@@ -2,11 +2,12 @@
 import type { Server } from 'node:http';
 import { createApp } from './app.js';
 import { loadConfig } from './config/env.js';
-import { assertNotOwner } from './db/index.js';
+import { assertNotOwner, createDb } from './db/index.js';
 import { modules as registry } from './modules/index.js';
 import { createClients, postgresCheck, redisCheck } from './platform/clients.js';
 import { healthRoutes } from './platform/health.js';
 import { createLogger } from './platform/logger.js';
+import { createEventBus } from './platform/events/bus.js';
 import { createQueueFactory } from './platform/queue/factory.js';
 import { moduleClosers, moduleHealthChecks, mountModules, type KomtruModule } from './platform/module.js';
 import { initSentry } from './platform/sentry.js';
@@ -37,10 +38,14 @@ export async function startApi(
   }
 
   // Producer side only: the API never consumes, so slow jobs never touch the request event loop.
+  // The same goes for events: the API publishes to the outbox and defines the subscriber queues, but
+  // the relay and every handler run in the worker.
   const queues = createQueueFactory({ redisUrl: config.redis.url, logger });
+  const db = createDb(clients.pool);
+  const events = createEventBus({ db, queues, logger, role: 'api' });
   for (const definition of modules.flatMap((m) => m.queues ?? [])) queues.define(definition);
   try {
-    for (const module of modules) await module.start?.({ queues });
+    for (const module of modules) await module.start?.({ queues, events, db });
   } catch (error) {
     await gracefulShutdown({
       closers: [

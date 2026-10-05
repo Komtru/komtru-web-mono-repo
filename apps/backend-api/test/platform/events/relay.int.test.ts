@@ -74,15 +74,13 @@ describe.runIf(infraEnabled)('outbox relay', () => {
   };
 
   const emit = (step: number, aggregateId = TRADE_ID) =>
-    t
-      .db()
-      .transaction((tx) =>
-        publish(tx, tradeCompleted, {
-          payload: { tradeId: TRADE_ID, step },
-          aggregateType: 'trade',
-          aggregateId,
-        }),
-      );
+    t.db().transaction((tx) =>
+      publish(tx, tradeCompleted, {
+        payload: { tradeId: TRADE_ID, step },
+        aggregateType: 'trade',
+        aggregateId,
+      }),
+    );
 
   const unpublished = async () => {
     const { rows } = await t.app().query('SELECT seq FROM platform.outbox WHERE published_at IS NULL');
@@ -110,7 +108,9 @@ describe.runIf(infraEnabled)('outbox relay', () => {
       payload: { tradeId: TRADE_ID, step: 1 },
     });
     // One job id per event and subscriber, so a replayed tick does not double-queue.
-    expect(queues.enqueued[0]?.options.jobId).toBe(`${envelope.eventId}:ledger.on-trade-completed`);
+    expect(queues.enqueued[0]?.options.jobId).toBe(`${envelope.eventId}--ledger.on-trade-completed`);
+    // BullMQ rejects a custom job id containing a colon, its own key separator.
+    expect(queues.enqueued.every((e) => !e.options.jobId?.includes(':'))).toBe(true);
     expect(await unpublished()).toBe(0);
   });
 

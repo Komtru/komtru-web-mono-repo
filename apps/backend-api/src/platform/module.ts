@@ -2,6 +2,8 @@
 // The app mounts every module's routes under /v1 and runs its lifecycle hooks; modules talk to each
 // other only through their index.ts (enforced by eslint-rules/module-boundaries.mjs).
 import type { Router } from 'express';
+import type { Db } from '../db/index.js';
+import type { EventBus } from './events/bus.js';
 import type { HealthCheck } from './health.js';
 import type { QueueDefinition, QueueFactory } from './queue/factory.js';
 import type { ScheduledJob } from './scheduler/registry.js';
@@ -11,6 +13,10 @@ import type { Closer } from './shutdown.js';
 export interface ModuleContext {
   /** Producers work in every process; consumers run only in the worker. */
   queues: QueueFactory;
+  /** Publish inside a caller's transaction; subscribe in start() (handlers run in the worker). */
+  events: EventBus;
+  /** The runtime pool, as komtru_app through PgBouncer. */
+  db: Db;
 }
 
 export interface KomtruModule {

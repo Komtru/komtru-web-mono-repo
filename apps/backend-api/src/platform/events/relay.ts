@@ -104,8 +104,9 @@ export function startOutboxRelay({
           for (const subscriber of bus.subscribers(row.event_type)) {
             await queues.producer(queueFor(subscriber)).add(row.event_type, envelope, {
               // One job per event and subscriber: a replayed tick is deduplicated by BullMQ while
-              // the job is still known, and by processed_events after that.
-              jobId: `${row.event_id}:${subscriber}`,
+              // the job is still known, and by processed_events after that. No colon: BullMQ uses
+              // it as its own key separator and rejects a custom id containing one.
+              jobId: `${row.event_id}--${subscriber}`,
             });
           }
         } catch (error) {
