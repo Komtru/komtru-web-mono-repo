@@ -51,6 +51,26 @@ export function hmac(key: string | Buffer, domain: string, value: string | Buffe
 }
 
 /**
+ * HMAC under a scheme we do not get to choose.
+ *
+ * `hmac` above length-prefixes a domain because the values it protects are low-entropy and shared
+ * across tables. A provider webhook signature is neither: the signed value is the whole request body,
+ * and the algorithm, the framing and the encoding are the provider's published contract. Adding our
+ * domain prefix here would simply produce a digest that never matches the one the provider sent, so
+ * this helper deliberately hashes the value and nothing else. It is not for anything we store.
+ */
+export function providerHmac(
+  algorithm: 'sha256' | 'sha512',
+  key: string | Buffer,
+  value: string | Buffer,
+): Buffer {
+  const keyBytes = toBuffer(key);
+  if (keyBytes.length === 0) throw new Error('providerHmac requires a non-empty key');
+
+  return crypto.createHmac(algorithm, keyBytes).update(toBuffer(value)).digest();
+}
+
+/**
  * Constant-time buffer comparison.
  *
  * `timingSafeEqual` throws on a length mismatch, which would itself be an oracle, so unequal lengths
