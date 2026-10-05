@@ -6,7 +6,15 @@
 // and (b) a lock taken by the first statement is held until the last migration commits. So a finding
 // is never fixed by adding CONCURRENTLY: either the table is small enough to lock (say so in a
 // waiver) or the work belongs outside the migrator, in an operations step.
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { finding, loadMigrations } from './migrations.mjs';
+
+// Waivers live here rather than in a comment in the migration, because this tool's own strongest
+// rule is that a migration which has already been applied is never edited again: a new comment line
+// changes the file's hash, and the migrator would never look at the file again to notice.
+export const WAIVERS_PATH = resolve(fileURLToPath(new URL('.', import.meta.url)), 'waivers.json');
 
 export const RULES = {
   'drop-object': {
@@ -47,7 +55,6 @@ export const RULES = {
   },
 };
 
-const WAIVER = /^[ \t]*--[ \t]*migration-safety:[ \t]*allow[ \t]+([a-z0-9-]+)[ \t]*\(([^)]*)\)/gim;
 const MIN_REASON = 20;
 
 const IDENT = String.raw`(?:"[^"]*"|[A-Za-z_][A-Za-z0-9_$]*)`;
@@ -256,20 +263,22 @@ function ruleHits(statement, existingTables) {
 }
 
 /** The waivers a migration carries, and the findings for the ones that cannot be trusted. */
-function readWaivers(tag, sql) {
+function readWaivers(tag, waivers) {
   const waived = new Set();
   const findings = [];
-  for (const [, rule, reason] of sql.matchAll(WAIVER)) {
+  for (const [rule, reason] of Object.entries(waivers)) {
     if (!(rule in RULES))
       findings.push(
-        finding('lint', 'unknown-waiver', `${tag} waives "${rule}", which is not a rule`, { tag }),
+        finding('lint', 'unknown-waiver', `waivers.json waives "${rule}" on ${tag}, which is not a rule`, {
+          tag,
+        }),
       );
-    else if (reason.trim().length < MIN_REASON)
+    else if (String(reason).trim().length < MIN_REASON)
       findings.push(
         finding(
           'lint',
           'waiver-reason',
-          `${tag} waives ${rule} with "${reason.trim()}": say why this is safe on a live database`,
+          `waivers.json waives ${rule} on ${tag} with "${reason}": say why this is safe on a live database`,
           { tag },
         ),
       );
@@ -278,8 +287,8 @@ function readWaivers(tag, sql) {
   return { waived, findings };
 }
 
-export function lintMigration({ tag, sql, existingTables }) {
-  const { waived, findings } = readWaivers(tag, sql);
+export function lintMigration({ tag, sql, existingTables, waivers = {} }) {
+  const { waived, findings } = readWaivers(tag, waivers);
   const created = createdTables(sql);
   const known = new Set([...existingTables, ...created]);
   const used = new Set();
@@ -305,18 +314,33 @@ export function lintMigration({ tag, sql, existingTables }) {
   for (const rule of waived)
     if (!used.has(rule))
       findings.push(
-        finding('lint', 'unused-waiver', `${tag} waives ${rule}, which nothing in it trips`, { tag }),
+        finding(
+          'lint',
+          'unused-waiver',
+          `waivers.json waives ${rule} on ${tag}, which nothing in that migration trips`,
+          { tag },
+        ),
       );
 
   return findings;
 }
 
+export const readWaiverFile = (path = WAIVERS_PATH) => JSON.parse(readFileSync(path, 'utf8'));
+
 /** Lints the whole folder, carrying forward the set of tables each migration inherits. */
-export function checkLint(dir) {
+export function checkLint(dir, waiverPath = WAIVERS_PATH) {
   const findings = [];
   const existingTables = new Set();
+  const waiverFile = readWaiverFile(waiverPath);
   for (const migration of loadMigrations(dir)) {
-    findings.push(...lintMigration({ tag: migration.tag, sql: migration.sql, existingTables }));
+    findings.push(
+      ...lintMigration({
+        tag: migration.tag,
+        sql: migration.sql,
+        existingTables,
+        waivers: waiverFile[migration.tag] ?? {},
+      }),
+    );
     for (const table of createdTables(migration.sql)) existingTables.add(table);
     // The snapshot describes the schema after this migration, which covers anything drizzle-kit
     // generated in a form the CREATE TABLE scan above would miss.

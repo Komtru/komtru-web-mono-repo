@@ -1,5 +1,2 @@
--- Both tables are created in 0008 and are empty in every environment: the platform is pre-launch.
--- migration-safety: allow constraint-scan (admin_action_approvals and admin_role_assignments are empty in every environment; the platform is pre-launch, so validating the new CHECK scans nothing and blocks nobody)
-
 ALTER TABLE "identity"."admin_action_approvals" ADD CONSTRAINT "admin_action_self_approval" CHECK ("identity"."admin_action_approvals"."approved_by" IS NULL OR "identity"."admin_action_approvals"."approved_by" <> "identity"."admin_action_approvals"."subject_user_id");--> statement-breakpoint
 ALTER TABLE "identity"."admin_role_assignments" ADD CONSTRAINT "admin_role_self_approval" CHECK ("identity"."admin_role_assignments"."approved_by" IS NULL OR "identity"."admin_role_assignments"."approved_by" <> "identity"."admin_role_assignments"."user_id");

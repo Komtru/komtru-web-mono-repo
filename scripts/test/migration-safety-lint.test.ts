@@ -2,13 +2,20 @@
 // database and proven not to fire on the safe way of writing the same change — and the whole set is
 // proven clean against the repository's own migrations, which is the only way the check stays useful.
 import { describe, expect, it } from 'vitest';
-import { RULES, checkLint, lintMigration, splitStatements } from '../../tools/migration-safety/lint.mjs';
+import {
+  RULES,
+  checkLint,
+  lintMigration,
+  readWaiverFile,
+  splitStatements,
+} from '../../tools/migration-safety/lint.mjs';
+import { loadMigrations } from '../../tools/migration-safety/migrations.mjs';
 import type { Finding } from '../../tools/migration-safety/migrations.mjs';
 
 const existingTables = new Set(['identity.users', 'identity.identity_audit_log']);
 const rules = (findings: Finding[]) => findings.map((finding) => finding.rule);
-const lint = (sql: string, waiver = '') =>
-  rules(lintMigration({ tag: '0099_fixture', sql: `${waiver}${sql}`, existingTables }));
+const lint = (sql: string, waivers: Record<string, string> = {}) =>
+  rules(lintMigration({ tag: '0099_fixture', sql, existingTables, waivers }));
 
 describe('splitStatements', () => {
   it('splits on drizzle statement breakpoints', () => {
@@ -100,25 +107,31 @@ describe('rules that stay quiet', () => {
 describe('waivers', () => {
   const dropColumn = 'ALTER TABLE "identity"."users" DROP COLUMN "bio";';
 
-  it('waives a rule named in a comment with a reason', () => {
-    const waiver =
-      '-- migration-safety: allow drop-object (expand/contract: nothing has read bio since T-099)\n';
-    expect(lint(dropColumn, waiver)).toEqual([]);
+  it('waives a rule the migration is listed for, with its reason', () => {
+    const reason = 'expand/contract: nothing has read bio since T-099 shipped';
+    expect(lint(dropColumn, { 'drop-object': reason })).toEqual([]);
   });
 
   it('reports unknown-waiver for a rule id that does not exist', () => {
-    const waiver = '-- migration-safety: allow drop-colum (a typo that would silently waive nothing)\n';
-    expect(lint(dropColumn, waiver)).toEqual(['unknown-waiver', 'drop-object']);
+    const waivers = { 'drop-colum': 'a typo that would otherwise silently waive nothing at all' };
+    expect(lint(dropColumn, waivers)).toEqual(['unknown-waiver', 'drop-object']);
   });
 
   it('reports waiver-reason when the reason is too short to be a reason', () => {
-    const waiver = '-- migration-safety: allow drop-object (fine)\n';
-    expect(lint(dropColumn, waiver)).toEqual(['waiver-reason', 'drop-object']);
+    expect(lint(dropColumn, { 'drop-object': 'fine' })).toEqual(['waiver-reason', 'drop-object']);
   });
 
   it('reports unused-waiver so a waiver cannot outlive the statement it excused', () => {
-    const waiver = '-- migration-safety: allow backfill (there is no backfill in this migration)\n';
-    expect(lint('CREATE TABLE "identity"."tags" ("id" uuid);', waiver)).toEqual(['unused-waiver']);
+    const waivers = { backfill: 'there is no backfill anywhere in this migration' };
+    expect(lint('CREATE TABLE "identity"."tags" ("id" uuid);', waivers)).toEqual(['unused-waiver']);
+  });
+
+  it('names a real rule in every waiver it ships with, against a migration that exists', () => {
+    const tags = new Set(loadMigrations().map((migration) => migration.tag));
+    for (const [tag, waivers] of Object.entries(readWaiverFile())) {
+      expect(tags, `${tag} is waived but is not a migration`).toContain(tag);
+      for (const rule of Object.keys(waivers)) expect(Object.keys(RULES)).toContain(rule);
+    }
   });
 });
 

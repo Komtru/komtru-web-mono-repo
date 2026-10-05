@@ -1,0 +1,12 @@
+{
+  "0007_identity_same_user_fks": {
+    "constraint-scan": "identity.users is created one migration earlier and has never held a row in any environment: the platform is pre-launch, so validating these composite foreign keys scans nothing and blocks nobody. A same-user foreign key added to a populated users has to go in NOT VALID and be validated by a second migration."
+  },
+  "0013_identity_four_eyes": {
+    "constraint-scan": "identity.admin_action_approvals and identity.admin_role_assignments are created in 0008 and are empty in every environment: the platform is pre-launch, so validating these four-eyes CHECKs scans no rows and takes its ACCESS EXCLUSIVE lock against no reader."
+  },
+  "0015_identity_desc_indexes": {
+    "drop-index-lock": "identity.identity_audit_log and identity.users are empty in every environment: the platform is pre-launch. Once they are not, these two tables are the ones that will be largest, and dropping an index on either has to happen outside the migrator - drizzle runs every migration in one transaction and Postgres refuses CONCURRENTLY there.",
+    "index-lock": "identity.identity_audit_log and identity.users are empty in every environment: the platform is pre-launch, so each of these four indexes is built over zero rows. The same rebuild on a live append-only audit log would block every insert for the length of the whole migration run and belongs in an operations step instead."
+  }
+}

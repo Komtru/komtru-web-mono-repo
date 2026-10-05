@@ -13,6 +13,7 @@ import {
   scratchDatabase,
 } from '../../tools/migration-safety/database.mjs';
 import type { Invariants } from '../../tools/migration-safety/database.mjs';
+import { baseMigrations, compareForward } from '../../tools/migration-safety/check.mjs';
 import { loadMigrations } from '../../tools/migration-safety/migrations.mjs';
 
 const enabled = process.env.KOMTRU_INFRA_TESTS === '1';
@@ -152,5 +153,50 @@ describe.runIf(enabled)('the schema-level invariants', () => {
     const actual = await introspect();
     const expected: Invariants = { ...readInvariants(), postgresMajor: 99 };
     expect(rules(checkInvariants(actual, expected))).toEqual(['postgres-major']);
+  });
+});
+
+describe.runIf(enabled)('applying forward from the baseline', () => {
+  it('reaches the same schema as a replay from empty', async () => {
+    const base = baseMigrations('HEAD');
+    expect(await compareForward(base.migrations!, loadMigrations())).toEqual([]);
+  });
+
+  it('reports migration-skipped for a migration older than the baseline head', async () => {
+    const base = loadMigrations();
+    const stale = {
+      ...base.at(-1)!,
+      tag: '0016_stale',
+      when: base[0]!.when - 1,
+      sha256: 'f'.repeat(64),
+      sql: 'CREATE SCHEMA "stale";',
+    };
+    const findings = await compareForward(base, [...base, stale]);
+    expect(rules(findings)).toEqual(['migration-skipped', 'forward-drift']);
+    expect(findings[0]?.tag).toBe('0016_stale');
+  });
+
+  it('reports forward-drift when a migration already on the baseline was edited', async () => {
+    const base = loadMigrations();
+    const head = base.map((migration, index) =>
+      index === 10
+        ? {
+            ...migration,
+            sha256: 'a'.repeat(64),
+            sql: `${migration.sql}\n--> statement-breakpoint\nCREATE TABLE "identity"."ghost" ("id" uuid);`,
+          }
+        : migration,
+    );
+    const findings = await compareForward(base, head);
+    expect(rules(findings)).toContain('forward-drift');
+    expect(findings.at(-1)?.message).toContain('identity.ghost');
+  });
+
+  it('reports forward-rewritten when the branch renamed a migration the baseline already has', async () => {
+    const base = loadMigrations();
+    const head = base.map((migration, index) =>
+      index === 2 ? { ...migration, tag: '0002_renamed' } : migration,
+    );
+    expect(rules(await compareForward(base, head))).toContain('forward-rewritten');
   });
 });

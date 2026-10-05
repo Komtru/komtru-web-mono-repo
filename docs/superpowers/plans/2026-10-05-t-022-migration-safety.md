@@ -101,8 +101,9 @@ describe('checkLock', () => {
 
 - Create: `tools/migration-safety/lint.mjs`, `tools/migration-safety/lint.d.mts`
 - Create: `scripts/test/migration-safety-lint.test.ts`
-- Modify: `apps/backend-api/drizzle/0007_identity_same_user_fks.sql`, `0013_identity_four_eyes.sql`, `0015_identity_desc_indexes.sql` (waiver comments only)
-- Modify: `tools/migration-safety/migrations.lock.json` (the three new hashes)
+- Create: `tools/migration-safety/waivers.json` (entries for `0007_identity_same_user_fks`, `0013_identity_four_eyes`, `0015_identity_desc_indexes`)
+
+No migration file is touched: see the revision note below.
 
 **Interfaces:**
 
@@ -127,7 +128,9 @@ Rules (`rule` — what it costs on a live database):
 | `rename`                      | `ALTER TABLE/… RENAME`                                                                               | the old code is still running during a deploy and queries the old name                                                                           |
 | `backfill`                    | top-level `UPDATE`/`DELETE FROM`/`INSERT INTO … SELECT` against a pre-existing table                 | holds its locks for the length of the whole migration run                                                                                        |
 
-Waiver: a line `-- migration-safety: allow <rule-id> (<reason>)` anywhere in the migration file waives that rule for that file. The reason must be at least 20 characters; a shorter one, or an unknown rule id, is a finding. The waiver lives in the SQL so the reason is reviewed with the statement it excuses.
+Waiver: an entry in `tools/migration-safety/waivers.json`, keyed by migration tag and rule id, whose value is the reason. The reason must be at least 20 characters; a shorter one, an unknown rule id, or a waiver nothing trips is itself a finding.
+
+**Revised during Task 4.** The waiver started as a comment line in the migration, so the reason would sit next to the statement it excused. Running the finished tool killed that design: the three migrations that needed waivers were already on `main`, and adding a comment changed their hashes, so the forward check correctly reported all three as migrations the real migrator would never apply. A waiver mechanism that requires editing an applied migration contradicts the tool's own strongest rule, so waivers moved to a file of their own.
 
 - [ ] **Step 1: Write the failing tests** in `scripts/test/migration-safety-lint.test.ts`, each rule proven to fire on a one-line SQL string and proven not to fire on its safe counterpart:
 

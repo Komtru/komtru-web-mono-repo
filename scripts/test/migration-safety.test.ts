@@ -4,7 +4,9 @@
 import { cpSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { resolve } from 'node:path';
+import { execFileSync } from 'node:child_process';
 import { afterAll, describe, expect, it } from 'vitest';
+import { baseMigrations, runChecks } from '../../tools/migration-safety/check.mjs';
 import {
   LOCK_PATH,
   MIGRATIONS_DIR,
@@ -144,5 +146,35 @@ describe('checkLock', () => {
     journal.entries.pop();
     writeFileSync(journalPath, JSON.stringify(journal, null, 2));
     expect(rules(checkLock(dir))).toContain('migration-removed');
+  });
+});
+
+describe('baseMigrations', () => {
+  const repoRoot = resolve(import.meta.dirname, '../..');
+  const status = () => execFileSync('git', ['status', '--porcelain'], { cwd: repoRoot, encoding: 'utf8' });
+
+  it('reads the baseline folder out of git without touching the working tree', () => {
+    const before = status();
+    const base = baseMigrations('HEAD');
+    expect(base.ref).toBe('HEAD');
+    expect(base.migrations?.map((migration) => migration.tag)).toEqual(
+      loadMigrations().map((migration) => migration.tag),
+    );
+    expect(status()).toBe(before);
+  });
+
+  it('gives a reason instead of throwing when the named ref is not in the repository', () => {
+    const base = baseMigrations('no-such-ref-for-t-022');
+    expect(base.ref).toBeNull();
+    expect(base.explicit).toBe(true);
+    expect(base.reason).toContain('no-such-ref-for-t-022');
+  });
+});
+
+describe('runChecks', () => {
+  it('passes every check that needs no database', async () => {
+    const { findings, counts } = await runChecks({ staticOnly: true });
+    expect(findings).toEqual([]);
+    expect(counts).toMatchObject({ migrations: 16, errors: 0, warnings: 0 });
   });
 });
