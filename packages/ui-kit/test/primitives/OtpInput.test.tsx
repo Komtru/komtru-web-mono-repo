@@ -59,6 +59,21 @@ describe('OtpInput', () => {
     expect(cells()[0]).toHaveProperty('value', '');
   });
 
+  it('writes into the next empty cell when a later one is tapped, rather than relocating the digit', () => {
+    render(<Harness />);
+    fireEvent.change(cells()[0]!, { target: { value: '4' } });
+    fireEvent.change(cells()[4]!, { target: { value: '7' } });
+    expect(cells().map((cell) => (cell as HTMLInputElement).value)).toEqual(['4', '7', '', '', '', '']);
+    expect(document.activeElement).toBe(cells()[2]);
+  });
+
+  it('closes the gap when a digit in the middle is deleted', () => {
+    render(<Harness />);
+    fireEvent.paste(cells()[0]!, { clipboardData: { getData: () => '4823' } });
+    fireEvent.keyDown(cells()[1]!, { key: 'Backspace' });
+    expect(cells().map((cell) => (cell as HTMLInputElement).value)).toEqual(['4', '2', '3', '', '', '']);
+  });
+
   it('walks left and right with the arrow keys', () => {
     render(<Harness />);
     fireEvent.keyDown(cells()[2]!, { key: 'ArrowLeft' });

@@ -39,10 +39,24 @@ export function OtpInput({
     if (next.length === length) onComplete?.(next);
   };
 
-  const setDigit = (index: number, digit: string) => {
-    const padded = value.padEnd(length, ' ').split('');
-    padded[index] = digit;
-    commit(padded.join('').trimEnd().replace(/ /g, ''));
+  /**
+   * A code has no holes, so the value stays dense: tapping the fifth cell with one digit typed
+   * writes into the second, rather than padding and then silently collapsing the gap. Returns where
+   * the digit actually landed, which is what the caret follows.
+   */
+  const writeAt = (index: number, digit: string): number => {
+    const chars = [...value];
+    const target = Math.min(index, chars.length);
+    chars[target] = digit;
+    commit(chars.join('').slice(0, length));
+    return target;
+  };
+
+  const clearAt = (index: number) => {
+    if (index < 0 || index >= value.length) return;
+    const chars = [...value];
+    chars.splice(index, 1);
+    commit(chars.join(''));
   };
 
   const focusCell = (index: number) => {
@@ -72,17 +86,16 @@ export function OtpInput({
             onChange={(event) => {
               const typed = event.target.value.replace(/\D/g, '').slice(-1);
               if (typed === '') return;
-              setDigit(index, typed);
-              focusCell(index + 1);
+              focusCell(writeAt(index, typed) + 1);
             }}
             onKeyDown={(event) => {
               if (event.key === 'Backspace') {
                 event.preventDefault();
                 if (digit === '') {
-                  setDigit(index - 1, '');
+                  clearAt(index - 1);
                   focusCell(index - 1);
                 } else {
-                  setDigit(index, '');
+                  clearAt(index);
                 }
               } else if (event.key === 'ArrowLeft') {
                 event.preventDefault();
