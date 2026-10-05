@@ -91,7 +91,9 @@ export const users = identity.table(
           OR (${table.username} IS NOT NULL AND ${table.usernameSkeleton} IS NOT NULL)`,
     ),
     index('users_status_idx').on(table.status),
-    index('users_created_at_idx').on(table.createdAt.desc()),
+    // nullsFirst(): `ORDER BY created_at DESC` is DESC NULLS FIRST, and an index built NULLS LAST
+    // cannot serve it (see audit.ts).
+    index('users_created_at_idx').on(table.createdAt.desc().nullsFirst()),
     index('users_ver_level_idx').on(table.verificationLevel),
   ],
 );

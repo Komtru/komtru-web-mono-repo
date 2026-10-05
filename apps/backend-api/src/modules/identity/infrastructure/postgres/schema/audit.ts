@@ -28,8 +28,11 @@ export const identityAuditLog = identity.table(
     correlationId: uuid('correlation_id'),
   },
   (table) => [
-    index('identity_audit_subject_idx').on(table.subjectUserId, table.occurredAt.desc()),
-    index('identity_audit_actor_idx').on(table.actorUserId, table.occurredAt.desc()),
-    index('identity_audit_action_idx').on(table.action, table.occurredAt.desc()),
+    // nullsFirst() because `ORDER BY occurred_at DESC` means DESC NULLS FIRST: drizzle's bare
+    // .desc() emits NULLS LAST, whose pathkeys do not match, and every audit timeline then sorts
+    // the whole match set instead of walking the index under its LIMIT.
+    index('identity_audit_subject_idx').on(table.subjectUserId, table.occurredAt.desc().nullsFirst()),
+    index('identity_audit_actor_idx').on(table.actorUserId, table.occurredAt.desc().nullsFirst()),
+    index('identity_audit_action_idx').on(table.action, table.occurredAt.desc().nullsFirst()),
   ],
 );

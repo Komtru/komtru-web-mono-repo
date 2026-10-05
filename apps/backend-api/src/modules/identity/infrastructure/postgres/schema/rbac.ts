@@ -90,12 +90,18 @@ export const adminRoleAssignments = identity.table(
     revokeReason: text('revoke_reason'),
   },
   (table) => [
-    // Four eyes: the approver can never be the grantor, and nobody grants themselves a role.
+    // Four eyes: neither the grantor nor the grantee may be the approver. M1 §5.7 names only the
+    // first two of these three; without the third the grantee signs off on their own elevation and
+    // the rule reduces to finding one admin willing to press grant.
     check(
       'admin_role_distinct_approver',
       sql`${table.approvedBy} IS NULL OR ${table.approvedBy} <> ${table.grantedBy}`,
     ),
     check('admin_role_no_self_grant', sql`${table.grantedBy} <> ${table.userId}`),
+    check(
+      'admin_role_self_approval',
+      sql`${table.approvedBy} IS NULL OR ${table.approvedBy} <> ${table.userId}`,
+    ),
     uniqueIndex('admin_role_active_unique')
       .on(table.userId, table.roleCode)
       .where(sql`${table.revokedAt} IS NULL`),
@@ -135,6 +141,11 @@ export const adminActionApprovals = identity.table(
     check(
       'admin_action_distinct_approver',
       sql`${table.approvedBy} IS NULL OR ${table.approvedBy} <> ${table.requestedBy}`,
+    ),
+    // The subject of an MFA reset or a forced username change is the last person who should approve it.
+    check(
+      'admin_action_self_approval',
+      sql`${table.approvedBy} IS NULL OR ${table.approvedBy} <> ${table.subjectUserId}`,
     ),
     index('admin_action_approvals_pending_idx')
       .on(table.action, table.requestedAt)

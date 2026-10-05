@@ -107,6 +107,8 @@ const INDEXES = [
 
 const CHECKS = [
   'admin_action_distinct_approver',
+  'admin_action_self_approval',
+  'admin_role_self_approval',
   'admin_role_distinct_approver',
   'admin_role_no_self_grant',
   'phone_e164_format',
@@ -114,6 +116,45 @@ const CHECKS = [
   'recovery_reviewer_not_subject',
   'users_username_format',
   'users_username_pair',
+].sort();
+
+// drizzle has no record of the two composite same-user keys (migration 0007), so only this list
+// stops a later `db:generate` quietly dropping them.
+const FOREIGN_KEYS = [
+  'account_recovery_requests_requested_device_id_devices_id_fk',
+  'account_recovery_requests_reviewed_by_users_id_fk',
+  'account_recovery_requests_user_id_users_id_fk',
+  'admin_action_approvals_approved_by_users_id_fk',
+  'admin_action_approvals_requested_by_users_id_fk',
+  'admin_action_approvals_subject_user_id_users_id_fk',
+  'admin_role_assignments_approved_by_users_id_fk',
+  'admin_role_assignments_granted_by_users_id_fk',
+  'admin_role_assignments_revoked_by_users_id_fk',
+  'admin_role_assignments_role_code_roles_code_fk',
+  'admin_role_assignments_user_id_users_id_fk',
+  'devices_user_id_users_id_fk',
+  'mfa_factors_phone_id_user_phones_id_fk',
+  'mfa_factors_user_id_users_id_fk',
+  'otp_challenges_user_id_users_id_fk',
+  'party_invitations_claimed_by_user_id_users_id_fk',
+  'party_invitations_inviter_user_id_users_id_fk',
+  'passkey_credentials_user_id_users_id_fk',
+  'role_permissions_permission_code_permissions_code_fk',
+  'role_permissions_role_code_roles_code_fk',
+  'sessions_device_id_devices_id_fk',
+  'sessions_parent_session_id_sessions_id_fk',
+  'sessions_user_id_users_id_fk',
+  'social_identities_user_id_users_id_fk',
+  'user_capabilities_granted_by_users_id_fk',
+  'user_capabilities_user_id_users_id_fk',
+  'user_credentials_user_id_users_id_fk',
+  'user_emails_user_id_users_id_fk',
+  'user_phones_user_id_users_id_fk',
+  'user_profiles_user_id_users_id_fk',
+  'username_history_changed_by_users_id_fk',
+  'username_history_user_id_users_id_fk',
+  'users_primary_email_fk',
+  'users_primary_phone_fk',
 ].sort();
 
 describe.runIf(infraEnabled)('the identity schema surface', () => {
@@ -146,6 +187,28 @@ describe.runIf(infraEnabled)('the identity schema surface', () => {
     ).toEqual(CHECKS);
   });
 
+  it('has exactly the M1 §5 foreign keys', async () => {
+    expect(
+      await names(
+        t.owner(),
+        `SELECT con.conname AS name FROM pg_constraint con
+           JOIN pg_namespace n ON n.oid = con.connamespace
+          WHERE n.nspname = 'identity' AND con.contype = 'f'`,
+      ),
+    ).toEqual(FOREIGN_KEYS);
+  });
+
+  // `ORDER BY x DESC` is DESC NULLS FIRST. drizzle's `.desc()` emits DESC NULLS LAST, whose
+  // pathkeys do not match, so the planner sorts every matching row instead of walking the index —
+  // measured as a Sort over a Bitmap Heap Scan rather than an Index Scan under LIMIT.
+  it('orders every DESC index NULLS FIRST, so a plain ORDER BY DESC can walk it', async () => {
+    const { rows } = await t.owner().query<{ indexname: string }>(
+      `SELECT indexname FROM pg_indexes
+        WHERE schemaname = 'identity' AND indexdef LIKE '%DESC NULLS LAST%'`,
+    );
+    expect(rows.map((row) => row.indexname)).toEqual([]);
+  });
+
   it('carries the four-eyes and append-only triggers and nothing else', async () => {
     expect(
       await names(
@@ -155,15 +218,21 @@ describe.runIf(infraEnabled)('the identity schema surface', () => {
            JOIN pg_namespace n ON n.oid = c.relnamespace
           WHERE n.nspname = 'identity' AND NOT tg.tgisinternal`,
       ),
-    ).toEqual(['admin_role_dual_approval', 'komtru_append_only']);
+    ).toEqual(['admin_role_dual_approval', 'komtru_append_only', 'roles_dual_approval_backfill']);
   });
 
-  it('keeps every identity table reachable by the runtime role', async () => {
-    const { rows } = await t.owner().query<{ name: string }>(
-      `SELECT c.relname AS name FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
-        WHERE n.nspname = 'identity' AND c.relkind = 'r'
-          AND NOT has_table_privilege('komtru_app', c.oid, 'SELECT, INSERT')`,
-    );
-    expect(rows).toEqual([]);
-  });
+  // One privilege per call: has_table_privilege('SELECT, INSERT') is OR, so a table that lost
+  // INSERT would pass a combined check.
+  it.each([['SELECT'], ['INSERT']])(
+    'grants the runtime role %s on every identity table',
+    async (privilege) => {
+      const { rows } = await t.owner().query<{ name: string }>(
+        `SELECT c.relname AS name FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+          WHERE n.nspname = 'identity' AND c.relkind = 'r'
+            AND NOT has_table_privilege('komtru_app', c.oid, $1)`,
+        [privilege],
+      );
+      expect(rows).toEqual([]);
+    },
+  );
 });

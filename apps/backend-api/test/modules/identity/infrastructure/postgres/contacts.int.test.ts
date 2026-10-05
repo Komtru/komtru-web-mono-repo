@@ -90,6 +90,19 @@ describe.runIf(infraEnabled)('identity contact channels', () => {
     expect(state).toBe('23505');
   });
 
+  // The production path is not a verified INSERT but an UPDATE when the OTP is confirmed, so race
+  // that statement too: the index, not the order of the reads, has to be what stops the second one.
+  it('rejects a second verified owner of an address claimed concurrently by update', async () => {
+    const [a, b] = [await insertUser(t.app()), await insertUser(t.app())];
+    const first = await addEmail(a, { email: 'j.ane@gmail.com' });
+    const second = await addEmail(b, { email: 'jane+shop@gmail.com' });
+    const state = await raceInserts(`UPDATE identity.user_emails SET verified_at = now() WHERE id = $1`, [
+      [first.rows[0]!.id],
+      [second.rows[0]!.id],
+    ]);
+    expect(state).toBe('23505');
+  });
+
   it('allows one primary phone per user', async () => {
     const user = await insertUser(t.app());
     await addPhone(user, { primary: true });

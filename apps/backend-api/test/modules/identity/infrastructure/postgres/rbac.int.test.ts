@@ -199,6 +199,104 @@ describe.runIf(infraEnabled)('identity credentials, capabilities and admin rbac'
     ).toBe('admin_action_distinct_approver');
   });
 
+  // Four eyes means the person who benefits is not one of the eyes. M1 §5.7 spells out only
+  // approver <> grantor, which still lets the grantee sign off on their own elevation.
+  it('rejects an approver who is the grantee', async () => {
+    const [subject, admin] = [await insertUser(t.app()), await insertUser(t.app())];
+    await addRole('SUPER_ADMIN', true);
+    expect(await constraintName(grant(subject, 'SUPER_ADMIN', admin, subject))).toBe(
+      'admin_role_self_approval',
+    );
+  });
+
+  it('rejects an approver who is the subject of an admin action', async () => {
+    const [subject, admin] = [await insertUser(t.app()), await insertUser(t.app())];
+    expect(
+      await constraintName(
+        t.app().query(
+          `INSERT INTO identity.admin_action_approvals
+             (action, subject_user_id, requested_by, approved_by, reason, expires_at)
+           VALUES ('MFA_RESET', $1, $2, $1, 'test', now() + interval '1 day')`,
+          [subject, admin],
+        ),
+      ),
+    ).toBe('admin_action_self_approval');
+  });
+
+  // The guard must not become the lock: a BEFORE UPDATE trigger that fires on the revoke statement
+  // leaves an unapproved grant live with no way for the app to take it back.
+  it('allows revoking a dual-approval grant', async () => {
+    const [subject, admin, approver] = [
+      await insertUser(t.app()),
+      await insertUser(t.app()),
+      await insertUser(t.app()),
+    ];
+    await addRole('FINANCE_ADMIN', true);
+    const { rows } = await grant(subject, 'FINANCE_ADMIN', admin, approver);
+    await expect(
+      t
+        .app()
+        .query(
+          `UPDATE identity.admin_role_assignments SET revoked_at = now(), approved_by = NULL WHERE id = $1`,
+          [rows[0]!.id],
+        ),
+    ).resolves.toBeDefined();
+  });
+
+  it('rejects requiring dual approval while unapproved grants of that role are live', async () => {
+    const [subject, admin] = [await insertUser(t.app()), await insertUser(t.app())];
+    await addRole('OPERATIONS_ADMIN');
+    await grant(subject, 'OPERATIONS_ADMIN', admin);
+    expect(
+      await errorMessage(
+        t
+          .app()
+          .query(`UPDATE identity.roles SET requires_dual_approval = true WHERE code = 'OPERATIONS_ADMIN'`),
+      ),
+    ).toMatch(/unapproved live assignments/);
+  });
+
+  it('allows requiring dual approval once the unapproved grants are revoked', async () => {
+    const [subject, admin] = [await insertUser(t.app()), await insertUser(t.app())];
+    await addRole('OPERATIONS_ADMIN');
+    const { rows } = await grant(subject, 'OPERATIONS_ADMIN', admin);
+    await t
+      .app()
+      .query(`UPDATE identity.admin_role_assignments SET revoked_at = now() WHERE id = $1`, [rows[0]!.id]);
+    await expect(
+      t
+        .app()
+        .query(`UPDATE identity.roles SET requires_dual_approval = true WHERE code = 'OPERATIONS_ADMIN'`),
+    ).resolves.toBeDefined();
+  });
+
+  // The role_code foreign key takes only a KEY SHARE lock, which a non-key UPDATE of
+  // requires_dual_approval does not conflict with: without an explicit row lock the flip slips past
+  // an in-flight grant and the result is a live, unapproved dual-approval assignment.
+  it('serialises a concurrent flip of requires_dual_approval against an in-flight grant', async () => {
+    const [subject, admin] = [await insertUser(t.app()), await insertUser(t.app())];
+    await addRole('OPERATIONS_ADMIN');
+    const [granter, flipper] = await Promise.all([t.app().connect(), t.app().connect()]);
+    try {
+      await granter.query('BEGIN');
+      await granter.query(
+        `INSERT INTO identity.admin_role_assignments (user_id, role_code, granted_by, reason)
+         VALUES ($1, 'OPERATIONS_ADMIN', $2, 'test')`,
+        [subject, admin],
+      );
+      const flip = errorMessage(
+        flipper.query(
+          `UPDATE identity.roles SET requires_dual_approval = true WHERE code = 'OPERATIONS_ADMIN'`,
+        ),
+      );
+      await granter.query('COMMIT');
+      expect(await flip).toMatch(/unapproved live assignments/);
+    } finally {
+      granter.release();
+      flipper.release();
+    }
+  });
+
   it('cascades role_permissions when a role is deleted', async () => {
     await addRole('SUPPORT_AGENT');
     await t
