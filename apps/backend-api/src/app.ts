@@ -18,6 +18,8 @@ export interface AppDependencies {
   mountRoot?: (app: Express) => void;
   /** Called for every unexpected error, e.g. to report it to Sentry. */
   onUnexpected?: (error: unknown) => void;
+  /** True once shutdown has begun; responses then close their connection (see server.ts). */
+  isDraining?: () => boolean;
 }
 
 export function createApp({
@@ -26,11 +28,22 @@ export function createApp({
   mountV1,
   mountRoot,
   onUnexpected = () => {},
+  isDraining = () => false,
 }: AppDependencies): Express {
   const app = express();
   app.disable('x-powered-by');
   app.set('trust proxy', config.http.trustProxyHops);
 
+  // Decided when headers are written, not when the request arrives: a request already in flight
+  // when shutdown starts must still close its keep-alive connection.
+  app.use((_req, res, next) => {
+    const writeHead = res.writeHead.bind(res);
+    res.writeHead = ((...args: Parameters<typeof writeHead>) => {
+      if (isDraining()) res.setHeader('Connection', 'close');
+      return writeHead(...args);
+    }) as typeof writeHead;
+    next();
+  });
   app.use(requestId);
   app.use(
     pinoHttp({

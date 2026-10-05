@@ -47,29 +47,33 @@ export const postgresCheck = (pool: pg.Pool): HealthCheck => ({
 
 /**
  * Resolves once the client is connected. With the offline queue disabled, a command sent while still
- * connecting fails outright, so readiness would flap right after boot. The caller's timeout bounds
- * the wait (runChecks reports `timeout`).
+ * connecting fails outright, so readiness would flap right after boot. The wait has its own deadline
+ * and always removes its listeners, so repeated probes against a Redis that stays down never pile
+ * up listeners on the shared client.
  */
-const whenReady = (redis: Redis): Promise<void> =>
-  redis.status === 'ready'
-    ? Promise.resolve()
-    : new Promise((resolve, reject) => {
-        const onReady = () => {
-          redis.off('end', onEnd);
-          resolve();
-        };
-        const onEnd = () => {
-          redis.off('ready', onReady);
-          reject(new Error('redis connection ended'));
-        };
-        redis.once('ready', onReady);
-        redis.once('end', onEnd);
-      });
+const whenReady = (redis: Redis, timeoutMs: number): Promise<void> => {
+  if (redis.status === 'ready') return Promise.resolve();
+  if (redis.status === 'end') return Promise.reject(new Error('redis connection ended'));
+  return new Promise((resolve, reject) => {
+    const settle = (error?: Error) => {
+      clearTimeout(timer);
+      redis.off('ready', onReady);
+      redis.off('end', onEnd);
+      if (error) reject(error);
+      else resolve();
+    };
+    const onReady = () => settle();
+    const onEnd = () => settle(new Error('redis connection ended'));
+    const timer = setTimeout(() => settle(new Error('redis not ready')), timeoutMs);
+    redis.once('ready', onReady);
+    redis.once('end', onEnd);
+  });
+};
 
-export const redisCheck = (redis: Redis): HealthCheck => ({
+export const redisCheck = (redis: Redis, readyTimeoutMs = 1000): HealthCheck => ({
   name: 'redis',
   async check() {
-    await whenReady(redis);
+    await whenReady(redis, readyTimeoutMs);
     if ((await redis.ping()) !== 'PONG') throw new Error('unexpected PING reply');
   },
 });

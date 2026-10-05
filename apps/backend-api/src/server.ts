@@ -6,24 +6,18 @@ import { modules as registry } from './modules/index.js';
 import { createClients, postgresCheck, redisCheck } from './platform/clients.js';
 import { healthRoutes } from './platform/health.js';
 import { createLogger } from './platform/logger.js';
-import { moduleHealthChecks, mountModules, type KomtruModule } from './platform/module.js';
+import { moduleClosers, moduleHealthChecks, mountModules, type KomtruModule } from './platform/module.js';
 import { initSentry } from './platform/sentry.js';
-import { gracefulShutdown, type Closer, type ShutdownResult } from './platform/shutdown.js';
+import type { RunningProcess } from './platform/run.js';
+import { gracefulShutdown, type Closer } from './platform/shutdown.js';
 
-export interface RunningApi {
+export interface RunningApi extends RunningProcess {
   server: Server;
-  stop(): Promise<ShutdownResult>;
 }
 
 const SHUTDOWN_TIMEOUT_MS = 10_000;
-
-/** Stops modules in reverse start order. */
-export const stopModules = (modules: KomtruModule[]): Closer => ({
-  name: 'modules',
-  async close() {
-    for (const module of [...modules].reverse()) await module.stop?.();
-  },
-});
+/** In-flight requests get this long to finish before their connections are forced closed. */
+const HTTP_DRAIN_TIMEOUT_MS = 5_000;
 
 export async function startApi(
   env: NodeJS.ProcessEnv,
@@ -36,9 +30,11 @@ export async function startApi(
 
   for (const module of modules) await module.start?.();
 
+  let draining = false;
   const app = createApp({
     config,
     logger,
+    isDraining: () => draining,
     mountV1: mountModules(modules),
     mountRoot: healthRoutes([
       postgresCheck(clients.pool),
@@ -48,35 +44,59 @@ export async function startApi(
     onUnexpected: (error) => sentry.captureException(error),
   });
 
-  const server = await new Promise<Server>((resolve) => {
-    const listening = app.listen(config.port, () => resolve(listening));
-  });
+  const releaseResources: Closer[] = [
+    ...moduleClosers(modules),
+    { name: 'clients', close: () => clients.close() },
+    { name: 'sentry', close: async () => void (await sentry.flush()) },
+  ];
+
+  let server: Server;
+  try {
+    server = await new Promise<Server>((resolve, reject) => {
+      const listening = app.listen(config.port, (error?: Error) =>
+        error ? reject(error) : resolve(listening),
+      );
+    });
+  } catch (error) {
+    // e.g. EADDRINUSE: release what was opened, then let the caller exit non-zero.
+    await gracefulShutdown({ closers: releaseResources, timeoutMs: SHUTDOWN_TIMEOUT_MS, logger });
+    throw error;
+  }
   // Longer than a typical load balancer's idle timeout, so the LB closes idle connections first.
   server.keepAliveTimeout = 65_000;
   server.headersTimeout = 66_000;
   logger.info({ port: config.port }, 'api listening');
 
-  const closeServer: Closer = {
+  /**
+   * Stop accepting connections and let in-flight requests finish. While draining, every response
+   * carries `Connection: close`, so a keep-alive socket closes right after its last request instead
+   * of holding the server open until its idle timeout. Anything still open after the drain deadline
+   * is closed forcibly, so the closers after this one always get to run.
+   */
+  const drainHttp: Closer = {
     name: 'http',
     close: () =>
       new Promise((resolve, reject) => {
-        server.close((error) => (error ? reject(error) : resolve()));
+        draining = true;
+        const force = setTimeout(() => server.closeAllConnections(), HTTP_DRAIN_TIMEOUT_MS);
+        server.close((error) => {
+          clearTimeout(force);
+          if (error) reject(error);
+          else resolve();
+        });
         server.closeIdleConnections();
       }),
   };
 
+  const reportFatal = (error: unknown, origin: string) => {
+    logger.fatal({ err: error, origin }, 'fatal error');
+    sentry.captureException(error);
+  };
+
   return {
+    reportFatal,
     server,
     stop: () =>
-      gracefulShutdown({
-        closers: [
-          closeServer,
-          stopModules(modules),
-          { name: 'clients', close: () => clients.close() },
-          { name: 'sentry', close: async () => void (await sentry.flush()) },
-        ],
-        timeoutMs: SHUTDOWN_TIMEOUT_MS,
-        logger,
-      }),
+      gracefulShutdown({ closers: [drainHttp, ...releaseResources], timeoutMs: SHUTDOWN_TIMEOUT_MS, logger }),
   };
 }

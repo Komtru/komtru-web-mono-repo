@@ -44,6 +44,19 @@ const bodyParserError = (error: unknown): ApiError | undefined => {
   return undefined;
 };
 
+/**
+ * Express, its router and body-parser signal the client's mistakes (unsupported charset, malformed
+ * path encoding, ...) with a 4xx `status`. Those are not bugs: answer with that status and a generic
+ * title, and keep them out of Sentry. Their messages stay out of the response.
+ */
+const clientError = (error: unknown): ApiError | undefined => {
+  if (typeof error !== 'object' || error === null) return undefined;
+  const status = 'status' in error ? error.status : 'statusCode' in error ? error.statusCode : undefined;
+  if (typeof status !== 'number' || !Number.isInteger(status) || status < 400 || status > 499)
+    return undefined;
+  return new ApiError(status, 'VALIDATION_FAILED', 'The request could not be processed');
+};
+
 export const notFound: RequestHandler = () => {
   throw new ApiError(404, 'NOT_FOUND', 'Not found');
 };
@@ -62,9 +75,9 @@ export function errorHandler(logger: Logger, onUnexpected: (error: unknown) => v
       );
       return;
     }
-    const parse = bodyParserError(error);
-    if (parse) {
-      sendProblem(res, toProblem(parse));
+    const client = bodyParserError(error) ?? clientError(error);
+    if (client) {
+      sendProblem(res, toProblem(client));
       return;
     }
 

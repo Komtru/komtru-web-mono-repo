@@ -1,7 +1,9 @@
 // Boots the real API and worker processes' wiring against the local Docker stack.
 // Skipped unless KOMTRU_INFRA_TESTS=1.
+import http from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { describe, expect, it } from 'vitest';
+import { defineModule } from '../../src/platform/module.js';
 import { startApi } from '../../src/server.js';
 import { startWorker } from '../../src/worker-process.js';
 
@@ -28,6 +30,64 @@ describe.runIf(enabled)('process wiring', () => {
   it('starts the worker and shuts it down cleanly', async () => {
     const worker = await startWorker(env);
     expect(await worker.stop()).toEqual({ clean: true, failed: [], timedOut: false });
+  });
+
+  it('drains an in-flight keep-alive request, then runs every closer', async () => {
+    const stopped: string[] = [];
+    const slow = defineModule({
+      name: 'slow',
+      routes: (router) => {
+        router.get('/slow', async (_req, res) => {
+          await new Promise((r) => setTimeout(r, 300));
+          res.json({ done: true });
+        });
+      },
+      stop: () => {
+        stopped.push('slow');
+        return Promise.resolve();
+      },
+    });
+    const api = await startApi(env, [slow]);
+    const { port } = api.server.address() as AddressInfo;
+    const agent = new http.Agent({ keepAlive: true });
+
+    const response = new Promise<{ status: number; connection: string | undefined }>((resolve, reject) => {
+      http
+        .get({ host: '127.0.0.1', port, path: '/v1/slow', agent }, (res) => {
+          res.resume();
+          res.on('end', () => resolve({ status: res.statusCode ?? 0, connection: res.headers.connection }));
+        })
+        .on('error', reject);
+    });
+    await new Promise((r) => setTimeout(r, 50)); // the request is now in flight
+
+    const started = Date.now();
+    const result = await api.stop();
+    expect(await response).toEqual({ status: 200, connection: 'close' });
+    expect(result).toEqual({ clean: true, failed: [], timedOut: false });
+    expect(stopped).toEqual(['slow']);
+    expect(Date.now() - started).toBeLessThan(3000);
+    agent.destroy();
+  });
+
+  it('rejects when the port is already in use', async () => {
+    const first = await startApi(env, []);
+    const { port } = first.server.address() as AddressInfo;
+    try {
+      await expect(startApi({ ...env, PORT: String(port) }, [])).rejects.toThrow(/EADDRINUSE/);
+    } finally {
+      await first.stop();
+    }
+  });
+
+  it('stops every module even when one fails to stop', async () => {
+    const stopped: string[] = [];
+    const ok = (name: string) => defineModule({ name, stop: () => (stopped.push(name), Promise.resolve()) });
+    const broken = defineModule({ name: 'broken', stop: () => Promise.reject(new Error('boom')) });
+    const api = await startApi(env, [ok('first'), broken, ok('last')]);
+    const result = await api.stop();
+    expect(stopped).toEqual(['last', 'first']);
+    expect(result).toEqual({ clean: false, failed: ['module:broken'], timedOut: false });
   });
 
   it('refuses to start without required configuration, naming what is missing', async () => {

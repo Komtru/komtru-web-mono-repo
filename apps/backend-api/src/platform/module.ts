@@ -3,6 +3,7 @@
 // other only through their index.ts (enforced by eslint-rules/module-boundaries.mjs).
 import type { Router } from 'express';
 import type { HealthCheck } from './health.js';
+import type { Closer } from './shutdown.js';
 
 export interface KomtruModule {
   name: string;
@@ -36,3 +37,10 @@ export function mountModules(modules: KomtruModule[]): (router: Router) => void 
 
 export const moduleHealthChecks = (modules: KomtruModule[]): HealthCheck[] =>
   modules.flatMap((m) => m.healthChecks ?? []);
+
+/** One closer per module, in reverse start order, so a failing stop never skips the others. */
+export const moduleClosers = (modules: KomtruModule[]): Closer[] =>
+  [...modules].reverse().flatMap((module) => {
+    const { stop } = module;
+    return stop ? [{ name: `module:${module.name}`, close: () => stop() }] : [];
+  });

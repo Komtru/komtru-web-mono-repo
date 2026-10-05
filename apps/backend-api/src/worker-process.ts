@@ -4,14 +4,12 @@ import { loadConfig } from './config/env.js';
 import { modules as registry } from './modules/index.js';
 import { createClients } from './platform/clients.js';
 import { createLogger } from './platform/logger.js';
-import type { KomtruModule } from './platform/module.js';
+import { moduleClosers, type KomtruModule } from './platform/module.js';
 import { initSentry } from './platform/sentry.js';
-import { gracefulShutdown, type ShutdownResult } from './platform/shutdown.js';
-import { stopModules } from './server.js';
+import type { RunningProcess } from './platform/run.js';
+import { gracefulShutdown } from './platform/shutdown.js';
 
-export interface RunningWorker {
-  stop(): Promise<ShutdownResult>;
-}
+export type RunningWorker = RunningProcess;
 
 export async function startWorker(
   env: NodeJS.ProcessEnv,
@@ -25,11 +23,17 @@ export async function startWorker(
   for (const module of modules) await module.start?.();
   logger.info('worker started');
 
+  const reportFatal = (error: unknown, origin: string) => {
+    logger.fatal({ err: error, origin }, 'fatal error');
+    sentry.captureException(error);
+  };
+
   return {
+    reportFatal,
     stop: () =>
       gracefulShutdown({
         closers: [
-          stopModules(modules),
+          ...moduleClosers(modules),
           { name: 'clients', close: () => clients.close() },
           { name: 'sentry', close: async () => void (await sentry.flush()) },
         ],

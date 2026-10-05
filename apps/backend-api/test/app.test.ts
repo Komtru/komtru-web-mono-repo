@@ -20,6 +20,9 @@ const build = (onUnexpected = vi.fn()) => {
     logger,
     onUnexpected,
     mountV1: (router) => {
+      router.get('/items/:id', (req, res) => {
+        res.json({ id: req.params.id });
+      });
       router.post('/echo', (req, res) => {
         res.json({ received: req.body as unknown });
       });
@@ -79,6 +82,25 @@ describe('problem details', () => {
       code: 'INVALID_TRANSITION',
       title: 'This trade cannot move to that state',
     });
+  });
+
+  it('answers an unsupported body charset with a 415 problem, without reporting it', async () => {
+    const { app, onUnexpected } = build();
+    const res = await request(app)
+      .post('/v1/echo')
+      .set('Content-Type', 'application/json; charset=latin1')
+      .send('{}');
+    expect(res.status).toBe(415);
+    expect(res.body).toMatchObject({ status: 415, code: 'VALIDATION_FAILED' });
+    expect(onUnexpected).not.toHaveBeenCalled();
+  });
+
+  it('answers a malformed path encoding with a 400 problem, without reporting it', async () => {
+    const { app, onUnexpected } = build();
+    const res = await request(app).get('/v1/items/%E0%A4%A');
+    expect(res.status).toBe(400);
+    expect(res.body).toMatchObject({ status: 400, code: 'VALIDATION_FAILED' });
+    expect(onUnexpected).not.toHaveBeenCalled();
   });
 
   it.each(['/v1/boom', '/v1/async-boom'])('hides unexpected errors behind a 500 (%s)', async (path) => {
