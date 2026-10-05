@@ -1,0 +1,84 @@
+{
+  "migrations": [
+    {
+      "tag": "0000_platform_schema",
+      "when": 1791208412527,
+      "sha256": "23026bf3551cf137d9e441927231db02dffe06c39313bd1a4ac56442ad3ba6cc"
+    },
+    {
+      "tag": "0001_platform_roles",
+      "when": 1791208416839,
+      "sha256": "156b3532b9aca1c0e16a72e87c45804c5dac942cb7970e47ae4a12712a7510a5"
+    },
+    {
+      "tag": "0002_platform_events",
+      "when": 1791218723340,
+      "sha256": "f262ff6d22f699b50b072f381fe6335c636bc00ab9ed0bfaea6a3b44d73a1e11"
+    },
+    {
+      "tag": "0003_idempotency_keys",
+      "when": 1791220394655,
+      "sha256": "1a3409ba233381a6a7cd66aa3ec1d7ee1b0d9376748672f1deaf97e5d48d16b4"
+    },
+    {
+      "tag": "0004_identity_citext",
+      "when": 1791225308565,
+      "sha256": "714abd85076494dc4d44c776ffceef6de9699c4cbef1edc5666e058f8bc0fbe2"
+    },
+    {
+      "tag": "0005_identity_enums",
+      "when": 1791225384193,
+      "sha256": "718df4471223d01be634c592955fa7807d0f945a659f7b49281ee7c3d992a4c9"
+    },
+    {
+      "tag": "0006_identity_core",
+      "when": 1791225508160,
+      "sha256": "5656cbd37bc31ed132ac048024334f293fd8f806fcd3e029f04f8685736f8b9c"
+    },
+    {
+      "tag": "0007_identity_same_user_fks",
+      "when": 1791225600958,
+      "sha256": "320cceb05911548f7b7adafe5ed6dd87dcc7baf506ccd36e81f9d0c1bdcf1883"
+    },
+    {
+      "tag": "0008_identity_rbac",
+      "when": 1791225691517,
+      "sha256": "2cb0d9a408691f37c819f2e74934e6bda375b8350769c950dbd453e3f8f77afc"
+    },
+    {
+      "tag": "0009_identity_dual_approval",
+      "when": 1791225704990,
+      "sha256": "b6ce1564440ebee63cce81fab5a2ce27e79e4ba29dfdcfae141cb1c8a996642a"
+    },
+    {
+      "tag": "0010_identity_sessions",
+      "when": 1791225820072,
+      "sha256": "d537f0fad31f094166d75473afc8e1c66f6b57bde8a5c25b53e10f2e49452764"
+    },
+    {
+      "tag": "0011_identity_audit_log",
+      "when": 1791225872051,
+      "sha256": "a4afa6c48a764e55958ea1e563a10ac29edbfb93fcc627c9bcf062d0e9b36367"
+    },
+    {
+      "tag": "0012_identity_audit_append_only",
+      "when": 1791225880380,
+      "sha256": "dcd4f36e8b62589925ecbc3750dd3d4a9a3f8278e5cc35a67bf705783762ffae"
+    },
+    {
+      "tag": "0013_identity_four_eyes",
+      "when": 1791229336721,
+      "sha256": "9e8aa340c082433b27b2abd0295dff67cd00ed07489b3cf91fece6bfb21cf0a8"
+    },
+    {
+      "tag": "0014_identity_dual_approval_hardening",
+      "when": 1791229351799,
+      "sha256": "acd31d7698758e7cecac5875a85703018b69de5a0b4a07e513a94441a10b3933"
+    },
+    {
+      "tag": "0015_identity_desc_indexes",
+      "when": 1791229390662,
+      "sha256": "774b9444e37319c92b706af3a1c03d4c2343c62c0b4f4ee2134fc72538d3730d"
+    }
+  ]
+}
