@@ -34,3 +34,7 @@ docs/ui-review/**/artifacts/
 # Originals kept at the repo root for the owner; the tracked copies live under docs/.
 /Komtru — UI Screens Living Master File.html
 /Kumtru — Master Build Prompt for Claude Code.md
+
+# Agent worktrees (one per ticket)
+.claude/worktrees/
+.worktrees/
