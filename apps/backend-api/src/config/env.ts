@@ -33,6 +33,8 @@ const VARIABLES = {
   POSTGRES_POOL_MAX: { schema: int(1, 200), required: false },
   REDIS_URL: { schema: z.url(), required: true },
   SENTRY_DSN: { schema: z.url(), required: false },
+  // 32 bytes of hex, reused verbatim from the old backend: rows it encrypted must stay readable.
+  ENCRYPTION_KEY: { schema: z.string().regex(/^[0-9a-fA-F]{64}$/), required: false },
   SCHEDULER_TIMEZONE: {
     schema: z.string().refine((tz) => {
       try {
@@ -66,6 +68,11 @@ export interface AppConfig {
   };
   redis: { url: string };
   sentry: { dsn?: string; environment: string };
+  /**
+   * Optional, not required: the API and worker boot without it, and only a call site that actually
+   * encrypts needs it. `createEncryption` fails loudly, naming the variable, when it is absent.
+   */
+  crypto: { encryptionKey?: string };
   /** Cron schedules are evaluated in this IANA timezone. */
   scheduler: { timezone: string };
 }
@@ -121,6 +128,7 @@ export function loadConfig(env: NodeJS.ProcessEnv): AppConfig {
       poolMax: v.POSTGRES_POOL_MAX ?? 10,
     },
     redis: { url: v.REDIS_URL as string },
+    crypto: { ...(v.ENCRYPTION_KEY ? { encryptionKey: v.ENCRYPTION_KEY } : {}) },
     scheduler: { timezone: v.SCHEDULER_TIMEZONE ?? 'Africa/Lagos' },
     sentry: {
       ...(v.SENTRY_DSN ? { dsn: v.SENTRY_DSN } : {}),
