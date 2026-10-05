@@ -72,6 +72,20 @@ describe('findProviderImportViolations', () => {
     ]);
   });
 
+  it('finds a client named client.ts inside a provider folder', async () => {
+    const root = await modules({
+      'ledger/infrastructure/providers/paystack/client.ts': 'export const charge = async () => undefined;\n',
+      'ledger/jobs/charge.job.ts':
+        "import { charge } from '../infrastructure/providers/paystack/client.js';\n",
+      'ledger/services/funding.service.ts':
+        "import { charge } from '../infrastructure/providers/paystack/client.js';\n",
+    });
+
+    await expect(findProviderImportViolations(root)).resolves.toMatchObject([
+      { file: 'ledger/services/funding.service.ts', kind: 'client-outside-jobs' },
+    ]);
+  });
+
   it('finds a dynamic import of a client', async () => {
     const root = await modules({
       [CLIENT]: 'export const verifyCharge = async () => undefined;\n',

@@ -57,6 +57,7 @@ Spec: `docs/specs/module-01-identity-and-user-management.md`. Decision C2 (desig
   - Apple first-callback email persisted and not nulled by later callbacks.
   - The synchronous code exchange is the documented exception in T-028, with timeout and circuit breaker; JWKS cached by a scheduled job.
   - Staff scope can never be obtained via social login (M1 C2).
+  - **T-028:** the code exchange uses `providerRequest` wrapped in `createCircuitBreaker` from `src/platform/providers/`; the provider calls live in `identity/infrastructure/providers/<provider>.client.ts`, which only `identity/jobs/` and the one documented synchronous callback path may import.
 
 ### T-035 — Party lookup and invitations
 

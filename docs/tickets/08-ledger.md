@@ -25,6 +25,7 @@ Decisions C4, C5, C8, C10, C11 (design §5). The ledger is authoritative; Paysta
   - Webhook signature: HMAC-SHA512 of the raw body, fails closed without a secret, length-safe compare; fresh fixture tests with real signatures.
   - Bank list cached by a scheduled job; name resolution as a job.
   - No Subaccounts, Splits or Dedicated Virtual Accounts anywhere (a grep test guards the codebase).
+  - **T-028:** the network-calling file is `ledger/infrastructure/providers/paystack/client.ts`, importable only from `ledger/jobs/` (`komtru/provider-clients`); webhook verification and payload parsing stay in pure sibling files, and every request goes through `providerRequest`.
 
 ### T-072 — Funding a trade
 

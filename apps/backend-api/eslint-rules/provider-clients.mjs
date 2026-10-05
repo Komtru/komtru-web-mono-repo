@@ -12,7 +12,8 @@ import path from 'node:path';
 
 const HTTP_HELPER = path.join('platform', 'providers', 'http');
 const stripExtension = (file) => file.replace(/\.(ts|js|mts|mjs)$/, '');
-const isClient = (file) => stripExtension(file).endsWith('.client');
+// `paystack.client.ts`, and `paystack/client.ts` for a provider with a folder of its own.
+const isClient = (file) => /(^|\.)client$/.test(path.basename(stripExtension(file)));
 const isJob = (file) => file.split(path.sep).includes('jobs');
 const isPlatform = (file) => file.includes(`${path.sep}src${path.sep}platform${path.sep}`);
 const isHttpHelper = (file) => stripExtension(file).endsWith(HTTP_HELPER);

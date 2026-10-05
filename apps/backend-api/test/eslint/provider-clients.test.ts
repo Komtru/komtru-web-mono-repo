@@ -29,6 +29,8 @@ tester.run('provider-clients', providerClients, {
     { filename: client, code: "import { providerRequest } from '../../../../platform/providers/http.js';" },
     { filename: helper, code: "import { createHmac } from 'node:crypto';" },
     { filename: route, code: "import { z } from 'zod';" },
+    // A provider with its own folder names the file client.ts (T-071's paystack/ layout).
+    { filename: job, code: "import { charge } from '../infrastructure/providers/paystack/client.js';" },
     // The platform may use its own helper.
     { filename: `${root}/platform/providers/circuit-breaker.ts`, code: "import { x } from './http.js';" },
   ],
@@ -51,6 +53,11 @@ tester.run('provider-clients', providerClients, {
     {
       filename: route,
       code: "const c = await import('../infrastructure/providers/paystack.client.js');",
+      errors: [{ messageId: 'clientOutsideJobs' }],
+    },
+    {
+      filename: service,
+      code: "import { charge } from '../infrastructure/providers/paystack/client.js';",
       errors: [{ messageId: 'clientOutsideJobs' }],
     },
     {

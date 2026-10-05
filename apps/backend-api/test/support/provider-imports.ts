@@ -15,7 +15,8 @@ export interface ClientImportViolation {
 const SPECIFIER = /(?:from\s*|import\s*\(\s*)['"](\.[^'"]*)['"]/g;
 const HTTP_HELPER = path.join('platform', 'providers', 'http');
 const stripExtension = (file: string) => file.replace(/\.(ts|js|mts|mjs)$/, '');
-const isClient = (file: string) => stripExtension(file).endsWith('.client');
+// `paystack.client.ts`, and `paystack/client.ts` for a provider with a folder of its own.
+const isClient = (file: string) => /(^|\.)client$/.test(path.basename(stripExtension(file)));
 
 async function* walk(dir: string): AsyncGenerator<string> {
   const entries = await readdir(dir, { withFileTypes: true }).catch(() => []);
