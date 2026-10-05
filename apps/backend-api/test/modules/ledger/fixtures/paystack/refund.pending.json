@@ -1,0 +1,13 @@
+{
+  "event": "refund.pending",
+  "data": {
+    "status": "pending",
+    "transaction_reference": "trade_fund_018f3b2c",
+    "refund_reference": "refund_018f3b55",
+    "amount": 5000000,
+    "currency": "NGN",
+    "id": 88127,
+    "integration": 100073,
+    "domain": "test"
+  }
+}

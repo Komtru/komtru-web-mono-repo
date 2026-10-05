@@ -1,0 +1,13 @@
+{
+  "event": "charge.failed",
+  "data": {
+    "id": 3021592901,
+    "status": "failed",
+    "reference": "trade_fund_018f3b2d",
+    "amount": 15225000,
+    "gateway_response": "Insufficient funds",
+    "currency": "NGN",
+    "channel": "card",
+    "customer": { "email": "buyer@example.test" }
+  }
+}

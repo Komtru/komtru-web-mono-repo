@@ -32,6 +32,16 @@ describe('loadConfig', () => {
     expect(config.sentry.dsn).toBeUndefined();
   });
 
+  it('exposes the Paystack keys only when they are set', () => {
+    expect(loadConfig(minimal).paystack).toEqual({});
+    // An empty value in .env means "not set" — it must never become an empty-string secret.
+    expect(loadConfig({ ...minimal, PAYSTACK_SECRET_KEY: '' }).paystack).toEqual({});
+    expect(
+      loadConfig({ ...minimal, PAYSTACK_SECRET_KEY: 'sk-test-value', PAYSTACK_PUBLIC_KEY: 'pk-test-value' })
+        .paystack,
+    ).toEqual({ secretKey: 'sk-test-value', publicKey: 'pk-test-value' });
+  });
+
   it('exposes the direct URL and runtime role password only when set', () => {
     expect(loadConfig(minimal).postgres).not.toHaveProperty('appPassword');
     const config = loadConfig({

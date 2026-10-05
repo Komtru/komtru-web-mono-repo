@@ -1,0 +1,13 @@
+{
+  "event": "refund.processed",
+  "data": {
+    "status": "processed",
+    "transaction_reference": "trade_fund_018f3b2c",
+    "refund_reference": "refund_018f3b55",
+    "amount": 5000000,
+    "currency": "NGN",
+    "id": 88129,
+    "integration": 100073,
+    "domain": "test"
+  }
+}

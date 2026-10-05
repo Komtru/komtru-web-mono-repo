@@ -48,6 +48,10 @@ const VARIABLES = {
     required: false,
   },
   SENTRY_ENVIRONMENT: { schema: z.string().min(1), required: false },
+  // Not shape-checked: a test key and a live key differ only by prefix, so a regex here is a boot
+  // failure waiting for the first legitimate key rotation, not a safety net.
+  PAYSTACK_SECRET_KEY: { schema: z.string().min(1), required: false },
+  PAYSTACK_PUBLIC_KEY: { schema: z.string().min(1), required: false },
 } satisfies Record<string, { schema: z.ZodType; required: boolean }>;
 
 type VariableName = keyof typeof VARIABLES;
@@ -76,6 +80,11 @@ export interface AppConfig {
   crypto: { encryptionKey?: string };
   /** Cron schedules are evaluated in this IANA timezone. */
   scheduler: { timezone: string };
+  /**
+   * Optional, like `crypto`: both processes boot without Paystack. Absent means every adapter call
+   * fails closed with a named error and webhook signatures never verify — never an empty-key HMAC.
+   */
+  paystack: { secretKey?: string; publicKey?: string };
 }
 
 export class ConfigError extends Error {
@@ -131,6 +140,10 @@ export function loadConfig(env: NodeJS.ProcessEnv): AppConfig {
     redis: { url: v.REDIS_URL as string },
     crypto: { ...(v.ENCRYPTION_KEY ? { encryptionKey: v.ENCRYPTION_KEY } : {}) },
     scheduler: { timezone: v.SCHEDULER_TIMEZONE ?? 'Africa/Lagos' },
+    paystack: {
+      ...(v.PAYSTACK_SECRET_KEY ? { secretKey: v.PAYSTACK_SECRET_KEY } : {}),
+      ...(v.PAYSTACK_PUBLIC_KEY ? { publicKey: v.PAYSTACK_PUBLIC_KEY } : {}),
+    },
     sentry: {
       ...(v.SENTRY_DSN ? { dsn: v.SENTRY_DSN } : {}),
       environment: v.SENTRY_ENVIRONMENT ?? nodeEnv,

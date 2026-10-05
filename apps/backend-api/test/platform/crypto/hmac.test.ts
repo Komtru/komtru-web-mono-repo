@@ -1,6 +1,12 @@
-import { createHash, randomBytes } from 'node:crypto';
+import { createHash, createHmac, randomBytes } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
-import { createHmacHasher, hmac, sha256, timingSafeEqualBuffers } from '../../../src/platform/crypto/hmac.js';
+import {
+  createHmacHasher,
+  hmac,
+  providerHmac,
+  sha256,
+  timingSafeEqualBuffers,
+} from '../../../src/platform/crypto/hmac.js';
 
 const key = randomBytes(32);
 const otherKey = randomBytes(32);
@@ -79,5 +85,30 @@ describe('createHmacHasher', () => {
 
   it('rejects an empty key', () => {
     expect(() => createHmacHasher('')).toThrow(/key/i);
+  });
+});
+
+describe('providerHmac', () => {
+  const body = Buffer.from('{"event":"charge.success"}', 'utf8');
+
+  it("is the provider's own scheme: no domain framing", () => {
+    expect(providerHmac('sha512', key, body).equals(createHmac('sha512', key).update(body).digest())).toBe(
+      true,
+    );
+    expect(providerHmac('sha256', key, body).equals(createHmac('sha256', key).update(body).digest())).toBe(
+      true,
+    );
+  });
+
+  it('treats a string key and value as their utf8 bytes', () => {
+    expect(
+      providerHmac('sha512', 'secret', '{}').equals(
+        providerHmac('sha512', Buffer.from('secret', 'utf8'), Buffer.from('{}', 'utf8')),
+      ),
+    ).toBe(true);
+  });
+
+  it('refuses an empty key', () => {
+    expect(() => providerHmac('sha512', '', body)).toThrow(/non-empty key/);
   });
 });

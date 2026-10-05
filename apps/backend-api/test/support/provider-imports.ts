@@ -9,7 +9,7 @@ export interface ClientImportViolation {
   /** Path relative to the scanned root. */
   file: string;
   specifier: string;
-  kind: 'client-outside-jobs' | 'http-outside-client' | 'raw-network-call';
+  kind: 'client-outside-jobs' | 'http-outside-client' | 'raw-network-call' | 'jobs-outside-jobs';
 }
 
 /** `from '…'`, `import('…')` and the side-effect form `import '…'`. */
@@ -20,6 +20,7 @@ const HTTP_HELPER = path.join('platform', 'providers', 'http');
 const stripExtension = (file: string) => file.replace(/\.(ts|js|mts|mjs)$/, '');
 /** `paystack.client.ts`, and `paystack/client.ts` for a provider with a folder of its own. */
 const isClient = (file: string) => /(^|\.)client$/.test(path.basename(stripExtension(file)));
+const INDEX_FILES = new Set(['index.ts', 'index.js']);
 
 async function* walk(dir: string): AsyncGenerator<string> {
   const entries = await readdir(dir, { withFileTypes: true }).catch(() => []);
@@ -37,8 +38,11 @@ export async function findProviderImportViolations(root: string): Promise<Client
   for await (const file of walk(root)) {
     const source = await readFile(file, 'utf8');
     const relative = path.relative(root, file);
-    const inJobs = relative.split(path.sep).includes('jobs');
+    const segments = relative.split(path.sep);
+    const inJobs = segments.includes('jobs');
     const client = isClient(file);
+    /** `<module>/index.ts`: the module's own surface, which wires its jobs' dependencies at start. */
+    const moduleIndex = segments.length === 2 && INDEX_FILES.has(segments[1] ?? '');
 
     if (!client && BARE_FETCH.test(source)) {
       violations.push({ file: relative, specifier: 'fetch()', kind: 'raw-network-call' });
@@ -58,6 +62,14 @@ export async function findProviderImportViolations(root: string): Promise<Client
         violations.push({ ...common, kind: 'client-outside-jobs' });
       } else if (stripExtension(target).endsWith(HTTP_HELPER) && !client) {
         violations.push({ ...common, kind: 'http-outside-client' });
+      } else if (
+        // A file in jobs/ may import a client, so importing that file is a second route to the
+        // provider. Only jobs/ and the module's index.ts may take it.
+        path.relative(root, target).split(path.sep).includes('jobs') &&
+        !inJobs &&
+        !moduleIndex
+      ) {
+        violations.push({ ...common, kind: 'jobs-outside-jobs' });
       }
     }
   }

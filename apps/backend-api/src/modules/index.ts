@@ -2,5 +2,8 @@
 // importing only that module's index.ts.
 import type { KomtruModule } from '../platform/module.js';
 import { configModule } from './config/index.js';
+import { ledgerModule } from './ledger/index.js';
 
-export const modules: KomtruModule[] = [configModule];
+// config first: it holds the fee schedule, which is read and validated at import, and everything
+// that posts money reads a snapshot taken from it.
+export const modules: KomtruModule[] = [configModule, ledgerModule];

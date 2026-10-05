@@ -1,0 +1,14 @@
+{
+  "event": "refund.failed",
+  "data": {
+    "status": "failed",
+    "transaction_reference": "trade_fund_018f3b2c",
+    "refund_reference": "refund_018f3b56",
+    "amount": 5000000,
+    "currency": "NGN",
+    "id": 88130,
+    "integration": 100073,
+    "domain": "test",
+    "message": "The customer account could not be credited"
+  }
+}

@@ -7,6 +7,7 @@ import { pinoHttp } from 'pino-http';
 import type { AppConfig } from './config/env.js';
 import { errorHandler, notFound } from './platform/errors.js';
 import type { Logger } from './platform/logger.js';
+import { captureRawBody } from './platform/http/raw-body.js';
 import { requestId } from './platform/request-id.js';
 
 export interface AppDependencies {
@@ -61,7 +62,9 @@ export function createApp({
     }),
   );
   app.use(compression());
-  app.use(express.json({ limit: '100kb' }));
+  // `verify` sees the collected bytes before they are parsed; it keeps them only for the webhook
+  // mount, whose signature checks cannot use the reparsed body (see platform/http/raw-body.ts).
+  app.use(express.json({ limit: '100kb', verify: captureRawBody }));
 
   mountRoot?.(app);
 

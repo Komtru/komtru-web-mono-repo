@@ -61,8 +61,8 @@ const NOT_MONEY =
 /** `import … from`, `export … from`, `require(…)` and `await import(…)` all reach the package. */
 const SHARED_TYPES =
   /(?:import|export)\s+(?:type\s+)?([^'";]*?)\s*from\s*['"]@komtru\/shared-types['"]|(?:require|import)\(\s*['"]@komtru\/shared-types['"]\s*\)/g;
-/** A relative path into the fee module that is not its barrel: the deep import the barrel forbids. */
-const DEEP_CONFIG_IMPORT = /['"][^'"]*\/config\/(?!index)[^'"]*['"]/g;
+/** Any relative specifier; whether it reaches into the fee module is decided by resolving it. */
+const RELATIVE_IMPORT = /['"](\.[^'"]*)['"]/g;
 /** The file itself, however the path is spelled. */
 const FEES_FILE_MENTION = /fees\.ya?ml/gi;
 /** A whole numeric token, tolerating `_` separators and a bigint `n` suffix; not part of an identifier. */
@@ -216,8 +216,15 @@ export async function findFeeViolations(
     for (const match of source.matchAll(FEES_FILE_MENTION)) {
       violations.push({ ...at(match.index), detail: 'config/fees.yaml', kind: 'fee-read-bypass' });
     }
-    for (const match of source.matchAll(DEEP_CONFIG_IMPORT)) {
-      violations.push({ ...at(match.index), detail: match[0], kind: 'fee-read-bypass' });
+    for (const match of source.matchAll(RELATIVE_IMPORT)) {
+      // Resolved, not pattern-matched: `../../config/env.js` from a module is the *environment*
+      // config in src/config, which every module may read. Only a path landing inside the fee
+      // module and not on its barrel is a bypass.
+      const target = path.resolve(path.dirname(file), match[1] ?? '');
+      const inside = path.relative(path.join(root, FEE_MODULE), target);
+      if (inside && !inside.startsWith('..') && !path.isAbsolute(inside) && !/^index\.[jt]s$/.test(inside)) {
+        violations.push({ ...at(match.index), detail: match[1] ?? '', kind: 'fee-read-bypass' });
+      }
     }
     if (SNAPSHOT_ONLY.includes(relative.split(path.sep)[0] ?? '')) {
       for (const symbol of LIVE_READS) {

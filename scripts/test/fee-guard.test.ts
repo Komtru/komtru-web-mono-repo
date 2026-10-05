@@ -71,10 +71,23 @@ describe('findFeeViolations', () => {
     const root = await tree({
       'trades/services/terms.service.ts': "readFileSync('../../../config/fees.yaml');\n",
     });
-    // The path also reaches into the config module past its barrel, which is its own finding.
     await expect(findFeeViolations(root, VALUES)).resolves.toMatchObject([
       { kind: 'fee-read-bypass', detail: 'config/fees.yaml' },
-      { kind: 'fee-read-bypass' },
+    ]);
+  });
+
+  it('tells the fee module apart from src/config, which every module may read', async () => {
+    const root = await tree({
+      // Resolves to src/config/env.ts, not modules/config: the environment, not the fee schedule.
+      'ledger/index.ts': "import { loadConfig } from '../../config/env.js';\n",
+      // Resolves inside modules/config, past its barrel: a real bypass.
+      'trades/services/terms.service.ts': "import { getFeeSchedule } from '../../config/fees.js';\n",
+    });
+    const found = await findFeeViolations(root, VALUES);
+    // The trades file trips twice — the deep import, and reading the live schedule at all from a
+    // module that must post from a snapshot. The ledger file, reading src/config/env, trips neither.
+    expect([...new Set(found.map((violation) => violation.file))]).toEqual([
+      'trades/services/terms.service.ts',
     ]);
   });
 

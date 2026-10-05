@@ -1,0 +1,13 @@
+{
+  "event": "transfer.success",
+  "data": {
+    "amount": 9000000,
+    "currency": "NGN",
+    "domain": "test",
+    "reference": "payout_018f3b40",
+    "status": "success",
+    "transfer_code": "TRF_vsyqdmlzble3uii",
+    "id": 441278,
+    "recipient": { "recipient_code": "RCP_1a2b3c4d5e" }
+  }
+}

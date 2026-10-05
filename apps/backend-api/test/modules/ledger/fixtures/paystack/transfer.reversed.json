@@ -1,0 +1,11 @@
+{
+  "event": "transfer.reversed",
+  "data": {
+    "amount": 9000000,
+    "currency": "NGN",
+    "reference": "payout_018f3b42",
+    "status": "reversed",
+    "transfer_code": "TRF_xsyqdmlzble3uik",
+    "id": 441280
+  }
+}

@@ -21,6 +21,7 @@ export const PROBLEM_CODES = [
   'MERCHANT_CANNOT_BUY',
   'ADDRESS_REQUIRED',
   'PARK_NOT_AVAILABLE_IN_CITY',
+  'PAYMENT_PROVIDER_UNAVAILABLE',
 ] as const;
 
 export const problemCodeSchema = z.enum(PROBLEM_CODES);
