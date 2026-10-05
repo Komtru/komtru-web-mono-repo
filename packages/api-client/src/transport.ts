@@ -29,6 +29,12 @@ export interface TransportRequest {
   /** Already interpolated and query-stringed; the transport only joins it to the base URL. */
   path: string;
   body?: unknown;
+  /**
+   * A body serialised once by the caller and sent byte-for-byte. The idempotency gate hashes the
+   * body, so every attempt of one user action must send exactly the same bytes — even if the
+   * caller's object was mutated while the client was backing off.
+   */
+  serialisedBody?: string;
   headers?: Record<string, string>;
   signal?: AbortSignal;
   responseSchema?: z.ZodType;
@@ -71,6 +77,12 @@ export function createTransport({
   const doFetch = fetchImpl ?? globalThis.fetch.bind(globalThis);
 
   const send = async <T>(request: TransportRequest): Promise<TransportResult<T>> => {
+    // A signal that is already aborted never fires `abort` again, so without this check the caller's
+    // cancellation would be ignored and the request would go out anyway.
+    if (request.signal?.aborted) {
+      throw new NetworkError(`The request to ${request.path} was aborted before it was sent`);
+    }
+
     const controller = new AbortController();
     let timedOut = false;
     const timer = setTimeout(() => {
@@ -81,49 +93,53 @@ export function createTransport({
     request.signal?.addEventListener('abort', onCallerAbort, { once: true });
 
     const headers = new Headers({ Accept: 'application/json', ...defaultHeaders, ...request.headers });
-    const hasBody = request.body !== undefined;
+    const hasBody = request.serialisedBody !== undefined || request.body !== undefined;
     if (hasBody && !headers.has('Content-Type')) headers.set('Content-Type', 'application/json');
+    const body = request.serialisedBody ?? (hasBody ? JSON.stringify(request.body) : undefined);
 
-    let response: Response;
     try {
-      response = await doFetch(joinUrl(baseUrl, request.path), {
-        method: request.method.toUpperCase(),
-        headers,
-        signal: controller.signal,
-        ...(hasBody ? { body: JSON.stringify(request.body) } : {}),
-        ...(credentials ? { credentials } : {}),
-      });
-    } catch (cause) {
-      // The deadline covers reading the body too, so the timer stays armed until that is done.
-      if (timedOut) throw new TimeoutError(`The request to ${request.path} timed out`, { cause });
-      throw new NetworkError(`The request to ${request.path} could not be sent`, { cause });
+      let response: Response;
+      try {
+        response = await doFetch(joinUrl(baseUrl, request.path), {
+          method: request.method.toUpperCase(),
+          headers,
+          signal: controller.signal,
+          ...(body !== undefined ? { body } : {}),
+          ...(credentials ? { credentials } : {}),
+        });
+      } catch (cause) {
+        if (timedOut) throw new TimeoutError(`The request to ${request.path} timed out`, { cause });
+        throw new NetworkError(`The request to ${request.path} could not be sent`, { cause });
+      }
+
+      // The deadline and the caller's signal both still apply here: a server that sends headers and
+      // then stalls mid-body is exactly the failure a header-only timeout misses.
+      let payload: unknown;
+      try {
+        payload = await decodeBody(response);
+      } catch (cause) {
+        if (timedOut) throw new TimeoutError(`The response to ${request.path} timed out`, { cause });
+        throw new NetworkError(`The response to ${request.path} could not be read`, { cause });
+      }
+
+      const meta = readResponseMeta(response.headers, response.status, now);
+      if (!response.ok) throw problemFromResponse(response.status, payload, meta);
+
+      if (!request.responseSchema) return { data: payload as T, meta };
+      const parsed = request.responseSchema.safeParse(payload);
+      if (!parsed.success) {
+        throw new ResponseShapeError(
+          `${request.method.toUpperCase()} ${request.path} returned a response that does not match its schema`,
+          parsed.error.issues,
+          meta,
+        );
+      }
+      return { data: parsed.data as T, meta };
     } finally {
+      // One place, so a rejected fetch cannot leave a 15-second timer holding the event loop open.
+      clearTimeout(timer);
       request.signal?.removeEventListener('abort', onCallerAbort);
     }
-
-    let body: unknown;
-    try {
-      body = await decodeBody(response);
-    } catch (cause) {
-      if (timedOut) throw new TimeoutError(`The response to ${request.path} timed out`, { cause });
-      throw new NetworkError(`The response to ${request.path} could not be read`, { cause });
-    } finally {
-      clearTimeout(timer);
-    }
-
-    const meta = readResponseMeta(response.headers, response.status, now);
-    if (!response.ok) throw problemFromResponse(response.status, body, meta);
-
-    if (!request.responseSchema) return { data: body as T, meta };
-    const parsed = request.responseSchema.safeParse(body);
-    if (!parsed.success) {
-      throw new ResponseShapeError(
-        `${request.method.toUpperCase()} ${request.path} returned a response that does not match its schema`,
-        parsed.error.issues,
-        meta,
-      );
-    }
-    return { data: parsed.data as T, meta };
   };
 
   return { send, baseUrl };

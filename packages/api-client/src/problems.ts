@@ -143,11 +143,20 @@ const STATUS_TITLES: Record<number, string> = {
  * problem details, but the caller still needs one shape to branch on. `synthetic` says the server
  * did not say this, so nothing downstream should treat `code` as a promise.
  */
+/** Mapped from the status alone, so a proxy's 403 never arrives labelled a validation failure. */
+const SYNTHETIC_CODES: Record<number, ProblemCode> = {
+  401: 'UNAUTHENTICATED',
+  403: 'FORBIDDEN',
+  404: 'NOT_FOUND',
+  409: 'CONFLICT',
+  429: 'RATE_LIMITED',
+};
+
 const synthesise = (status: number): ReceivedProblem => ({
   type: 'about:blank',
   title: STATUS_TITLES[status] ?? 'The request failed',
   status,
-  code: status >= 500 || status < 400 ? 'INTERNAL' : 'VALIDATION_FAILED',
+  code: SYNTHETIC_CODES[status] ?? (status >= 400 && status < 500 ? 'VALIDATION_FAILED' : 'INTERNAL'),
 });
 
 export function problemFromResponse(status: number, body: unknown, meta: ResponseMeta): ProblemError {

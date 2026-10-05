@@ -6,7 +6,6 @@
 //     in the process, so twenty requests that all 401 together produce one refresh;
 //   * everything else a repeat can fix goes through the retry policy, which only ever retries a
 //     mutation that carries a key.
-import type { SessionScope } from '@komtru/shared-types';
 import type { TokenStore } from './auth/session.js';
 import {
   buildPath,
@@ -67,8 +66,6 @@ export interface ApiClient {
   ) => Promise<CallResult<EndpointOutput<E>>>;
   transport: Transport;
   tokens: TokenStore | undefined;
-  /** Which session scope this client's endpoints expect; set by the app that builds it. */
-  scope: SessionScope | undefined;
 }
 
 export function createApiClient(options: ApiClientOptions): ApiClient {
@@ -92,6 +89,10 @@ export function createApiClient(options: ApiClientOptions): ApiClient {
       : undefined;
     const idempotent = READ_METHODS.has(typed.method) || idempotencyKey !== undefined;
 
+    // Serialised once, before the first attempt. The server hashes method, path, query and body, so
+    // a caller object mutated during a backoff would otherwise turn a retry into a 422.
+    const serialisedBody = input.body === undefined ? undefined : JSON.stringify(input.body);
+
     let refreshed = false;
     let attempt = 0;
 
@@ -106,7 +107,7 @@ export function createApiClient(options: ApiClientOptions): ApiClient {
           method: typed.method,
           path,
           headers,
-          ...(input.body !== undefined ? { body: input.body } : {}),
+          ...(serialisedBody !== undefined ? { serialisedBody } : {}),
           ...(callOptions.signal ? { signal: callOptions.signal } : {}),
           ...(typed.schema.response ? { responseSchema: typed.schema.response } : {}),
         });
@@ -125,14 +126,20 @@ export function createApiClient(options: ApiClientOptions): ApiClient {
           !refreshed
         ) {
           refreshed = true;
-          const next = await tokens.refreshOnce(snapshot.generation);
-          // No token afterwards means the refresh credential is gone: the session really is over.
-          if (next.accessToken !== null) continue;
+          // A refresh that cannot run — the route handler is down, the phone is offline — must not
+          // replace the 401 the caller is branching on. The session is only over when the refresh
+          // says so, which is `null`, and that is what fires `onSessionEnded`.
+          const next = await tokens.refreshOnce(snapshot.generation).catch(() => undefined);
+          if (next && next.accessToken !== null) continue;
         }
 
         attempt += 1;
         if (attempt >= policy.maxAttempts || !isRetryable(error, idempotent)) throw error;
-        await sleep(retryDelayMs(attempt - 1, error, policy), callOptions.signal);
+        const delay = retryDelayMs(attempt - 1, error, policy);
+        // The server asked for longer than this client is willing to wait: hand the caller the 429,
+        // which carries `retryAfterMs` so the UI can say when to try again.
+        if (delay === null) throw error;
+        await sleep(delay, callOptions.signal);
       }
     }
   };
@@ -143,7 +150,7 @@ export function createApiClient(options: ApiClientOptions): ApiClient {
     callOptions?: CallOptions,
   ): Promise<EndpointOutput<E>> => (await callWithMeta(endpoint, input, callOptions)).data;
 
-  return { call, callWithMeta, transport, tokens, scope: undefined };
+  return { call, callWithMeta, transport, tokens };
 }
 
 const responseMetaOf = (error: ProblemError): ResponseMeta => ({

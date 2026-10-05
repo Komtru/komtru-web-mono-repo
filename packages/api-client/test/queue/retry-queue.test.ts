@@ -4,7 +4,7 @@ import type { ApiClient } from '../../src/client.js';
 import { defineEndpoint } from '../../src/contracts.js';
 import { ProblemError, readResponseMeta } from '../../src/problems.js';
 import { createMemoryQueueStore } from '../../src/queue/memory-store.js';
-import { createRetryQueue } from '../../src/queue/retry-queue.js';
+import { createRetryQueue, queueRetryDelayMs } from '../../src/queue/retry-queue.js';
 import type { QueueEvent } from '../../src/queue/types.js';
 
 const receiveParcel = defineEndpoint({
@@ -223,5 +223,33 @@ describe('createRetryQueue', () => {
     await queue.enqueue('receiveParcel', { params: { id: 'p1' } });
     await queue.flush();
     expect(events.map((event) => event.type)).toEqual(['enqueued', 'sent', 'idle']);
+  });
+});
+
+describe('queueRetryDelayMs', () => {
+  const entry = (attempts: number) => ({
+    id: 'e1',
+    seq: 1,
+    endpoint: 'receiveParcel',
+    input: {},
+    idempotencyKey: 'key-for-entry-1',
+    enqueuedAt: 0,
+    attempts,
+  });
+
+  it('backs off further the longer an entry has been stuck', () => {
+    const noJitter = () => 1;
+    expect(queueRetryDelayMs(entry(1), problem(503, 'INTERNAL'), noJitter)).toBe(300);
+    expect(queueRetryDelayMs(entry(2), problem(503, 'INTERNAL'), noJitter)).toBe(600);
+    expect(queueRetryDelayMs(entry(3), problem(503, 'INTERNAL'), noJitter)).toBe(1_200);
+  });
+
+  it('obeys a Retry-After the server can afford to wait out', () => {
+    const rateLimited = new ProblemError(
+      { type: 'about:blank', title: 'RATE_LIMITED', status: 429, code: 'RATE_LIMITED' },
+      readResponseMeta(new Headers({ 'Retry-After': '5' }), 429),
+      false,
+    );
+    expect(queueRetryDelayMs(entry(1), rateLimited)).toBe(5_000);
   });
 });

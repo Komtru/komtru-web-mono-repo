@@ -57,7 +57,14 @@ describe('retryDelayMs', () => {
   const policy = { ...DEFAULT_RETRY_POLICY, random: () => 1 };
 
   it('obeys the server’s Retry-After over its own backoff', () => {
-    expect(retryDelayMs(0, problem(429, 'RATE_LIMITED', { 'Retry-After': '30' }), policy)).toBe(30_000);
+    expect(retryDelayMs(0, problem(429, 'RATE_LIMITED', { 'Retry-After': '2' }), policy)).toBe(2_000);
+  });
+
+  it('gives up rather than waiting out a Retry-After longer than the policy allows', () => {
+    // An auth route limited over 15 minutes answers `Retry-After: 900`. Sitting on an unsettled
+    // promise for a quarter of an hour is worse than handing the 429 to the UI.
+    expect(retryDelayMs(0, problem(429, 'RATE_LIMITED', { 'Retry-After': '900' }), policy)).toBeNull();
+    expect(retryDelayMs(0, problem(429, 'RATE_LIMITED', { 'Retry-After': '10' }), policy)).toBe(10_000);
   });
 
   it('backs off exponentially with full jitter', () => {

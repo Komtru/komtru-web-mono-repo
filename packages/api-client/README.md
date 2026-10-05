@@ -65,11 +65,25 @@ released" must never reach the server before "parcel received". A failure a repe
 one attempt too many, drops the entry and emits `dropped` so the UI can say what did not go through.
 `park-agent-app` pairs it with `createIndexedDbQueueStore()` so a queued release survives a reload.
 
+**What a dropped entry means for the app that consumes this.** Dropping the head and carrying on is
+the lesser of two evils, but it does break the ordering invariant for the entries behind it: if
+"parcel received" is dropped with a 403, "parcel released" will still be sent. Nothing here marks
+those followers as suspect — the ticket that owns the queued UI (T-16x) has to decide what an agent
+sees, which is why `dropped` carries the whole entry and the error. `queueRetryDelayMs(entry, error)`
+says how long to wait before the next `flush()`.
+
+Note the nesting: the client retries up to `maxAttempts` (3) inside each queue attempt, and the
+queue allows up to `maxAttempts` (10) of its own, so one entry can cost up to 30 requests before it
+is dropped. Lower either for a chattier endpoint.
+
 ## Seams left for other tickets
 
 - **T-017** owns the `/api/auth/*` route handlers; this package supplies `authRoutePaths()`,
   `createRouteHandlerRefresh()` and `backendLoginPath(scope)`.
 - **T-027** owns the socket gateway. `RealtimeProvider` takes an injectable `connect`, and the
-  5-minute socket token is minted by the app's Server Component layout (socket guide §6).
+  5-minute socket token is minted by the app's Server Component layout (socket guide §6). The
+  provider re-keys its effect on `token` and connects with `forceNew: true`, because socket.io caches
+  one Manager per URL and honours `auth` only when the socket is first created — without it a
+  reminted token would reconnect carrying the expired one.
 - **T-031/T-034** own login and refresh; `authSessionSchema` is `{ accessToken, scope, expiresAt? }`.
 - Wiring `flush()` to `online` or `visibilitychange` belongs to the app that owns the queued UI.

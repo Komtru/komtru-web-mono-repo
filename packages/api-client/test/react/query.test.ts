@@ -1,5 +1,5 @@
 import type { Paginated } from '@komtru/shared-types';
-import { QueryClient } from '@tanstack/react-query';
+import { MutationObserver, QueryClient } from '@tanstack/react-query';
 import { describe, expect, it, vi } from 'vitest';
 import { IDEMPOTENCY_KEY_PATTERN } from '../../src/idempotency.js';
 import { ProblemError, readResponseMeta } from '../../src/problems.js';
@@ -50,7 +50,7 @@ describe('optimisticMutationOptions', () => {
     return queryClient;
   };
 
-  it('applies the change straight away and gives the mutation one idempotency key', async () => {
+  it('applies the change straight away and hands the mutation an idempotency key', async () => {
     const queryClient = setup();
     const mutationFn = vi.fn(() => Promise.resolve({ ok: true }));
     const options = optimisticMutationOptions<{ id: string }, { ok: boolean }, Paginated<{ id: string }>>({
@@ -61,36 +61,82 @@ describe('optimisticMutationOptions', () => {
         previous && { ...previous, items: [...previous.items, { id: variables.id }] },
     });
 
-    const context = await options.onMutate({ id: 'b' });
+    await options.onMutate({ id: 'b' });
 
     expect(queryClient.getQueryData(['trades'])).toEqual({
       items: [{ id: 'a' }, { id: 'b' }],
       nextCursor: null,
     });
-    expect(context.idempotencyKey).toMatch(IDEMPOTENCY_KEY_PATTERN);
 
-    await options.mutationFn({ id: 'b' });
+    await options.mutationFn({ id: 'b' }, {});
     expect(mutationFn).toHaveBeenCalledWith({ id: 'b' }, expect.stringMatching(IDEMPOTENCY_KEY_PATTERN));
   });
 
-  it('keeps one key across a retry of the same mutation', async () => {
-    const queryClient = setup();
-    const keys: string[] = [];
-    const options = optimisticMutationOptions<{ id: string }, void, Paginated<{ id: string }>>({
+  /** Drives TanStack's own retry machinery rather than calling the option functions by hand. */
+  const trackingOptions = (queryClient: QueryClient, keys: string[], onAttempt?: () => void) =>
+    optimisticMutationOptions<{ id: string }, void, Paginated<{ id: string }>>({
       queryClient,
       queryKey: ['trades'],
       mutationFn: (_variables, key) => {
         keys.push(key);
-        return Promise.resolve();
+        onAttempt?.();
+        return keys.length === 1 ? Promise.reject(new Error('flaky')) : Promise.resolve();
       },
       apply: (previous) => previous,
     });
 
-    await options.onMutate({ id: 'b' });
-    await options.mutationFn({ id: 'b' });
-    await options.mutationFn({ id: 'b' });
+  it('sends one key across a retry that TanStack itself drives', async () => {
+    const queryClient = setup();
+    const keys: string[] = [];
+    const observer = new MutationObserver(queryClient, {
+      ...trackingOptions(queryClient, keys),
+      retry: 1,
+      retryDelay: 0,
+    });
 
+    await observer.mutate({ id: 'b' });
+
+    expect(keys).toHaveLength(2);
     expect(new Set(keys).size).toBe(1);
+    expect(keys[0]).toMatch(IDEMPOTENCY_KEY_PATTERN);
+  });
+
+  it('keeps the key when a re-render replaces the pending mutation’s options', async () => {
+    // TanStack re-reads options.mutationFn on every attempt, and a re-render while the mutation is
+    // pending swaps the whole options object. A key held in the factory closure would change here.
+    const queryClient = setup();
+    const keys: string[] = [];
+    const observer = new MutationObserver(queryClient, {
+      ...trackingOptions(queryClient, keys, () => {
+        if (keys.length === 1) {
+          observer.setOptions({ ...trackingOptions(queryClient, keys), retry: 1, retryDelay: 0 });
+        }
+      }),
+      retry: 1,
+      retryDelay: 0,
+    });
+
+    await observer.mutate({ id: 'b' });
+
+    expect(keys).toHaveLength(2);
+    expect(new Set(keys).size).toBe(1);
+  });
+
+  it('gives two mutations in flight at once their own keys', async () => {
+    const queryClient = setup();
+    const options = optimisticMutationOptions<{ id: string }, void, Paginated<{ id: string }>>({
+      queryClient,
+      queryKey: ['trades'],
+      mutationFn: (_variables, key) => Promise.resolve(key) as unknown as Promise<void>,
+      apply: (previous) => previous,
+    });
+
+    // The same variables object on purpose: two taps of the same button are two actions.
+    const variables = { id: 'b' };
+    const first = (await options.mutationFn(variables, {})) as unknown as string;
+    const second = (await options.mutationFn(variables, {})) as unknown as string;
+
+    expect(first).not.toBe(second);
   });
 
   it('rolls the cache back when the mutation fails', async () => {

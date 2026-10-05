@@ -28,8 +28,26 @@ export const cursorInfiniteQueryOptions = <T>({ queryKey, fetchPage }: CursorInf
 
 export interface OptimisticMutationContext<TSnapshot> {
   previous: TSnapshot | undefined;
-  idempotencyKey: string;
 }
+
+/**
+ * TanStack builds one context object per `mutate()` and hands the same one to every retry attempt,
+ * while it re-reads `options.mutationFn` from the *current* options on each attempt — and replaces a
+ * pending mutation's options outright when the component re-renders. So the key cannot live in this
+ * factory's closure: by the time a retry runs, that closure belongs to a different render. Keying a
+ * WeakMap on the per-mutation context object is the only identity that is stable across attempts and
+ * distinct between two concurrent mutations, even when they share the same variables.
+ */
+const keysByMutation = new WeakMap<object, string>();
+
+const keyFor = (context: object | undefined): string => {
+  if (context === undefined) return createIdempotencyKey();
+  const existing = keysByMutation.get(context);
+  if (existing !== undefined) return existing;
+  const minted = createIdempotencyKey();
+  keysByMutation.set(context, minted);
+  return minted;
+};
 
 export interface OptimisticMutationOptions<TVariables, TData, TSnapshot> {
   queryClient: QueryClient;
@@ -51,21 +69,16 @@ export function optimisticMutationOptions<TVariables, TData, TSnapshot>({
   mutationFn,
   apply,
 }: OptimisticMutationOptions<TVariables, TData, TSnapshot>) {
-  let currentKey: string | undefined;
-
   return {
-    mutationFn: (variables: TVariables): Promise<TData> => {
-      currentKey ??= createIdempotencyKey();
-      return mutationFn(variables, currentKey);
-    },
+    mutationFn: (variables: TVariables, context?: object): Promise<TData> =>
+      mutationFn(variables, keyFor(context)),
 
     onMutate: async (variables: TVariables): Promise<OptimisticMutationContext<TSnapshot>> => {
       // An in-flight refetch would otherwise land after the optimistic write and undo it.
       await queryClient.cancelQueries({ queryKey });
       const previous = queryClient.getQueryData<TSnapshot>(queryKey);
       queryClient.setQueryData(queryKey, apply(previous, variables));
-      currentKey = createIdempotencyKey();
-      return { previous, idempotencyKey: currentKey };
+      return { previous };
     },
 
     onError: (
@@ -74,11 +87,9 @@ export function optimisticMutationOptions<TVariables, TData, TSnapshot>({
       context: OptimisticMutationContext<TSnapshot> | undefined,
     ): void => {
       if (context) queryClient.setQueryData(queryKey, context.previous);
-      currentKey = undefined;
     },
 
     onSettled: async (): Promise<void> => {
-      currentKey = undefined;
       await queryClient.invalidateQueries({ queryKey });
     },
   };

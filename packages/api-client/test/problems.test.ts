@@ -88,6 +88,16 @@ describe('problemFromResponse', () => {
     expect(error.problem.status).toBe(502);
   });
 
+  it('never labels a synthetic problem with a code the status contradicts', () => {
+    // A proxy's own 403 page must not reach a caller branching on `code` as VALIDATION_FAILED.
+    expect(problemFromResponse(403, 'Forbidden', meta({}, 403)).knownCode).toBe('FORBIDDEN');
+    expect(problemFromResponse(401, '', meta({}, 401)).knownCode).toBe('UNAUTHENTICATED');
+    expect(problemFromResponse(404, '', meta({}, 404)).knownCode).toBe('NOT_FOUND');
+    expect(problemFromResponse(429, '', meta({}, 429)).knownCode).toBe('RATE_LIMITED');
+    expect(problemFromResponse(418, '', meta({}, 418)).knownCode).toBe('VALIDATION_FAILED');
+    expect(problemFromResponse(504, '', meta({}, 504)).knownCode).toBe('INTERNAL');
+  });
+
   it('carries Retry-After and the rate-limit budget on a 429', () => {
     const error = problemFromResponse(
       429,

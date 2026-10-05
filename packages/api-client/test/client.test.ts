@@ -107,6 +107,23 @@ describe('createApiClient', () => {
       expect(keysSent()).toEqual([action.key, action.key]);
     });
 
+    it('sends the body it started with, even if the caller mutates it mid-retry', async () => {
+      const body = { amount: '45200000' };
+      server.reply((_request, call) => {
+        body.amount = '999';
+        return call === 1
+          ? { status: 503, headers: { 'Retry-After': '0' }, body: problemBody(503, 'INTERNAL') }
+          : { status: 201, body: { id: 'trade-1' } };
+      });
+
+      await client().call(createTrade, { body });
+
+      expect(server.requests.map((request) => request.body)).toEqual([
+        '{"amount":"45200000"}',
+        '{"amount":"45200000"}',
+      ]);
+    });
+
     it('sends no key for a route the backend did not mark retryable', async () => {
       server.reply(() => ({ status: 200, body: { id: 't' } }));
       await client().call(cancelTrade, { params: { id: 't' } });
@@ -148,6 +165,20 @@ describe('createApiClient', () => {
       );
       await client().call(createTrade, { body: { amount: '1' } });
       expect(slept).toEqual([2_000]);
+    });
+
+    it('hands a long rate-limit wait to the caller instead of sitting on it', async () => {
+      server.reply(() => ({
+        status: 429,
+        headers: { 'Retry-After': '900' },
+        body: problemBody(429, 'RATE_LIMITED'),
+      }));
+      await expect(client().call(createTrade, { body: { amount: '1' } })).rejects.toMatchObject({
+        knownCode: 'RATE_LIMITED',
+        retryAfterMs: 900_000,
+      });
+      expect(server.requests).toHaveLength(1);
+      expect(slept).toEqual([]);
     });
 
     it('gives up after maxAttempts and throws the last problem', async () => {
@@ -236,6 +267,23 @@ describe('createApiClient', () => {
       });
       expect(server.requests).toHaveLength(2);
       expect(refreshes).toBe(1);
+    });
+
+    it('keeps the 401 when the refresh itself cannot run', async () => {
+      // The refresh route is down, not saying the session is over. The caller must still see
+      // UNAUTHENTICATED, and nothing may sign the user out.
+      const onSessionEnded = vi.fn();
+      const store = createTokenStore({
+        refresh: () => Promise.reject(new Error('the auth route is unreachable')),
+        onSessionEnded,
+      });
+      store.set({ accessToken: 'old', scope: 'CONSUMER' });
+      server.reply(() => ({ status: 401, body: problemBody(401, 'UNAUTHENTICATED') }));
+
+      await expect(client({ tokens: store }).call(listTrades, { query: {} })).rejects.toMatchObject({
+        knownCode: 'UNAUTHENTICATED',
+      });
+      expect(onSessionEnded).not.toHaveBeenCalled();
     });
 
     it('surfaces the 401 without retrying when the session is over', async () => {

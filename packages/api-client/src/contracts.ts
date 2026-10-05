@@ -74,9 +74,6 @@ export type EndpointInput<E extends AnyEndpoint> = InputMember<'params', E['sche
 
 export type EndpointOutput<E extends AnyEndpoint> = z.output<E['schema']['response']>;
 
-export const endpointLabel = (endpoint: AnyEndpoint): string =>
-  `${endpoint.method.toUpperCase()} ${endpoint.path}`;
-
 const PARAM = /:([A-Za-z_][A-Za-z0-9_]*)/g;
 
 export function buildPath(template: string, params: Record<string, string | number> | undefined): string {

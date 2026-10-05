@@ -1,5 +1,5 @@
 import { paginatedSchema } from '@komtru/shared-types';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import { buildPath, buildQuery } from '../src/contracts.js';
 import { NetworkError, ProblemError, ResponseShapeError, TimeoutError } from '../src/problems.js';
@@ -126,6 +126,52 @@ describe('createTransport', () => {
     const error = await pending.catch((caught: unknown) => caught);
     expect(error).toBeInstanceOf(NetworkError);
     expect(error).not.toBeInstanceOf(TimeoutError);
+  });
+
+  it('refuses a signal that was already aborted instead of sending the request anyway', async () => {
+    server.reply(() => ({ status: 200, body: {} }));
+    await expect(
+      transport().send({ method: 'get', path: '/trades', signal: AbortSignal.abort() }),
+    ).rejects.toBeInstanceOf(NetworkError);
+    expect(server.requests).toHaveLength(0);
+  });
+
+  it('clears its timeout when the request never reaches a server', async () => {
+    // An un-cleared 15-second timer holds the Node event loop open on every failed request, which
+    // is every request on a flaky connection.
+    const timers = new Set<ReturnType<typeof setTimeout>>();
+    const realSetTimeout = globalThis.setTimeout;
+    const realClearTimeout = globalThis.clearTimeout;
+    vi.stubGlobal('setTimeout', (handler: () => void, ms?: number) => {
+      const timer = realSetTimeout(handler, ms);
+      timers.add(timer);
+      return timer;
+    });
+    vi.stubGlobal('clearTimeout', (timer: ReturnType<typeof setTimeout>) => {
+      timers.delete(timer);
+      realClearTimeout(timer);
+    });
+
+    try {
+      const unreachable = createTransport({ baseUrl: 'http://127.0.0.1:1/v1' });
+      await expect(unreachable.send({ method: 'get', path: '/trades' })).rejects.toBeInstanceOf(NetworkError);
+      expect(timers.size).toBe(0);
+    } finally {
+      vi.unstubAllGlobals();
+      for (const timer of timers) realClearTimeout(timer);
+    }
+  });
+
+  it('sends a pre-serialised body byte for byte', async () => {
+    server.reply(() => ({ status: 200, body: {} }));
+    const mutable = { amount: '1' };
+    const serialisedBody = JSON.stringify(mutable);
+    mutable.amount = '999';
+
+    await transport().send({ method: 'post', path: '/trades', body: mutable, serialisedBody });
+
+    expect(server.requests[0]?.body).toBe('{"amount":"1"}');
+    expect(server.requests[0]?.headers['content-type']).toBe('application/json');
   });
 
   it('passes default headers and per-request headers through', async () => {

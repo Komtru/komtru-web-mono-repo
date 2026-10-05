@@ -81,7 +81,10 @@ describe('@komtru/api-client', () => {
         "'@tanstack/react-query'",
         'indexedDB',
         'localStorage',
+        'sessionStorage',
         'document.',
+        'window.',
+        'navigator.',
       ]) {
         expect(`${path}: ${String(source.includes(forbidden))}`).toBe(`${path}: false`);
       }

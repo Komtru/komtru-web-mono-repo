@@ -43,6 +43,9 @@ export function createIndexedDbQueueStore({
       };
       request.onsuccess = () => resolve(request.result);
       request.onerror = () => reject(request.error ?? new Error('The retry queue database would not open'));
+      // A version bump while another tab holds the old connection open: fail rather than hang.
+      request.onblocked = () =>
+        reject(new Error('The retry queue database is open in another tab; close it and retry'));
     });
     return opening;
   };

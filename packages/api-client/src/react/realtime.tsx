@@ -48,7 +48,9 @@ const defaultConnect: SocketFactory = async (url, token) => {
   const { io } = (await import('socket.io-client')) as unknown as {
     io: (url: string, options: unknown) => SocketLike;
   };
-  return io(url, { auth: { token } });
+  // `forceNew` because socket.io caches one Manager per URL and only honours `auth` when the socket
+  // is first created: without it, a reminted token would reconnect carrying the expired one.
+  return io(url, { auth: { token }, forceNew: true });
 };
 
 export interface SocketProviderProps {

@@ -143,6 +143,12 @@ export function createRetryQueue({
   };
 }
 
-/** The backoff a caller should wait before the next `flush()` after a `retrying` event. */
-export const queueRetryDelayMs = (entry: QueuedRequest, error: unknown, random = Math.random): number =>
-  retryDelayMs(entry.attempts - 1, error, { ...DEFAULT_RETRY_POLICY, random });
+/**
+ * The backoff a caller should wait before the next `flush()` after a `retrying` event. A server that
+ * asked for longer than the policy allows is capped rather than refused: unlike a live call, nobody
+ * is waiting on this promise, so the queue can afford the full wait.
+ */
+export const queueRetryDelayMs = (entry: QueuedRequest, error: unknown, random = Math.random): number => {
+  const policy = { ...DEFAULT_RETRY_POLICY, random };
+  return retryDelayMs(entry.attempts - 1, error, policy) ?? policy.maxDelayMs;
+};

@@ -109,6 +109,13 @@ describe('createTokenStore', () => {
     expect(seen).toEqual([session('a')]);
   });
 
+  it('exposes the live session, so an app can read the scope it is signed in with', () => {
+    const store = createTokenStore({ refresh: () => Promise.resolve(null) });
+    expect(store.session()).toBeNull();
+    store.set({ accessToken: 'a', scope: 'LOGISTICS' });
+    expect(store.session()).toEqual({ accessToken: 'a', scope: 'LOGISTICS' });
+  });
+
   it('bumps the generation on every explicit set', () => {
     const store = createTokenStore({ refresh: () => Promise.resolve(null) });
     const before = store.read().generation;

@@ -7,6 +7,7 @@ export interface RetryPolicy {
   /** Including the first try: 3 means two retries. */
   maxAttempts: number;
   baseDelayMs: number;
+  /** Bounds both the backoff and a `Retry-After` this client is willing to sit and wait out. */
   maxDelayMs: number;
   /** Injected so a test can pin the jitter. */
   random: () => number;
@@ -37,9 +38,17 @@ export function isRetryable(error: unknown, idempotent: boolean): boolean {
   return error.status === 408 || error.status === 429 || error.status >= 500;
 }
 
-/** Exponential backoff with full jitter, unless the server said exactly how long to wait. */
-export function retryDelayMs(attempt: number, error: unknown, policy: RetryPolicy): number {
-  if (error instanceof ProblemError && error.retryAfterMs !== undefined) return error.retryAfterMs;
+/**
+ * Exponential backoff with full jitter, unless the server said exactly how long to wait.
+ *
+ * `null` means "do not wait, give up": a rate limiter on a 15-minute window answers
+ * `Retry-After: 900`, and silently holding the promise for a quarter of an hour is worse for the
+ * person tapping Sign in than surfacing the 429, which carries `retryAfterMs` for the UI to show.
+ */
+export function retryDelayMs(attempt: number, error: unknown, policy: RetryPolicy): number | null {
+  if (error instanceof ProblemError && error.retryAfterMs !== undefined) {
+    return error.retryAfterMs > policy.maxDelayMs ? null : error.retryAfterMs;
+  }
   const ceiling = Math.min(policy.maxDelayMs, policy.baseDelayMs * 2 ** attempt);
   return Math.round(policy.random() * ceiling);
 }
