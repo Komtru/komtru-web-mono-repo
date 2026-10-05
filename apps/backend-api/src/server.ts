@@ -49,7 +49,7 @@ export async function startApi(
   const emitter = createInProcessEmitter(logger);
   for (const definition of modules.flatMap((m) => m.queues ?? [])) queues.define(definition);
   try {
-    for (const module of modules) await module.start?.({ queues, events, emitter, db });
+    for (const module of modules) await module.start?.({ queues, events, emitter, db, config, logger });
   } catch (error) {
     await gracefulShutdown({
       closers: [

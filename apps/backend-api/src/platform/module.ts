@@ -2,12 +2,14 @@
 // The app mounts every module's routes under /v1 and runs its lifecycle hooks; modules talk to each
 // other only through their index.ts (enforced by eslint-rules/module-boundaries.mjs).
 import type { Router } from 'express';
+import type { AppConfig } from '../config/env.js';
 import type { Db } from '../db/index.js';
 import { mountRoutes, type MountDeps } from './http/mount.js';
 import type { RouteDefinition } from './http/route.js';
 import type { EventBus } from './events/bus.js';
 import type { InProcessEmitter } from './events/emitter.js';
 import type { HealthCheck } from './health.js';
+import type { Logger } from './logger.js';
 import type { QueueDefinition, QueueFactory } from './queue/factory.js';
 import type { ScheduledJob } from './scheduler/registry.js';
 import type { Closer } from './shutdown.js';
@@ -22,6 +24,14 @@ export interface ModuleContext {
   emitter: InProcessEmitter;
   /** The runtime pool, as komtru_app through PgBouncer. */
   db: Db;
+  /**
+   * The configuration this process was started with. A module has no other way to see a tuning
+   * variable, and reading `process.env` inside one would diverge from the environment the process
+   * was actually given (which the integration tests craft by hand).
+   */
+  config: AppConfig;
+  /** The process logger, already bound to `process: 'api' | 'worker'`. */
+  logger: Logger;
 }
 
 export interface KomtruModule {
