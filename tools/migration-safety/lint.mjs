@@ -43,7 +43,7 @@ export const RULES = {
   },
   'constraint-scan': {
     summary:
-      'ADD CONSTRAINT validates every existing row under a strong lock; ADD ... NOT VALID followed by VALIDATE CONSTRAINT in a later migration does not.',
+      'A constraint added to a populated table validates every existing row, and UNIQUE, PRIMARY KEY and EXCLUDE also build an index, all under ACCESS EXCLUSIVE. CHECK and FOREIGN KEY can go in NOT VALID and be validated by a later migration; the index-building forms cannot and belong outside the migrator.',
   },
   rename: {
     summary:
@@ -141,6 +141,8 @@ const normalize = (statement) => {
     if (kind === 'comment') out += ' ';
     else if (kind === 'dollar' && blankBody)
       out += `${statement.slice(from, body[0])}${statement.slice(body[1], to)}`;
+    // A string literal is data, never a statement: COMMENT ON … IS 'do not DROP TABLE this'.
+    else if (kind === 'literal' && statement[from] === "'") out += "''";
     else out += statement.slice(from, to);
   });
   return out.replace(/\s+/g, ' ').trim();
@@ -235,13 +237,18 @@ function ruleHits(statement, existingTables) {
 
     if (/\bALTER\s+(?:COLUMN\s+)?\S+\s+(?:SET\s+DATA\s+)?TYPE\b/i.test(statement)) hits.push('type-change');
 
+    // ADD CONSTRAINT ... UNIQUE / PRIMARY KEY / EXCLUDE is what drizzle-kit emits for `.unique()` on
+    // an existing table, and it builds an index under ACCESS EXCLUSIVE. None of the three accepts
+    // NOT VALID, so there is no safe form of them inside a migration at all. The same constraints
+    // written inline on an ADD COLUMN do exactly the same work.
     if (
       topLevelParts(statement).some(
         (part) =>
-          /\bADD\s+CONSTRAINT\b/i.test(part) &&
-          /\b(?:CHECK|FOREIGN\s+KEY)\b/i.test(part) &&
+          (/\bADD\s+CONSTRAINT\b/i.test(part) || ADD_COLUMN.test(part)) &&
+          /\b(?:CHECK|FOREIGN\s+KEY|UNIQUE|PRIMARY\s+KEY|EXCLUDE|REFERENCES)\b/i.test(part) &&
           !/\bNOT\s+VALID\b/i.test(part),
-      )
+      ) ||
+      /\bADD\s+(?:PRIMARY\s+KEY|UNIQUE|EXCLUDE)\b/i.test(statement)
     )
       hits.push('constraint-scan');
   }
@@ -249,15 +256,11 @@ function ruleHits(statement, existingTables) {
   if (/\bALTER\s+(?:TABLE|INDEX|SEQUENCE|TYPE|VIEW|SCHEMA)\b[\s\S]*\bRENAME\b/i.test(statement))
     hits.push('rename');
 
-  const dmlTarget = matchRef(
+  // `WITH … UPDATE` is the same statement wearing a hat.
+  const dml = /^\s*(?:WITH\b[\s\S]*\)\s*)?(?:UPDATE|DELETE\s+FROM|INSERT\s+INTO)\s+(?:ONLY\s+)?/i.exec(
     statement,
-    String.raw`^\s*(?:UPDATE|DELETE\s+FROM|INSERT\s+INTO)\s+(?:ONLY\s+)?`,
   );
-  if (
-    /^\s*(?:UPDATE|DELETE\s+FROM|INSERT\s+INTO)\b/i.test(statement) &&
-    isExisting(dmlTarget, existingTables)
-  )
-    hits.push('backfill');
+  if (dml && isExisting(matchRef(statement.slice(dml[0].length), '^'), existingTables)) hits.push('backfill');
 
   return hits;
 }
@@ -290,14 +293,13 @@ function readWaivers(tag, waivers) {
 export function lintMigration({ tag, sql, existingTables, waivers = {} }) {
   const { waived, findings } = readWaivers(tag, waivers);
   const created = createdTables(sql);
-  const known = new Set([...existingTables, ...created]);
   const used = new Set();
+  // A table this very migration creates is empty by construction, so nothing done to it can lock out
+  // a writer or scan rows that exist.
+  const existing = new Set([...existingTables].filter((table) => !created.has(table)));
 
   for (const raw of splitStatements(sql)) {
     const statement = normalize(raw);
-    // A table this very migration creates is empty by construction, so nothing done to it can lock
-    // out a writer or scan rows that exist.
-    const existing = new Set([...known].filter((table) => !created.has(table)));
     for (const rule of ruleHits(statement, existing)) {
       if (waived.has(rule)) {
         used.add(rule);

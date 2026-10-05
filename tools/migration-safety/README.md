@@ -46,6 +46,13 @@ Everything here follows from three properties of `PgDialect.migrate`, the drizzl
 finding and lives in `RULES` in `lint.mjs`. A rule only fires against a table that existed **before**
 the migration under test: anything done to a table the same migration creates is free.
 
+The one most likely to catch you is `constraint-scan`: it covers `UNIQUE`, `PRIMARY KEY` and
+`EXCLUDE` as well as `CHECK` and `FOREIGN KEY`, because all five validate or index every existing
+row under `ACCESS EXCLUSIVE`, and `ALTER TABLE … ADD CONSTRAINT … UNIQUE` is what `drizzle-kit
+generate` emits when you add `.unique()` to a column of a table that already exists. `CHECK` and
+`FOREIGN KEY` have a safe form — `NOT VALID`, then `VALIDATE CONSTRAINT` in a later migration. The
+other three do not.
+
 ### Waiving a rule
 
 Waivers live in `waivers.json`, keyed by migration tag and rule, with the reason as the value:
@@ -92,7 +99,7 @@ pnpm migration:safety --update-invariants
 
 `KOMTRU_TEST_DIRECT_URL` points it at Postgres (default `postgresql://komtru:komtru@localhost:55432`,
 the `docker-compose.yml` stack). It creates and drops its own databases, named
-`${KOMTRU_MIGRATION_SAFETY_DB_PREFIX}_<label>` — set that prefix when another run might be using the
-same server. `invariants.json` records the Postgres major it was captured on, because
+`${KOMTRU_MIGRATION_SAFETY_DB_PREFIX}_<label>_<pid+random>`, so two runs on one server cannot collide
+and nothing ever drops a database it did not just create. `invariants.json` records the Postgres major it was captured on, because
 `pg_get_indexdef` prints differently across majors; the check refuses to compare across them rather
 than reporting the difference as drift.

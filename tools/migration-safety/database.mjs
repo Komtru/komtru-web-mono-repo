@@ -4,6 +4,7 @@
 // call to it: the check has to reproduce how the real migrator chooses what to apply, including the
 // part where a migration older than the last applied one is skipped without a word, and that
 // behaviour is only observable from outside.
+import { randomBytes } from 'node:crypto';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -31,17 +32,17 @@ const withAdmin = async (fn) => {
 };
 
 /**
- * Creates `<prefix>_<label>`, hands over a connected client and drops the database again — including
- * when the body throws, because a leftover database on a shared Postgres breaks the next run.
+ * Creates `<prefix>_<label>_<unique>`, hands over a connected client and drops the database again —
+ * including when the body throws, because a leftover database on a shared Postgres breaks the next
+ * run. The suffix is what keeps two concurrent runs on one server out of each other's way: nothing
+ * here ever names, let alone drops, a database it did not just create.
  */
 export async function scratchDatabase(label, run) {
-  const name = `${PREFIX}_${label}`.replace(/-/g, '_');
+  const unique = `${process.pid.toString(36)}${randomBytes(3).toString('hex')}`;
+  const name = `${PREFIX}_${label}_${unique}`.replace(/-/g, '_');
   if (!SAFE_NAME.test(name)) throw new Error(`migration-safety: ${name} is not a usable database name`);
   const drop = (admin) => admin.query(`DROP DATABASE IF EXISTS ${name} WITH (FORCE)`);
-  await withAdmin(async (admin) => {
-    await drop(admin);
-    await admin.query(`CREATE DATABASE ${name}`);
-  });
+  await withAdmin((admin) => admin.query(`CREATE DATABASE ${name}`));
   const client = new pg.Client({ connectionString: directUrl(name) });
   await client.connect();
   try {
@@ -125,7 +126,8 @@ export async function fingerprint(client) {
     SELECT format('index %s', pg_get_indexdef(i.indexrelid))
       FROM pg_index i JOIN pg_class c ON c.oid = i.indrelid JOIN ns n ON n.oid = c.relnamespace
     UNION ALL
-    SELECT format('trigger %s', pg_get_triggerdef(t.oid))
+    -- tgenabled is not part of pg_get_triggerdef, so DISABLE TRIGGER would otherwise be invisible.
+    SELECT format('trigger [%s] %s', t.tgenabled, pg_get_triggerdef(t.oid))
       FROM pg_trigger t JOIN pg_class c ON c.oid = t.tgrelid JOIN ns n ON n.oid = c.relnamespace
      WHERE NOT t.tgisinternal
     UNION ALL
@@ -147,6 +149,30 @@ export async function fingerprint(client) {
                   (SELECT coalesce(string_agg(item::text, ' ' ORDER BY item::text), '-')
                      FROM unnest(coalesce(c.relacl, '{}'::aclitem[])) AS item))
       FROM pg_class c JOIN ns n ON n.oid = c.relnamespace WHERE c.relkind IN ('r', 'p')
+    UNION ALL
+    SELECT format('rls %s.%s %s %s', n.nspname, c.relname, c.relrowsecurity, c.relforcerowsecurity)
+      FROM pg_class c JOIN ns n ON n.oid = c.relnamespace WHERE c.relkind IN ('r', 'p')
+    UNION ALL
+    SELECT format('policy %s.%s.%s %s %s %s %s', n.nspname, c.relname, p.polname, p.polcmd,
+                  p.polpermissive, coalesce(pg_get_expr(p.polqual, p.polrelid), '-'),
+                  coalesce(pg_get_expr(p.polwithcheck, p.polrelid), '-'))
+      FROM pg_policy p JOIN pg_class c ON c.oid = p.polrelid JOIN ns n ON n.oid = c.relnamespace
+    UNION ALL
+    SELECT format('view %s.%s %s', n.nspname, c.relname, md5(pg_get_viewdef(c.oid)))
+      FROM pg_class c JOIN ns n ON n.oid = c.relnamespace WHERE c.relkind IN ('v', 'm')
+    UNION ALL
+    SELECT format('schema-acl %s %s', n.nspname,
+                  (SELECT coalesce(string_agg(item::text, ' ' ORDER BY item::text), '-')
+                     FROM unnest(coalesce(ns_acl.nspacl, '{}'::aclitem[])) AS item))
+      FROM ns n JOIN pg_namespace ns_acl ON ns_acl.oid = n.oid
+    UNION ALL
+    SELECT format('column-acl %s.%s.%s %s', n.nspname, c.relname, a.attname,
+                  (SELECT coalesce(string_agg(item::text, ' ' ORDER BY item::text), '-')
+                     FROM unnest(a.attacl) AS item))
+      FROM pg_attribute a
+      JOIN pg_class c ON c.oid = a.attrelid
+      JOIN ns n ON n.oid = c.relnamespace
+     WHERE a.attnum > 0 AND NOT a.attisdropped AND a.attacl IS NOT NULL
   `);
   return rows.map((row) => row.line).sort();
 }
@@ -180,7 +206,7 @@ export async function introspectInvariants(client) {
      WHERE ct.contype = 'c' AND ${USER_SCHEMAS}`);
   const triggers = await client.query(`
     SELECT format('%s.%s', n.nspname, c.relname) AS table, t.tgname AS name,
-           pg_get_triggerdef(t.oid) AS definition
+           format('[%s] %s', t.tgenabled, pg_get_triggerdef(t.oid)) AS definition
       FROM pg_trigger t
       JOIN pg_class c ON c.oid = t.tgrelid
       JOIN pg_namespace n ON n.oid = c.relnamespace

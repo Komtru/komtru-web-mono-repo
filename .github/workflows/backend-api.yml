@@ -15,6 +15,9 @@ on:
       - '.npmrc'
       - 'pnpm-workspace.yaml'
       - 'turbo.json'
+      # The migration-safety job is this workflow's, so a change to the tool, to a waiver or to the
+      # recorded invariants has to re-run it.
+      - 'tools/migration-safety/**'
       - '.github/workflows/backend-api.yml'
       - '.github/actions/setup/**'
   pull_request:
@@ -27,6 +30,9 @@ on:
       - '.npmrc'
       - 'pnpm-workspace.yaml'
       - 'turbo.json'
+      # The migration-safety job is this workflow's, so a change to the tool, to a waiver or to the
+      # recorded invariants has to re-run it.
+      - 'tools/migration-safety/**'
       - '.github/workflows/backend-api.yml'
       - '.github/actions/setup/**'
   workflow_dispatch:

@@ -8,7 +8,13 @@ const argv = process.argv.slice(2);
 const flag = (name) => argv.includes(`--${name}`);
 const value = (name) => {
   const index = argv.indexOf(`--${name}`);
-  return index === -1 ? undefined : argv[index + 1];
+  if (index === -1) return undefined;
+  const given = argv[index + 1];
+  if (!given || given.startsWith('--')) {
+    process.stderr.write(`migration-safety: --${name} needs a value\n`);
+    process.exit(2);
+  }
+  return given;
 };
 
 if (flag('help')) {
@@ -40,15 +46,16 @@ if (flag('update-invariants')) {
   process.exit(0);
 }
 
-const { findings, counts } = await runChecks({ staticOnly: flag('static'), ref: value('base-ref') });
+const { findings, counts, ran } = await runChecks({ staticOnly: flag('static'), ref: value('base-ref') });
 
 for (const item of findings)
   process.stdout.write(`${item.severity}: ${item.check}/${item.rule} ${item.message}\n\n`);
 
-const checked = flag('static')
-  ? `${counts.migrations} migrations, static checks only`
-  : `${counts.migrations} migrations, ${counts.replayed} replayed, ${counts.invariants} invariants`;
+// Name every check that ran, so a check that quietly did nothing cannot read as a check that passed.
 process.stdout.write(
-  `migration-safety: ${checked}; ${counts.errors} error(s), ${counts.warnings} warning(s)\n`,
+  `migration-safety: ${counts.migrations} migrations, ${counts.waived} waived statement(s); ` +
+    `ran ${ran.join(', ')}` +
+    (ran.includes('replay') ? `; ${counts.replayed} replayed, ${counts.invariants} invariants` : '') +
+    `; ${counts.errors} error(s), ${counts.warnings} warning(s)\n`,
 );
 process.exit(counts.errors ? 1 : 0);

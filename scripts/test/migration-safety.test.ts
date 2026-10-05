@@ -5,6 +5,7 @@ import { cpSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:f
 import { tmpdir } from 'node:os';
 import { resolve } from 'node:path';
 import { execFileSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 import { afterAll, describe, expect, it } from 'vitest';
 import { baseMigrations, runChecks } from '../../tools/migration-safety/check.mjs';
 import {
@@ -156,8 +157,9 @@ describe('baseMigrations', () => {
   it('reads the baseline folder out of git without touching the working tree', () => {
     const before = status();
     const base = baseMigrations('HEAD');
+    if (base.ref === null) throw new Error(base.reason);
     expect(base.ref).toBe('HEAD');
-    expect(base.migrations?.map((migration) => migration.tag)).toEqual(
+    expect(base.migrations.map((migration) => migration.tag)).toEqual(
       loadMigrations().map((migration) => migration.tag),
     );
     expect(status()).toBe(before);
@@ -169,12 +171,61 @@ describe('baseMigrations', () => {
     expect(base.explicit).toBe(true);
     expect(base.reason).toContain('no-such-ref-for-t-022');
   });
+
+  it('gives a reason when the baseline predates the migration folder', () => {
+    // A branch cut before T-021 has a merge base with no apps/backend-api/drizzle at all.
+    const beforeDrizzle = execFileSync('git', ['rev-parse', '453ddc5^'], { cwd: repoRoot, encoding: 'utf8' });
+    const base = baseMigrations(beforeDrizzle.trim());
+    expect(base.ref).toBeNull();
+    expect(base.reason).toContain('apps/backend-api/drizzle');
+  });
+});
+
+describe('the command line', () => {
+  const cli = fileURLToPath(new URL('../../tools/migration-safety/cli.mjs', import.meta.url));
+  const run = (...args: string[]) => {
+    try {
+      return { status: 0, out: execFileSync(process.execPath, [cli, ...args], { encoding: 'utf8' }) };
+    } catch (error) {
+      const failure = error as { status: number; stdout: string; stderr: string };
+      return { status: failure.status, out: `${failure.stdout}${failure.stderr}` };
+    }
+  };
+
+  it('passes the static checks and names each one it ran', () => {
+    const { status, out } = run('--static');
+    expect(out).toContain('ran journal, lock, lint');
+    // A check that did nothing must never read as a check that passed, so the waived count is here.
+    expect(out).toContain('4 waived statement(s)');
+    expect(status).toBe(0);
+  });
+
+  it('refuses a --base-ref with no value instead of quietly using the default', () => {
+    const { status, out } = run('--static', '--base-ref');
+    expect(out).toContain('--base-ref needs a value');
+    expect(status).toBe(2);
+  });
+
+  it('documents every flag it accepts', () => {
+    const { out } = run('--help');
+    for (const flag of ['--static', '--base-ref', '--update-lock', '--update-invariants'])
+      expect(out).toContain(flag);
+  });
 });
 
 describe('runChecks', () => {
   it('passes every check that needs no database', async () => {
-    const { findings, counts } = await runChecks({ staticOnly: true });
+    const { findings, counts, ran } = await runChecks({ staticOnly: true });
     expect(findings).toEqual([]);
-    expect(counts).toMatchObject({ migrations: 16, errors: 0, warnings: 0 });
+    expect(counts).toMatchObject({ migrations: 16, waived: 4, errors: 0, warnings: 0 });
+    expect(ran).toEqual(['journal', 'lock', 'lint']);
+  });
+
+  it('stops at the journal rather than throwing on a folder it cannot read', async () => {
+    // Everything after the journal check loads the migrations, which throws on a missing file; the
+    // journal check is the one that can report it.
+    const { findings, ran } = await runChecks({ staticOnly: true, dir: fixture('missing-sql') });
+    expect(findings.map((item) => item.rule)).toEqual(['journal-complete']);
+    expect(ran).toEqual(['journal']);
   });
 });

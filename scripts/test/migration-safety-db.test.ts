@@ -13,7 +13,7 @@ import {
   scratchDatabase,
 } from '../../tools/migration-safety/database.mjs';
 import type { Invariants } from '../../tools/migration-safety/database.mjs';
-import { baseMigrations, compareForward } from '../../tools/migration-safety/check.mjs';
+import { baseMigrations, checkForward, compareForward } from '../../tools/migration-safety/check.mjs';
 import { loadMigrations } from '../../tools/migration-safety/migrations.mjs';
 
 const enabled = process.env.KOMTRU_INFRA_TESTS === '1';
@@ -82,7 +82,7 @@ describe.runIf(enabled)('replaying the migrations', () => {
     try {
       const { rows } = await admin.query<{ datname: string }>(
         'SELECT datname FROM pg_database WHERE datname LIKE $1',
-        [`%_${name}`],
+        [`%_${name}_%`],
       );
       expect(rows).toEqual([]);
     } finally {
@@ -142,6 +142,24 @@ describe.runIf(enabled)('the schema-level invariants', () => {
     expect(rules(checkInvariants(actual, expected))).toEqual(['invariant-added']);
   });
 
+  it('sees a trigger that was disabled rather than dropped', async () => {
+    // pg_get_triggerdef does not print the enabled state, so a one-line DISABLE TRIGGER would
+    // otherwise take the audit log's append-only guarantee away with every check still green.
+    const { findings, drift } = await scratchDatabase('disabled-trigger', async (client) => {
+      await applyMigrations(client, loadMigrations());
+      const before = new Set(await fingerprint(client));
+      await client.query('ALTER TABLE identity.identity_audit_log DISABLE TRIGGER komtru_append_only');
+      const after = await fingerprint(client);
+      return {
+        findings: checkInvariants(await introspectInvariants(client), readInvariants()),
+        drift: after.filter((line) => !before.has(line)),
+      };
+    });
+    expect(rules(findings)).toEqual(['invariant-changed']);
+    expect(drift).toHaveLength(1);
+    expect(drift[0]).toContain('komtru_append_only');
+  });
+
   it('reports invariant-changed when a definition is not the one on record', async () => {
     const actual = await introspect();
     const expected = readInvariants();
@@ -156,10 +174,35 @@ describe.runIf(enabled)('the schema-level invariants', () => {
   });
 });
 
+describe.runIf(enabled)('the schema fingerprint', () => {
+  it.each([
+    ['row-level security', 'ALTER TABLE identity.users ENABLE ROW LEVEL SECURITY'],
+    ['a policy', 'CREATE POLICY p ON identity.users USING (true)'],
+    ['a schema-level grant', 'GRANT CREATE ON SCHEMA identity TO komtru_app'],
+    ['a column-level grant', 'GRANT UPDATE ("locale") ON identity.users TO komtru_app'],
+    ['a table-level grant', 'GRANT UPDATE ON identity.identity_audit_log TO komtru_app'],
+  ])('notices %s', async (_label, statement) => {
+    const drift = await scratchDatabase('fingerprint', async (client) => {
+      await applyMigrations(client, loadMigrations());
+      const before = new Set(await fingerprint(client));
+      await client.query(statement);
+      return (await fingerprint(client)).filter((line) => !before.has(line));
+    });
+    expect(drift.length).toBeGreaterThan(0);
+  });
+});
+
 describe.runIf(enabled)('applying forward from the baseline', () => {
   it('reaches the same schema as a replay from empty', async () => {
     const base = baseMigrations('HEAD');
-    expect(await compareForward(base.migrations!, loadMigrations())).toEqual([]);
+    if (base.ref === null) throw new Error(base.reason);
+    expect(await compareForward(base.migrations, loadMigrations())).toEqual([]);
+  });
+
+  it('says so rather than passing silently when the baseline is this very commit', async () => {
+    const findings = await checkForward('HEAD');
+    expect(rules(findings)).toEqual(['forward-noop']);
+    expect(findings[0]?.severity).toBe('warning');
   });
 
   it('reports migration-skipped for a migration older than the baseline head', async () => {

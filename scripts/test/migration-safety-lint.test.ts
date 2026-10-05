@@ -62,6 +62,21 @@ describe('rules that fire', () => {
     ['rename', 'ALTER TABLE "identity"."users" RENAME COLUMN "locale" TO "lang";'],
     ['backfill', `UPDATE "identity"."users" SET "locale" = 'en-NG';`],
     ['backfill', 'DELETE FROM "identity"."users" WHERE "closed_at" IS NOT NULL;'],
+    // A CTE in front changes nothing about the locks the statement takes.
+    [
+      'backfill',
+      `WITH stale AS (SELECT id FROM "identity"."users") UPDATE "identity"."users" SET "locale" = 'x';`,
+    ],
+    // drizzle-kit emits exactly this for `.unique()` on a column of a table that already exists, and
+    // it builds an index under ACCESS EXCLUSIVE. None of these three can be added NOT VALID.
+    ['constraint-scan', 'ALTER TABLE "identity"."users" ADD CONSTRAINT "u" UNIQUE ("locale");'],
+    ['constraint-scan', 'ALTER TABLE "identity"."users" ADD PRIMARY KEY ("id");'],
+    ['constraint-scan', 'ALTER TABLE "identity"."users" ADD COLUMN "slug" text UNIQUE;'],
+    [
+      'constraint-scan',
+      'ALTER TABLE "identity"."users" ADD COLUMN "org" uuid REFERENCES "identity"."users"("id");',
+    ],
+    ['constraint-scan', 'alter table identity.users add constraint u unique (locale);'],
   ])('fires %s', (rule, sql) => {
     expect(lint(sql)).toContain(rule);
   });
@@ -88,6 +103,18 @@ describe('rules that stay quiet', () => {
     ],
     ['a grant', 'GRANT INSERT, SELECT ON "identity"."users" TO komtru_app;'],
     ['a new table with NOT NULL columns', 'CREATE TABLE "identity"."tags" ("id" uuid NOT NULL);'],
+    [
+      'a new table with its own unique and primary key constraints',
+      'CREATE TABLE "identity"."tags" ("id" uuid PRIMARY KEY, "slug" text UNIQUE);',
+    ],
+    [
+      'a dangerous-looking string literal, which is data and not a statement',
+      'COMMENT ON TABLE "identity"."users" IS \'never DROP TABLE this one\';',
+    ],
+    [
+      'a backfill of a table this migration creates',
+      'CREATE TABLE "identity"."t" ("id" int);\nINSERT INTO "identity"."t" (id) SELECT 1;',
+    ],
   ])('stays quiet for %s', (_label, sql) => {
     expect(lint(sql)).toEqual([]);
   });

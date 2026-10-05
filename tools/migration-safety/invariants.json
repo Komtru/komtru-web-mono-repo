@@ -98,17 +98,17 @@
     {
       "table": "identity.admin_role_assignments",
       "name": "admin_role_dual_approval",
-      "definition": "CREATE TRIGGER admin_role_dual_approval BEFORE INSERT OR UPDATE ON identity.admin_role_assignments FOR EACH ROW EXECUTE FUNCTION identity.enforce_dual_approval()"
+      "definition": "[O] CREATE TRIGGER admin_role_dual_approval BEFORE INSERT OR UPDATE ON identity.admin_role_assignments FOR EACH ROW EXECUTE FUNCTION identity.enforce_dual_approval()"
     },
     {
       "table": "identity.identity_audit_log",
       "name": "komtru_append_only",
-      "definition": "CREATE TRIGGER komtru_append_only BEFORE DELETE OR UPDATE ON identity.identity_audit_log FOR EACH ROW EXECUTE FUNCTION platform.reject_mutation()"
+      "definition": "[O] CREATE TRIGGER komtru_append_only BEFORE DELETE OR UPDATE ON identity.identity_audit_log FOR EACH ROW EXECUTE FUNCTION platform.reject_mutation()"
     },
     {
       "table": "identity.roles",
       "name": "roles_dual_approval_backfill",
-      "definition": "CREATE TRIGGER roles_dual_approval_backfill BEFORE UPDATE ON identity.roles FOR EACH ROW EXECUTE FUNCTION identity.enforce_dual_approval_backfill()"
+      "definition": "[O] CREATE TRIGGER roles_dual_approval_backfill BEFORE UPDATE ON identity.roles FOR EACH ROW EXECUTE FUNCTION identity.enforce_dual_approval_backfill()"
     }
   ]
 }

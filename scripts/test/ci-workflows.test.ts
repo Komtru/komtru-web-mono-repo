@@ -161,6 +161,9 @@ describe.each(APPS)('%s workflow', (app) => {
       'turbo.json',
       `.github/workflows/${app}.yml`,
       '.github/actions/setup/**',
+      // The backend's workflow owns the migration-safety job, so the tool it runs is part of its
+      // filter: a pull request that only adds a waiver still has to face the check.
+      ...(app === 'backend-api' ? ['tools/migration-safety/**'] : []),
     ]);
     expect(new Set(workflow.on.push?.paths)).toEqual(expected);
     expect(new Set(workflow.on.pull_request?.paths)).toEqual(expected);

@@ -18,15 +18,22 @@ import {
   readInvariants,
   scratchDatabase,
 } from './database.mjs';
-import { checkLint } from './lint.mjs';
+import { checkLint, readWaiverFile } from './lint.mjs';
 import { checkJournal, checkLock, finding, loadMigrations } from './migrations.mjs';
 
 const REPO_ROOT = resolve(fileURLToPath(new URL('.', import.meta.url)), '../..');
 const DRIZZLE_PATH = 'apps/backend-api/drizzle';
 const MAX_DRIFT_LINES = 20;
 
+// stderr is captured rather than inherited: several calls here are expected to fail (a ref that is
+// not in a shallow clone, a baseline older than the migration folder) and say so in a finding.
 const git = (...args) =>
-  execFileSync('git', args, { cwd: REPO_ROOT, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
+  execFileSync('git', args, {
+    cwd: REPO_ROOT,
+    encoding: 'utf8',
+    stdio: ['ignore', 'pipe', 'pipe'],
+    maxBuffer: 64 * 1024 * 1024,
+  });
 
 const resolveCommit = (ref) => {
   try {
@@ -61,7 +68,17 @@ export function baseMigrations(ref = process.env.KOMTRU_MIGRATION_BASE_REF) {
   } catch {
     // No common ancestor (an unrelated or very shallow history): compare against the ref itself.
   }
-  const journal = JSON.parse(git('show', `${base}:${DRIZZLE_PATH}/meta/_journal.json`));
+  let journal;
+  try {
+    journal = JSON.parse(git('show', `${base}:${DRIZZLE_PATH}/meta/_journal.json`));
+  } catch {
+    // The baseline predates the migration folder — true of any branch cut before T-021.
+    return {
+      ref: null,
+      explicit,
+      reason: `${name} (at ${base.slice(0, 8)}) has no ${DRIZZLE_PATH}, so there is no earlier schema to apply forward from`,
+    };
+  }
   const migrations = journal.entries.map((entry) => {
     const sql = git('show', `${base}:${DRIZZLE_PATH}/${entry.tag}.sql`);
     return {
@@ -144,14 +161,40 @@ export async function checkForward(ref) {
     return [
       finding('forward', 'forward-skipped', base.reason, { severity: base.explicit ? 'error' : 'warning' }),
     ];
+  // On a push to main the merge base is HEAD itself, so there is no earlier schema and the check
+  // compares a branch with itself. Say so: a run that gates a deploy must not look the same whether
+  // it compared two schemas or none.
+  if (base.commit === resolveCommit('HEAD'))
+    return [
+      finding(
+        'forward',
+        'forward-noop',
+        `the baseline (${base.ref}) is this commit, so nothing was applied forward. On a push to main ` +
+          'that is expected; the pull request run is the one that compares the two schemas.',
+        { severity: 'warning' },
+      ),
+    ];
   return compareForward(base.migrations, loadMigrations());
 }
 
 /** Everything, in the order a reader wants it: the cheap static checks first. */
-export async function runChecks({ staticOnly = false, ref } = {}) {
-  const migrations = loadMigrations();
-  const findings = [...checkJournal(), ...checkLock(), ...checkLint()];
-  const counts = { migrations: migrations.length, replayed: 0, invariants: 0 };
+export async function runChecks({ staticOnly = false, ref, dir } = {}) {
+  const counts = { migrations: 0, waived: 0, replayed: 0, invariants: 0 };
+  const ran = ['journal'];
+  // Nothing downstream can read a folder the journal check has just called incomplete — loading it
+  // would throw instead of reporting — so this is the one check that stops the run.
+  const journal = checkJournal(dir);
+  if (journal.length)
+    return { findings: journal, counts: { ...counts, errors: journal.length, warnings: 0 }, ran };
+
+  const migrations = loadMigrations(dir);
+  counts.migrations = migrations.length;
+  counts.waived = Object.values(readWaiverFile()).reduce(
+    (total, waivers) => total + Object.keys(waivers).length,
+    0,
+  );
+  const findings = [...checkLock(dir), ...checkLint(dir)];
+  ran.push('lock', 'lint');
 
   if (!staticOnly) {
     const expected = readInvariants();
@@ -164,9 +207,10 @@ export async function runChecks({ staticOnly = false, ref } = {}) {
       actual.partialUniqueIndexes.length + actual.checkConstraints.length + actual.triggers.length;
     findings.push(...checkInvariants(actual, expected));
     findings.push(...(await checkForward(ref)));
+    ran.push('replay', 'invariants', 'forward');
   }
 
   counts.errors = findings.filter((item) => item.severity === 'error').length;
   counts.warnings = findings.filter((item) => item.severity === 'warning').length;
-  return { findings, counts };
+  return { findings, counts, ran };
 }
