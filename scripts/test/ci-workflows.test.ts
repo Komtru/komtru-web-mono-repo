@@ -405,3 +405,31 @@ describe('backend-api service containers', () => {
     }
   });
 });
+
+/**
+ * The fee version check (T-047). It has to run where the file it polices can change: `config/**` is
+ * in no app workflow's derived path filter, so the backend's step alone would never fire on a commit
+ * that touches only config/fees.yaml.
+ */
+describe('fee schedule version check', () => {
+  const runsOf = (file: string, job: string) =>
+    readYaml<Workflow>(file)
+      .jobs[job]!.steps.map((step) => step.run ?? '')
+      .join('\n');
+
+  it.each([
+    ['.github/workflows/backend-api.yml', 'lint'],
+    ['.github/workflows/repo.yml', 'checks'],
+  ])('runs in %s (%s)', (file, job) => {
+    const runs = runsOf(file, job);
+    expect(runs).toContain('tools/fee-version-check/cli.mjs');
+    // Shallow clones have no origin/main to compare against until it is fetched.
+    expect(runs).toContain('git fetch --no-tags --depth=1 origin main');
+  });
+
+  it('is not left to a path filter that excludes config/', () => {
+    const paths = readYaml<Workflow>('.github/workflows/backend-api.yml').on.pull_request?.paths ?? [];
+    expect(paths.some((path) => path.startsWith('config/'))).toBe(false);
+    expect(readYaml<Workflow>('.github/workflows/repo.yml').on.pull_request?.paths).toBeUndefined();
+  });
+});

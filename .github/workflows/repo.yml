@@ -26,6 +26,13 @@ jobs:
       - uses: ./.github/actions/setup
         with:
           cache-key: repo
+      - name: Fee schedule version
+        # A fee value may not change without a `version` bump (design §6.5). `config/**` is outside
+        # every app workflow's derived path filter, so this also runs in the unfiltered repo
+        # workflow - otherwise a commit touching only config/fees.yaml would be checked by nothing.
+        run: |
+          git fetch --no-tags --depth=1 origin main
+          node tools/fee-version-check/cli.mjs FETCH_HEAD
       - name: Formatting
         run: pnpm format:check
       - name: Repository tests
