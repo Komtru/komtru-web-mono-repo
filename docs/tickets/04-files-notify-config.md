@@ -14,6 +14,7 @@
   - Tombstoning destroys the asset via a job and keeps the row resolvable.
   - Usage-sync scheduled job marks accounts `NEAR_QUOTA`/`DISABLED` and emits the storage-account events.
   - Camera-capture metadata (server-received timestamp, uploader, hub id when present) stored with the record; the client's clock is never trusted.
+  - **T-028:** upload signing is pure and stays in a non-client file a request handler may call; every call that reaches Cloudinary (finalize reconciliation, tombstone destroy, usage sync) goes in `files/infrastructure/providers/cloudinary.client.ts` and is imported only from `files/jobs/`.
 
 ### T-041 — Avatars
 

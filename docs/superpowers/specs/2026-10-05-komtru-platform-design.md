@@ -183,6 +183,15 @@ Flows that look synchronous are made asynchronous rather than breaking the BullM
 
 **One exception needs the owner's acknowledgement:** the OAuth authorization-code exchange during social login is a synchronous call in the callback handler, because the user is mid-redirect and a queued retry cannot finish the handshake. It runs with a strict timeout and a circuit breaker, and provider signing keys (JWKS) are refreshed by a scheduled job rather than fetched inline.
 
+**Owner acknowledgement: pending** (raised with T-028, 2026-10-05).
+
+#### How the rule is made structural (T-028)
+
+- **One helper.** `src/platform/providers/http.ts` is the only place the backend calls `fetch`. Its deadline covers reading the response body, not just the headers, so a provider that sends headers and then stalls surfaces as a timeout. It retries only a call the caller declares idempotent (`GET`/`HEAD` by method; anything else must opt in because it carries a provider idempotency key), retries only failures a repeat can fix (network, timeout, `429`, `5xx`), and logs one line per attempt with every query value and any URL credentials redacted and no request or response body. `src/platform/providers/circuit-breaker.ts` serves the exception above, admitting one trial call when its reset window elapses.
+- **Where provider code lives.** A provider adapter sits in `src/modules/<module>/infrastructure/providers/`. Its network-calling functions are exported from `<provider>.client.ts` and may be imported only from that module's `jobs/`. Everything pure — webhook signature verification, payload parsing, Cloudinary upload signing — lives in sibling files with no I/O, which request handlers may use freely.
+- **Enforcement.** The ESLint rule `komtru/provider-clients` reports a `*.client.ts` imported from anywhere but `jobs/`, the provider HTTP helper imported from anywhere but a client, and a module file reaching the network directly (`fetch()`, `node:http`, `node:https`, `undici`). `apps/backend-api/test/platform/provider-boundaries.test.ts` scans `src/modules` for the same violations independently of ESLint, so the boundary survives the rule being disabled.
+- **The flows this shapes** (implemented by their own tickets): Paystack charges start client-side through Paystack Inline against a server-issued reference, confirmed by the webhook and a verify job (T-071); KYC checks (T-050), bank-name resolution (T-051) and IMEI lookups (T-067) write a pending record, run in a job, and push the result to the client over the socket; Cloudinary uploads go straight from the browser to Cloudinary with a signature the API computes locally, so the backend never proxies the bytes (T-040).
+
 ---
 
 ## 5. Conflicts found and how they are resolved
