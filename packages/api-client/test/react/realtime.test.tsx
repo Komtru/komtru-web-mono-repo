@@ -107,8 +107,15 @@ describe('RealtimeProvider', () => {
 
   it('counts the notifications pushed to the user and clears them on demand', async () => {
     const { socket, emit } = fakeSocket();
-    renderWithProvider(<NotificationBell />, { socket });
-    await waitFor(() => expect(screen.getByTestId('unread').textContent).toBe('0'));
+    renderWithProvider(
+      <>
+        <ConnectionBadge />
+        <NotificationBell />
+      </>,
+      { socket },
+    );
+    // The subscription only exists once the socket reaches the context, one tick after mount.
+    await waitFor(() => expect(screen.getByTestId('has-socket').textContent).toBe('yes'));
 
     emit('notification', { kind: 'trade.funded' });
     emit('notification', { kind: 'trade.shipped' });
