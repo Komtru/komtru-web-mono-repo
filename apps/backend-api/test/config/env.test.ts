@@ -52,6 +52,16 @@ describe('loadConfig', () => {
     ]);
   });
 
+  it('accepts a 32-byte hex encryption key and rejects anything else', () => {
+    const key = 'a'.repeat(64);
+    expect(loadConfig({ ...minimal, ENCRYPTION_KEY: key }).crypto.encryptionKey).toBe(key);
+    expect(loadConfig(minimal).crypto).not.toHaveProperty('encryptionKey');
+    expect(failure({ ...minimal, ENCRYPTION_KEY: 'a'.repeat(63) }).invalid).toEqual(['ENCRYPTION_KEY']);
+    expect(failure({ ...minimal, ENCRYPTION_KEY: `${'a'.repeat(62)}zz` }).invalid).toEqual([
+      'ENCRYPTION_KEY',
+    ]);
+  });
+
   it('logs JSON in production by default', () => {
     expect(loadConfig({ ...minimal, NODE_ENV: 'production' }).log.format).toBe('json');
   });
