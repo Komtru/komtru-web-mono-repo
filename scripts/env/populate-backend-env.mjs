@@ -28,12 +28,15 @@ function parseEnvRaw(text) {
   return out;
 }
 
-/** Parses KEY=VALUE lines. Later duplicates win. Surrounding quotes on a value are removed. */
+/**
+ * Parses KEY=VALUE lines the way dotenv reads them. Later duplicates win. Surrounding quotes are
+ * removed; an unquoted value loses a trailing ` # comment`.
+ */
 export function parseEnv(text) {
   const out = {};
   for (const [key, raw] of Object.entries(parseEnvRaw(text))) {
     const quoted = raw.length >= 2 && (raw[0] === '"' || raw[0] === "'") && raw.at(-1) === raw[0];
-    out[key] = quoted ? raw.slice(1, -1) : raw;
+    out[key] = quoted ? raw.slice(1, -1) : raw.replace(/\s+#.*$/, '');
   }
   return out;
 }

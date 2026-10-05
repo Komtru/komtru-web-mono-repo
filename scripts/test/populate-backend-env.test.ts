@@ -15,6 +15,16 @@ const fixtureValues = Object.values(parseEnv(fixture)).filter((v) => v.length >=
 
 const valueOf = (text: string, key: string) => parseEnv(text)[key];
 
+describe('parseEnv', () => {
+  it('strips an inline comment from an unquoted value, as dotenv does', () => {
+    expect(parseEnv('PORT=7813   # HTTP port\n').PORT).toBe('7813');
+  });
+
+  it('keeps a # inside a quoted value', () => {
+    expect(parseEnv('NAME="a # b"\n').NAME).toBe('a # b');
+  });
+});
+
 describe('buildBackendEnv — local target', () => {
   const { text } = buildBackendEnv(fixture, { target: 'local' });
 
