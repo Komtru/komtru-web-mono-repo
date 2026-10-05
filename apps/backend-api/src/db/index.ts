@@ -8,4 +8,5 @@ export type Db = NodePgDatabase;
 /** Wraps the shared runtime pool (komtru_app, through PgBouncer). */
 export const createDb = (pool: pg.Pool): Db => drizzle(pool);
 
+export { appendOnly } from './helpers/appendOnly.js';
 export { APPEND_ONLY_TRIGGER, RUNTIME_ROLE, RuntimeRoleError, assertNotOwner } from './roles.js';
