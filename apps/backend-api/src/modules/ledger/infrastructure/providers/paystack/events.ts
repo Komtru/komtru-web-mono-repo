@@ -27,6 +27,9 @@ const envelope = z.object({ event: z.string().min(1), data: z.looseObject({}) })
 
 const chargeSucceeded = z.object({
   reference,
+  // A delivery whose envelope says `charge.success` while its data says otherwise is a contradiction,
+  // not an event. One line, and the event type can never disagree with the payload it carries.
+  status: z.literal('success'),
   amount: amountMinor,
   paid_at: z.string().min(1),
 });
@@ -44,23 +47,40 @@ const transferFailed = transfer.extend({
 /**
  * A refund carries no reference of ours: Paystack's Refund API accepts none, unlike a charge, where we
  * supply `reference` at initialize and Paystack echoes it back. The ORIGINAL charge's reference is what
- * identifies the trade, and it arrives either flat or nested depending on the event. `webhookIngest`
- * (T-072) matches a refund to its row by `providerRefundId`; this reference is how a human reading the
- * log finds the trade.
+ * identifies the trade, and it arrives either flat or nested depending on the event.
+ *
+ * At least one of the three spellings is required. The obvious fallback — the refund's own id — would
+ * put a provider id into a field the interface documents as OUR reference, which is precisely the
+ * well-formed-but-wrong shape this file exists to prevent: a human reading the log, or any later code
+ * that joins on it, would be silently matching the wrong thing. A delivery with none of them is refused
+ * instead, which is how we would find out that the payload shape differs from the documented one.
  */
-const refund = z.object({
-  id: providerId,
-  transaction_reference: reference.optional(),
-  reference: reference.optional(),
-  transaction: z.looseObject({ reference: reference.optional() }).optional(),
-  status: z.string().min(1).optional(),
-});
-const refundProcessed = refund.extend({ amount: amountMinor });
+const refund = z
+  .object({
+    id: providerId,
+    transaction_reference: reference.optional(),
+    reference: reference.optional(),
+    transaction: z.looseObject({ reference: reference.optional() }).optional(),
+    status: z.string().min(1).optional(),
+    message: z.string().min(1).nullish(),
+  })
+  .refine((data) => refundReferenceOf(data) !== undefined, {
+    path: ['transaction_reference'],
+    error: 'a refund event must carry the original transaction reference',
+  });
+const refundProcessed = z.intersection(refund, z.object({ amount: amountMinor }));
 
-type Refund = z.output<typeof refund>;
+interface RefundReferences {
+  transaction_reference?: string | undefined;
+  reference?: string | undefined;
+  transaction?: { reference?: string | undefined } | undefined;
+}
 
-const refundReference = (data: Refund): string =>
-  data.transaction_reference ?? data.reference ?? data.transaction?.reference ?? data.id;
+const refundReferenceOf = (data: RefundReferences): string | undefined =>
+  data.transaction_reference ?? data.reference ?? data.transaction?.reference;
+
+/** Safe after the schema's refinement, which is what guarantees one of the three is present. */
+const refundReference = (data: RefundReferences): string => refundReferenceOf(data) as string;
 
 /** Names the event and the failing paths; never a value, since a payload carries customer data. */
 const reject = (event: string, error: z.ZodError): never => {
@@ -177,7 +197,9 @@ export function parsePaystackEvent(rawBody: Buffer): NormalizedPaymentEvent | nu
         type: 'refund.failed',
         reference: refundReference(data_),
         providerRefundId: data_.id,
-        reason: data_.status ?? 'refund failed',
+        // Not `status`: on a refund.failed event that is the string 'failed', which tells an operator
+        // nothing they did not already know from the event type.
+        reason: data_.message ?? 'refund failed',
       };
     }
     default:

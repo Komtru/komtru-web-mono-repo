@@ -1,4 +1,8 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
+import type { Redis } from 'ioredis';
+import { loadConfig } from '../../../src/config/env.js';
+import type { ModuleContext } from '../../../src/platform/module.js';
+import { testRedisUrl } from '../../support/db-urls.js';
 import { ledgerModule, RESOLVE_ACCOUNT_NAME_QUEUE } from '../../../src/modules/ledger/index.js';
 import { modules } from '../../../src/modules/index.js';
 import { createScheduleRegistry } from '../../../src/platform/scheduler/registry.js';
@@ -24,6 +28,24 @@ describe('the ledger module', () => {
 
     expect(registry.list().map((j) => j.name)).toEqual(['ledger.refresh-bank-list']);
     expect(registry.get('ledger.refresh-bank-list')?.cron).toMatch(/^\S+ \S+ \* \* \*$/);
+  });
+
+  it('says so at boot when Paystack is unconfigured', async () => {
+    const config = loadConfig({
+      NODE_ENV: 'test',
+      LOG_LEVEL: 'silent',
+      POSTGRES_URL: 'postgresql://komtru:komtru@localhost:56432/komtru_v2_dev',
+      REDIS_URL: testRedisUrl(),
+    });
+    const warn = vi.fn();
+    const logger = { warn, info: vi.fn(), error: vi.fn() } as unknown as ModuleContext['logger'];
+    const ctx = { config, logger, redis: {} as Redis } as ModuleContext;
+
+    await ledgerModule.start?.(ctx);
+    await ledgerModule.stop?.();
+
+    // Otherwise an unset key and an attack look identical in the logs: every signature returns false.
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('PAYSTACK_SECRET_KEY'));
   });
 
   it('refuses to run a job before the module started, rather than failing on undefined', async () => {

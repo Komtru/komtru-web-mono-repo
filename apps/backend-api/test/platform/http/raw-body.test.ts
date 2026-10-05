@@ -76,6 +76,27 @@ describe('raw body capture', () => {
     expect(response.status).toBe(413);
   });
 
+  it('captures for the mixed-case path Express also routes', async () => {
+    // Express routes case-insensitively by default, so this reaches the handler; without the fold it
+    // would arrive with no bytes and 400 forever against a provider that retries.
+    const response = await request(app)
+      .post('/v1/Webhooks/paystack')
+      .set('content-type', 'application/json')
+      .send(BODY);
+
+    expect(response.status).toBe(200);
+    expect(echo(response.body).raw).toBe(BODY);
+  });
+
+  it('captures when the webhook route carries a query string', async () => {
+    const response = await request(app)
+      .post('/v1/webhooks/paystack?attempt=2')
+      .set('content-type', 'application/json')
+      .send(BODY);
+
+    expect(echo(response.body).raw).toBe(BODY);
+  });
+
   it('prefixes only the versioned webhook mount', () => {
     expect(WEBHOOK_PATH_PREFIX).toBe('/v1/webhooks/');
   });

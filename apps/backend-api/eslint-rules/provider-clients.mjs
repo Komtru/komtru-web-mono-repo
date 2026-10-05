@@ -30,12 +30,22 @@ function withinModules(file) {
 /** Anchored on src/modules, so a checkout under a directory named `jobs` does not disable the rule. */
 const isJob = (file) => (withinModules(file) ?? '').split(path.sep).includes('jobs');
 
+/** `ledger/index.ts` — the module's own surface, which assembles its jobs' dependencies at start. */
+const isModuleIndex = (file) => {
+  const parts = (withinModules(file) ?? '').split(path.sep);
+  return parts.length === 2 && INDEX_FILES.has(parts[1]);
+};
+
+const INDEX_FILES = new Set(['index.ts', 'index.js']);
+
 /** @type {import('eslint').Rule.RuleModule} */
 export default {
   meta: {
     type: 'problem',
     docs: { description: 'Call providers from jobs only, through a *.client.ts file.' },
     messages: {
+      jobsOutsideJobs:
+        "'{{target}}' lives in jobs/, so it may be imported only from jobs/ or the module's index.ts. A file there can hand out a provider client, which is the boundary this rule exists to hold.",
       clientOutsideJobs:
         "'{{target}}' calls a provider, so it may be imported only from jobs/. Enqueue a job instead, or move the pure part into its own file.",
       httpOutsideClient:
@@ -63,6 +73,13 @@ export default {
       const target = path.resolve(path.dirname(importer), specifier);
       if (isClient(target) && !isJob(importer) && !isClient(importer)) {
         context.report({ node, messageId: 'clientOutsideJobs', data: { target: specifier } });
+        return;
+      }
+      // A file in jobs/ may legitimately import a client, so importing THAT file is a second way to
+      // reach the provider. Only jobs/ and the module's index.ts (which wires a job's dependencies at
+      // start) may do it; a service or controller reaching in would call the provider synchronously.
+      if (isJob(target) && !isJob(importer) && !isModuleIndex(importer)) {
+        context.report({ node, messageId: 'jobsOutsideJobs', data: { target: specifier } });
         return;
       }
       if (isHttpHelper(target) && !isClient(importer) && !isPlatformProvider(importer)) {

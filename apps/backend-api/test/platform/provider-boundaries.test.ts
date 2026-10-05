@@ -136,6 +136,38 @@ describe('findProviderImportViolations', () => {
     await expect(findProviderImportViolations(root)).resolves.toEqual([]);
   });
 
+  it('finds a service reaching the provider through a file in jobs/', async () => {
+    // The loophole the client check alone leaves open: jobs/providers.ts may import the client, so a
+    // service importing jobs/providers.ts calls Paystack from a request handler with both checks green.
+    const root = await modules({
+      [CLIENT]: 'export const verifyCharge = async () => undefined;\n',
+      'ledger/jobs/providers.ts':
+        "export { verifyCharge } from '../infrastructure/providers/paystack.client.js';\n",
+      'ledger/services/funding.service.ts': "import { verifyCharge } from '../jobs/providers.js';\n",
+      'ledger/http/controllers.ts': "import { verifyCharge } from '../jobs/providers.js';\n",
+    });
+
+    const violations = await findProviderImportViolations(root);
+
+    expect(violations.map((v) => v.file).sort()).toEqual([
+      'ledger/http/controllers.ts',
+      'ledger/services/funding.service.ts',
+    ]);
+    expect(new Set(violations.map((v) => v.kind))).toEqual(new Set(['jobs-outside-jobs']));
+  });
+
+  it("lets a module's index.ts wire its own jobs, and jobs reach each other", async () => {
+    const root = await modules({
+      [CLIENT]: 'export const verifyCharge = async () => undefined;\n',
+      'ledger/jobs/providers.ts':
+        "export { verifyCharge } from '../infrastructure/providers/paystack.client.js';\n",
+      'ledger/jobs/verify.job.ts': "import { verifyCharge } from './providers.js';\n",
+      'ledger/index.ts': "import { verifyCharge } from './jobs/providers.js';\n",
+    });
+
+    await expect(findProviderImportViolations(root)).resolves.toEqual([]);
+  });
+
   it('reports nothing for a tree that does not exist yet', async () => {
     await expect(findProviderImportViolations(join(tmpdir(), 'komtru-no-such-tree'))).resolves.toEqual([]);
   });

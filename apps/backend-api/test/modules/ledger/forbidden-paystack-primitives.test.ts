@@ -61,12 +61,61 @@ describe('findForbiddenPaystackPrimitives', () => {
     expect(new Set(findings.map((f) => f.primitive))).toEqual(new Set([DEDICATED]));
   });
 
+  it('scans the config files a source-only scan would walk past', async () => {
+    const root = await sources({
+      'docker-compose.yml': `    environment:\n      PAYSTACK_${SUB.toUpperCase()}_CODE: ACCT_x\n`,
+      '.env.example': `PAYSTACK_${SUB.toUpperCase()}_CODE=\n`,
+      'migrations/0001_init.sql': `alter table charges add column ${SUB}_code text;\n`,
+      'scripts/seed.sh': `curl -d "${SUB}=ACCT_x" https://api.paystack.co/transaction/initialize\n`,
+    });
+
+    const findings = await findForbiddenPaystackPrimitives(root);
+
+    expect(findings.map((f) => f.file).sort()).toEqual([
+      '.env.example',
+      'docker-compose.yml',
+      'migrations/0001_init.sql',
+      'scripts/seed.sh',
+    ]);
+  });
+
+  it(`reports the SDK-shaped ${SPLIT} spellings, not just the parameter names`, async () => {
+    const cap = `${SPLIT[0]?.toUpperCase() ?? ''}${SPLIT.slice(1)}`;
+    const root = await sources({
+      'create.ts': `await paystack.create${cap}({ type: 'percentage' });\n`,
+      'accessor.ts': `await paystack.${SPLIT}s.list();\n`,
+      'type.ts': `interface ${cap}Group { id: string }\n`,
+    });
+
+    expect((await findForbiddenPaystackPrimitives(root)).map((f) => f.file).sort()).toEqual([
+      'accessor.ts',
+      'create.ts',
+      'type.ts',
+    ]);
+  });
+
+  it('reports the third primitive in lower and camel case, not only shouted', async () => {
+    const abbr = FORBIDDEN.abbreviation;
+    const root = await sources({
+      'snake.ts': `const ${abbr.toLowerCase()}_enabled = true;\n`,
+      'camel.ts': `const ${abbr.toLowerCase()}Service = makeService();\n`,
+      'suffix.ts': `const use${abbr[0]}${abbr.slice(1).toLowerCase()} = () => null;\n`,
+    });
+
+    expect((await findForbiddenPaystackPrimitives(root)).map((f) => f.file).sort()).toEqual([
+      'camel.ts',
+      'snake.ts',
+      'suffix.ts',
+    ]);
+  });
+
   it('reports nothing for ordinary code that happens to use the word', async () => {
     // A guard that cries wolf gets switched off; these must stay silent.
     const root = await sources({
       'paths.ts': "const parts = file.split(path.sep);\nconst [head] = name.split('.');\n",
       'copy.tsx': "export const label = 'Split the bill with a friend';\n",
       'why.ts': '// Transaction splitting is forbidden here; see m8.\n',
+      'words.ts': 'const divan = 1;\nconst individual = 2;\nconst advance = 3;\n',
       'notes.md': `we must never use a ${SUB} or a ${DEDICATED} virtual account\n`,
     });
 

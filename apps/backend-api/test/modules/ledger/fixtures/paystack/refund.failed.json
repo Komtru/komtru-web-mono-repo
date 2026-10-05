@@ -8,6 +8,7 @@
     "currency": "NGN",
     "id": 88130,
     "integration": 100073,
-    "domain": "test"
+    "domain": "test",
+    "message": "The customer account could not be credited"
   }
 }

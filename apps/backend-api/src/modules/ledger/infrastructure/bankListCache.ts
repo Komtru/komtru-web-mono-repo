@@ -45,7 +45,13 @@ export function createRedisBankListCache(redis: Redis, ttlSeconds = BANK_LIST_TT
       return parsed.success ? parsed.data : null;
     },
     async write(banks) {
-      await redis.set(BANK_LIST_CACHE_KEY, JSON.stringify(banks), 'EX', ttlSeconds);
+      // Validated on the way in as well as on the way out. The read side turns anything unrecognised
+      // into `null`, so writing junk here would not crash anything — it would quietly empty the bank
+      // picker for the whole TTL, which is the failure nobody notices until a seller calls support.
+      const parsed = cachedBanks.safeParse(banks);
+      if (!parsed.success) throw new Error('ledger: refusing to cache a malformed bank list');
+      if (parsed.data.length === 0) throw new Error('ledger: refusing to cache an empty bank list');
+      await redis.set(BANK_LIST_CACHE_KEY, JSON.stringify(parsed.data), 'EX', ttlSeconds);
     },
   };
 }

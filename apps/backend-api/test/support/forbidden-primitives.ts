@@ -33,6 +33,14 @@ export interface ForbiddenPrimitiveFinding {
 
 const SEP = '[ _-]?';
 
+const titleCase = (value: string): string => value[0] + value.slice(1).toLowerCase();
+/** Shouted, title and lower case — the three spellings an identifier actually takes. */
+const ABBREVIATION_CASINGS = [
+  FORBIDDEN.abbreviation,
+  titleCase(FORBIDDEN.abbreviation),
+  FORBIDDEN.abbreviation.toLowerCase(),
+];
+
 /**
  * Deliberately narrow on the second and third. A guard that fires on `String.split` or on the word
  * "splitting" in a sentence gets switched off within the week, so each pattern names a Paystack API
@@ -47,19 +55,61 @@ const PATTERNS: { primitive: string; pattern: RegExp }[] = [
   },
   {
     primitive: FORBIDDEN.split,
-    pattern: new RegExp(`['"\`/]${FORBIDDEN.split}(['"\`/?]|$)`, 'i'),
+    pattern: new RegExp(`['"\`/]${FORBIDDEN.split}s?(['"\`/?]|$)`, 'i'),
+  },
+  // The SDK-shaped spellings the endpoint and parameter patterns miss: a create/update verb in front
+  // of the name, a pluralised resource accessor, and the usual Group/Config/Type/Id suffixes.
+  {
+    primitive: FORBIDDEN.split,
+    pattern: new RegExp(`(create|update|delete|add|remove)${FORBIDDEN.split}`, 'i'),
+  },
+  { primitive: FORBIDDEN.split, pattern: new RegExp(`\\.${FORBIDDEN.split}s\\b`, 'i') },
+  {
+    primitive: FORBIDDEN.split,
+    pattern: new RegExp(`${FORBIDDEN.split}(Group|Config|Type|Id)`, 'i'),
   },
   {
     primitive: FORBIDDEN.dedicated,
     pattern: new RegExp(`${FORBIDDEN.dedicated}${SEP}(virtual${SEP})?account`, 'i'),
   },
+  // The three casings are spelled out rather than using the `i` flag, because under `i` the trailing
+  // `(?![a-z])` would also reject an uppercase letter and so miss the camelCase spelling — which is
+  // the one most likely to appear in real code.
   {
     primitive: FORBIDDEN.dedicated,
-    pattern: new RegExp(`(^|[^A-Za-z])${FORBIDDEN.abbreviation}([^A-Za-z]|$)`),
+    pattern: new RegExp(`(^|[^A-Za-z])(${ABBREVIATION_CASINGS.join('|')})(?![a-z])`),
+  },
+  {
+    primitive: FORBIDDEN.dedicated,
+    pattern: new RegExp(`[a-z](${FORBIDDEN.abbreviation}|${titleCase(FORBIDDEN.abbreviation)})(?![a-z])`),
   },
 ];
 
-const SCANNED = new Set(['.ts', '.tsx', '.mts', '.mjs', '.cjs', '.js', '.jsx', '.json', '.sql']);
+const SCANNED = new Set([
+  '.ts',
+  '.tsx',
+  '.mts',
+  '.mjs',
+  '.cjs',
+  '.js',
+  '.jsx',
+  '.vue',
+  '.svelte',
+  '.json',
+  '.sql',
+  '.yml',
+  '.yaml',
+  '.toml',
+  '.sh',
+  '.py',
+  '.graphql',
+  '.prisma',
+  '.example',
+]);
+/** `.env`, `.env.local`, `Dockerfile` — config with no extension to key on. */
+const SCANNED_NAMES = new Set(['Dockerfile', 'Makefile']);
+const isScanned = (name: string): boolean =>
+  SCANNED.has(path.extname(name)) || SCANNED_NAMES.has(name) || name.startsWith('.env');
 /** Markdown is not scanned: the specs and the tickets discuss these primitives by name, as they must. */
 const SKIPPED_DIRECTORIES = new Set([
   'node_modules',
@@ -79,7 +129,7 @@ async function* walk(dir: string): AsyncGenerator<string> {
     const full = path.join(dir, entry.name);
     if (entry.isDirectory()) {
       if (!SKIPPED_DIRECTORIES.has(entry.name)) yield* walk(full);
-    } else if (SCANNED.has(path.extname(entry.name))) {
+    } else if (isScanned(entry.name)) {
       yield full;
     }
   }

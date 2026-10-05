@@ -73,8 +73,30 @@ describe('parsePaystackEvent', () => {
       type: 'refund.failed',
       reference: 'trade_fund_018f3b2c',
       providerRefundId: '88130',
-      reason: 'failed',
+      reason: 'The customer account could not be credited',
     });
+  });
+
+  it('falls back to a generic reason when a failed refund carries no message', () => {
+    const payload = {
+      event: 'refund.failed',
+      data: { id: 88130, status: 'failed', transaction_reference: 'trade_fund_018f3b2c' },
+    };
+    // Never `status`: on a refund.failed event that reads 'failed', which says nothing.
+    expect(parsePaystackEvent(body(JSON.stringify(payload)))).toMatchObject({
+      reason: 'refund failed',
+    });
+  });
+
+  it('refuses a refund event that identifies no original transaction', () => {
+    // The old fallback put the refund's own id into a field documented as OUR reference.
+    const payload = { event: 'refund.processed', data: { id: 88129, amount: 100, status: 'processed' } };
+    expect(() => parsePaystackEvent(body(JSON.stringify(payload)))).toThrow(ApiError);
+  });
+
+  it('refuses a charge.success whose own data says it failed', () => {
+    const payload = edited('charge.success', (data) => (data['status'] = 'failed'));
+    expect(() => parsePaystackEvent(payload)).toThrow(ApiError);
   });
 
   it('reads a refund reference from the nested transaction object too', () => {

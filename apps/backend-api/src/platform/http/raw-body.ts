@@ -23,9 +23,18 @@ declare module 'express-serve-static-core' {
 /** Inbound provider webhooks are mounted here, e.g. `POST /v1/webhooks/paystack` (m8 §8). */
 export const WEBHOOK_PATH_PREFIX = '/v1/webhooks/';
 
-/** body-parser's `verify` hook: it runs on the collected buffer, before any parsing. */
+/**
+ * body-parser's `verify` hook: it runs on the collected buffer, before any parsing.
+ *
+ * The path is lower-cased and stripped of its query first. Express routes case-insensitively by
+ * default, so `POST /V1/Webhooks/paystack` reaches the handler; a case-sensitive check here would
+ * leave it with no bytes to verify and 400 forever against a provider that retries. Capturing more
+ * cannot weaken anything — this is not an authentication decision, it only decides whether the bytes
+ * are kept, and the signature check is what actually gates the request.
+ */
 export function captureRawBody(req: Request, _res: Response, buf: Buffer): void {
-  if (req.originalUrl.startsWith(WEBHOOK_PATH_PREFIX)) req.rawBody = buf;
+  const path = req.originalUrl.split('?')[0]?.toLowerCase() ?? '';
+  if (path.startsWith(WEBHOOK_PATH_PREFIX)) req.rawBody = buf;
 }
 
 /**

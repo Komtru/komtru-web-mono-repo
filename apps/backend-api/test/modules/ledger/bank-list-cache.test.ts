@@ -1,5 +1,6 @@
 import type { Redis } from 'ioredis';
 import { describe, expect, it } from 'vitest';
+import type { Bank } from '../../../src/modules/ledger/domain/providerAdapter.js';
 import {
   BANK_LIST_CACHE_KEY,
   BANK_LIST_TTL_SECONDS,
@@ -42,6 +43,20 @@ describe('the bank list cache', () => {
     // The refresh runs daily; a TTL shorter than two intervals would empty the cache after one
     // failure, which is the moment the list is most needed.
     expect(BANK_LIST_TTL_SECONDS).toBeGreaterThan(2 * 24 * 60 * 60);
+  });
+
+  it.each([
+    ['a malformed list', [{ bankName: 'Access' }] as unknown],
+    ['an empty list', [] as unknown],
+  ])('refuses to overwrite a good list with %s', async (_name, banks) => {
+    // The read side turns junk into null, so a bad write would silently empty the bank picker for the
+    // whole TTL rather than fail anything.
+    const { redis, store } = fakeRedis();
+    const cache = createRedisBankListCache(redis);
+    await cache.write(BANKS);
+
+    await expect(cache.write(banks as Bank[])).rejects.toThrow(/refusing to cache/);
+    expect(store.get(BANK_LIST_CACHE_KEY)).toBe(JSON.stringify(BANKS));
   });
 
   it('reads null when nothing is cached', async () => {

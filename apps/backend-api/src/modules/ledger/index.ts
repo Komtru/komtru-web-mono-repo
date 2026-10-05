@@ -62,14 +62,23 @@ const started = (): LedgerDeps => {
   return deps;
 };
 
-const buildDeps = (ctx: { config: AppConfig; logger: Logger; redis: Redis }): LedgerDeps => ({
-  registry: paymentProviders({
+const buildDeps = (ctx: { config: AppConfig; logger: Logger; redis: Redis }): LedgerDeps => {
+  // Without a key every job 503s and every webhook signature returns false, which in the logs looks
+  // exactly like an attack. One line at boot is the difference between "misconfigured" and "under
+  // attack" for whoever has to read them.
+  if (!ctx.config.paystack.secretKey) {
+    ctx.logger.warn('ledger: PAYSTACK_SECRET_KEY is not set; every provider call will fail closed');
+  }
+
+  return {
+    registry: paymentProviders({
+      logger: ctx.logger,
+      ...(ctx.config.paystack.secretKey ? { secretKey: ctx.config.paystack.secretKey } : {}),
+    }),
+    cache: createRedisBankListCache(ctx.redis),
     logger: ctx.logger,
-    ...(ctx.config.paystack.secretKey ? { secretKey: ctx.config.paystack.secretKey } : {}),
-  }),
-  cache: createRedisBankListCache(ctx.redis),
-  logger: ctx.logger,
-});
+  };
+};
 
 export const ledgerModule = defineModule({
   name: 'ledger',

@@ -57,6 +57,9 @@ const serving = async (
 const BANK_PAGE_ONE = [
   { name: 'Access Bank', code: '044', active: true },
   { name: 'Defunct Bank', code: '999', active: false },
+  { name: 'Deleted Bank', code: '998', active: true, is_deleted: true },
+  // Offering a bank that cannot receive a transfer only moves the failure to the payout.
+  { name: 'Collections Only Bank', code: '997', active: true, supports_transfer: false },
 ];
 const BANK_PAGE_TWO = [{ name: 'Zenith Bank', code: '057', active: true }];
 
@@ -104,8 +107,11 @@ describe('the paystack client', () => {
     }
   });
 
-  it('follows the bank list across pages and drops inactive banks', async () => {
+  it('follows the bank list across pages and drops banks a seller cannot be paid into', async () => {
     const options = await serving((path, res) => {
+      // Paystack only returns a cursor when the request asked for one; a stub that hands out `next`
+      // unconditionally would hide exactly the bug this test exists to catch.
+      if (!path.includes('use_cursor=true')) return json(res, 200, ok(BANK_PAGE_ONE, { meta: {} }));
       if (path.includes('next=cursor2')) return json(res, 200, ok(BANK_PAGE_TWO, { meta: { next: null } }));
       return json(res, 200, ok(BANK_PAGE_ONE, { meta: { next: 'cursor2' } }));
     });
@@ -116,10 +122,18 @@ describe('the paystack client', () => {
       { name: 'Zenith Bank', code: '057' },
     ]);
     expect(stub!.hits).toHaveLength(2);
+    expect(stub!.hits[0]!.path).toContain('use_cursor=true');
     expect(stub!.hits[1]!.path).toContain('next=cursor2');
   });
 
-  it('stops paging at the cap when a provider never stops offering a next cursor', async () => {
+  it('stops when the provider repeats a cursor instead of fetching the same page forever', async () => {
+    const options = await serving((_path, res) => json(res, 200, ok(BANK_PAGE_TWO, { meta: { next: 'c' } })));
+
+    await expect(createPaystackAdapter(options).listBanks()).resolves.toHaveLength(2);
+    expect(stub!.hits).toHaveLength(2);
+  });
+
+  it('stops paging at the cap when a provider never stops offering a new cursor', async () => {
     const options = await serving((_path, res, hit) =>
       json(res, 200, ok(BANK_PAGE_TWO, { meta: { next: `cursor${hit + 2}` } })),
     );
@@ -214,6 +228,7 @@ describe('the paystack client', () => {
           reference: 'trade_fund_1',
           status: 'success',
           amount: 15_225_000,
+          currency: 'NGN',
           paid_at: '2026-10-04T11:21:43.000Z',
         }),
       ),
@@ -223,6 +238,7 @@ describe('the paystack client', () => {
       reference: 'trade_fund_1',
       status: 'success',
       amountMinor: 15_225_000,
+      currency: 'NGN',
       paidAt: '2026-10-04T11:21:43.000Z',
     });
     expect(stub!.hits[0]!.path).toBe('/transaction/verify/trade%20fund%2F1');
@@ -236,7 +252,53 @@ describe('the paystack client', () => {
       .catch((e: unknown) => e);
 
     expect(error).toBeInstanceOf(ApiError);
+    // `message` is non-enumerable, so JSON.stringify alone would not see it.
+    expect((error as ApiError).message).not.toContain(SECRET);
+    expect((error as ApiError).detail ?? '').not.toContain(SECRET);
     expect(JSON.stringify(error)).not.toContain(SECRET);
+  });
+
+  it('refuses a verify response that is missing or mistyped, rather than crediting from it', async () => {
+    // charge.verify is the one call T-072 trusts before touching the ledger; a cast here would let an
+    // undefined amount reach a journal entry.
+    const options = await serving((_path, res) =>
+      json(res, 200, ok({ reference: 'trade_fund_1', status: 'success', paid_at: null })),
+    );
+
+    const error = await verifyCharge(options, 'trade_fund_1').catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(ApiError);
+    expect((error as ApiError).detail).toContain('amount');
+  });
+
+  it.each([
+    ['an initialize with no checkout url', '/transaction/initialize', { access_code: 'a', reference: 'r' }],
+    ['a resolve with no account name', '/bank/resolve', { account_number: '0123456789' }],
+    ['a recipient with no code', '/transferrecipient', { id: 1 }],
+    ['a transfer with no code', '/transfer', { status: 'success' }],
+    ['a refund with no id', '/refund', { status: 'processed' }],
+    ['a bank list that is not a list', '/bank', { banks: [] }],
+  ])('refuses %s', async (_name, path, body) => {
+    const options = await serving((_p, res) => json(res, 200, ok(body)));
+    const adapter = createPaystackAdapter(options);
+    const callFor: Record<string, () => Promise<unknown>> = {
+      '/transaction/initialize': () =>
+        adapter.initializeCharge({
+          amountMinor: 1,
+          currency: 'NGN',
+          reference: 'r',
+          customerEmail: 'a@b.test',
+        }),
+      '/bank/resolve': () => adapter.resolveAccountName('0123456789', '044'),
+      '/transferrecipient': () =>
+        adapter.createTransferRecipient({ accountNumber: '0', bankCode: '0', accountName: 'A' }),
+      '/transfer': () =>
+        adapter.initiateTransfer({ providerRecipientId: 'R', amountMinor: 1, reference: 'r' }),
+      '/refund': () =>
+        adapter.initiateRefund({ chargeProviderReference: 'c', amountMinor: 1, reference: 'r' }),
+      '/bank': () => adapter.listBanks(),
+    };
+
+    await expect(callFor[path]!()).rejects.toBeInstanceOf(ApiError);
   });
 
   it('treats a 2xx with no data as an error', async () => {
@@ -246,10 +308,7 @@ describe('the paystack client', () => {
   });
 
   it('never retries a transfer, and does retry a bank list', async () => {
-    const options = await serving((path, res) => {
-      if (path.startsWith('/transfer')) return json(res, 500, { status: false, message: 'boom' });
-      return json(res, 500, { status: false, message: 'boom' });
-    });
+    const options = await serving((_path, res) => json(res, 500, { status: false, message: 'boom' }));
     const adapter = createPaystackAdapter({ ...options, backoffMs: 1 });
 
     await expect(
