@@ -9,3 +9,4 @@ export * from './rbac.js';
 export * from './sessions.js';
 export * from './usernames.js';
 export * from './invitations.js';
+export * from './audit.js';

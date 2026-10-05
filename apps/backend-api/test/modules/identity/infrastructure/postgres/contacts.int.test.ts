@@ -40,9 +40,11 @@ describe.runIf(infraEnabled)('identity contact channels', () => {
       await first.query('BEGIN');
       await second.query('BEGIN');
       await first.query(statement, values[0]);
-      const blocked = second.query(statement, values[1]);
+      // sqlState() wraps the query synchronously: the rejection arrives while COMMIT is still in
+      // flight, and a handler attached after that point is an unhandled rejection.
+      const blocked = sqlState(second.query(statement, values[1]));
       await first.query('COMMIT');
-      const state = await sqlState(blocked);
+      const state = await blocked;
       await second.query('ROLLBACK');
       return state;
     } finally {

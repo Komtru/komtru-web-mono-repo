@@ -78,6 +78,20 @@
       "when": 1791225820072,
       "tag": "0010_identity_sessions",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1791225872051,
+      "tag": "0011_identity_audit_log",
+      "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1791225880380,
+      "tag": "0012_identity_audit_append_only",
+      "breakpoints": true
     }
   ]
 }
