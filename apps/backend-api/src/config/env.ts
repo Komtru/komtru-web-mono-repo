@@ -28,6 +28,7 @@ const VARIABLES = {
   TRUST_PROXY_HOPS: { schema: int(0, 10), required: false },
   POSTGRES_URL: { schema: z.url(), required: true },
   POSTGRES_DIRECT_URL: { schema: z.url(), required: false },
+  POSTGRES_APP_PASSWORD: { schema: z.string().min(8), required: false },
   POSTGRES_SSL: { schema: bool, required: false },
   POSTGRES_POOL_MAX: { schema: int(1, 200), required: false },
   REDIS_URL: { schema: z.url(), required: true },
@@ -43,7 +44,15 @@ export interface AppConfig {
   port: number;
   log: { level: (typeof LOG_LEVELS)[number]; format: 'json' | 'pretty' };
   http: { allowedOrigins: string[]; trustProxyHops: number };
-  postgres: { url: string; directUrl?: string; ssl: boolean; poolMax: number };
+  postgres: {
+    url: string;
+    /** Owner connection, bypassing PgBouncer; migrations only. */
+    directUrl?: string;
+    /** The migrator sets this as komtru_app's login password. */
+    appPassword?: string;
+    ssl: boolean;
+    poolMax: number;
+  };
   redis: { url: string };
   sentry: { dsn?: string; environment: string };
 }
@@ -94,6 +103,7 @@ export function loadConfig(env: NodeJS.ProcessEnv): AppConfig {
     postgres: {
       url: v.POSTGRES_URL as string,
       ...(v.POSTGRES_DIRECT_URL ? { directUrl: v.POSTGRES_DIRECT_URL } : {}),
+      ...(v.POSTGRES_APP_PASSWORD ? { appPassword: v.POSTGRES_APP_PASSWORD } : {}),
       ssl: v.POSTGRES_SSL ?? false,
       poolMax: v.POSTGRES_POOL_MAX ?? 10,
     },

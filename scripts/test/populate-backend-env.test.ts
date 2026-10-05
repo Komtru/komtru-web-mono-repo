@@ -28,8 +28,11 @@ describe('parseEnv', () => {
 describe('buildBackendEnv — local target', () => {
   const { text } = buildBackendEnv(fixture, { target: 'local' });
 
-  it('points the app at PgBouncer on the local stack with the new database', () => {
-    expect(valueOf(text, 'POSTGRES_URL')).toBe('postgresql://komtru:komtru@localhost:56432/komtru_v2_dev');
+  it('points the app at PgBouncer as the runtime role, on the new database', () => {
+    expect(valueOf(text, 'POSTGRES_URL')).toBe(
+      'postgresql://komtru_app:komtru_app@localhost:56432/komtru_v2_dev',
+    );
+    expect(valueOf(text, 'POSTGRES_APP_PASSWORD')).toBe('komtru_app');
   });
 
   it('adds a direct Postgres URL for migrations', () => {
@@ -77,8 +80,20 @@ describe('buildBackendEnv — rds target', () => {
       'postgresql',
       '//fixture_user:fixture-db-password-123@devdb.fixture.us-east-1.rds.amazonaws.com:5432/komtru_v2_dev',
     ].join(':');
-    expect(valueOf(text, 'POSTGRES_URL')).toBe(expected);
     expect(valueOf(text, 'POSTGRES_DIRECT_URL')).toBe(expected);
+  });
+
+  it('runs the app as komtru_app on the same host, with a password derived from the owner password', () => {
+    const appUrl = new URL(valueOf(text, 'POSTGRES_URL') ?? '');
+    const password = valueOf(text, 'POSTGRES_APP_PASSWORD') ?? '';
+    expect(password).toMatch(/^[0-9a-f]{64}$/);
+    expect(appUrl.username).toBe('komtru_app');
+    expect(appUrl.password).toBe(password);
+    expect(appUrl.host).toBe('devdb.fixture.us-east-1.rds.amazonaws.com:5432');
+    expect(appUrl.pathname).toBe('/komtru_v2_dev');
+    // Stable across regenerations, so two developers sharing the database never clobber each other.
+    expect(valueOf(buildBackendEnv(fixture, { target: 'rds' }).text, 'POSTGRES_APP_PASSWORD')).toBe(password);
+    expect(password).not.toContain('fixture-db-password-123');
   });
 
   it('switches any other database name to komtru_v2_dev too', () => {

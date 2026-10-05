@@ -3,16 +3,20 @@
 // Design §3.4: keep every value and the old variable names, except the database. The old URL points
 // at `komtru_dev`, which the old backend already migrated; the new build must never touch it.
 //   --target local (default)  Point Postgres and Redis at the local Docker stack (docker-compose.yml).
-//   --target rds              Keep the RDS host and credentials, switch the database to komtru_v2_dev.
+//   --target rds              Keep the RDS host, switch the database to komtru_v2_dev; migrations use the
+//                             owner credentials, the app runs as komtru_app with a derived password.
 //
 // SECURITY: this script prints variable NAMES only, never values, including on error paths.
 import { spawnSync } from 'node:child_process';
+import { createHmac } from 'node:crypto';
 import { chmodSync, existsSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { LOCAL_INFRA } from './local-infra.mjs';
+import { LOCAL_APP_ROLE, LOCAL_INFRA } from './local-infra.mjs';
 
 export const NEW_DATABASE = 'komtru_v2_dev';
+/** The least-privilege role the API and worker run as (the migrator creates it; design T-021). */
+export const RUNTIME_ROLE = 'komtru_app';
 
 /** KEY -> the right-hand side exactly as written in the source (quotes, escapes, comments kept). */
 function parseEnvRaw(text) {
@@ -49,6 +53,21 @@ const switchDatabase = (url) => {
 };
 
 /**
+ * The runtime role's password on a shared server, derived from the owner's password so every
+ * developer regenerating their .env gets the same value and nobody resets it under someone else.
+ * Whoever holds the owner password can derive it, which grants nothing they did not already have.
+ */
+const deriveRuntimePassword = (ownerPassword) =>
+  createHmac('sha256', ownerPassword).update(`${RUNTIME_ROLE}@${NEW_DATABASE}`).digest('hex');
+
+const asRuntimeRole = (ownerUrl, password) => {
+  const url = new URL(ownerUrl);
+  url.username = RUNTIME_ROLE;
+  url.password = password;
+  return url.toString();
+};
+
+/**
  * @param {string} sourceText contents of the old backend .env
  * @param {{ target: 'local' | 'rds' }} options
  * @returns {{ text: string, names: string[] }}
@@ -60,16 +79,20 @@ export function buildBackendEnv(sourceText, { target }) {
   const parsed = parseEnv(sourceText);
 
   if (target === 'local') {
-    values.POSTGRES_URL = LOCAL_INFRA.pooledUrl;
+    values.POSTGRES_URL = LOCAL_INFRA.appPooledUrl;
     values.POSTGRES_DIRECT_URL = LOCAL_INFRA.directUrl;
+    values.POSTGRES_APP_PASSWORD = LOCAL_APP_ROLE.password;
     values.POSTGRES_SSL = 'false';
     values.REDIS_URL = LOCAL_INFRA.redisUrl;
     // A local run must never email real people; Mailjet's sandbox validates without sending.
     values.MAILJET_SANDBOX = 'true';
   } else if (target === 'rds') {
     if (!parsed.POSTGRES_URL) throw new UsageError('The source has no POSTGRES_URL to switch.');
-    values.POSTGRES_URL = switchDatabase(parsed.POSTGRES_URL);
-    values.POSTGRES_DIRECT_URL = values.POSTGRES_URL;
+    const ownerUrl = switchDatabase(parsed.POSTGRES_URL);
+    const appPassword = deriveRuntimePassword(decodeURIComponent(new URL(ownerUrl).password));
+    values.POSTGRES_DIRECT_URL = ownerUrl;
+    values.POSTGRES_URL = asRuntimeRole(ownerUrl, appPassword);
+    values.POSTGRES_APP_PASSWORD = appPassword;
   } else {
     throw new UsageError(`Unknown --target "${target}". Use "local" or "rds".`);
   }
