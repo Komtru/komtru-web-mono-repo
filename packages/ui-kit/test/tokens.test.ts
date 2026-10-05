@@ -1,8 +1,31 @@
+/* eslint-disable komtru-design/no-raw-hex -- the parity test is the one place that must restate the
+   reference's own colours; reading them from the tokens would make the assertions circular. */
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { REFERENCE_HTML, TOKEN_COUNT, parseRootTokens, rootBlocks } from '../scripts/extract-tokens.js';
+import {
+  REFERENCE_HTML,
+  TOKEN_COUNT,
+  parseCssDeclarations,
+  parseRootTokens,
+  renderTokensCss,
+  renderTokensTs,
+  rootBlocks,
+} from '../scripts/extract-tokens.js';
+import { KOMTRU_TOKENS, cssVar } from '../src/tokens.js';
 
 const html = readFileSync(REFERENCE_HTML, 'utf8');
+
+const readArtefact = (relative: string) => readFileSync(new URL(`../${relative}`, import.meta.url), 'utf8');
+
+/** The body of the block opened by `header`, so the test reads a generated file back structurally. */
+const blockOf = (css: string, header: string) => {
+  const start = css.indexOf(header);
+  if (start === -1) throw new Error(`No ${header} block`);
+  const open = start + header.length;
+  const end = css.indexOf('}', open);
+  if (end === -1) throw new Error(`Unterminated ${header} block`);
+  return css.slice(open, end);
+};
 
 describe('the reference HTML', () => {
   it('declares five identical :root blocks', () => {
@@ -38,5 +61,26 @@ describe('parseRootTokens', () => {
 
   it('rejects a repeated name inside one block', () => {
     expect(() => parseRootTokens('<style>:root{--a:1px;--a:2px;}</style>')).toThrow(/--a/);
+  });
+});
+
+describe('generated artefacts', () => {
+  it('tokens.css declares exactly the HTML tokens', () => {
+    expect(parseCssDeclarations(blockOf(readArtefact('src/tokens.css'), ':root {'))).toEqual(
+      parseRootTokens(html),
+    );
+  });
+
+  it('tokens.ts exports exactly the HTML tokens', () => {
+    expect(new Map(Object.entries(KOMTRU_TOKENS))).toEqual(parseRootTokens(html));
+  });
+
+  it('is byte-identical to a fresh render', () => {
+    expect(readArtefact('src/tokens.css')).toBe(renderTokensCss(parseRootTokens(html)));
+    expect(readArtefact('src/tokens.ts')).toBe(renderTokensTs(parseRootTokens(html)));
+  });
+
+  it('cssVar quotes a token for inline use', () => {
+    expect(cssVar('--trust-emerald')).toBe('var(--trust-emerald)');
   });
 });
