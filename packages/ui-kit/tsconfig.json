@@ -5,5 +5,5 @@
     "rootDir": ".",
     "types": ["node"]
   },
-  "include": ["src", "test", "*.config.ts", "*.config.mjs"]
+  "include": ["src", "test", "scripts", "*.config.ts", "*.config.mjs"]
 }
