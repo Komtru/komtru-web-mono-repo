@@ -5,7 +5,24 @@ import { z } from 'zod';
 export const PAGE_LIMIT_DEFAULT = 20;
 export const PAGE_LIMIT_MAX = 100;
 
-const limit = z.coerce.number().int().min(1).max(PAGE_LIMIT_MAX).default(PAGE_LIMIT_DEFAULT);
+/** Numbered pages stop here; deeper offsets are slow and belong to cursor pagination. */
+export const PAGE_NUMBER_MAX = 10_000;
+
+/**
+ * A whole number from a query string or JSON body. Strict on purpose: `z.coerce.number()` would
+ * accept `0x10`, `1e1`, `" 5 "` and `true`. An empty value (`?limit=`) counts as absent, so the
+ * default applies.
+ */
+const queryInt = (min: number, max: number, fallback: number) =>
+  z.preprocess(
+    (value) => (value === '' ? undefined : value),
+    z
+      .union([z.number(), z.string().regex(/^\d+$/).transform(Number)])
+      .pipe(z.number().int().min(min).max(max))
+      .default(fallback),
+  );
+
+const limit = queryInt(1, PAGE_LIMIT_MAX, PAGE_LIMIT_DEFAULT);
 
 export const cursorPageRequestSchema = z.object({
   cursor: z.string().min(1).optional(),
@@ -14,7 +31,7 @@ export const cursorPageRequestSchema = z.object({
 export type CursorPageRequest = z.infer<typeof cursorPageRequestSchema>;
 
 export const pageRequestSchema = z.object({
-  page: z.coerce.number().int().min(1).default(1),
+  page: queryInt(1, PAGE_NUMBER_MAX, 1),
   limit,
 });
 export type PageRequest = z.infer<typeof pageRequestSchema>;

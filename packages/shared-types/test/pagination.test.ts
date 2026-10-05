@@ -27,6 +27,14 @@ describe('cursorPageRequestSchema', () => {
     expect(cursorPageRequestSchema.safeParse({ limit }).success).toBe(false);
   });
 
+  it('treats an empty ?limit= as absent and uses the default', () => {
+    expect(cursorPageRequestSchema.parse({ limit: '' })).toEqual({ limit: 20 });
+  });
+
+  it.each(['0x10', '1e1', ' 5 ', true, ['5', '6']])('rejects loose query value %j', (limit) => {
+    expect(cursorPageRequestSchema.safeParse({ limit }).success).toBe(false);
+  });
+
   it('rejects an empty cursor', () => {
     expect(cursorPageRequestSchema.safeParse({ cursor: '' }).success).toBe(false);
   });
