@@ -8,6 +8,7 @@ import {
   parseCssDeclarations,
   parseRootTokens,
   renderTokensCss,
+  renderTailwindPreset,
   renderTokensTs,
   rootBlocks,
 } from '../scripts/extract-tokens.js';
@@ -82,5 +83,33 @@ describe('generated artefacts', () => {
 
   it('cssVar quotes a token for inline use', () => {
     expect(cssVar('--trust-emerald')).toBe('var(--trust-emerald)');
+  });
+});
+
+describe('the tailwind preset', () => {
+  const preset = () => readFileSync(new URL('../../config/tailwind/preset.css', import.meta.url), 'utf8');
+
+  it('declares exactly the HTML tokens, across its two blocks', () => {
+    const declared = new Map([
+      ...parseCssDeclarations(blockOf(preset(), '@theme static {')),
+      ...parseCssDeclarations(blockOf(preset(), ':root {')),
+    ]);
+    expect(declared).toEqual(parseRootTokens(html));
+  });
+
+  it('aliases every token whose tailwind namespace differs, and never self-references', () => {
+    const aliases = parseCssDeclarations(blockOf(preset(), '@theme inline {'));
+    expect(aliases.get('--color-trust-indigo')).toBe('var(--trust-indigo)');
+    expect(aliases.get('--color-success-on-soft')).toBe('var(--success-on-soft)');
+    expect(aliases.get('--spacing-4')).toBe('var(--sp-4)');
+    expect(aliases.get('--radius-md')).toBe('var(--r-md)');
+    expect(aliases.get('--radius-full')).toBe('var(--r-full)');
+    // `rounded-r-md` would also match tailwind's own `rounded-{side}` modifier.
+    expect(aliases.has('--radius-r-md')).toBe(false);
+    for (const [name, value] of aliases) expect(value).not.toBe(`var(${name})`);
+  });
+
+  it('is byte-identical to a fresh render', () => {
+    expect(preset()).toBe(renderTailwindPreset(parseRootTokens(html)));
   });
 });

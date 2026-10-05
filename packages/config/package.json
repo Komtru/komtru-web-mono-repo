@@ -8,7 +8,8 @@
     "./tsconfig/*": "./tsconfig/*",
     "./eslint": "./eslint/index.mjs",
     "./prettier": "./prettier/index.json",
-    "./vitest": "./vitest/preset.mjs"
+    "./vitest": "./vitest/preset.mjs",
+    "./tailwind/preset.css": "./tailwind/preset.css"
   },
   "scripts": {
     "lint": "eslint .",
@@ -25,6 +26,7 @@
   },
   "devDependencies": {
     "@types/node": "22.20.5",
+    "tailwindcss": "4.3.3",
     "typescript": "6.0.3"
   }
 }

@@ -144,6 +144,59 @@ export function renderTokensTs(tokens: Map<string, string>): string {
   ].join('\n');
 }
 
+// Tailwind v4 reads its theme from custom properties in named namespaces. Six of the HTML's tokens
+// already sit in one (`--font-*`, `--shadow-*`, `--ease-*`), so declaring them inside `@theme`
+// publishes the property and creates the utility in one go. The rest need an alias, and the alias
+// must not be declared twice: `--font-display: var(--font-display)` is self-referential and would
+// make the property invalid at computed-value time, taking the whole font stack with it.
+const NATIVE_NAMESPACES = ['--font-', '--shadow-', '--ease-'];
+
+const isNative = (name: string) => NATIVE_NAMESPACES.some((prefix) => name.startsWith(prefix));
+
+/** The Tailwind theme key a token maps to, or null when the token has no Tailwind namespace. */
+function tailwindAlias(name: string): string | null {
+  if (name.startsWith('--sp-')) return `--spacing-${name.slice('--sp-'.length)}`;
+  if (name.startsWith('--r-')) return `--radius-${name.slice('--r-'.length)}`;
+  // Durations are last: Tailwind v4 has no duration namespace, so `--dur-*` stays a plain property
+  // consumed as `var(--dur-standard)`.
+  if (name.startsWith('--dur-')) return null;
+  return `--color-${name.slice('--'.length)}`;
+}
+
+/** The single stylesheet every app imports: Tailwind, the reference tokens, and the theme mapping. */
+export function renderTailwindPreset(tokens: Map<string, string>): string {
+  const native = [...tokens].filter(([name]) => isNative(name));
+  const plain = [...tokens].filter(([name]) => !isNative(name));
+  const aliases = plain
+    .map(([name]) => [tailwindAlias(name), name] as const)
+    .filter((pair): pair is readonly [string, string] => pair[0] !== null);
+
+  return [
+    '/*',
+    ...HEADER_LINES.map((line) => ` * ${line}`),
+    ' */',
+    "@import 'tailwindcss';",
+    '',
+    '/* Tokens whose name is already a Tailwind namespace: font-display, shadow-card, ease-standard.',
+    '   `static` because Tailwind otherwise drops a theme property no utility used, and the reference',
+    '   reaches for these from plain CSS (`h1 { font-family: var(--font-display) }`). */',
+    '@theme static {',
+    ...native.map(([name, value]) => `  ${name}: ${value};`),
+    '}',
+    '',
+    '/* The rest of the reference tokens, verbatim. */',
+    ':root {',
+    ...plain.map(([name, value]) => `  ${name}: ${value};`),
+    '}',
+    '',
+    '/* `inline` keeps each utility pointing at the reference token rather than copying its value. */',
+    '@theme inline {',
+    ...aliases.map(([alias, name]) => `  ${alias}: var(${name});`),
+    '}',
+    '',
+  ].join('\n');
+}
+
 /** `pnpm --filter @komtru/ui-kit tokens` rewrites every artefact from the reference. */
 export function writeArtefacts(): void {
   const tokens = parseRootTokens(readFileSync(REFERENCE_HTML, 'utf8'));
@@ -152,6 +205,7 @@ export function writeArtefacts(): void {
   }
   writeFileSync(new URL('../src/tokens.css', import.meta.url), renderTokensCss(tokens));
   writeFileSync(new URL('../src/tokens.ts', import.meta.url), renderTokensTs(tokens));
+  writeFileSync(new URL('../../config/tailwind/preset.css', import.meta.url), renderTailwindPreset(tokens));
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) writeArtefacts();
