@@ -7,6 +7,7 @@ import { modules as registry } from './modules/index.js';
 import { createClients, postgresCheck, redisCheck } from './platform/clients.js';
 import { healthRoutes } from './platform/health.js';
 import { createLogger } from './platform/logger.js';
+import { createQueueFactory } from './platform/queue/factory.js';
 import { moduleClosers, moduleHealthChecks, mountModules, type KomtruModule } from './platform/module.js';
 import { initSentry } from './platform/sentry.js';
 import type { RunningProcess } from './platform/run.js';
@@ -35,7 +36,10 @@ export async function startApi(
     throw error;
   }
 
-  for (const module of modules) await module.start?.();
+  // Producer side only: the API never consumes, so slow jobs never touch the request event loop.
+  const queues = createQueueFactory({ redisUrl: config.redis.url, logger });
+  for (const definition of modules.flatMap((m) => m.queues ?? [])) queues.define(definition);
+  for (const module of modules) await module.start?.({ queues });
 
   let draining = false;
   const app = createApp({
@@ -53,6 +57,7 @@ export async function startApi(
 
   const releaseResources: Closer[] = [
     ...moduleClosers(modules),
+    { name: 'queues', close: () => queues.close() },
     { name: 'clients', close: () => clients.close() },
     { name: 'sentry', close: async () => void (await sentry.flush()) },
   ];
