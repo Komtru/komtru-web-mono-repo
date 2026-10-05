@@ -186,7 +186,10 @@ describe.each(APPS)('%s workflow', (app) => {
   });
 
   it('runs lint, typecheck, test, build and deploy in that order', () => {
-    expect(Object.keys(jobs)).toEqual(['lint', 'typecheck', 'test', 'build', 'deploy']);
+    const expected = ['lint', 'typecheck', 'test', 'build', 'deploy'];
+    // Only the backend has a schema to protect, so T-022's gate belongs to it alone.
+    if (app === 'backend-api') expected.splice(3, 0, 'migration-safety');
+    expect(Object.keys(jobs)).toEqual(expected);
     expect(asArray(jobs.test?.needs).sort()).toEqual(['lint', 'typecheck']);
     expect(asArray(jobs.build?.needs)).toEqual(['test']);
   });
@@ -208,6 +211,7 @@ describe.each(APPS)('%s workflow', (app) => {
 
   it('deploys only from main, only after the tests, and only a placeholder until T-005', () => {
     expect(asArray(jobs.deploy?.needs)).toContain('test');
+    if (app === 'backend-api') expect(asArray(jobs.deploy?.needs)).toContain('migration-safety');
     expect(jobs.deploy?.if).toBe("github.ref == 'refs/heads/main'");
     expect(jobs.deploy?.steps).toHaveLength(1);
     expect(jobs.deploy?.steps[0]?.run).toContain('T-005');
@@ -403,5 +407,60 @@ describe('backend-api service containers', () => {
       expect(workflows.get(app)!.jobs.test?.services).toBeUndefined();
       expect(workflows.get(app)!.jobs.test?.env).toBeUndefined();
     }
+  });
+});
+
+/**
+ * T-022. A replay from empty is what the backend's own Vitest globalSetup already does on every
+ * infra run; this job is the rest — journal and snapshot drift, a migration edited after it was
+ * applied, a statement that is safe only on an empty table, and the apply forward from main's
+ * schema, which is the only check that sees the database a deploy will actually meet.
+ */
+describe('backend-api migration-safety job', () => {
+  const backend = workflows.get('backend-api')!;
+  const job = backend.jobs['migration-safety']!;
+  const checkout = job.steps.find((step) => step.uses?.startsWith('actions/checkout@'));
+
+  it('runs beside the test suite rather than behind it', () => {
+    expect(asArray(job.needs).sort()).toEqual(['lint', 'typecheck']);
+  });
+
+  it('gates the deploy', () => {
+    expect(asArray(backend.jobs.deploy?.needs)).toContain('migration-safety');
+    // The placeholder comment that stood in for this job is gone.
+    expect(workflowText.get('backend-api')).not.toContain('T-022 adds');
+  });
+
+  it('checks out the whole history, without which there is no main to apply forward from', () => {
+    expect(Number(checkout?.with?.['fetch-depth'])).toBe(0);
+  });
+
+  it('installs through the shared composite action', () => {
+    expect(job.steps[0]?.uses).toMatch(/^actions\/checkout@v\d+$/);
+    expect(job.steps.some((step) => step.uses === './.github/actions/setup')).toBe(true);
+  });
+
+  it('runs the tool', () => {
+    expect(job.steps.map((step) => step.run ?? '').join('\n')).toContain('pnpm migration:safety');
+  });
+
+  it('gives it one Postgres, the same image and credentials docker-compose uses', () => {
+    expect(job.services?.postgres?.image).toBe(compose.services.postgres?.image);
+    expect(job.services?.postgres?.env).toEqual(compose.services.postgres?.environment);
+    expect(job.services?.postgres?.ports).toEqual([`${LOCAL_PORTS.postgres}:5432`]);
+    expect(job.services?.postgres?.options).toContain('--health-cmd');
+  });
+
+  it('needs no PgBouncer and no Redis, because migrations only ever run direct', () => {
+    expect(Object.keys(job.services ?? {})).toEqual(['postgres']);
+  });
+
+  it('points the tool at that Postgres, as the test job is pointed at it', () => {
+    expect(job.env?.KOMTRU_TEST_DIRECT_URL).toBe(backendTest.env?.KOMTRU_TEST_DIRECT_URL);
+  });
+
+  it('belongs to the backend alone', () => {
+    for (const app of APPS.filter((name) => name !== 'backend-api'))
+      expect(workflows.get(app)!.jobs['migration-safety']).toBeUndefined();
   });
 });

@@ -125,6 +125,43 @@ jobs:
           cache-key: backend-api
       - run: pnpm exec turbo run test --filter=@komtru/backend-api
 
+  # T-022. The backend's own Vitest globalSetup already proves every migration applies to an empty
+  # database on every infra run, so this job is the rest: journal and snapshot drift, a migration
+  # edited after it was applied, a statement that is only safe on an empty table, the maintained list
+  # of partial unique indexes, check constraints and triggers, and the apply forward from main's
+  # schema — the one check that sees the database a deploy will actually meet. Beside `test` rather
+  # than behind it: it shares nothing with the suite but the two static jobs.
+  migration-safety:
+    needs: [lint, typecheck]
+    runs-on: ubuntu-latest
+    env:
+      KOMTRU_TEST_DIRECT_URL: postgresql://komtru:komtru@localhost:55432
+    # Migrations run as the owner, straight at Postgres, never through PgBouncer (src/db/migrator.ts),
+    # so this job needs neither the pooler nor Redis. Throwaway container credentials only.
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: komtru
+          POSTGRES_PASSWORD: komtru
+          POSTGRES_DB: komtru_v2_dev
+        ports:
+          - '55432:5432'
+        options: >-
+          --health-cmd "pg_isready -U komtru -d komtru_v2_dev"
+          --health-interval 2s
+          --health-timeout 3s
+          --health-retries 30
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # The forward apply reads main's migration folder out of git; a shallow clone has no main.
+          fetch-depth: 0
+      - uses: ./.github/actions/setup
+        with:
+          cache-key: backend-api
+      - run: pnpm migration:safety
+
   build:
     needs: [test]
     runs-on: ubuntu-latest
@@ -135,10 +172,9 @@ jobs:
           cache-key: backend-api
       - run: pnpm exec turbo run build --filter=@komtru/backend-api
 
-  # T-022 adds the `migration-safety` job and this job gains it in `needs`; T-005 replaces the
-  # placeholder with the real API and worker deploys.
+  # T-005 replaces the placeholder with the real API and worker deploys.
   deploy:
-    needs: [test, build]
+    needs: [test, build, migration-safety]
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     steps:
