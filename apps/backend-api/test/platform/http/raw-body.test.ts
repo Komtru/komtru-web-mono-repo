@@ -33,6 +33,13 @@ const app = createApp({
 // is exactly what breaks a signature check against a reparsed body.
 const BODY = '{"b":1,\n  "a":"caf\\u00e9"}';
 
+interface Echo {
+  raw: string | null;
+  parsed?: unknown;
+}
+
+const echo = (body: unknown): Echo => body as Echo;
+
 describe('raw body capture', () => {
   it('gives a webhook route the exact bytes that arrived', async () => {
     const response = await request(app)
@@ -41,8 +48,8 @@ describe('raw body capture', () => {
       .send(BODY);
 
     expect(response.status).toBe(200);
-    expect(response.body.raw).toBe(BODY);
-    expect(JSON.stringify(response.body.parsed)).not.toBe(BODY);
+    expect(echo(response.body).raw).toBe(BODY);
+    expect(JSON.stringify(echo(response.body).parsed)).not.toBe(BODY);
   });
 
   it('still parses the webhook body as JSON', async () => {
@@ -51,13 +58,13 @@ describe('raw body capture', () => {
       .set('content-type', 'application/json')
       .send(BODY);
 
-    expect(response.body.parsed).toEqual({ b: 1, a: 'café' });
+    expect(echo(response.body).parsed).toEqual({ b: 1, a: 'café' });
   });
 
   it('retains nothing for an ordinary route', async () => {
     const response = await request(app).post('/v1/trades').set('content-type', 'application/json').send(BODY);
 
-    expect(response.body.raw).toBeNull();
+    expect(echo(response.body).raw).toBeNull();
   });
 
   it('still enforces the body limit on a webhook route', async () => {
