@@ -60,6 +60,11 @@ describe('parseRootTokens', () => {
     expect(() => parseRootTokens(drifted)).toThrow(/--trust-indigo/);
   });
 
+  it('ignores a CSS comment inside a block', () => {
+    const tokens = parseRootTokens('<style>:root{/* a note; with a semicolon */--a:1px;}</style>');
+    expect([...tokens]).toEqual([['--a', '1px']]);
+  });
+
   it('rejects a repeated name inside one block', () => {
     expect(() => parseRootTokens('<style>:root{--a:1px;--a:2px;}</style>')).toThrow(/--a/);
   });

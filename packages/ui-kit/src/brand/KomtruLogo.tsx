@@ -7,6 +7,8 @@ export interface KomtruLogoProps {
   /** Overrides the mark's size only; the wordmark keeps the reference's type scale. */
   size?: number;
   className?: string;
+  /** Merged last, so a caller can reach the lockup's own layout values. */
+  style?: React.CSSProperties;
 }
 
 /**
@@ -21,7 +23,7 @@ const LOCKUPS = {
   { wordmark: string; fontSize: number; gap: number; nodeRadius: KomtruMarkNodeRadius }
 >;
 
-export function KomtruLogo({ product, size = 16, className }: KomtruLogoProps): React.JSX.Element {
+export function KomtruLogo({ product, size = 16, className, style }: KomtruLogoProps): React.JSX.Element {
   const lockup = LOCKUPS[product ?? 'consumer'];
 
   return (
@@ -30,12 +32,13 @@ export function KomtruLogo({ product, size = 16, className }: KomtruLogoProps): 
       role="img"
       aria-label={lockup.wordmark}
       style={{
-        display: 'inline-flex',
+        display: 'flex',
         alignItems: 'center',
         gap: `${lockup.gap}px`,
         fontFamily: cssVar('--font-display'),
         fontWeight: 600,
         fontSize: `${lockup.fontSize}px`,
+        ...style,
       }}
     >
       <KomtruMark size={size} nodeRadius={lockup.nodeRadius} />

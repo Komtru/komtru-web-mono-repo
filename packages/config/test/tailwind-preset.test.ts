@@ -73,6 +73,20 @@ describe('@komtru/config/tailwind/preset.css', () => {
     expect(css).not.toMatch(/\.rounded-r-md \{\n\s+border-radius:/);
   });
 
+  it('retires the default palette, so every colour utility names a reference token', async () => {
+    const css = await build(['bg-red-500', 'text-slate-700', 'bg-neutral-200', 'bg-white']);
+    for (const utility of ['.bg-red-500', '.text-slate-700', '.bg-neutral-200', '.bg-white']) {
+      expect(css).not.toContain(utility);
+    }
+  });
+
+  it('keeps the colour keywords the reference itself writes', async () => {
+    const css = await build(['bg-transparent', 'text-current', 'bg-pure-white']);
+    expect(css).toContain('background-color: transparent');
+    expect(css).toContain('color: currentcolor');
+    expect(css).toContain('background-color: var(--pure-white)');
+  });
+
   it('introduces no dark theme', async () => {
     const css = await build(['bg-trust-indigo', 'text-midnight-text']);
     expect(css).not.toMatch(/prefers-color-scheme|\.dark\b/);

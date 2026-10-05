@@ -16,13 +16,17 @@ afterEach(cleanup);
 const here = path.dirname(fileURLToPath(import.meta.url));
 const html = readFileSync(path.join(here, '../../../docs/design-reference', REFERENCE_FILE), 'utf8');
 
-/** The mark as the reference writes it next to `text`, reduced to the attributes that define it. */
-function referenceMark(text: 'Komtru' | 'Komtru Ops') {
+/**
+ * The mark the reference draws inside `className`, reduced to the attributes that define it.
+ * Anchored to the class rather than to the first mark in the file: the reference draws 45 of them in
+ * six variants, and these two lockups are the only ones the components claim to reproduce.
+ */
+function referenceMark(className: 'scr-logo' | 'ds-logo', text: 'Komtru' | 'Komtru Ops') {
   const pattern = new RegExp(
-    `(<svg viewBox="0 0 24 24"[^>]*>(?:<circle[^>]*/>){3}<path[^>]*/></svg>)${text}<`,
+    `<div class="${className}">(<svg viewBox="0 0 24 24"[^>]*>(?:<circle[^>]*/>){3}<path[^>]*/></svg>)${text}<`,
   );
   const found = pattern.exec(html);
-  if (!found?.[1]) throw new Error(`The reference has no mark beside "${text}"`);
+  if (!found?.[1]) throw new Error(`The reference has no .${className} beside "${text}"`);
   const svg = found[1];
   const attribute = (name: string) => new RegExp(`${name}="([^"]*)"`).exec(svg)?.[1];
   return {
@@ -59,7 +63,7 @@ describe('KomtruMark', () => {
     expect(svg?.getAttribute('fill')).toBe('none');
     expect(svg?.getAttribute('width')).toBe('16');
     expect(svg?.getAttribute('height')).toBe('16');
-    expect(renderedMark(container)).toEqual(referenceMark('Komtru'));
+    expect(renderedMark(container)).toEqual(referenceMark('scr-logo', 'Komtru'));
   });
 
   it('hides itself from the accessibility tree when it carries no name', () => {
@@ -89,7 +93,7 @@ describe('KomtruLogo', () => {
     expect(root.style.fontWeight).toBe('600');
     expect(root.style.fontSize).toBe('14px');
     expect(root.style.gap).toBe('6px');
-    expect(renderedMark(container)).toEqual(referenceMark('Komtru'));
+    expect(renderedMark(container)).toEqual(referenceMark('scr-logo', 'Komtru'));
   });
 
   it('renders the ops wordmark the way .ds-logo does', () => {
@@ -98,7 +102,7 @@ describe('KomtruLogo', () => {
     const root = container.firstElementChild as HTMLElement;
     expect(root.style.fontSize).toBe('13px');
     expect(root.style.gap).toBe('7px');
-    expect(renderedMark(container)).toEqual(referenceMark('Komtru Ops'));
+    expect(renderedMark(container)).toEqual(referenceMark('ds-logo', 'Komtru Ops'));
   });
 
   it('names itself for assistive technology', () => {

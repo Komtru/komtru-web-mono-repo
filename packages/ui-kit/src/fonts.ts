@@ -2,6 +2,10 @@
 // for Google at runtime. Each loader writes its own family name into the matching token variable,
 // in front of the reference's fallbacks, so `var(--font-display)` keeps meaning the same thing.
 //
+// The Tailwind preset also declares `--font-display` and friends, but inside `@layer theme`, while
+// next/font's `variable` class is unlayered — and unlayered CSS beats any layer. So the loaded
+// webfont always wins on `<html className={fontVariables}>`. Do not "fix" the apparent duplication.
+//
 // This module is exported separately from the package root: `next/font/google` is rewritten by the
 // Next compiler and throws when anything else imports it.
 import { IBM_Plex_Mono, Inter, Space_Grotesk } from 'next/font/google';

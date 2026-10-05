@@ -20,13 +20,15 @@ export const TOKEN_COUNT = 52;
  * a value containing one, which is exactly the silent corruption this file exists to prevent.
  */
 function splitDeclarations(body: string): string[] {
+  // Comments first: `/* note; here */` would otherwise parse as a declaration named `/* note`.
+  const text = body.replace(/\/\*[\s\S]*?\*\//g, '');
   const parts: string[] = [];
   let depth = 0;
   let quote: string | null = null;
   let start = 0;
 
-  for (let i = 0; i < body.length; i += 1) {
-    const char = body[i];
+  for (let i = 0; i < text.length; i += 1) {
+    const char = text[i];
     if (quote !== null) {
       if (char === quote) quote = null;
       continue;
@@ -35,11 +37,11 @@ function splitDeclarations(body: string): string[] {
     else if (char === '(') depth += 1;
     else if (char === ')') depth -= 1;
     else if (char === ';' && depth === 0) {
-      parts.push(body.slice(start, i));
+      parts.push(text.slice(start, i));
       start = i + 1;
     }
   }
-  parts.push(body.slice(start));
+  parts.push(text.slice(start));
   return parts.map((part) => part.trim()).filter((part) => part.length > 0);
 }
 
@@ -154,6 +156,18 @@ const NATIVE_NAMESPACES = ['--font-', '--shadow-', '--ease-'];
 
 const isNative = (name: string) => NATIVE_NAMESPACES.some((prefix) => name.startsWith(prefix));
 
+// Tailwind ships ~250 colours of its own. Left in place they sit beside the reference's palette and
+// read exactly like it — `text-slate-700` next to the real `text-slate` — and no lint rule can tell
+// them apart, because there is no hex involved. Retiring the namespace makes every colour utility a
+// token by construction. The three keywords stay: the reference writes `transparent` and `#fff`
+// through `--pure-white`, and `currentColor` is how an icon inherits its parent's colour.
+const COLOUR_RESET = [
+  '--color-*: initial;',
+  '--color-transparent: transparent;',
+  '--color-current: currentColor;',
+  '--color-inherit: inherit;',
+];
+
 /** The Tailwind theme key a token maps to, or null when the token has no Tailwind namespace. */
 function tailwindAlias(name: string): string | null {
   if (name.startsWith('--sp-')) return `--spacing-${name.slice('--sp-'.length)}`;
@@ -192,6 +206,7 @@ export function renderTailwindPreset(tokens: Map<string, string>): string {
     '',
     '/* `inline` keeps each utility pointing at the reference token rather than copying its value. */',
     '@theme inline {',
+    ...COLOUR_RESET.map((line) => `  ${line}`),
     ...aliases.map(([alias, name]) => `  ${alias}: var(${name});`),
     '}',
     '',

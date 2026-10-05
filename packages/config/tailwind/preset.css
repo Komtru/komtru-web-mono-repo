@@ -68,6 +68,10 @@
 
 /* `inline` keeps each utility pointing at the reference token rather than copying its value. */
 @theme inline {
+  --color-*: initial;
+  --color-transparent: transparent;
+  --color-current: currentColor;
+  --color-inherit: inherit;
   --color-komtru-midnight: var(--komtru-midnight);
   --color-trust-indigo: var(--trust-indigo);
   --color-trust-indigo-soft: var(--trust-indigo-soft);
