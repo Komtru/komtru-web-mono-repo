@@ -39,7 +39,8 @@ pnpm env:backend --force          # overwrite an existing apps/backend-api/.env
 The script copies every value from `docs/specs/backend-apis.env` exactly, with these changes:
 
 - **Local target:** Postgres and Redis point at the Docker stack, and `MAILJET_SANDBOX=true` so no real email is sent from a local run.
-- **RDS target:** the host and credentials stay, but the database always changes to `komtru_v2_dev`, whatever the source named.
+- **RDS target:** the host stays, and the database always changes to `komtru_v2_dev`, whatever the source named. The source's credentials become `POSTGRES_DIRECT_URL` (migrations only).
+- **Both targets:** the app itself (`POSTGRES_URL`) connects as `komtru_app`, the least-privilege runtime role. Its password is `POSTGRES_APP_PASSWORD`: `komtru_app` locally, and on RDS a value derived from the owner password, so every developer generates the same one.
 
 > **Live provider keys stay live.** The Termii SMS key, Cloudinary accounts and other provider credentials are copied unchanged, so a local run can send real SMS to real phone numbers and spend real credit. Until the notification module ships its SMS dry-run switch (T-045), only use phone numbers you own when testing OTP or alerts. Paystack is in test mode, so no real money moves.
 
@@ -48,6 +49,18 @@ The script copies every value from `docs/specs/backend-apis.env` exactly, with t
 The script writes the file with owner-only permissions and prints variable names, never values. It finds the credentials file from any git worktree, because the file only exists in the main checkout.
 
 Frontends read `.env.local`; copy each app's `.env.example` to start.
+
+## Create the schema
+
+```bash
+pnpm --filter @komtru/backend-api db:migrate
+```
+
+This runs as the owner over `POSTGRES_DIRECT_URL`. It applies the migrations, creates `komtru_app` if needed, sets its password from `POSTGRES_APP_PASSWORD`, and grants it access to every module schema. Run it after every pull that adds a migration. The API and worker refuse to start if `POSTGRES_URL` names a superuser or the schema owner.
+
+**Upgrading from before T-021:** regenerate your env with `pnpm env:backend --force` (it adds `POSTGRES_APP_PASSWORD` and points `POSTGRES_URL` at `komtru_app`), run `pnpm infra:up` once to recreate PgBouncer, then migrate. Without `POSTGRES_APP_PASSWORD`, `db:migrate` leaves `komtru_app` unable to log in.
+
+**On RDS** the migrating user (the old backend's credentials) must own `komtru_v2_dev` and its `public` schema and have `CREATEROLE`, on Postgres 15 or later. The migrator checks the resulting privileges and fails with a list of what did not take, instead of carrying on with a weaker runtime role.
 
 ## Secret protection on commit
 

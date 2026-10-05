@@ -27,6 +27,8 @@
   - Migrations create the `komtru_app` runtime role with least privilege; the app never runs as the owner role.
   - `appendOnly(table)` helper emits the trigger plus `GRANT INSERT, SELECT` pattern used by every audit table.
   - Test harness: one database per Vitest worker, migrated once, truncated between tests; integration tests run through PgBouncer.
+- **Status:** Done (2026-10-05). Plan: `docs/superpowers/plans/2026-10-05-t-021-database-foundation.md`. Runtime grants are re-applied by the migrator on every run (so new module schemas need no hand-written grant), the migrator verifies the lockdown took, and the runtime password reaches Postgres only as a SCRAM verifier. Lint rule: `komtru/pgbouncer-safe`.
+- **Deferred review minors:** fixed test database names collide across concurrent runs (two worktrees); `truncateAll` will wipe migration-seeded rows; runtime grants skip views and override hand-written REVOKEs, and give no USAGE on `public` for extensions; lint rule misses lower-case keywords, string-keyed `name`, query configs in variables, `set_config`/`TEMP TABLE`; startup can wait up to PgBouncer's `query_wait_timeout` when Postgres is down; `komtru_app` keeps PUBLIC's CONNECT on other databases on the server; no lock against concurrent migrate runs.
 
 ### T-022 — Migration-safety check
 

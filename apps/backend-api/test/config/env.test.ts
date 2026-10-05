@@ -31,6 +31,19 @@ describe('loadConfig', () => {
     expect(config.sentry.dsn).toBeUndefined();
   });
 
+  it('exposes the direct URL and runtime role password only when set', () => {
+    expect(loadConfig(minimal).postgres).not.toHaveProperty('appPassword');
+    const config = loadConfig({
+      ...minimal,
+      POSTGRES_DIRECT_URL: 'postgresql://komtru:komtru@localhost:55432/komtru_v2_dev',
+      POSTGRES_APP_PASSWORD: 'komtru_app',
+    });
+    expect(config.postgres).toMatchObject({
+      directUrl: 'postgresql://komtru:komtru@localhost:55432/komtru_v2_dev',
+      appPassword: 'komtru_app',
+    });
+  });
+
   it('logs JSON in production by default', () => {
     expect(loadConfig({ ...minimal, NODE_ENV: 'production' }).log.format).toBe('json');
   });

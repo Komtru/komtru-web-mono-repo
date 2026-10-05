@@ -29,7 +29,9 @@ services:
       DB_PORT: '5432'
       DB_USER: komtru
       DB_PASSWORD: komtru
-      DB_NAME: komtru_v2_dev
+      # No DB_NAME: the generated [databases] entry is `*`, so per-worker test databases route through
+      # PgBouncer too. Users other than komtru (e.g. the komtru_app runtime role) are looked up in
+      # Postgres through the generated `auth_user=komtru`.
       AUTH_TYPE: scram-sha-256
       POOL_MODE: transaction
       MAX_CLIENT_CONN: '200'

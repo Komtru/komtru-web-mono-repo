@@ -1,4 +1,5 @@
 export declare const NEW_DATABASE: string;
+export declare const RUNTIME_ROLE: string;
 export declare function parseEnv(text: string): Record<string, string>;
 export declare function buildBackendEnv(
   sourceText: string,

@@ -14,10 +14,15 @@ export const LOCAL_PORTS = Object.freeze({
 // Local-only credentials for throwaway containers; never used for any shared environment.
 export const LOCAL_DATABASE = Object.freeze({ name: 'komtru_v2_dev', user: 'komtru', password: 'komtru' });
 
+/** The least-privilege runtime role the migrator creates; the app connects as this. */
+export const LOCAL_APP_ROLE = Object.freeze({ user: 'komtru_app', password: 'komtru_app' });
+
 const db = LOCAL_DATABASE;
+const app = LOCAL_APP_ROLE;
 
 export const LOCAL_INFRA = Object.freeze({
   pooledUrl: `postgresql://${db.user}:${db.password}@localhost:${LOCAL_PORTS.pgbouncer}/${db.name}`,
+  appPooledUrl: `postgresql://${app.user}:${app.password}@localhost:${LOCAL_PORTS.pgbouncer}/${db.name}`,
   directUrl: `postgresql://${db.user}:${db.password}@localhost:${LOCAL_PORTS.postgres}/${db.name}`,
   redisUrl: `redis://localhost:${LOCAL_PORTS.redis}`,
   mailpitUrl: `http://localhost:${LOCAL_PORTS.mailpitUi}`,

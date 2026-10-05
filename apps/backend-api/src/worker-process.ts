@@ -1,6 +1,7 @@
 // The worker process: runs background work (BullMQ queues and schedules, added in T-023) in its own
 // process, so a slow job never blocks the API's event loop.
 import { loadConfig } from './config/env.js';
+import { assertNotOwner } from './db/index.js';
 import { modules as registry } from './modules/index.js';
 import { createClients } from './platform/clients.js';
 import { createLogger } from './platform/logger.js';
@@ -19,6 +20,12 @@ export async function startWorker(
   const logger = createLogger(config, { process: 'worker' });
   const sentry = initSentry(config, 'worker');
   const clients = createClients(config);
+  try {
+    await assertNotOwner(clients.pool);
+  } catch (error) {
+    await clients.close();
+    throw error;
+  }
 
   for (const module of modules) await module.start?.();
   logger.info('worker started');
