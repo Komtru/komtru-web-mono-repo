@@ -4,17 +4,22 @@ import { randomUUID } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 import { infraEnabled } from '../../support/db-urls.js';
 import { useTestDatabase } from '../../support/db.js';
-import { constraintName, enumLabels, insertAccount, insertJournal, insertLine, sqlState } from './support.js';
+import { constraintName, enumLabels, insertAccount, insertJournal, postRaw, sqlState } from './support.js';
 
 describe.runIf(infraEnabled)('ledger schema', () => {
   const t = useTestDatabase();
 
-  const balancedJournal = async (overrides: Record<string, unknown> = {}) => {
-    const journal = await insertJournal(t.app(), overrides);
+  const balancedJournal = async (overrides: Record<string, unknown> = {}, amount = 10_000n) => {
     const pool = await insertAccount(t.app(), 'PLATFORM_ESCROW_POOL');
     const escrow = await insertAccount(t.app(), 'USER_ESCROW_LIABILITY', { trade_id: randomUUID() });
-    await insertLine(t.app(), journal, pool, 'DEBIT', 10_000n);
-    await insertLine(t.app(), journal, escrow, 'CREDIT', 10_000n);
+    const journal = await postRaw(
+      t.app(),
+      [
+        { accountId: pool, direction: 'DEBIT', amountMinor: amount },
+        { accountId: escrow, direction: 'CREDIT', amountMinor: amount },
+      ],
+      overrides,
+    );
     return { journal, pool, escrow };
   };
 
@@ -120,24 +125,32 @@ describe.runIf(infraEnabled)('ledger schema', () => {
   });
 
   it('rejects a zero and a negative amount', async () => {
-    const { journal, pool } = await balancedJournal();
-    expect(await constraintName(insertLine(t.app(), journal, pool, 'DEBIT', 0n))).toBe(
-      'ledger_entries_amount_positive',
-    );
-    expect(await constraintName(insertLine(t.app(), journal, pool, 'DEBIT', -1n))).toBe(
-      'ledger_entries_amount_positive',
-    );
+    const pool = await insertAccount(t.app(), 'PLATFORM_ESCROW_POOL');
+    expect(
+      await constraintName(
+        postRaw(t.app(), [
+          { accountId: pool, direction: 'DEBIT', amountMinor: 0n },
+          { accountId: pool, direction: 'CREDIT', amountMinor: 0n },
+        ]),
+      ),
+    ).toBe('ledger_entries_amount_positive');
+    expect(
+      await constraintName(
+        postRaw(t.app(), [
+          { accountId: pool, direction: 'DEBIT', amountMinor: -1n },
+          { accountId: pool, direction: 'CREDIT', amountMinor: -1n },
+        ]),
+      ),
+    ).toBe('ledger_entries_amount_positive');
   });
 
   it('stores an amount beyond 2^53 exactly', async () => {
     const huge = 9_007_199_254_740_993n;
-    const { journal, pool, escrow } = await balancedJournal({ line_count: 4 });
-    await insertLine(t.app(), journal, pool, 'DEBIT', huge);
-    await insertLine(t.app(), journal, escrow, 'CREDIT', huge);
+    const { journal } = await balancedJournal({}, huge);
     const { rows } = await t
       .app()
       .query<{ amount_minor: string }>(
-        `SELECT amount_minor FROM ledger.ledger_entries WHERE journal_entry_id = $1 ORDER BY amount_minor DESC LIMIT 1`,
+        `SELECT amount_minor FROM ledger.ledger_entries WHERE journal_entry_id = $1 LIMIT 1`,
         [journal],
       );
     expect(rows[0]?.amount_minor).toBe(huge.toString());

@@ -103,3 +103,35 @@ export const insertLine = (
      VALUES ($1, $2, $3, $4)`,
     [journalEntryId, accountId, direction, amountMinor.toString()],
   );
+
+export interface RawLine {
+  accountId: string;
+  direction: 'DEBIT' | 'CREDIT';
+  amountMinor: bigint;
+}
+
+/**
+ * A whole posting written in one transaction, the way the database requires: a journal entry alone
+ * cannot commit, because the deferred balance trigger sees it with no lines.
+ */
+export const postRaw = async (
+  pool: pg.Pool,
+  lines: RawLine[],
+  overrides: Record<string, unknown> = {},
+): Promise<string> => {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const journal = await insertJournal(client, { line_count: lines.length, ...overrides });
+    for (const line of lines) {
+      await insertLine(client, journal, line.accountId, line.direction, line.amountMinor);
+    }
+    await client.query('COMMIT');
+    return journal;
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
+};
