@@ -49,6 +49,8 @@
   - Shared Redis connections with the `komtru:` key prefix; queue factory with exponential backoff, attempt caps and a dead-letter queue surfaced by a metric and an ops event.
   - Scheduler registry: modules register `module.job-name` with a cron in `Africa/Lagos`; only the worker starts schedulers; orphaned schedules are pruned. Fresh tests cover registration, pruning and timezone.
   - Statelessness test: two API instances and one worker against one Redis process jobs exactly once and share rate-limit state.
+- **Status:** Done (2026-10-05). Plan: `docs/superpowers/plans/2026-10-05-t-023-queues-scheduler.md`. Shared rate-limit state is asserted in T-025 (which builds the limiter); the dead-letter "ops event" is the `onDeadLetter` hook, to be wired to the bus in T-024.
+- **Deferred:** jobs failed by BullMQ's stalled checker are not dead-lettered (needs a `QueueEvents` listener); scheduler pruning needs a generation stamp plus periodic reconcile before workers run multi-replica; BullMQ objects lack `error` listeners; worker shutdown drains in series; duplicate queue names are not rejected; the statelessness test prunes the dev Redis scheduler queue; producer payloads are not type-linked to queue definitions; dead-lettering is not atomic with the move to failed.
 
 ### T-024 — Domain events: outbox and typed bus
 
