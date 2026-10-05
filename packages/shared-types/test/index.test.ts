@@ -1,8 +1,33 @@
 import { describe, expect, it } from 'vitest';
-import { workspace } from '../src/index.js';
+import * as sharedTypes from '../src/index.js';
 
-describe('@komtru/shared-types', () => {
-  it('identifies itself', () => {
-    expect(workspace).toBe('@komtru/shared-types');
+describe('@komtru/shared-types public surface', () => {
+  it('exports every schema and helper from one entry point', () => {
+    for (const name of [
+      'koboSchema',
+      'positiveKoboSchema',
+      'formatNaira',
+      'nairaToKobo',
+      'applyBps',
+      'cursorPageRequestSchema',
+      'pageRequestSchema',
+      'paginatedSchema',
+      'pagedSchema',
+      'problemDetailsSchema',
+      'problemTypeUri',
+      'isProblemDetails',
+      'uuidSchema',
+      'publicUserIdSchema',
+      'tradeCodeSchema',
+      'hubCodeSchema',
+      'sessionScopeSchema',
+      'currencySchema',
+    ]) {
+      expect(sharedTypes, name).toHaveProperty(name);
+    }
+  });
+
+  it('no longer exports the scaffold placeholder', () => {
+    expect(sharedTypes).not.toHaveProperty('workspace');
   });
 });
