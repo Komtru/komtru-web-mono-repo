@@ -17,6 +17,10 @@ describe('randomToken', () => {
   it.each([0, 8, -1])('rejects %i bytes as too little entropy', (bytes) => {
     expect(() => randomToken(bytes)).toThrow(/16/);
   });
+
+  it('rejects a fractional byte count rather than quietly rounding it down', () => {
+    expect(() => randomToken(20.5)).toThrow(/whole number/);
+  });
 });
 
 describe('randomNumericCode', () => {

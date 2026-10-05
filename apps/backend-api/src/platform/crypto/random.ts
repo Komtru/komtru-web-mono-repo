@@ -15,7 +15,10 @@ const MAX_CODE_DIGITS = 14;
 
 /** Cryptographically random opaque token, URL-safe. 32 bytes = 256 bits, per §D5. */
 export function randomToken(bytes = 32): string {
+  // `randomBytes` truncates a fractional count, handing back less entropy than the caller asked for.
+  if (!Number.isInteger(bytes)) throw new Error('randomToken needs a whole number of bytes');
   if (bytes < MIN_TOKEN_BYTES) throw new Error(`randomToken needs at least ${MIN_TOKEN_BYTES} bytes`);
+
   return crypto.randomBytes(bytes).toString('base64url');
 }
 

@@ -195,7 +195,9 @@ it.each([0, 15])('rejects %i digits', …);
 
 - Produces: `NormalisedEmail { email, emailNormal, domain }`, `isValidEmail`, `normaliseEmail`, `isApplePrivateRelay`, `maskEmail`, `DEFAULT_COUNTRY: CountryCode = 'NG'`, `PHONE_REVERIFY_AFTER_DAYS = 365`, `NormalisedPhone { phoneE164, countryCode }`, `normalisePhone(raw, country?) : NormalisedPhone | null`, `maskPhone`, `phoneReverifyAfter(from: Date): Date`, `generatePublicId(prefix?): string`, `IdentifierKind`, `classifyIdentifier`.
 
-Lifted from `identity/domain/identifiers.ts`, essentially verbatim: the ReDoS-free split-and-check domain validation, the provider folding sets, the Crockford-minus-ILOU public id alphabet and the leading-`@` username rule are all already right. Adapted only in its imports and header. It lives at the platform root, not under `identity/`, because trades, logistics and notifications all normalise the same identifiers.
+Lifted from `identity/domain/identifiers.ts`: the ReDoS-free split-and-check domain validation, the provider folding sets, the Crockford-minus-ILOU public id alphabet and the leading-`@` username rule are all already right. It lives at the platform root, not under `identity/`, because trades, logistics and notifications all normalise the same identifiers.
+
+Four behaviours are corrected rather than lifted, each with its own test above: `maskPhone` keeps a shrinking prefix so at least four characters are always hidden (the old fixed 7-and-4 showed 11 of the 12 characters of every US and Canadian E.164 number); `normaliseEmail` validates before canonicalising, so an undeliverable string cannot reach the column the verified-email unique index covers; `normalisePhone` leaves `countryCode` absent for a valid non-geographic number (`+800`) instead of defaulting it to `NG`; and `classifyIdentifier` accepts a leading `(`, which `(0801) 234-5678` needs.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -217,7 +219,7 @@ it('normalises a local NG number to E.164', …);                            // 
 it('normalises an already-international number regardless of default', …); // '+447911123456' -> countryCode 'GB'
 it('honours an explicit default country', …);                              // normalisePhone('(415) 555-2671', 'US')
 it.each(['', '12', '0801234567', 'not a phone'])('returns null for %s', …);
-it('masks a phone to its first seven and last four', …);                   // '+2348012345678' -> '+234801•••5678'; short -> '•••'
+it('masks a phone, always hiding at least four characters', …);            // '+2348012345678' -> '+23480•••5678'; '+14155552671' -> '+141•••2671'; short -> '•••'
 it('re-verifies a year out', …);
 
 // public id and classification

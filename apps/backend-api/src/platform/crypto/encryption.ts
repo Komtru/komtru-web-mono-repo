@@ -45,35 +45,47 @@ export function encrypt(key: Buffer, plaintext: string): string {
   ].join(':');
 }
 
-export function decrypt(key: Buffer, payload: string): string {
-  const parts = payload.split(':');
-  const [prefix, ivHex, tagHex, dataHex] = parts;
+/** The three fields, or `null` when the payload is not this module's output. */
+const parsePayload = (payload: string): { iv: Buffer; tag: Buffer; data: Buffer } | null => {
+  const [prefix, ivHex, tagHex, dataHex, ...rest] = payload.split(':');
 
-  // One message for every shape of malformed input: a caller that could tell "bad tag length" from
-  // "wrong part count" learns nothing it can act on, and the distinction travels into logs.
   if (
-    parts.length !== 4 ||
+    rest.length > 0 ||
+    dataHex === undefined ||
     prefix !== ENCRYPTION_PREFIX ||
     !isHex(ivHex as string, IV_BYTES) ||
     !isHex(tagHex as string, TAG_BYTES) ||
-    !isHex(dataHex as string)
+    !isHex(dataHex)
   ) {
-    throw new Error(MALFORMED);
+    return null;
   }
 
-  const decipher = crypto.createDecipheriv(ALGORITHM, key, Buffer.from(ivHex as string, 'hex'));
-  decipher.setAuthTag(Buffer.from(tagHex as string, 'hex'));
+  return {
+    iv: Buffer.from(ivHex as string, 'hex'),
+    tag: Buffer.from(tagHex as string, 'hex'),
+    data: Buffer.from(dataHex, 'hex'),
+  };
+};
 
-  return Buffer.concat([decipher.update(Buffer.from(dataHex as string, 'hex')), decipher.final()]).toString(
-    'utf8',
-  );
+export function decrypt(key: Buffer, payload: string): string {
+  const parsed = parsePayload(payload);
+  // One message for every shape of malformed input: a caller that could tell "bad tag length" from
+  // "wrong part count" learns nothing it can act on, and the distinction travels into logs.
+  if (!parsed) throw new Error(MALFORMED);
+
+  const decipher = crypto.createDecipheriv(ALGORITHM, key, parsed.iv);
+  decipher.setAuthTag(parsed.tag);
+
+  return Buffer.concat([decipher.update(parsed.data), decipher.final()]).toString('utf8');
 }
 
-/** True when `value` looks like output of `encrypt`, for migrating columns that hold a mix. */
-export const isEncrypted = (value: string): boolean => {
-  const parts = value.split(':');
-  return parts.length === 4 && parts[0] === ENCRYPTION_PREFIX;
-};
+/**
+ * True when `value` is a payload `decrypt` would accept, for migrating columns that hold a mix.
+ *
+ * Same parse as `decrypt`, so "is encrypted" and "can be decrypted" cannot drift apart and send a
+ * half-migrated row down the wrong branch. It says nothing about the key: only about the shape.
+ */
+export const isEncrypted = (value: string): boolean => parsePayload(value) !== null;
 
 export interface Encryption {
   encrypt(plaintext: string): string;

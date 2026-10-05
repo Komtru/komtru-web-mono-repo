@@ -50,6 +50,16 @@ describe('normaliseEmail', () => {
     expect(() => normaliseEmail('jane')).toThrow(/not an email/);
     expect(() => normaliseEmail('@example.com')).toThrow(/not an email/);
   });
+
+  it.each(['jane@localhost', 'ja ne@example.com', 'jane@example..com', `${'a'.repeat(250)}@x.com`])(
+    'refuses to canonicalise %s, which isValidEmail rejects',
+    (value) => {
+      // emailNormal backs the verified-email unique index; a value that can never be delivered to
+      // must not reach it just because the caller forgot to validate first.
+      expect(isValidEmail(value)).toBe(false);
+      expect(() => normaliseEmail(value)).toThrow(/not an email/);
+    },
+  );
 });
 
 describe('isValidEmail', () => {
@@ -91,15 +101,28 @@ describe('masking and provider checks', () => {
     expect(maskEmail('not-an-email')).toBe('•••');
   });
 
-  it('masks a phone to its first seven and last four digits', () => {
-    expect(maskPhone('+2348012345678')).toBe('+234801•••5678');
+  it('masks around whitespace and case rather than revealing them', () => {
+    expect(maskEmail('  Jane@Gmail.com ')).toBe('j•••@gmail.com');
+  });
+
+  it('masks a phone to its last four digits behind a shortened prefix', () => {
+    expect(maskPhone('+2348012345678')).toBe('+23480•••5678');
     expect(maskPhone('+234801')).toBe('•••');
   });
 
-  it('refuses to half-mask a number short enough that the mask would reveal every digit', () => {
-    // 7 leading + 4 trailing is the whole of an 11-character number, and overlaps on a shorter one.
-    expect(maskPhone('+2348012345')).toBe('•••');
+  it.each(['+2348012345678', '+14155552671', '+2348012345'])(
+    'hides at least four characters of %s',
+    (phone) => {
+      // A 12-character number (every US/CA number in E.164) showed 11 of its 12 before this.
+      const masked = maskPhone(phone);
+      expect(masked).toContain('•••');
+      expect(masked.replace('•••', '')).toHaveLength(phone.length - 4);
+    },
+  );
+
+  it('refuses to half-mask a number too short to leave a recognisable prefix', () => {
     expect(maskPhone('+234801234')).toBe('•••');
+    expect(maskPhone('+23480')).toBe('•••');
   });
 });
 
@@ -125,6 +148,11 @@ describe('normalisePhone', () => {
 
   it.each(['', '12', '0801234567', 'not a phone'])('returns null for %s', (value) => {
     expect(normalisePhone(value)).toBeNull();
+  });
+
+  it('leaves the country off a valid non-geographic number rather than guessing', () => {
+    // +800 is international toll-free: a real, valid number that belongs to no country.
+    expect(normalisePhone('+800 1234 5678')).toEqual({ phoneE164: '+80012345678' });
   });
 
   it('re-verifies a year out', () => {

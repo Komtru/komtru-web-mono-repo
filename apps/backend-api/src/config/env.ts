@@ -33,7 +33,8 @@ const VARIABLES = {
   POSTGRES_POOL_MAX: { schema: int(1, 200), required: false },
   REDIS_URL: { schema: z.url(), required: true },
   SENTRY_DSN: { schema: z.url(), required: false },
-  // 32 bytes of hex, reused verbatim from the old backend: rows it encrypted must stay readable.
+  // 32 bytes of hex. The name is the old backend's, so its .env drops in unchanged (design §3.4);
+  // nothing it encrypted migrates, so rotating the value costs a redeploy and nothing else.
   ENCRYPTION_KEY: { schema: z.string().regex(/^[0-9a-fA-F]{64}$/), required: false },
   SCHEDULER_TIMEZONE: {
     schema: z.string().refine((tz) => {

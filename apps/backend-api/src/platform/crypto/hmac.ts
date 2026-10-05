@@ -74,10 +74,11 @@ export interface HmacHasher {
 
 /** Binds a module's pepper once, so call sites never handle key material. */
 export function createHmacHasher(key: string | Buffer): HmacHasher {
-  if (toBuffer(key).length === 0) throw new Error('createHmacHasher requires a non-empty key');
+  const keyBytes = toBuffer(key);
+  if (keyBytes.length === 0) throw new Error('createHmacHasher requires a non-empty key');
 
   return {
-    hmac: (domain, value) => hmac(key, domain, value),
-    matches: (domain, value, expected) => timingSafeEqualBuffers(hmac(key, domain, value), expected),
+    hmac: (domain, value) => hmac(keyBytes, domain, value),
+    matches: (domain, value, expected) => timingSafeEqualBuffers(hmac(keyBytes, domain, value), expected),
   };
 }

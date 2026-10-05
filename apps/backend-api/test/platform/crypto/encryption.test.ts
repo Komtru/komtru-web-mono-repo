@@ -71,6 +71,16 @@ describe('encrypt/decrypt', () => {
     expect(isEncrypted(encrypt(key, 'secret'))).toBe(true);
     for (const value of ['', 'plain', 'v1:aa:bb', 'v2:aa:bb:cc']) expect(isEncrypted(value)).toBe(false);
   });
+
+  it.each(['v1:::', 'v1:a:b:c', 'v1:zz:bb:cc'])(
+    'does not call %s encrypted when decrypt would reject it',
+    (value) => {
+      // A migration that holds a mix branches on isEncrypted; "encrypted but undecryptable" sends
+      // the row down the wrong branch.
+      expect(isEncrypted(value)).toBe(false);
+      expect(() => decrypt(key, value)).toThrow(/Malformed ciphertext/);
+    },
+  );
 });
 
 describe('parseEncryptionKey', () => {

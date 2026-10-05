@@ -74,12 +74,13 @@ export const isValidEmail = (value: string): boolean => {
 };
 
 export const normaliseEmail = (raw: string): NormalisedEmail => {
+  // Validate before canonicalising, not alongside it: `emailNormal` is what the verified-email
+  // unique index covers, so an undeliverable string must not reach that column because a call site
+  // forgot the separate `isValidEmail` call.
+  if (!isValidEmail(raw)) throw new Error('Cannot normalise a value that is not an email address');
+
   const trimmed = raw.trim().toLowerCase();
   const at = trimmed.lastIndexOf('@');
-
-  if (at <= 0 || at === trimmed.length - 1) {
-    throw new Error('Cannot normalise a value that is not an email address');
-  }
 
   const local = trimmed.slice(0, at);
   const domain = trimmed.slice(at + 1);
@@ -114,10 +115,12 @@ export const isApplePrivateRelay = (email: string): boolean =>
 
 /** `jane@gmail.com` -> `j•••@gmail.com`. Enough for the owner to recognise, useless to an attacker. */
 export const maskEmail = (email: string): string => {
-  const at = email.lastIndexOf('@');
+  // Trimmed and lowercased first, or an untrimmed address reveals its leading space as the initial.
+  const value = email.trim().toLowerCase();
+  const at = value.lastIndexOf('@');
   if (at <= 0) return '•••';
 
-  return `${email.slice(0, 1)}•••${email.slice(at)}`;
+  return `${value.slice(0, 1)}•••${value.slice(at)}`;
 };
 
 // ---------------------------------------------------------------------------
@@ -132,8 +135,12 @@ export const PHONE_REVERIFY_AFTER_DAYS = 365;
 export interface NormalisedPhone {
   /** `+2348012345678`. The ONLY format ever stored. */
   phoneE164: string;
-  /** ISO 3166-1 alpha-2, e.g. `NG`. */
-  countryCode: string;
+  /**
+   * ISO 3166-1 alpha-2, e.g. `NG`. Absent for a valid non-geographic number (`+800` international
+   * toll-free and friends): defaulting those to the caller's country would store a fact that is
+   * simply wrong, which is worse than storing nothing.
+   */
+  countryCode?: string;
 }
 
 /**
@@ -150,18 +157,26 @@ export const normalisePhone = (
 
   if (!parsed || !parsed.isValid()) return null;
 
-  return { phoneE164: parsed.number, countryCode: parsed.country ?? country };
+  return { phoneE164: parsed.number, ...(parsed.country ? { countryCode: parsed.country } : {}) };
 };
 
+/** Last four characters shown, at most seven leading ones, and never fewer than this many hidden. */
+const PHONE_MASK_MIN_HIDDEN = 4;
+
 /**
- * `+2348012345678` -> `+234801•••5678`.
+ * `+2348012345678` -> `+23480•••5678`.
  *
- * Fully masked below 12 characters: the 7 leading and 4 trailing characters the mask keeps are the
- * whole of an 11-character number, and overlap on anything shorter, so the lifted `<= 8` threshold
- * printed some numbers in full behind three dots.
+ * The leading run shrinks so that at least four characters are always hidden, rather than the lifted
+ * fixed 7-and-4: 7 + 4 is the whole of an 11-character number and all but one of a 12-character one,
+ * which is every US and Canadian number in E.164 — a mask that hides one digit is not a mask.
  */
-export const maskPhone = (phoneE164: string): string =>
-  phoneE164.length <= 11 ? '•••' : `${phoneE164.slice(0, 7)}•••${phoneE164.slice(-4)}`;
+export const maskPhone = (phoneE164: string): string => {
+  const lead = Math.min(7, phoneE164.length - 4 - PHONE_MASK_MIN_HIDDEN);
+  // Below three leading characters there is nothing left to recognise the number by.
+  if (lead < 3) return '•••';
+
+  return `${phoneE164.slice(0, lead)}•••${phoneE164.slice(-4)}`;
+};
 
 export const phoneReverifyAfter = (from: Date): Date =>
   new Date(from.getTime() + PHONE_REVERIFY_AFTER_DAYS * 24 * 60 * 60 * 1000);
@@ -183,6 +198,9 @@ const PUBLIC_ID_LENGTH = 6;
  * Random rather than sequential: a sequential public id leaks total user count and growth rate, and
  * makes `GET /admin/users/KMT-U-000042` a working enumeration walk. Collisions are handled by the
  * UNIQUE constraint and a retry at the call site, not by hoping.
+ *
+ * Six characters is ~30 bits, which is short enough to guess at scale: a public id identifies a row,
+ * it never authorises access to one. Whichever ticket first inserts one owns the retry.
  */
 export const generatePublicId = (prefix = 'KMT-U'): string => {
   let out = '';
