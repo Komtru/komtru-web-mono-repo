@@ -6,3 +6,18 @@ export * from './domain/accounts.js';
 export * from './domain/journal.js';
 export * from './domain/events.js';
 export * from './infrastructure/postgres/schema/index.js';
+export {
+  findAccountId,
+  resolveAccountId,
+  type Reader,
+} from './infrastructure/postgres/accountsRepository.js';
+export {
+  claimJournalEntry,
+  findEntriesByJournal,
+  findJournalByKey,
+  insertEntries,
+  listAccountEntries,
+  type JournalEntryClaim,
+  type JournalEntryRow,
+  type LedgerEntryRow,
+} from './infrastructure/postgres/journalRepository.js';
