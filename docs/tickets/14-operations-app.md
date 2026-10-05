@@ -42,10 +42,12 @@ Same definition of done as Epic 13, applied to desktop and tablet reference fram
 - **Screens:** PH7, TO-PA1, TO-PA2, TO-PA3, TO-PA4, TO-PA6, TO-PA6B, TO-PA10 (both variants), TO-PA11
 - **Depends on:** T-141, T-091
 - **Notes:** deviations from the reference per design C23: TO-PA6B, TO-PA10 and TO-PA11 drop bank and account-number fields, TO-PA2 drops the payout row from the evidence matrix, TO-PA3 drops the payout checklist item, and TO-PA4 drops "available fees".
+- **Notes on location:** TO-PA6 uses the catalog city picker with an "Add city" action for staff holding `geo.manage`.
 
 ### T-148 — Park network and custody
 - **Screens:** TO-PA7, TO-PA8, P0-04, P0-05, P0-07, TO-PA5
 - **Depends on:** T-147, T-095
+- **Coverage:** TO-PA7 gains state and city filters and a coverage summary: serviceable cities, cities with hubs in onboarding, and unmet Park demand by city.
 
 ### T-149 — Logistics companies and packages
 - **Screens:** none in the reference; m2 §9 Companies and Packages tabs, built in the console design language
@@ -66,3 +68,8 @@ Same definition of done as Epic 13, applied to desktop and tablet reference fram
 ### T-153 — Overview, configuration, notifications and analytics
 - **Screens:** TO1; the rest have no reference screen: settings and feature flags, a read-only fees panel showing the live fee file version and values with a note that fees change by editing `config/fees.yaml`, Trade Standards, notification templates and dead-letter queue, analytics dashboards and report runs
 - **Depends on:** T-140, T-048, T-049, T-045, T-105
+
+### T-155 — Location catalog management
+- **Screens:** none in the reference; built in the console design language
+- **Depends on:** T-140, T-046
+- **Acceptance criteria:** sidebar item "Locations" for staff with `geo.manage`; states list with city counts and Park coverage counts; per-state city table with add, rename and deactivate, each needing a reason; a city-requests queue showing requester counts per requested name, with add, merge into an existing city, or reject; changes reach customer dropdowns within the cache invalidation window (tested); every action recorded in the admin action log.

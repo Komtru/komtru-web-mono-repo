@@ -136,6 +136,7 @@ Modules and Postgres schemas:
 | `files` | `files` | M20 |
 | `notify` | `notify` | M11 |
 | `config` | `config` | M17 |
+| `geo` (states, cities, city requests) | `geo` | owner ruling, §7.8 |
 | `trust` | `trust` | M6 |
 | `merchant` | `merchant` | M5 |
 | `search` | `search` | M19 |
@@ -210,6 +211,7 @@ Flows that look synchronous are made asynchronous rather than breaking the BullM
 | C20 | The HTML makes business verification optional at SO3 and shows only automated KYB review (AC10) | Owner ruling 2026-10-05: merchant certification is an application with mandatory CAC documents, approved by a human in operations-app. Automated CAC checks are evidence for the reviewer, not the decision | Owner |
 | C22 | HTML Y2 role switcher and separate seller tab bar vs. owner's "no switch" | Owner ruling 2026-10-05: one trades list across both sides, no role views (§6.3) | Owner |
 | C23 | Master prompt's ₦300 platform rate and HTML PE1/PH4 hub earnings and withdrawals | Owner ruling 2026-10-05: agents collect ₦300–₦500 in cash directly from the buyer. Komtru only tells the buyer to expect it. No ledger entries, hub payout accounts, earnings or withdrawals | Owner |
+| C24 | No spec ties Park availability to location; the HTML ship step offers Park Hub Transit unconditionally | Owner ruling 2026-10-05: Park can be chosen only for cities where an onboarded, operating hub exists (§7.8) | Owner |
 | C21 | M17 D1 puts tunable defaults in a database settings table editable at runtime; the owner wants every fee and cut in an easily configurable file | Owner ruling 2026-10-05: one version-controlled fee file is the only source of fee and cut values (§6.5). M17's table keeps non-money tunables such as windows and retry caps | Owner |
 
 ---
@@ -325,7 +327,7 @@ payout_fee:                    # charged on each seller withdrawal
 
 | Table | Purpose | Key constraints |
 |---|---|---|
-| `park_hubs` | Terminal: code (`H-JIB-004`), name, operator business (`God is Good Motors`), branch, address, state/city, `status` (`PENDING`, `ACTIVE`, `SUSPENDED`), `operating_state` (`OPEN`, `CLOSED`, `FULL`, `UNABLE_TO_RECEIVE`), operating hours, authorization `verified_at` / `review_due_at` | Unique code. Partial unique on normalised (operator, branch, address) for live hubs, which stops duplicate claims of one terminal (gap audit item 1) |
+| `park_hubs` | Terminal: code (`H-JIB-004`), name, operator business (`God is Good Motors`), branch, `city_id` (catalog city, §7.8), street address, landmark, optional GPS pin, `status` (`PENDING`, `ACTIVE`, `SUSPENDED`), `operating_state` (`OPEN`, `CLOSED`, `FULL`, `UNABLE_TO_RECEIVE`), operating hours, authorization `verified_at` / `review_due_at` | Unique code. Partial unique on normalised (operator, branch, address) for live hubs, which stops duplicate claims of one terminal (gap audit item 1) |
 | `park_hub_applications` | Onboarding case: applicant user, origin (`SELF_SERVE` from PH1–PH5, `TRUSTOPS_REGISTERED` from TO-PA6/TO-PA10), step data, evidence file refs (identity, authorization, mandatory photo gate), payout account ref, `status` (`DRAFT`, `SUBMITTED`, `IN_REVIEW`, `CHANGES_REQUESTED`, `APPROVED`, `REJECTED`), assigned reviewer, SLA | Submit blocked without authorization evidence |
 | `park_hub_agents` | Hub ↔ member assignment: `can_receive`, `can_inspect`, `can_release`, `can_add_staff`, `role_label` (`PRIMARY_AGENT`, `STAFF`), `status` (`INVITED`, `ACTIVE`, `SUSPENDED`, `REMOVED`), granted/revoked by and at | Rows are never deleted. Partial unique: one live row per (hub, member); one live `PRIMARY_AGENT` per hub. `can_release` requires a TrustOps approver id (check constraint) |
 | `park_parcels` | One per trade: soft `trade_id` (unique), origin and destination hub FKs, waybill, transit carrier, driver phone, plate, `status` (`AWAITING_SOURCE_DROPOFF`, `AT_SOURCE_HUB`, `IN_TRANSIT`, `AT_DESTINATION_HUB`, `RELEASED`, `EXCEPTION`), `status_before_exception` | Unique `trade_id`. `canTransition` plus 409. Origin may equal destination, which skips `IN_TRANSIT` |
@@ -391,6 +393,20 @@ The trade-side consumer (delivery → inspection → buyer confirms or auto-comp
 - PE1 becomes a handover log (counts and recent releases) with no money shown. PH4 becomes an acknowledgement of the cash-fee rule with no payout setup. TO-PA6B and TO-PA10 drop the bank fields, and TO-PA4 drops "available fees". Each is a listed deviation in its UI ticket.
 - The master prompt's `canManagePayouts` permission flag is dropped, since there is nothing to manage.
 
+### 7.8 Coverage: Park only where hubs exist (C24)
+
+**Owner ruling, 2026-10-05.** Park Hub Transit can be chosen only when the trade's destination city has an onboarded hub. A product going to Jos cannot use Park until a hub in Jos is live.
+
+- **Location catalog.** Two database tables in a `geo` schema: `states` (Nigeria's 36 states plus the FCT) and `cities` (each belonging to one state, with a display name and search aliases). The catalog grows as coverage grows. TrustOps adds cities from operations-app, and nothing needs a deploy. Cities are always picked from the catalog; free text is never matched.
+- **Dropdown APIs.** `GET /geo/states` returns the states. `GET /geo/states/:stateId/cities` returns that state's active cities. `GET /geo/cities?q=` is a typeahead. All are cursor-paginated per the platform rule, with a page size large enough for a dropdown to load in one request, and are cached. Every address, hub and trade form uses these dropdowns.
+- **Missing cities.** When a user's city isn't listed, the address form offers "My city isn't listed". That records a city request with the state and the typed name, which TrustOps reviews and either adds to the catalog or merges into an existing city. The user is notified either way.
+- **Delivery addresses.** Every user keeps one or more saved addresses: label, recipient name and phone, street line, landmark, a state and a city from the catalog, and a default flag. A user must have an address before taking part in a trade.
+- **Hubs carry structured locations.** Every hub records its city, street address, landmark, optional GPS pin and operating hours. Onboarding cannot be submitted without a catalog city, by either the self-serve applicant or TrustOps.
+- **Trades carry addresses.** The buyer picks one of their saved addresses as the delivery address, and the seller picks one as the ships-from address. Both are snapshotted into the trade terms, including state and city, so later edits to the address book never change a trade. Changing either is a counter-proposal like any other term change.
+- **Serviceable city.** A city is Park-serviceable when it has at least one hub that is `ACTIVE` and `OPEN`, with at least one `ACTIVE` agent holding both `can_receive` and `can_release`. The coverage service computes this from live data, caches it in Redis, and invalidates the cache on any hub or agent change.
+- **Where it is enforced.** The ship step (X2) offers Park only when the delivery city is serviceable, and then lists that city's hubs to pick from. Otherwise the option is shown disabled with "Park isn't available in Jos yet". The backend re-checks when the parcel is created and returns `409 PARK_NOT_AVAILABLE_IN_CITY`. The ships-from city must also be serviceable, because the seller drops the parcel at a hub there (Q15).
+- **Coverage changing mid-trade.** If a destination hub is suspended or closes while a parcel is on its way, a custody case opens so TrustOps can redirect the parcel to another hub in that city or agree another route with the parties.
+- **Visibility.** `GET /park/coverage` lists serviceable cities, paginated, and `GET /park/coverage/cities/:cityId/hubs` lists a city's available hubs. operations-app shows coverage by state and city, including cities with hubs in onboarding.
 ---
 
 ## 8. Frontend architecture and UI fidelity
@@ -480,6 +496,9 @@ Each has a default that tickets ship with if no answer arrives. Only Q1 blocks a
 | Q11 | Are storefront, listings and the listing-based discovery screens merchant-only, with casual sellers using trade proposals only? | Yes, merchant-only | Nothing |
 | Q12 | Must a casual, non-merchant seller still pass NIN/BVN plus liveness (level 2) before their trade can be funded? | Yes, to protect payouts | Nothing |
 | Q13 | Confirm the merchant application form fields in §6.3 | As listed in §6.3 | Nothing |
+| Q15 | Must the seller's ships-from city also have a hub, since the seller drops the parcel at one? | Yes, both cities must be serviceable | Nothing |
+| Q16 | Which cities seed the catalog? | Every state capital plus major commercial cities, reviewed by the owner before T-046 merges; TrustOps adds more as hubs onboard | Nothing |
+| Q17 | Should address dropdowns list every catalog city, or only cities with Park coverage? | Every active catalog city. Park coverage only decides whether Park can be chosen, so trades with couriers or self-arranged shipping work anywhere listed | Nothing |
 | Q14 | What platform cut, if any, comes out of seller and merchant proceeds? The HTML shows only the buyer fee | 0% for both, set in the fee file | Nothing |
 
 ---

@@ -80,7 +80,7 @@ Spec: `docs/specs/module-01-identity-and-user-management.md`. Decision C2 (desig
 - **Touches:** `identity/domain/rbac/{catalog,sod}.ts`, `identity/services/{rbac,approval,user}.service.ts`, `identity/http/admin.controller.ts`, `test/rbac/matrix.test.ts`
 - **Depends on:** T-036
 - **Acceptance criteria:**
-  - One permission catalog for the whole platform: M1's 22 identity permissions plus every module's slice (trade, payment, payout, reconciliation, dispute, verification, duplicate flag, ticket, risk, logistics, park, cases, config, audit, analytics, growth, messaging moderation). Roles per M1 §12.1 plus `DISPUTE_LEAD` (M3) and `PARK_OPERATIONS` (owner can rename). Includes `merchant.application.view` and `merchant.application.decide`, granted to `SUPER_ADMIN`, `OPERATIONS_ADMIN` and `KYC_ANALYST`; the matrix counts are updated for them.
+  - One permission catalog for the whole platform: M1's 22 identity permissions plus every module's slice (trade, payment, payout, reconciliation, dispute, verification, duplicate flag, ticket, risk, logistics, park, cases, config, audit, analytics, growth, messaging moderation). Roles per M1 §12.1 plus `DISPUTE_LEAD` (M3) and `PARK_OPERATIONS` (owner can rename). Includes `geo.manage` and `merchant.application.view` / `merchant.application.decide`, the latter two granted to `SUPER_ADMIN`, `OPERATIONS_ADMIN` and `KYC_ANALYST`; the matrix counts are updated for them.
   - Exhaustive matrix test over every permission × every role from a single table; adding a permission without placing it fails CI, and the counts are asserted.
   - `POST /auth/staff/login` (password + MFA only), separate from consumer login.
   - Capability service with `canActAsBuyer(userId)`, false while an `ACTIVE` `MERCHANT` capability exists, exported from the identity barrel and unit-tested, including the rule that trades already in flight finish normally.
@@ -105,3 +105,14 @@ Spec: `docs/specs/module-01-identity-and-user-management.md`. Decision C2 (desig
   - Close account blocked while any trade is active (CA1, CA2).
   - Account recovery requests with human review above threshold; opens a support ticket via event.
   - Data export and erasure requests hand off to compliance (T-104); anonymisation procedure per M1 §15 including avatar tombstoning through files.
+
+### T-042 — Saved delivery addresses
+
+- **Touches:** `identity/services/address.service.ts`, `identity/http/me.controller.ts`, migration `identity_addresses`
+- **Depends on:** T-030, T-046
+- **Acceptance criteria:**
+  - `user_addresses`: label, recipient name, recipient phone (E.164), street line, landmark, `state_id` and `city_id` (soft references to the catalog), default flag (one default per user, partial unique index), `archived_at`.
+  - `GET /me/addresses` (paginated), `POST`, `PATCH`, archive, and make-default. The city must belong to the chosen state and be active (422 otherwise).
+  - Addresses are archived, never deleted, because trades snapshot them.
+  - `hasUsableAddress(userId)` exported for the trade gates in T-061.
+

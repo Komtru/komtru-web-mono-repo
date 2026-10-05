@@ -15,11 +15,12 @@ State machine: design §6 (decision C1). Trades never touch money; they request 
   - `trades.initiator_role` (`BUYER` or `SELLER`) recorded on every trade.
   - Eligibility gates per design §6.3: no `SELLER` capability gate; `canActAsBuyer` wherever a user would become the buyer (`403 MERCHANT_CANNOT_BUY`); buyer level 1 at funding; seller level 2 before funding. Each fails with a specific error and publishes `trade.eligibility_blocked`. Tests cover a merchant trying each buyer path and a merchant's in-flight buyer trade completing after certification.
   - `inspection_window_hours` and `delivery_grace_hours` are integers snapshotted from Trade Standards (resolves m2 §13.3).
+  - `trade_terms_versions` carry a delivery address snapshot and a ships-from address snapshot (street, landmark, recipient, `state_id`, `city_id`), both required (design §7.8).
 
 ### T-061 — Proposal flow
 
 - **Touches:** `trades/services/{proposal,trade}.service.ts`, `trades/http/**`
-- **Depends on:** T-060, T-035, T-049, T-040, T-047
+- **Depends on:** T-060, T-035, T-049, T-040, T-047, T-046, T-042
 - **Acceptance criteria:**
   - The initiator chooses `initiatorRole` on every trade; a certified merchant is forced to `SELLER`. Item spec validated against the category's Trade Standards (G1, Z2); live contract preview data (Z3).
   - Naming a certified merchant as the buyer is rejected before send, and the counterparty's `canBuy` is checked again at acceptance and invitation claim.
@@ -27,6 +28,7 @@ State machine: design §6 (decision C1). Trades never touch money; they request 
   - Seller proof media is mandatory before a trade can reach `PENDING_PAYMENT`: attached at send time for a seller-initiated proposal, or at acceptance when the seller accepts a buyer's proposal (W1, where Accept stays disabled until media is attached); counter-proposal creates a new terms version and flips the turn (W2, BR1); decline with reason (SD1); cancel before funding (CT1).
   - "Do not ship yet" state after acceptance (W3) is `PENDING_PAYMENT`. Acceptance snapshots the fee schedule version and computed fees onto the trade (T-047), so the buyer sees the exact total before funding.
   - Every action is idempotent, writes state changes and activity, and publishes events.
+  - The buyer picks a saved address as the delivery address and the seller picks one as the ships-from address; both are snapshotted into the terms. Sending, accepting or claiming a trade without a usable address returns `422 ADDRESS_REQUIRED`, and the client sends the user to add one. Changing either address is a term change.
 
 ### T-062 — Proposal risk hold and TrustOps review
 
@@ -55,6 +57,7 @@ State machine: design §6 (decision C1). Trades never touch money; they request 
   - A single delivery-signal consumer (design §7.5 payload) applies M7 §6 trust weighting, including the partner-history exception, and moves the trade to `INSPECTION` or `UNCONFIRMED_DELIVERY`.
   - Delivery deadline per trade; seller extension request and buyer response (DE1, DE2); overdue with no extension triggers an automatic refund request (DE3, DE4).
   - All deadline jobs are idempotent and re-check state and holds.
+  - Ship-step options are computed server-side: Park is offered only when both trade cities are Park-serviceable (design §7.8), with the reason returned when it is not, so the client never decides availability.
 
 ### T-065 — Inspection and completion
 

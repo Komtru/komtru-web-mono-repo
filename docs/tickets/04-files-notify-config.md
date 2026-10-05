@@ -32,6 +32,18 @@
   - Adapters: Mailjet (email), Termii (SMS), FCM (push); IN_APP feed (`GET /notifications`, mark-read) also pushed over the socket.
   - Identity templates (OTP, new-device, password changed, session reuse) seeded; every later module ticket adds its own templates and mappings.
 
+### T-046 — Location catalog: states, cities and city requests
+
+- **Touches:** `src/modules/geo/**`, migration `geo_*`, `packages/shared-types/src/geo.ts`, `packages/api-client` geo hooks
+- **Depends on:** T-021, T-025, T-037
+- **Acceptance criteria:**
+  - `geo.states` (36 states plus the FCT, seeded) and `geo.cities` (state FK, display name, normalised name, aliases, `active`) with a unique index on (state, normalised name), so the same city cannot be added twice.
+  - Seed file of state capitals and major commercial cities, reviewed by the owner before merge (design §12 Q16).
+  - Dropdown APIs: `GET /geo/states`, `GET /geo/states/:stateId/cities` (active cities only) and `GET /geo/cities?q=&stateId=` (prefix and alias typeahead). All cursor-paginated with a page size big enough for one dropdown request, and cached in Redis with invalidation on any catalog change.
+  - `geo.city_requests`: a user submits state plus a typed city name from "My city isn't listed"; status `PENDING`, `ADDED`, `MERGED`, `REJECTED`; the requester is notified of the outcome.
+  - Staff endpoints behind `geo.manage`: add, rename and deactivate cities; review city requests (add as a new city, merge into an existing one, or reject with reason). Every change writes the admin action log. A city used by an address, hub or trade can be deactivated but never deleted, and deactivated cities stay readable on old records.
+  - `api-client` hooks `useStates()` and `useCities(stateId)` shared by every app's dropdowns.
+
 ### T-047 — Fee schedule file
 
 - **Touches:** `config/fees.yaml`, `packages/shared-types/src/fees/{schema,calculator}.ts`, `apps/backend-api/src/modules/config/fees.ts`, `tools/fee-version-check/**`, backend workflow step

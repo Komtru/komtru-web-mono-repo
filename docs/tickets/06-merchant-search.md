@@ -8,7 +8,7 @@
 - **Depends on:** T-050, T-051, T-049, T-040, T-073, T-107
 - **Acceptance criteria:**
   - `merchant_applications` with status `DRAFT`, `SUBMITTED`, `IN_REVIEW`, `CHANGES_REQUESTED`, `APPROVED`, `REJECTED`; at most one live application per user (partial unique index); append-only status and decision log.
-  - Form fields per design §6.3: business name and type, registered address, categories (sets which Trade Standards apply), CAC number, CAC certificate, status report or memorandum, proprietor or director ID, payout account. Documents are `KYC_DOCUMENT` files, `PRIVATE_OWNER` plus a reviewer grant. Submit returns 422 without the CAC documents.
+  - Form fields per design §6.3: business name and type, registered address, categories (sets which Trade Standards apply), CAC number, CAC certificate, status report or memorandum, proprietor or director ID, payout account. The registered address uses the state and city dropdowns from T-046. Documents are `KYC_DOCUMENT` files, `PRIVATE_OWNER` plus a reviewer grant. Submit returns 422 without the CAC documents.
   - On submit, jobs run the automated CAC lookup and the bank name-match (T-051); results attach as evidence and never decide.
   - Each submitted application registers as a `MERCHANT_APPLICATION` case with an evidence matrix (identity level, CAC lookup, documents present, bank name-match) and a rule-based advisory.
   - Staff endpoints, all paginated and behind `merchant.application.*` permissions: queue with filters, detail with signed document URLs (every view written to `file_access_log`), approve, request changes (named documents or fields), reject. Every decision requires a reason and a policy citation, and writes the admin action log.

@@ -37,8 +37,9 @@ One app for every consumer with no buyer or seller views (design C22, §6.3), pl
 
 ### T-115 — Create and propose a trade
 - **Screens:** G1, G2, Z2, Z3, CTS1, I3, MI1, MI2, P2-D6, D6, P3-D1, P3-D2, P3-D3, P3-D4, P3-D5, P3-T1, P3-T2, G3, Q1, R1, AC4, IF1
-- **Depends on:** T-061, T-062, T-063, T-067, T-049, T-110
+- **Depends on:** T-061, T-062, T-063, T-067, T-049, T-110, T-046
 - **Notes:** G1 and Z2 open with an "I'm buying / I'm selling" choice; certified merchants skip it and are always selling. Counterparty lookup warns before send when the chosen buyer is a certified merchant.
+- **Notes on location:** proposal and acceptance forms include an address picker over the user's saved addresses, with "Add a new address" inline when they have none.
 
 ### T-116 — Buyer trade core and canonical trade detail
 - **Screens:** C1, C2, C3, P0-03, D1, T2, C5, AR1
@@ -78,6 +79,7 @@ One app for every consumer with no buyer or seller views (design C22, §6.3), pl
 - **Depends on:** T-115, T-064, T-087, T-093, T-110
 - **Notes:** X2 lists Park first, then every enabled courier company, then "Arrange my own shipping" (m2 §10).
 - **Notes on Park:** choosing Park Hub Transit on X2 shows the same cash handling-fee notice so the seller can tell the buyer. Seller-side screens S2, W1–W3, BR1, SD1, S3, X1, X2, MI3 and AC8 are states of the shared trade detail and list, not a seller area.
+- **Notes on Park coverage:** X2 shows Park Hub Transit disabled with "Park isn't available in {city} yet" when the delivery or ships-from city has no live hub, and lists only that city's hubs when it does (design §7.8).
 
 ### T-124 — Seller payouts
 - **Screens:** S6, AB5, AB6, WF1, PR1
@@ -90,7 +92,8 @@ One app for every consumer with no buyer or seller views (design C22, §6.3), pl
 
 ### T-126 — Trust, account and settings
 - **Screens:** J1, J2, J3, J4, M1, M3, VF1, AS1, AS2, CA1, CA2, LS1, C10, S10, NP1
-- **Depends on:** T-050, T-039, T-045, T-102, T-110
+- **Depends on:** T-050, T-039, T-045, T-102, T-110, T-042
+- **Address book:** add, edit, archive and set a default delivery address from Account (extends J3; no separate reference screen). State and city are dropdowns fed by the geo APIs; the city list reloads when the state changes; "My city isn't listed" submits a city request and explains it will be reviewed.
 
 ### T-127 — Reviews
 - **Screens:** AC5, SR1, SR2
@@ -107,7 +110,8 @@ One app for every consumer with no buyer or seller views (design C22, §6.3), pl
 ### T-130 — Park Hub application
 - **Screens:** PH1, PH2, PH3, PH4, PH5, PH6, PA7, PA8
 - **Notes:** the Account item shows the states "Not yet set up", application in review, and active. PH4 deviates from the reference: no payout setup, only an acknowledgement that agents collect the ₦300–₦500 handling fee from buyers in cash (design C23).
-- **Depends on:** T-091, T-110
+- **Depends on:** T-091, T-110, T-046
+- **Notes on location:** PH1 uses the same state and city dropdowns; a missing city goes through the city-request flow, never free-text matching.
 
 ### T-131 — Wallet top-up
 - **Status:** Blocked on design §12 Q3

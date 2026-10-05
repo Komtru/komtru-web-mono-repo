@@ -7,7 +7,7 @@ Design §7. Park is a row in `logistics_companies` (`is_default`); Park Agents a
 ### T-090 — Park schema
 
 - **Touches:** `src/modules/park/infrastructure/postgres/**`, migration `park_*`
-- **Depends on:** T-085
+- **Depends on:** T-085, T-046
 - **Acceptance criteria:**
   - `park_hubs`, `park_hub_applications`, `park_hub_agents`, `park_parcels`, `park_custody_events`, `park_handover_pins` exactly as design §7.2, with hard same-schema FKs and soft refs to `logistics`, `trade` and `identity`.
   - Partial unique indexes: one live assignment per (hub, member); one live primary agent per hub; one live PIN per (parcel, leg); one parcel per trade; no duplicate live hub for the same operator, branch and address.
@@ -15,6 +15,7 @@ Design §7. Park is a row in `logistics_companies` (`is_default`); Park Agents a
   - `park_custody_events` append-only by trigger and grants.
   - Parcel state machine as a pure `canTransition` with every valid and invalid transition tested, including origin = destination skipping `IN_TRANSIT` and `EXCEPTION` resuming the stored prior state.
   - No price, fee or payout column exists anywhere in the `park` schema (schema test, design C23). Permission flags are `can_receive`, `can_inspect`, `can_release`, `can_add_staff`.
+  - `park_hubs` stores `city_id` (soft reference to the location catalog), street address, landmark, optional GPS coordinates and operating hours; index on `city_id` for active, open hubs. The duplicate-hub guard uses the city rather than free text.
 
 ### T-091 — Hub onboarding, activation and lifecycle
 
@@ -28,6 +29,7 @@ Design §7. Park is a row in `logistics_companies` (`is_default`); Park Agents a
   - Lifecycle (TO-PA4): suspend custody rights, request re-verification (authorization review date), change primary agent, temporarily close hub; every action needs a reason and keeps history. `park.hub.suspended` on suspension.
   - Hub staff invites by agents with `can_add_staff`; release rights for staff need TrustOps approval.
   - Every endpoint idempotent where retryable and paginated where it lists.
+  - Both onboarding paths require a catalog city; staff with `geo.manage` can add a missing city inline during TrustOps registration. Hubs in onboarding are visible to TrustOps as upcoming coverage but never offered to customers.
 
 ### T-092 — Custody operations API
 
@@ -53,6 +55,11 @@ Design §7. Park is a row in `logistics_companies` (`is_default`); Park Agents a
   - Parcel `AT_SOURCE_HUB` moves the trade to `SHIPPED`; `park.parcel.released` feeds the shared delivery-signal consumer with source `PARK_CUSTODY` (trusted), moving the trade to `INSPECTION`.
   - `park.parcel.exception` places a `PARK_EXCEPTION` hold on the trade; clearing lifts it.
   - Ageing job opens a `CUSTODY` case past `park.custody_ageing_hours` and records ageing buckets.
+  - Coverage service per design §7.8: a city is serviceable when it has a hub that is `ACTIVE` and `OPEN` with at least one `ACTIVE` agent holding `can_receive` and `can_release`; results cached in Redis and invalidated by hub and agent events.
+  - `GET /park/coverage` (serviceable cities, paginated) and `GET /park/coverage/cities/:cityId/hubs`; parcel creation re-checks both trade cities and returns `409 PARK_NOT_AVAILABLE_IN_CITY` when either is not serviceable.
+  - The destination hub must be in the delivery city and the origin hub in the ships-from city (validated server-side).
+  - Suspending or closing a hub with parcels headed to it opens a custody case per parcel for redirection.
+  - Tests: Jos with no hub rejects Park; a Jos hub in onboarding still rejects it; activating a Jos hub with a release-capable agent allows it; suspending that agent removes it again.
 
 ### T-094 — Park cash-fee notices and handover log
 
@@ -74,3 +81,4 @@ Design §7. Park is a row in `logistics_companies` (`is_default`); Park Agents a
   - Parcel detail (P0-05): immutable custody timeline and accountability panel.
   - Incident decisions (TO-PA5): clear for another attempt (resets the lock with an audit reason), keep held and contact buyer, escalate (to dispute or hub review).
   - All lists paginated; metrics aggregated by scheduled jobs, not computed per request for network-wide views.
+  - Coverage view data: serviceable cities by state, hubs per city, cities with hubs in onboarding, and cities where trades requested Park but none was available (demand signal from rejected ship-step checks).
