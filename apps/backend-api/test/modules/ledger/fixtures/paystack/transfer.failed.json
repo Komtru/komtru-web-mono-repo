@@ -1,0 +1,12 @@
+{
+  "event": "transfer.failed",
+  "data": {
+    "amount": 9000000,
+    "currency": "NGN",
+    "reference": "payout_018f3b41",
+    "status": "failed",
+    "reason": "Account resolution failed at the receiving bank",
+    "transfer_code": "TRF_wsyqdmlzble3uij",
+    "id": 441279
+  }
+}

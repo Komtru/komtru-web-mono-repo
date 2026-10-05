@@ -1,0 +1,8 @@
+{
+  "event": "customeridentification.success",
+  "data": {
+    "customer_code": "CUS_x1y2z3",
+    "email": "buyer@example.test",
+    "identification": { "country": "NG" }
+  }
+}
