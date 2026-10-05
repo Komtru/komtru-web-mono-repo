@@ -6,6 +6,10 @@ export const PROBLEM_CODES = [
   // Generic
   'VALIDATION_FAILED',
   'UNAUTHENTICATED',
+  // Two 401s the client acts on differently: `TOKEN_EXPIRED` means a refresh will probably work,
+  // `SESSION_REVOKED` means it will not and the only honest next step is to sign out (T-031).
+  'TOKEN_EXPIRED',
+  'SESSION_REVOKED',
   'FORBIDDEN',
   'NOT_FOUND',
   'CONFLICT',

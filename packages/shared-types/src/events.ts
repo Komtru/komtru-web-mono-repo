@@ -2,7 +2,7 @@
 // outbox (design §4.3) and delivered at least once, so every consumer is idempotent on `eventId`.
 import { z } from 'zod';
 import { uuidSchema } from './ids.js';
-import { SESSION_SCOPES } from './enums.js';
+import { SESSION_SCOPES, sessionScopeSchema } from './enums.js';
 
 /** `module.thing.happened`: three lower-case segments, so the module that owns an event is obvious. */
 export const eventTypeSchema = z
@@ -68,5 +68,42 @@ export const queueDeadLetteredEvent = defineEvent(
     attempts: z.number().int().min(0),
     error: z.string(),
     failedAt: z.iso.datetime(),
+  }),
+);
+
+/**
+ * A session was issued: a login, a social callback, or an OTP verification (M1 §11). Risk scores the
+ * device and the IP; Notifications tells the user about a sign-in they did not make.
+ */
+export const identitySessionCreatedEvent = defineEvent(
+  'identity.session.created',
+  1,
+  z.object({
+    userId: uuidSchema,
+    sessionId: uuidSchema,
+    familyId: uuidSchema,
+    scope: sessionScopeSchema,
+    deviceId: uuidSchema.nullable().default(null),
+    ip: z.string().nullable().default(null),
+    amr: z.array(z.string()).default([]),
+    isNewDevice: z.boolean().default(false),
+  }),
+);
+
+/**
+ * A consumed refresh token was presented again (M1 D5). Either the token was stolen or the real
+ * client is replaying; both cost the whole rotation family, so Risk treats this as high priority and
+ * M10 opens a ticket. `revokedSessions` is how many rows the family kill actually revoked.
+ */
+export const identitySessionReuseDetectedEvent = defineEvent(
+  'identity.session.reuse_detected',
+  1,
+  z.object({
+    userId: uuidSchema,
+    familyId: uuidSchema,
+    replayedSessionId: uuidSchema,
+    scope: sessionScopeSchema,
+    ip: z.string().nullable().default(null),
+    revokedSessions: z.number().int().min(0),
   }),
 );

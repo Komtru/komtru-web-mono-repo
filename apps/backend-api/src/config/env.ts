@@ -48,6 +48,14 @@ const VARIABLES = {
     required: false,
   },
   SENTRY_ENVIRONMENT: { schema: z.string().min(1), required: false },
+  // 32 raw bytes as 64 hex characters: the Ed25519 *seed*, which is what the old backend's .env
+  // holds. The public half is derived from it, so there is no second variable to keep in sync.
+  IDENTITY_SIGNING_KEY: { schema: z.string().regex(/^[0-9a-fA-F]{64}$/), required: false },
+  IDENTITY_SIGNING_KEY_ID: { schema: z.string().min(1), required: false },
+  IDENTITY_ACCESS_TOKEN_TTL_SECONDS: { schema: int(60, 3600), required: false },
+  IDENTITY_TOKEN_ISSUER: { schema: z.url(), required: false },
+  IDENTITY_TOKEN_AUDIENCE: { schema: z.string().min(1), required: false },
+  IDENTITY_EPOCH_CACHE_TTL_SECONDS: { schema: int(1, 300), required: false },
 } satisfies Record<string, { schema: z.ZodType; required: boolean }>;
 
 type VariableName = keyof typeof VARIABLES;
@@ -76,6 +84,21 @@ export interface AppConfig {
   crypto: { encryptionKey?: string };
   /** Cron schedules are evaluated in this IANA timezone. */
   scheduler: { timezone: string };
+  /** Access tokens and the session kill switch (M1 D5). */
+  identity: {
+    /**
+     * Optional for the same reason as `crypto.encryptionKey`: a process with no identity module
+     * boots without it. `createTokenSigner` fails loudly, naming the variable, when it is absent.
+     */
+    signingKey?: string;
+    /** The `kid` in every access token header and in the JWKS. */
+    signingKeyId?: string;
+    accessTokenTtlSeconds: number;
+    tokenIssuer: string;
+    tokenAudience: string;
+    /** How long a user's `sessions_epoch` may be cached in Redis (M1 D5's worst-case exposure). */
+    epochCacheTtlSeconds: number;
+  };
 }
 
 export class ConfigError extends Error {
@@ -131,6 +154,14 @@ export function loadConfig(env: NodeJS.ProcessEnv): AppConfig {
     redis: { url: v.REDIS_URL as string },
     crypto: { ...(v.ENCRYPTION_KEY ? { encryptionKey: v.ENCRYPTION_KEY } : {}) },
     scheduler: { timezone: v.SCHEDULER_TIMEZONE ?? 'Africa/Lagos' },
+    identity: {
+      ...(v.IDENTITY_SIGNING_KEY ? { signingKey: v.IDENTITY_SIGNING_KEY } : {}),
+      ...(v.IDENTITY_SIGNING_KEY_ID ? { signingKeyId: v.IDENTITY_SIGNING_KEY_ID } : {}),
+      accessTokenTtlSeconds: v.IDENTITY_ACCESS_TOKEN_TTL_SECONDS ?? 600,
+      tokenIssuer: v.IDENTITY_TOKEN_ISSUER ?? 'https://api.komtru.com',
+      tokenAudience: v.IDENTITY_TOKEN_AUDIENCE ?? 'komtru',
+      epochCacheTtlSeconds: v.IDENTITY_EPOCH_CACHE_TTL_SECONDS ?? 10,
+    },
     sentry: {
       ...(v.SENTRY_DSN ? { dsn: v.SENTRY_DSN } : {}),
       environment: v.SENTRY_ENVIRONMENT ?? nodeEnv,

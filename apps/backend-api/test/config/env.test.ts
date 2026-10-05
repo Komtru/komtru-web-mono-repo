@@ -63,6 +63,39 @@ describe('loadConfig', () => {
     ]);
   });
 
+  it('reads the identity token settings', () => {
+    const config = loadConfig({
+      ...minimal,
+      IDENTITY_SIGNING_KEY: 'a'.repeat(64),
+      IDENTITY_SIGNING_KEY_ID: 'k1',
+      IDENTITY_ACCESS_TOKEN_TTL_SECONDS: '600',
+      IDENTITY_TOKEN_ISSUER: 'https://api.komtru.com',
+      IDENTITY_TOKEN_AUDIENCE: 'komtru',
+      IDENTITY_EPOCH_CACHE_TTL_SECONDS: '10',
+    });
+    expect(config.identity).toEqual({
+      signingKey: 'a'.repeat(64),
+      signingKeyId: 'k1',
+      accessTokenTtlSeconds: 600,
+      tokenIssuer: 'https://api.komtru.com',
+      tokenAudience: 'komtru',
+      epochCacheTtlSeconds: 10,
+    });
+  });
+
+  it('defaults the identity token settings and names an invalid signing key', () => {
+    expect(loadConfig(minimal).identity).toEqual({
+      accessTokenTtlSeconds: 600,
+      tokenIssuer: 'https://api.komtru.com',
+      tokenAudience: 'komtru',
+      epochCacheTtlSeconds: 10,
+    });
+    expect(failure({ ...minimal, IDENTITY_SIGNING_KEY: 'nothex' }).invalid).toEqual(['IDENTITY_SIGNING_KEY']);
+    expect(failure({ ...minimal, IDENTITY_ACCESS_TOKEN_TTL_SECONDS: '1' }).invalid).toEqual([
+      'IDENTITY_ACCESS_TOKEN_TTL_SECONDS',
+    ]);
+  });
+
   it('logs JSON in production by default', () => {
     expect(loadConfig({ ...minimal, NODE_ENV: 'production' }).log.format).toBe('json');
   });
