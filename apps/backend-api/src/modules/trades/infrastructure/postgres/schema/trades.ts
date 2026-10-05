@@ -59,9 +59,9 @@ export const trades = trade.table(
     inspectionWindowHours: integer('inspection_window_hours').notNull(),
     deliveryGraceHours: integer('delivery_grace_hours').notNull(),
 
-    /** The latest proposal, and the one acceptance pinned. Both constrained to this trade by the
-     * composite foreign keys in migration 0020 — drizzle cannot express those, so they are not
-     * declared here. */
+    /** The latest proposal, and the one acceptance pinned. A plain foreign key on either column
+     * would accept another trade's version, so both carry the trade id in a composite key
+     * (migration 0020); drizzle expresses neither that nor its deferred ON DELETE SET NULL. */
     currentTermsVersionId: uuid('current_terms_version_id'),
     acceptedTermsVersionId: uuid('accepted_terms_version_id'),
 

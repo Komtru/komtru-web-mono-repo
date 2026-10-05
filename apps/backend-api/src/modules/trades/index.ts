@@ -1,0 +1,12 @@
+// The trades module's public surface (design §4.2). Other modules may use the state machine, the
+// eligibility gates, the events and the tables through this barrel, and nothing else: the
+// komtru/module-boundaries rule makes this the only way in. T-061 adds the services and routes.
+export * from './domain/stateMachine.js';
+export * from './domain/errors.js';
+export * from './domain/eligibility.js';
+export * from './domain/events.js';
+export * from './domain/tradeCode.js';
+export * from './domain/feeSnapshot.js';
+export * from './infrastructure/postgres/schema/index.js';
+export * from './infrastructure/postgres/transitions.js';
+export * from './infrastructure/postgres/principals.js';
