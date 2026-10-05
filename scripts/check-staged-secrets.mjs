@@ -18,26 +18,36 @@ const MIN_SECRET_LENGTH = 12;
 const isPlainUrl = (v) => /^[a-z][a-z0-9+.-]*:\/\/[^@\s]*$/i.test(v);
 const isUrlList = (v) =>
   v.includes(',') && v.split(',').every((part) => isPlainUrl(part.trim()) || part.trim().startsWith('/'));
+// A plain email address. The local part may not contain ':' or '/', so a connection string such as
+// `postgresql://user:pass@host.domain` is never mistaken for one.
+const isEmail = (v) => /^[\w.+-]+@[\w-]+(\.[\w-]+)+$/.test(v);
 const isNonSecret = (v) =>
-  /^(true|false)$/i.test(v) ||
-  /^\d+$/.test(v) ||
-  /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(v) ||
-  isPlainUrl(v) ||
-  isUrlList(v);
+  /^(true|false)$/i.test(v) || /^\d+$/.test(v) || isEmail(v) || isPlainUrl(v) || isUrlList(v);
+
+/** The password embedded in a `scheme://user:password@host` value, if any. */
+const urlPassword = (v) => {
+  if (!/^[a-z][a-z0-9+.-]*:\/\/[^\s]*@/i.test(v)) return '';
+  try {
+    return decodeURIComponent(new URL(v).password);
+  } catch {
+    return '';
+  }
+};
 
 /** Values worth scanning for: long, and not obviously public. A URL's embedded password is added too. */
 export function loadSecretValues(envPath) {
   if (!existsSync(envPath)) return [];
   const values = new Set();
   for (const value of Object.values(parseEnv(readFileSync(envPath, 'utf8')))) {
+    // Any URL carrying credentials is a secret, checked first so no other rule can exempt it.
+    const password = urlPassword(value);
+    if (password) {
+      values.add(value);
+      if (password.length >= 8) values.add(password);
+      continue;
+    }
     if (value.length < MIN_SECRET_LENGTH || isNonSecret(value)) continue;
     values.add(value);
-    try {
-      const password = decodeURIComponent(new URL(value).password);
-      if (password.length >= 8) values.add(password);
-    } catch {
-      // not a URL
-    }
   }
   return [...values];
 }

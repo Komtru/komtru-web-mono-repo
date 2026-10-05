@@ -89,6 +89,20 @@ describe('loadSecretValues', () => {
     expect(values).toHaveLength(3);
   });
 
+  it('loads an RDS-style connection string and its password, not mistaking it for an email', () => {
+    dir = mkdtempSync(path.join(tmpdir(), 'komtru-values-'));
+    const file = path.join(dir, 'source');
+    const rdsUrl = [
+      'postgresql',
+      '//app_user:Rds-Pass-1234@devdb.abc123.us-east-1.rds.amazonaws.com:5432/komtru_dev',
+    ].join(':');
+    writeFileSync(file, `POSTGRES_URL=${rdsUrl}\nFROM=noreply@komtru.example\n`);
+    const values = loadSecretValues(file);
+    expect(values).toContain(rdsUrl);
+    expect(values).toContain('Rds-Pass-1234');
+    expect(values).not.toContain('noreply@komtru.example');
+  });
+
   it('returns nothing when the credentials file is absent', () => {
     dir = mkdtempSync(path.join(tmpdir(), 'komtru-values-'));
     expect(loadSecretValues(path.join(dir, 'missing'))).toEqual([]);
