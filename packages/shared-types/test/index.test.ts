@@ -26,6 +26,10 @@ describe('@komtru/shared-types public surface', () => {
       'hubCodeSchema',
       'sessionScopeSchema',
       'currencySchema',
+      'sellerKindSchema',
+      'feeScheduleSchema',
+      'parseFeeSchedule',
+      'FeeScheduleError',
     ]) {
       expect(sharedTypes, name).toHaveProperty(name);
     }
