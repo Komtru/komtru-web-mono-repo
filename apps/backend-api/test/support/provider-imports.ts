@@ -1,7 +1,7 @@
 // A second, deliberately independent check of the rule in eslint-rules/provider-clients.mjs: no file
-// outside jobs/ imports a provider client, and nothing but a client imports the provider HTTP helper.
-// Written against the source text rather than the ESLint config, so it is what still fails if the rule
-// is disabled, renamed or dropped from the config.
+// outside jobs/ imports a provider client, nothing but a client imports the provider HTTP helper, and no
+// module file reaches the network directly. Written against the source text rather than the ESLint
+// config, so it is what still fails if the rule is disabled, renamed or dropped from the config.
 import { readdir, readFile } from 'node:fs/promises';
 import path from 'node:path';
 
@@ -9,13 +9,16 @@ export interface ClientImportViolation {
   /** Path relative to the scanned root. */
   file: string;
   specifier: string;
-  kind: 'client-outside-jobs' | 'http-outside-client';
+  kind: 'client-outside-jobs' | 'http-outside-client' | 'raw-network-call';
 }
 
-const SPECIFIER = /(?:from\s*|import\s*\(\s*)['"](\.[^'"]*)['"]/g;
+/** `from '…'`, `import('…')` and the side-effect form `import '…'`. */
+const SPECIFIER = /(?:from\s*|import\s*\(\s*|import\s+)['"]([^'"]+)['"]/g;
+const BARE_FETCH = /(?<![\w.$])fetch\s*\(/;
+const RAW_HTTP_MODULES = new Set(['node:http', 'node:https', 'http', 'https', 'undici', 'axios']);
 const HTTP_HELPER = path.join('platform', 'providers', 'http');
 const stripExtension = (file: string) => file.replace(/\.(ts|js|mts|mjs)$/, '');
-// `paystack.client.ts`, and `paystack/client.ts` for a provider with a folder of its own.
+/** `paystack.client.ts`, and `paystack/client.ts` for a provider with a folder of its own. */
 const isClient = (file: string) => /(^|\.)client$/.test(path.basename(stripExtension(file)));
 
 async function* walk(dir: string): AsyncGenerator<string> {
@@ -27,21 +30,33 @@ async function* walk(dir: string): AsyncGenerator<string> {
   }
 }
 
-/** Walks a module tree (`src/modules`) and reports every forbidden provider import. */
+/** Walks a module tree (`src/modules`) and reports every forbidden provider call or import. */
 export async function findProviderImportViolations(root: string): Promise<ClientImportViolation[]> {
   const violations: ClientImportViolation[] = [];
 
   for await (const file of walk(root)) {
     const source = await readFile(file, 'utf8');
-    const inJobs = path.relative(root, file).split(path.sep).includes('jobs');
+    const relative = path.relative(root, file);
+    const inJobs = relative.split(path.sep).includes('jobs');
+    const client = isClient(file);
+
+    if (!client && BARE_FETCH.test(source)) {
+      violations.push({ file: relative, specifier: 'fetch()', kind: 'raw-network-call' });
+    }
 
     for (const [, specifier] of source.matchAll(SPECIFIER)) {
       if (specifier === undefined) continue;
+      const common = { file: relative, specifier };
+      if (RAW_HTTP_MODULES.has(specifier)) {
+        if (!client) violations.push({ ...common, kind: 'raw-network-call' });
+        continue;
+      }
+      if (!specifier.startsWith('.')) continue;
+
       const target = path.resolve(path.dirname(file), specifier);
-      const common = { file: path.relative(root, file), specifier };
-      if (isClient(target) && !inJobs) {
+      if (isClient(target) && !inJobs && !client) {
         violations.push({ ...common, kind: 'client-outside-jobs' });
-      } else if (stripExtension(target).endsWith(HTTP_HELPER) && !isClient(file)) {
+      } else if (stripExtension(target).endsWith(HTTP_HELPER) && !client) {
         violations.push({ ...common, kind: 'http-outside-client' });
       }
     }

@@ -18,7 +18,7 @@ export type ProviderHttpMethod = 'GET' | 'HEAD' | 'POST' | 'PUT' | 'PATCH' | 'DE
 export interface ProviderRequest {
   /** Provider name as it appears in logs and metrics, e.g. `paystack`. */
   provider: string;
-  /** Stable operation name, e.g. `charge.verify`. Logged instead of the path, which carries ids. */
+  /** Stable operation name, e.g. `charge.verify`. What a log reader groups by; the path carries ids. */
   operation: string;
   method: ProviderHttpMethod;
   url: string;
@@ -70,10 +70,13 @@ export class ProviderUnavailableError extends Error {
 }
 
 const REDACTED = '[redacted]';
-const SECRET_PARAM = /(key|secret|token|signature|password|pin|hash)/i;
-const SECRET_HEADER = /^(authorization|cookie|set-cookie)$|api[-_]?key|secret|token|signature|hash/i;
 
-/** Strips credentials from a URL so it can be logged: userinfo and secret-looking query values. */
+/**
+ * Makes a URL safe to log. Credentials in the userinfo go, and so does every query VALUE: a denylist of
+ * secret-looking parameter names is guesswork that misses `?code=` (the OAuth authorization code) and
+ * `?sig=`, and a query value is never what a reader needs — `operation` already says which call this is.
+ * Parameter names stay, because they are what makes a log line recognisable.
+ */
 export function redactUrl(url: string): string {
   let parsed: URL;
   try {
@@ -85,17 +88,9 @@ export function redactUrl(url: string): string {
     parsed.username = REDACTED;
     parsed.password = '';
   }
-  for (const name of [...parsed.searchParams.keys()]) {
-    if (SECRET_PARAM.test(name)) parsed.searchParams.set(name, REDACTED);
-  }
+  for (const name of [...parsed.searchParams.keys()]) parsed.searchParams.set(name, REDACTED);
   // URL escapes the brackets of the placeholder; undo that so the log line reads plainly.
   return parsed.toString().replaceAll('%5Bredacted%5D', REDACTED);
-}
-
-export function redactHeaders(headers: Record<string, string>): Record<string, string> {
-  return Object.fromEntries(
-    Object.entries(headers).map(([name, value]) => [name, SECRET_HEADER.test(name) ? REDACTED : value]),
-  );
 }
 
 /**
@@ -116,7 +111,17 @@ const isRetryableFailure = (error: unknown): boolean =>
   error instanceof ProviderUnavailableError ||
   (error instanceof ProviderHttpError && (error.status === 429 || error.status >= 500));
 
-const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+/** Resolves early when the caller gives up, so a job being drained does not wait out its backoff. */
+const sleep = (ms: number, signal?: AbortSignal) =>
+  new Promise<void>((resolve) => {
+    const done = () => {
+      clearTimeout(timer);
+      signal?.removeEventListener('abort', done);
+      resolve();
+    };
+    const timer = setTimeout(done, ms);
+    signal?.addEventListener('abort', done, { once: true });
+  });
 
 const readBody = async (response: Response): Promise<unknown> => {
   const text = await response.text();
@@ -133,23 +138,30 @@ const readBody = async (response: Response): Promise<unknown> => {
 async function attemptOnce(request: ProviderRequest, timeoutMs: number): Promise<ProviderResponse> {
   const { provider, operation, method, url, headers = {}, body, signal } = request;
   const deadline = AbortSignal.timeout(timeoutMs);
-  const response = await fetch(url, {
-    method,
-    headers: body === undefined ? headers : { 'content-type': 'application/json', ...headers },
-    ...(body === undefined ? {} : { body: JSON.stringify(body) }),
-    signal: signal ? AbortSignal.any([deadline, signal]) : deadline,
-  }).catch((error: unknown) => {
+
+  // fetch resolves as soon as the headers arrive, so reading the body shares the deadline and the same
+  // classification: a provider that sends headers and then stalls is the commonest half-dead failure,
+  // and it has to reach the caller as a timeout the retry and the circuit breaker both understand.
+  try {
+    const response = await fetch(url, {
+      method,
+      headers: body === undefined ? headers : { 'content-type': 'application/json', ...headers },
+      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+      signal: signal ? AbortSignal.any([deadline, signal]) : deadline,
+    });
+    const parsed = await readBody(response);
+    if (!response.ok) throw new ProviderHttpError(provider, operation, response.status, parsed);
+    return { status: response.status, headers: Object.fromEntries(response.headers), body: parsed };
+  } catch (error) {
+    if (error instanceof ProviderHttpError) throw error;
     // The caller's cancellation is theirs: surface it untouched so it is never mistaken for a retryable
     // provider failure.
     if (signal?.aborted) throw signal.reason;
-    if (deadline.aborted)
+    if (deadline.aborted) {
       throw new ProviderUnavailableError(provider, operation, 'timeout', { cause: error });
+    }
     throw new ProviderUnavailableError(provider, operation, 'network', { cause: error });
-  });
-
-  const parsed = await readBody(response);
-  if (!response.ok) throw new ProviderHttpError(provider, operation, response.status, parsed);
-  return { status: response.status, headers: Object.fromEntries(response.headers), body: parsed };
+  }
 }
 
 /**
@@ -177,7 +189,7 @@ export async function providerRequest<T = unknown>(
     const startedAt = Date.now();
     try {
       const response = await attemptOnce(request, timeoutMs);
-      logger.debug(
+      logger.info(
         { ...base, attempt, status: response.status, durationMs: Date.now() - startedAt },
         'provider: ok',
       );
@@ -197,7 +209,7 @@ export async function providerRequest<T = unknown>(
         throw error;
       }
       logger.warn(fields, 'provider: attempt failed, retrying');
-      await sleep(backoffMs * 2 ** (attempt - 1));
+      await sleep(backoffMs * 2 ** (attempt - 1), request.signal);
     }
   }
 }

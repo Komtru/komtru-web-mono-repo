@@ -405,3 +405,14 @@ Expected: every task green; record the test counts.
 git add docs
 git commit -m "docs(design): record provider client boundary and the oauth exception"
 ```
+
+---
+
+## Deviations from this plan, after code review
+
+- `redactUrl` redacts **every** query value, not only secret-looking names: a denylist missed `?code=` (the OAuth authorization code) and `?sig=`. Parameter names are kept.
+- `redactHeaders` was dropped. Headers are never logged, so it had no caller; a future adapter that logs headers can add it back.
+- The per-attempt deadline covers reading the response body, not only the headers. Without that, a provider that sends headers and then stalls reached the caller as a raw `DOMException`, was not retried on an idempotent call, and never tripped the circuit breaker.
+- The breaker admits exactly one trial call while half-open, rather than the whole backlog.
+- The lint rule and the scanner also report a module file reaching the network directly (`fetch()`, `node:http`, `node:https`, `undici`, `axios`), allow a client to import a sibling client, and anchor the `jobs/` test on `src/modules/` so a checkout under a directory named `jobs` cannot disable the rule.
+- A successful call logs at `info`, not `debug`: for a payments integration the "we called the provider and it answered 200" line is the one wanted during a dispute.

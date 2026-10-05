@@ -1,3 +1,4 @@
+import { existsSync } from 'node:fs';
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
@@ -98,6 +99,43 @@ describe('findProviderImportViolations', () => {
     ]);
   });
 
+  it('finds a bare fetch and a raw http client outside a provider client', async () => {
+    const root = await modules({
+      'ledger/http/controllers.ts': "const r = await fetch('https://api.paystack.co/x');\n",
+      'ledger/jobs/charge.job.ts': "import https from 'node:https';\n",
+      'ledger/infrastructure/providers/paystack.client.ts': "const r = await fetch('https://x.test');\n",
+    });
+
+    const violations = await findProviderImportViolations(root);
+
+    expect(violations.map((v) => v.file).sort()).toEqual([
+      'ledger/http/controllers.ts',
+      'ledger/jobs/charge.job.ts',
+    ]);
+    expect(new Set(violations.map((v) => v.kind))).toEqual(new Set(['raw-network-call']));
+  });
+
+  it('finds a side-effect import of a client', async () => {
+    const root = await modules({
+      'ledger/infrastructure/providers/paystack.client.ts': 'export const charge = 1;\n',
+      'ledger/http/controllers.ts': "import '../infrastructure/providers/paystack.client.js';\n",
+    });
+
+    await expect(findProviderImportViolations(root)).resolves.toMatchObject([
+      { kind: 'client-outside-jobs' },
+    ]);
+  });
+
+  it('lets a client import a sibling client', async () => {
+    const root = await modules({
+      'ledger/infrastructure/providers/paystack/base.client.ts': 'export const call = 1;\n',
+      'ledger/infrastructure/providers/paystack/charge.client.ts':
+        "import { call } from './base.client.js';\n",
+    });
+
+    await expect(findProviderImportViolations(root)).resolves.toEqual([]);
+  });
+
   it('reports nothing for a tree that does not exist yet', async () => {
     await expect(findProviderImportViolations(join(tmpdir(), 'komtru-no-such-tree'))).resolves.toEqual([]);
   });
@@ -106,6 +144,8 @@ describe('findProviderImportViolations', () => {
 describe('src/modules', () => {
   it('has no http/ or services/ file importing a provider client', async () => {
     const root = resolve(import.meta.dirname, '../../src/modules');
+    // The scan is silent about a root that is not there, so prove it is scanning the real tree.
+    expect(existsSync(root)).toBe(true);
     await expect(findProviderImportViolations(root)).resolves.toEqual([]);
   });
 });

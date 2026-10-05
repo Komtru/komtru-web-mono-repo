@@ -9,7 +9,7 @@ export interface CircuitBreakerOptions {
   /** Provider name; appears in the log line and in the error. */
   name: string;
   failureThreshold?: number;
-  /** How long the breaker stays open before it allows one trial call. */
+  /** How long the breaker stays open before it allows one trial call through. */
   resetAfterMs?: number;
   logger: Logger;
   /** Injected by tests so no test waits out a reset window. */
@@ -42,6 +42,7 @@ export function createCircuitBreaker({
 }: CircuitBreakerOptions): CircuitBreaker {
   let failures = 0;
   let openedAt: number | undefined;
+  let probing = false;
 
   const state = (): 'closed' | 'open' | 'half-open' => {
     if (openedAt === undefined) return 'closed';
@@ -51,14 +52,21 @@ export function createCircuitBreaker({
   return {
     state,
     async run<T>(operation: string, call: () => Promise<T>): Promise<T> {
-      if (state() === 'open') throw new ProviderUnavailableError(name, operation, 'circuit-open');
+      // Half-open admits exactly one caller. Admitting the whole backlog would send every waiting login
+      // at the provider at once, which is the stampede the breaker stands in front of.
+      if (state() === 'open' || (state() === 'half-open' && probing)) {
+        throw new ProviderUnavailableError(name, operation, 'circuit-open');
+      }
+      probing = state() === 'half-open';
       try {
         const result = await call();
         if (openedAt !== undefined) logger.info({ provider: name, operation }, 'provider: circuit closed');
         failures = 0;
         openedAt = undefined;
+        probing = false;
         return result;
       } catch (error) {
+        probing = false;
         if (!countsAsFailure(error)) throw error;
         failures++;
         if (failures >= failureThreshold) {

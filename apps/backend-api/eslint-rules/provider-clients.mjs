@@ -2,21 +2,33 @@
 //
 // Design §4.4 puts every external call behind BullMQ so a slow or failing provider cannot hold an HTTP
 // request open or block the API's event loop. The structure that makes that checkable: the functions
-// that touch the network live in `infrastructure/providers/<provider>.client.ts` and are imported only
-// from `jobs/`; everything pure (webhook signature verification, payload parsing, upload signing) lives
-// in sibling files that request handlers may use freely.
+// that touch the network live in `infrastructure/providers/<provider>.client.ts` (or `<provider>/client.ts`)
+// and are imported only from `jobs/`; everything pure — webhook signature verification, payload parsing,
+// upload signing — lives in sibling files that request handlers may use freely.
 //
 // Paths alone decide this, so a `./x.client.js` specifier that resolves to `x.client.ts` on disk needs
 // no filesystem lookup.
 import path from 'node:path';
 
+const MODULES_SEGMENT = `${path.sep}src${path.sep}modules${path.sep}`;
+const PLATFORM_PROVIDERS = `${path.sep}src${path.sep}platform${path.sep}providers${path.sep}`;
 const HTTP_HELPER = path.join('platform', 'providers', 'http');
+const RAW_HTTP_MODULES = new Set(['node:http', 'node:https', 'http', 'https', 'undici', 'axios']);
+
 const stripExtension = (file) => file.replace(/\.(ts|js|mts|mjs)$/, '');
-// `paystack.client.ts`, and `paystack/client.ts` for a provider with a folder of its own.
+/** `paystack.client.ts`, and `paystack/client.ts` for a provider with a folder of its own. */
 const isClient = (file) => /(^|\.)client$/.test(path.basename(stripExtension(file)));
-const isJob = (file) => file.split(path.sep).includes('jobs');
-const isPlatform = (file) => file.includes(`${path.sep}src${path.sep}platform${path.sep}`);
 const isHttpHelper = (file) => stripExtension(file).endsWith(HTTP_HELPER);
+const isPlatformProvider = (file) => file.includes(PLATFORM_PROVIDERS);
+
+/** `/…/src/modules/ledger/jobs/x.ts` → `ledger/jobs/x.ts`, and null outside src/modules. */
+function withinModules(file) {
+  const at = file.lastIndexOf(MODULES_SEGMENT);
+  return at === -1 ? null : file.slice(at + MODULES_SEGMENT.length);
+}
+
+/** Anchored on src/modules, so a checkout under a directory named `jobs` does not disable the rule. */
+const isJob = (file) => (withinModules(file) ?? '').split(path.sep).includes('jobs');
 
 /** @type {import('eslint').Rule.RuleModule} */
 export default {
@@ -28,20 +40,32 @@ export default {
         "'{{target}}' calls a provider, so it may be imported only from jobs/. Enqueue a job instead, or move the pure part into its own file.",
       httpOutsideClient:
         "The provider HTTP helper belongs in a '*.client.ts' file under infrastructure/providers/, not in '{{importer}}'.",
+      rawNetworkCall:
+        "Reach a provider through providerRequest() in a '*.client.ts' file, not with {{what}} here.",
     },
     schema: [],
   },
   create(context) {
     const importer = context.filename;
+    // Only module code is held to this: the platform owns the helper, and src/server.ts owns the server.
+    const inModule = withinModules(importer) !== null;
 
     const check = (node, specifier) => {
-      if (typeof specifier !== 'string' || !specifier.startsWith('.')) return;
+      if (typeof specifier !== 'string') return;
+      if (RAW_HTTP_MODULES.has(specifier)) {
+        if (inModule && !isClient(importer)) {
+          context.report({ node, messageId: 'rawNetworkCall', data: { what: `'${specifier}'` } });
+        }
+        return;
+      }
+      if (!specifier.startsWith('.')) return;
+
       const target = path.resolve(path.dirname(importer), specifier);
-      if (isClient(target) && !isJob(importer)) {
+      if (isClient(target) && !isJob(importer) && !isClient(importer)) {
         context.report({ node, messageId: 'clientOutsideJobs', data: { target: specifier } });
         return;
       }
-      if (isHttpHelper(target) && !isClient(importer) && !isPlatform(importer)) {
+      if (isHttpHelper(target) && !isClient(importer) && !isPlatformProvider(importer)) {
         context.report({
           node,
           messageId: 'httpOutsideClient',
@@ -57,6 +81,12 @@ export default {
       ExportAllDeclaration: fromSource,
       ImportExpression(node) {
         if (node.source.type === 'Literal') check(node, node.source.value);
+      },
+      // The import boundary says nothing about a bare `fetch(...)`, which is the easier accident.
+      CallExpression(node) {
+        if (node.callee.type !== 'Identifier' || node.callee.name !== 'fetch') return;
+        if (!inModule || isClient(importer)) return;
+        context.report({ node, messageId: 'rawNetworkCall', data: { what: 'fetch()' } });
       },
     };
   },

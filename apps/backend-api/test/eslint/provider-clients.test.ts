@@ -12,6 +12,8 @@ const tester = new RuleTester({
   languageOptions: { ecmaVersion: 2023, sourceType: 'module', parser: tseslint.parser },
 });
 const root = '/repo/apps/backend-api/src';
+// A checkout whose path happens to contain "jobs" must not make every file look like a job.
+const jobsCheckout = '/home/dev/jobs/komtru/apps/backend-api/src';
 const client = `${root}/modules/ledger/infrastructure/providers/paystack.client.ts`;
 const helper = `${root}/modules/ledger/infrastructure/providers/paystack.signature.ts`;
 const job = `${root}/modules/ledger/jobs/verify-charge.job.ts`;
@@ -33,6 +35,11 @@ tester.run('provider-clients', providerClients, {
     { filename: job, code: "import { charge } from '../infrastructure/providers/paystack/client.js';" },
     // The platform may use its own helper.
     { filename: `${root}/platform/providers/circuit-breaker.ts`, code: "import { x } from './http.js';" },
+    // A provider folder may share a base client between its own clients.
+    { filename: client, code: "import { call } from './base.client.js';" },
+    { filename: `${root}/platform/providers/http.ts`, code: 'await fetch("https://x.test");' },
+    { filename: client, code: 'const r = await fetch("https://x.test");' },
+    { filename: helper, code: 'const key = fetchKey();' },
   ],
   invalid: [
     {
@@ -75,6 +82,26 @@ tester.run('provider-clients', providerClients, {
       filename: job,
       code: "import { providerRequest } from '../../../platform/providers/http.js';",
       errors: [{ messageId: 'httpOutsideClient' }],
+    },
+    {
+      filename: service,
+      code: 'const r = await fetch("https://api.paystack.co/transaction");',
+      errors: [{ messageId: 'rawNetworkCall' }],
+    },
+    {
+      filename: route,
+      code: "import https from 'node:https';",
+      errors: [{ messageId: 'rawNetworkCall' }],
+    },
+    {
+      filename: job,
+      code: "import { request } from 'undici';",
+      errors: [{ messageId: 'rawNetworkCall' }],
+    },
+    {
+      filename: `${jobsCheckout}/modules/ledger/services/funding.service.ts`,
+      code: "import { verifyCharge } from '../infrastructure/providers/paystack.client.js';",
+      errors: [{ messageId: 'clientOutsideJobs' }],
     },
   ],
 });

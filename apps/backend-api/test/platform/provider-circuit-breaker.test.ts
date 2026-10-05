@@ -96,6 +96,51 @@ describe('createCircuitBreaker', () => {
     expect(cb.state()).toBe('closed');
   });
 
+  it('lets one caller through in half-open and turns the rest away until the probe settles', async () => {
+    const time = clock();
+    const cb = breaker({ failureThreshold: 1, resetAfterMs: 30_000, now: time.now });
+    await expect(cb.run('oauth.token', () => Promise.reject(unavailable()))).rejects.toThrow();
+    time.advance(30_001);
+
+    let started = 0;
+    let release = () => {};
+    const slow = () => {
+      started++;
+      return new Promise<string>((resolve) => (release = () => resolve('tok')));
+    };
+
+    const probe = cb.run('oauth.token', slow);
+    const queued = await Promise.allSettled([cb.run('oauth.token', slow), cb.run('oauth.token', slow)]);
+
+    expect(started).toBe(1);
+    for (const result of queued) {
+      expect(result).toMatchObject({ status: 'rejected', reason: { reason: 'circuit-open' } });
+    }
+
+    release();
+    await expect(probe).resolves.toBe('tok');
+    expect(cb.state()).toBe('closed');
+  });
+
+  it('logs the open once, not once per concurrent failure', async () => {
+    const lines: Record<string, unknown>[] = [];
+    const logger = pino(
+      { level: 'debug' },
+      {
+        write: (line: string) => {
+          lines.push(JSON.parse(line) as Record<string, unknown>);
+        },
+      },
+    );
+    const cb = createCircuitBreaker({ name: 'google', logger, failureThreshold: 1 });
+
+    for (let i = 0; i < 3; i++) {
+      await cb.run('oauth.token', () => Promise.reject(unavailable())).catch(() => undefined);
+    }
+
+    expect(lines.filter((line) => line.msg === 'provider: circuit opened')).toHaveLength(1);
+  });
+
   it('reopens when the half-open trial fails, and the reset window restarts from that failure', async () => {
     const time = clock();
     const cb = breaker({ failureThreshold: 1, resetAfterMs: 30_000, now: time.now });

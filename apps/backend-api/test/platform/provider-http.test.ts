@@ -5,7 +5,6 @@ import {
   ProviderHttpError,
   ProviderUnavailableError,
   providerRequest,
-  redactHeaders,
   redactUrl,
 } from '../../src/platform/providers/http.js';
 import { startStubServer, type StubServer } from '../support/stub-server.js';
@@ -38,9 +37,16 @@ const json = (res: ServerResponse, status: number, body: unknown) => {
 };
 
 describe('redactUrl', () => {
-  it('redacts secret-bearing query parameters and keeps the rest', () => {
+  it('redacts every query value and keeps the parameter names', () => {
     expect(redactUrl('https://api.x.test/v1/a?api_key=sk_live_1&page=2')).toBe(
-      'https://api.x.test/v1/a?api_key=[redacted]&page=2',
+      'https://api.x.test/v1/a?api_key=[redacted]&page=[redacted]',
+    );
+  });
+
+  it('redacts the short names a denylist would miss', () => {
+    // ?code= is the OAuth authorization code, which is exactly the flow the breaker exists for.
+    expect(redactUrl('https://accounts.x.test/token?code=4%2F0Ab&sig=abc&auth=xyz')).toBe(
+      'https://accounts.x.test/token?code=[redacted]&sig=[redacted]&auth=[redacted]',
     );
   });
 
@@ -50,14 +56,6 @@ describe('redactUrl', () => {
 
   it('never throws on a url it cannot parse', () => {
     expect(redactUrl('not a url')).toBe('[unparseable url]');
-  });
-});
-
-describe('redactHeaders', () => {
-  it('redacts secret-bearing headers whatever their case and keeps the rest', () => {
-    expect(
-      redactHeaders({ Authorization: 'Bearer t', 'X-Api-Key': 'k', Accept: 'application/json' }),
-    ).toEqual({ Authorization: '[redacted]', 'X-Api-Key': '[redacted]', Accept: 'application/json' });
   });
 });
 
@@ -212,6 +210,49 @@ describe('providerRequest', () => {
     expect((error as ProviderUnavailableError).reason).toBe('timeout');
   });
 
+  it('fails with reason timeout when the body stalls after the headers arrive', async () => {
+    // A draining load balancer accepts the connection, sends headers and then stops. fetch resolves on
+    // the headers, so the deadline has to cover the body too.
+    server = await startStubServer((_req, res) => {
+      res.writeHead(200, { 'content-type': 'application/json' });
+      res.write('{"partial":');
+    });
+
+    const error = await providerRequest(silent, {
+      provider: 'google',
+      operation: 'oauth.token',
+      method: 'POST',
+      url: `${server.url}/x`,
+      timeoutMs: 30,
+    }).catch((e: unknown) => e);
+
+    expect(error).toBeInstanceOf(ProviderUnavailableError);
+    expect((error as ProviderUnavailableError).reason).toBe('timeout');
+  });
+
+  it('retries an idempotent call whose body stalls', async () => {
+    server = await startStubServer((_req, res, hit) => {
+      if (hit === 0) {
+        res.writeHead(200, { 'content-type': 'application/json' });
+        res.write('{"partial":');
+        return;
+      }
+      json(res, 200, { ok: true });
+    });
+
+    const response = await providerRequest(silent, {
+      provider: 'google',
+      operation: 'oauth.certs',
+      method: 'GET',
+      url: `${server.url}/x`,
+      timeoutMs: 40,
+      backoffMs: 1,
+    });
+
+    expect(response.body).toEqual({ ok: true });
+    expect(server.hits).toHaveLength(2);
+  });
+
   it('retries a timeout on an idempotent call and succeeds once the provider answers', async () => {
     server = await startStubServer((_req, res, hit) => {
       if (hit === 0) return; // first attempt hangs until its deadline
@@ -232,15 +273,12 @@ describe('providerRequest', () => {
   });
 
   it('fails with reason network when the host refuses the connection', async () => {
-    const closed = await startStubServer((_req, res) => json(res, 200, {}));
-    const { url } = closed;
-    await closed.close();
-
     const error = await providerRequest(silent, {
       provider: 'paystack',
       operation: 'charge.verify',
       method: 'GET',
-      url: `${url}/x`,
+      // Port 1 is privileged and never bound, so this refuses deterministically.
+      url: 'http://127.0.0.1:1/x',
       maxAttempts: 1,
     }).catch((e: unknown) => e);
 
@@ -261,8 +299,57 @@ describe('providerRequest', () => {
       backoffMs: 1,
     }).catch((e: unknown) => e);
 
-    expect(error).not.toBeInstanceOf(ProviderHttpError);
+    expect(error).toBe(controller.signal.reason);
     expect(server.hits).toHaveLength(1);
+  });
+
+  it('returns the raw text when the provider does not send json', async () => {
+    server = await startStubServer((_req, res) => {
+      res.writeHead(200, { 'content-type': 'text/plain' });
+      res.end('OK');
+    });
+
+    const response = await providerRequest(silent, {
+      provider: 'termii',
+      operation: 'sms.send',
+      method: 'GET',
+      url: `${server.url}/x`,
+    });
+
+    expect(response.body).toBe('OK');
+  });
+
+  it('returns the raw text when a provider promising json sends an error page', async () => {
+    server = await startStubServer((_req, res) => {
+      res.writeHead(200, { 'content-type': 'application/json' });
+      res.end('<html>502 Bad Gateway</html>');
+    });
+
+    const response = await providerRequest(silent, {
+      provider: 'termii',
+      operation: 'sms.send',
+      method: 'GET',
+      url: `${server.url}/x`,
+    });
+
+    expect(response.body).toBe('<html>502 Bad Gateway</html>');
+  });
+
+  it('returns undefined for an empty body', async () => {
+    server = await startStubServer((_req, res) => {
+      res.writeHead(204);
+      res.end();
+    });
+
+    const response = await providerRequest(silent, {
+      provider: 'termii',
+      operation: 'sms.send',
+      method: 'GET',
+      url: `${server.url}/x`,
+    });
+
+    expect(response.status).toBe(204);
+    expect(response.body).toBeUndefined();
   });
 
   it('logs one line per attempt with the url redacted and no request or response body', async () => {
