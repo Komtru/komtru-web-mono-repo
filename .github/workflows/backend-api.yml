@@ -1,0 +1,87 @@
+# CI for apps/backend-api. Path-filtered to the app, the packages it depends on and the few root
+# files that change every build, so a change to another app never starts this run. GitHub Actions
+# does not support YAML anchors, hence the duplicated `paths:` list.
+name: backend-api
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'apps/backend-api/**'
+      - 'packages/config/**'
+      - 'packages/shared-types/**'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+      - 'pnpm-workspace.yaml'
+      - 'turbo.json'
+      - '.github/workflows/backend-api.yml'
+      - '.github/actions/setup/**'
+  pull_request:
+    paths:
+      - 'apps/backend-api/**'
+      - 'packages/config/**'
+      - 'packages/shared-types/**'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+      - 'pnpm-workspace.yaml'
+      - 'turbo.json'
+      - '.github/workflows/backend-api.yml'
+      - '.github/actions/setup/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: backend-api-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/setup
+        with:
+          cache-key: backend-api
+      - run: pnpm exec turbo run lint --filter=@komtru/backend-api
+
+  typecheck:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/setup
+        with:
+          cache-key: backend-api
+      - run: pnpm exec turbo run typecheck --filter=@komtru/backend-api
+
+  test:
+    needs: [lint, typecheck]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/setup
+        with:
+          cache-key: backend-api
+      - run: pnpm exec turbo run test --filter=@komtru/backend-api
+
+  build:
+    needs: [test]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/setup
+        with:
+          cache-key: backend-api
+      - run: pnpm exec turbo run build --filter=@komtru/backend-api
+
+  # T-022 adds the `migration-safety` job and this job gains it in `needs`; T-005 replaces the
+  # placeholder with the real API and worker deploys.
+  deploy:
+    needs: [test, build]
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      # Placeholder: the hosting target is design §12 Q1, confirmed and wired up in T-005. Real
+      # credentials will arrive as ${{ secrets.* }}; never as literals in this file.
+      - run: echo "No deploy target for backend-api yet - T-005 confirms the hosting target and replaces this step."
