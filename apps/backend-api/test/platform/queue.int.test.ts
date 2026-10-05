@@ -1,5 +1,6 @@
 // Queue factory against real Redis. Skipped unless KOMTRU_INFRA_TESTS=1.
 import { randomUUID } from 'node:crypto';
+import { UnrecoverableError } from 'bullmq';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { loadConfig } from '../../src/config/env.js';
 import { createLogger } from '../../src/platform/logger.js';
@@ -44,6 +45,7 @@ describe.runIf(infraEnabled)('queue factory', () => {
     const name = unique('ok');
     const seen: number[] = [];
     factory.consume<{ n: number }>({ name, process: ({ n }) => Promise.resolve(void seen.push(n)) });
+    factory.run();
     await factory.producer<{ n: number }>(name).add('run', { n: 7 });
     await eventually(() => seen.length === 1);
     expect(seen).toEqual([7]);
@@ -70,6 +72,7 @@ describe.runIf(infraEnabled)('queue factory', () => {
       },
     });
     const before = deadLetterCounter.snapshot()[name] ?? 0;
+    factory.run();
     await factory.producer(name).add('run', { order: 'A1' });
 
     const dead = factory.producer(`${name}.dead`);
@@ -102,10 +105,54 @@ describe.runIf(infraEnabled)('queue factory', () => {
         return attempts === 1 ? Promise.reject(new Error('blip')) : Promise.resolve();
       },
     });
+    factory.run();
     await factory.producer(name).add('run', {});
     await eventually(() => attempts === 2);
     await new Promise((r) => setTimeout(r, 200));
     expect((await factory.producer(`${name}.dead`).getJobCounts('waiting')).waiting).toBe(0);
     expect(onDeadLetter).not.toHaveBeenCalled();
+  });
+
+  it('dead-letters an UnrecoverableError on its first attempt', async () => {
+    const onDeadLetter = vi.fn();
+    factory = createQueueFactory({ redisUrl, logger, onDeadLetter });
+    const name = unique('unrecoverable');
+    factory.consume({
+      name,
+      attempts: 3,
+      backoffMs: 10,
+      process: () => Promise.reject(new UnrecoverableError('bad payload')),
+    });
+    factory.run();
+    await factory.producer(name).add('run', {});
+    await eventually(() => onDeadLetter.mock.calls.length === 1);
+    expect(onDeadLetter.mock.calls[0]?.[0]).toMatchObject({ error: 'bad payload', attempts: 1 });
+  });
+
+  it('survives an onDeadLetter hook that throws', async () => {
+    const unhandled = vi.fn();
+    process.on('unhandledRejection', unhandled);
+    try {
+      const onDeadLetter = vi.fn(() => {
+        throw new Error('bus down');
+      });
+      factory = createQueueFactory({ redisUrl, logger, onDeadLetter });
+      const name = unique('hook-throws');
+      factory.consume({ name, attempts: 1, process: () => Promise.reject(new Error('x')) });
+      factory.run();
+      await factory.producer(name).add('run', {});
+      await eventually(() => onDeadLetter.mock.calls.length === 1);
+      await new Promise((r) => setTimeout(r, 100));
+      expect(unhandled).not.toHaveBeenCalled();
+    } finally {
+      process.off('unhandledRejection', unhandled);
+    }
+  });
+
+  it('fails an enqueue fast instead of hanging while Redis is unreachable', async () => {
+    factory = createQueueFactory({ redisUrl: 'redis://127.0.0.1:1', logger });
+    const started = Date.now();
+    await expect(factory.producer(unique('down')).add('run', {})).rejects.toThrow();
+    expect(Date.now() - started).toBeLessThan(3000);
   });
 });

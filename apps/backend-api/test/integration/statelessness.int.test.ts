@@ -67,4 +67,38 @@ describe.runIf(infraEnabled)('stateless processes', () => {
       await Promise.all([apiA.stop(), apiB.stop(), worker.stop()]);
     }
   });
+
+  it('takes no jobs and releases its connections when worker startup fails', async () => {
+    const queueName = `test.early-${randomUUID().slice(0, 8)}`;
+    const processed: unknown[] = [];
+    const env = {
+      NODE_ENV: 'test',
+      LOG_LEVEL: 'silent',
+      REDIS_URL: 'redis://localhost:56379',
+      POSTGRES_URL: pooledUrl(workerDatabase()),
+    };
+    const api = await startApi({ ...env, PORT: '0' }, [
+      defineModule({
+        name: 'early',
+        queues: [{ name: queueName, process: () => Promise.resolve() }],
+        start: (ctx) =>
+          ctx.queues
+            .producer(queueName)
+            .add('x', {})
+            .then(() => undefined),
+      }),
+    ]);
+    try {
+      const broken = defineModule({
+        name: 'early',
+        queues: [{ name: queueName, process: (d: unknown) => Promise.resolve(void processed.push(d)) }],
+        start: () => Promise.reject(new Error('module failed to start')),
+      });
+      await expect(startWorker(env, [broken])).rejects.toThrow(/module failed to start/);
+      await new Promise((r) => setTimeout(r, 300));
+      expect(processed).toEqual([]);
+    } finally {
+      await api.stop();
+    }
+  });
 });

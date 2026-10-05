@@ -39,7 +39,20 @@ export async function startApi(
   // Producer side only: the API never consumes, so slow jobs never touch the request event loop.
   const queues = createQueueFactory({ redisUrl: config.redis.url, logger });
   for (const definition of modules.flatMap((m) => m.queues ?? [])) queues.define(definition);
-  for (const module of modules) await module.start?.({ queues });
+  try {
+    for (const module of modules) await module.start?.({ queues });
+  } catch (error) {
+    await gracefulShutdown({
+      closers: [
+        ...moduleClosers(modules),
+        { name: 'queues', close: () => queues.close() },
+        { name: 'clients', close: () => clients.close() },
+      ],
+      timeoutMs: SHUTDOWN_TIMEOUT_MS,
+      logger,
+    });
+    throw error;
+  }
 
   let draining = false;
   const app = createApp({

@@ -19,12 +19,15 @@ export function createRedis(url: string, { prefix = true }: { prefix?: boolean }
 }
 
 /**
- * A connection for one BullMQ Queue or Worker. BullMQ requires `maxRetriesPerRequest: null` because
- * its blocking commands stay open for minutes; each Queue and Worker gets its own, so one stalled
- * consumer never stalls another.
+ * A connection for one BullMQ Queue or Worker; each gets its own, so one stalled consumer never stalls
+ * another. Workers need `maxRetriesPerRequest: null` (their blocking commands stay open for minutes).
+ * Producers sit on HTTP paths, so they fail fast while Redis is away instead of hanging the request.
  */
-export function createBullConnection(url: string): Redis {
-  const redis = new Redis(url, { maxRetriesPerRequest: null, enableReadyCheck: false });
+export function createBullConnection(url: string, role: 'producer' | 'worker' = 'worker'): Redis {
+  const redis =
+    role === 'worker'
+      ? new Redis(url, { maxRetriesPerRequest: null, enableReadyCheck: false })
+      : new Redis(url, { maxRetriesPerRequest: 1, enableOfflineQueue: false, connectTimeout: 2_000 });
   redis.on('error', () => {});
   return redis;
 }
