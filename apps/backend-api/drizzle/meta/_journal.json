@@ -134,6 +134,13 @@
       "when": 1791238230239,
       "tag": "0018_trade_state_machine",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1791238582481,
+      "tag": "0019_trade_immutable_columns",
+      "breakpoints": true
     }
   ]
 }
