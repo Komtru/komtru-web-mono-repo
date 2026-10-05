@@ -1,0 +1,78 @@
+# Local development infrastructure. Start with `pnpm infra:up` (waits for every health check).
+# Ports default to non-standard values so they never clash with an existing local Postgres or Redis;
+# override with the KOMTRU_* variables (scripts/env/local-infra.mjs reads the same ones).
+# Credentials here are for throwaway local containers only.
+name: komtru
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: komtru
+      POSTGRES_PASSWORD: komtru
+      POSTGRES_DB: komtru_v2_dev
+    ports:
+      - '${KOMTRU_PG_PORT:-55432}:5432'
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U komtru -d komtru_v2_dev']
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  # Transaction pooling from day one (design §4.4). The app connects here; migrations bypass it.
+  pgbouncer:
+    image: edoburu/pgbouncer:latest
+    environment:
+      DB_HOST: postgres
+      DB_PORT: '5432'
+      DB_USER: komtru
+      DB_PASSWORD: komtru
+      DB_NAME: komtru_v2_dev
+      AUTH_TYPE: scram-sha-256
+      POOL_MODE: transaction
+      MAX_CLIENT_CONN: '200'
+      DEFAULT_POOL_SIZE: '20'
+      ADMIN_USERS: komtru
+      LISTEN_PORT: '5432'
+    ports:
+      - '${KOMTRU_PGBOUNCER_PORT:-56432}:5432'
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      # 127.0.0.1, not localhost: localhost resolves to ::1 here and PgBouncer listens on IPv4.
+      test: ['CMD-SHELL', 'nc -z 127.0.0.1 5432']
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  redis:
+    image: redis:7-alpine
+    command: ['redis-server', '--appendonly', 'yes']
+    ports:
+      - '${KOMTRU_REDIS_PORT:-56379}:6379'
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  # Catches every email the backend sends locally; UI at http://localhost:58025.
+  mailpit:
+    image: axllent/mailpit:latest
+    ports:
+      - '${KOMTRU_MAILPIT_SMTP_PORT:-51025}:1025'
+      - '${KOMTRU_MAILPIT_UI_PORT:-58025}:8025'
+    healthcheck:
+      test: ['CMD', '/mailpit', 'readyz']
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+volumes:
+  postgres-data:
+  redis-data:

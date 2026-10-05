@@ -42,7 +42,8 @@ Every ticket in this file runs before feature work. Design reference: `docs/supe
 
 ### T-003 — Local infrastructure and environment wiring
 
-- **Touches:** `docker-compose.yml`, `infra/pgbouncer/*`, `apps/backend-api/.env.example`, `apps/*/.env.example`, `scripts/env/populate-backend-env.ts`, `.husky/pre-commit` (secret scan)
+- **Status:** Done (2026-10-05). Plan: `docs/superpowers/plans/2026-10-05-t-003-local-infra.md`. Runbook: `docs/runbooks/local-dev.md`.
+- **Touches:** `docker-compose.yml`, `scripts/env/{local-infra,populate-backend-env}.mjs`, `scripts/check-staged-secrets.mjs`, `.secretlintrc.json`, `.secretlintignore`, `apps/*/.env.example`, `.husky/pre-commit` (secret scan)
 - **Depends on:** T-002
 - **Acceptance criteria:**
   - `docker compose up` starts Postgres 16, PgBouncer in transaction mode in front of it, Redis 7 and Mailpit, all with health checks.

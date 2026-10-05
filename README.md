@@ -24,6 +24,10 @@ Most apps are still placeholders. Each one is built out by its own ticket in [do
 - Node 22 (see `.nvmrc`; 22.12 or newer)
 - pnpm 10 (`corepack enable` picks up the pinned version)
 
+## Local services
+
+`pnpm infra:up` starts Postgres, PgBouncer, Redis and Mailpit in Docker, and `pnpm env:backend` writes the backend's `.env`. The [local development runbook](docs/runbooks/local-dev.md) covers both, including the credentials file you need first.
+
 ## Commands
 
 Run from the repository root.

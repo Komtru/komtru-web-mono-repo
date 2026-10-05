@@ -30,6 +30,7 @@
   - Send jobs on BullMQ with backoff and up to `NOTIFY_MAX_ATTEMPTS`; dead-lettered security notifications publish `notification.dead_lettered` (support opens a ticket in T-100).
   - Security-critical templates bypass preferences and rate limits; others respect per-category, per-channel preferences (NP1) and per-user caps.
   - Adapters: Mailjet (email), Termii (SMS), FCM (push); IN_APP feed (`GET /notifications`, mark-read) also pushed over the socket.
+  - Outside production, SMS and push run in dry-run mode by default (`NOTIFY_SMS_DRY_RUN`, `NOTIFY_PUSH_DRY_RUN`): the message is rendered, recorded and logged with the recipient masked, but never sent. Local runs keep live provider keys (T-003), so this is what stops them texting real people. A test proves no provider call is made in dry-run mode.
   - Identity templates (OTP, new-device, password changed, session reuse) seeded; every later module ticket adds its own templates and mappings.
 
 ### T-046 — Location catalog: states, cities and city requests
