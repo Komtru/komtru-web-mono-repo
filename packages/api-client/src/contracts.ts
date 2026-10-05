@@ -11,18 +11,6 @@ export type HttpMethod = (typeof HTTP_METHODS)[number];
 /** `PUBLIC` is called without a bearer token; every other scope needs a session of that scope. */
 export type EndpointScope = SessionScope | 'PUBLIC';
 
-export interface EndpointSchemas<
-  P extends z.ZodType = z.ZodType,
-  Q extends z.ZodType = z.ZodType,
-  B extends z.ZodType = z.ZodType,
-  R extends z.ZodType = z.ZodType,
-> {
-  params?: P;
-  query?: Q;
-  body?: B;
-  response: R;
-}
-
 /** An endpoint's metadata, with no schemas: what the client needs to decide how to call it. */
 export interface EndpointDefinition {
   method: HttpMethod;
@@ -37,36 +25,52 @@ export interface EndpointDefinition {
   paginated?: 'cursor' | 'page';
 }
 
+/** A schema slot an endpoint may leave empty: absent means "this endpoint takes none". */
+export type OptionalSchema = z.ZodType | undefined;
+
+export interface EndpointSchemas<
+  P extends OptionalSchema = undefined,
+  Q extends OptionalSchema = undefined,
+  B extends OptionalSchema = undefined,
+  R extends z.ZodType = z.ZodType,
+> {
+  params?: P;
+  query?: Q;
+  body?: B;
+  response: R;
+}
+
 export interface Endpoint<
-  P extends z.ZodType = z.ZodType,
-  Q extends z.ZodType = z.ZodType,
-  B extends z.ZodType = z.ZodType,
+  P extends OptionalSchema = undefined,
+  Q extends OptionalSchema = undefined,
+  B extends OptionalSchema = undefined,
   R extends z.ZodType = z.ZodType,
 > extends EndpointDefinition {
   schema: EndpointSchemas<P, Q, B, R>;
 }
 
-export type AnyEndpoint = Endpoint;
+export type AnyEndpoint = Endpoint<OptionalSchema, OptionalSchema, OptionalSchema, z.ZodType>;
 
 export const defineEndpoint = <
-  P extends z.ZodType,
-  Q extends z.ZodType,
-  B extends z.ZodType,
-  R extends z.ZodType,
+  P extends OptionalSchema = undefined,
+  Q extends OptionalSchema = undefined,
+  B extends OptionalSchema = undefined,
+  R extends z.ZodType = z.ZodType,
 >(
   endpoint: Endpoint<P, Q, B, R>,
 ): Endpoint<P, Q, B, R> => endpoint;
 
-/** Everything a caller supplies for one call, with the members the endpoint has no schema for omitted. */
-export type EndpointInput<E extends AnyEndpoint> = (E['schema']['params'] extends z.ZodType
-  ? { params: z.input<NonNullable<E['schema']['params']>> }
-  : { params?: undefined }) &
-  (E['schema']['query'] extends z.ZodType
-    ? { query: z.input<NonNullable<E['schema']['query']>> }
-    : { query?: undefined }) &
-  (E['schema']['body'] extends z.ZodType
-    ? { body: z.input<NonNullable<E['schema']['body']>> }
-    : { body?: undefined });
+/**
+ * One member per schema the endpoint declares, and an optional `undefined` for each one it does
+ * not: `call(listTrades, { query })` type-checks, `call(listTrades, { body })` does not.
+ */
+type InputMember<K extends string, S extends OptionalSchema> = [NonNullable<S>] extends [never]
+  ? { [Key in K]?: undefined }
+  : { [Key in K]: z.input<NonNullable<S>> };
+
+export type EndpointInput<E extends AnyEndpoint> = InputMember<'params', E['schema']['params']> &
+  InputMember<'query', E['schema']['query']> &
+  InputMember<'body', E['schema']['body']>;
 
 export type EndpointOutput<E extends AnyEndpoint> = z.output<E['schema']['response']>;
 
