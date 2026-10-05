@@ -1,6 +1,10 @@
 {
   "extends": "@komtru/config/tsconfig/library.json",
   "compilerOptions": {
+    "lib": ["DOM", "DOM.Iterable", "ES2023"],
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "jsx": "react-jsx",
     "declaration": true,
     "types": ["node"]
   },

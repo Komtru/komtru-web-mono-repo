@@ -2,6 +2,11 @@
 docs/specs/
 docs/design-reference/
 docs/MASTER_BUILD_PROMPT.md
+
+# Token stylesheets generated verbatim from the reference: Prettier would lowercase the hex
+# values and respace the shadows, and the parity test compares them literally.
+packages/ui-kit/src/tokens.css
+packages/config/tailwind/preset.css
 pnpm-lock.yaml
 dist/
 .next/

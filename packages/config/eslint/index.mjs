@@ -5,6 +5,7 @@ import js from '@eslint/js';
 import prettier from 'eslint-config-prettier';
 import globals from 'globals';
 import tseslint from 'typescript-eslint';
+import noRawHex from './no-raw-hex.mjs';
 
 /**
  * @param {{ tsconfigRootDir: string, project?: string | string[], react?: boolean, ignores?: string[] }} options
@@ -16,6 +17,9 @@ export function komtruEslint({ tsconfigRootDir, project, react = false, ignores 
     js.configs.recommended,
     ...tseslint.configs.recommendedTypeChecked,
     {
+      // Namespaced away from `komtru/*`: apps/backend-api already defines a `komtru` plugin of its
+      // own, and ESLint refuses to see one plugin name defined twice.
+      plugins: { 'komtru-design': { rules: { 'no-raw-hex': noRawHex } } },
       languageOptions: {
         ecmaVersion: 2023,
         sourceType: 'module',
@@ -31,6 +35,7 @@ export function komtruEslint({ tsconfigRootDir, project, react = false, ignores 
         '@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_', varsIgnorePattern: '^_' }],
         eqeqeq: ['error', 'always'],
         'no-console': 'error',
+        'komtru-design/no-raw-hex': 'error',
       },
     },
     {
