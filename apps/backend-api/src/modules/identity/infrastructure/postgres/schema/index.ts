@@ -6,3 +6,6 @@ export * from './users.js';
 export * from './contacts.js';
 export * from './credentials.js';
 export * from './rbac.js';
+export * from './sessions.js';
+export * from './usernames.js';
+export * from './invitations.js';
