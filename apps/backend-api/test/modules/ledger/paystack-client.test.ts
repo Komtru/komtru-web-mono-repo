@@ -3,6 +3,7 @@ import type { ServerResponse } from 'node:http';
 import { afterEach, describe, expect, it } from 'vitest';
 import {
   createPaystackAdapter,
+  listBanks,
   MAX_BANK_PAGES,
   verifyCharge,
   type PaystackClientOptions,
@@ -300,6 +301,22 @@ describe('the paystack client', () => {
       expect((error as ApiError).code).toBe('PAYMENT_PROVIDER_UNAVAILABLE');
     }
     expect(stub!.hits).toHaveLength(0);
+  });
+
+  it('lets one of our own bugs through instead of calling it a provider outage', async () => {
+    const options = await serving((_path, res) => json(res, 200, ok([])));
+    const broken = {
+      ...options,
+      // A logger that throws stands in for any bug in our own code inside the call path.
+      logger: {
+        ...options.logger,
+        info: () => {
+          throw new TypeError('not a provider failure');
+        },
+      } as typeof options.logger,
+    };
+
+    await expect(listBanks(broken)).rejects.toBeInstanceOf(TypeError);
   });
 
   it('exposes the pure webhook functions through the adapter', async () => {

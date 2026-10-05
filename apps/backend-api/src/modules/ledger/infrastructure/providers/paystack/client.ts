@@ -24,6 +24,7 @@ import type { Logger } from '../../../../../platform/logger.js';
 import {
   providerRequest,
   ProviderHttpError,
+  ProviderUnavailableError,
   type ProviderHttpMethod,
 } from '../../../../../platform/providers/http.js';
 import type {
@@ -122,13 +123,25 @@ async function call<T>(options: PaystackClientOptions, spec: CallSpec): Promise<
     return envelope;
   } catch (error) {
     if (error instanceof ApiError) throw error;
-    const status = error instanceof ProviderHttpError ? error.status : undefined;
-    throw new ApiError(
-      502,
-      'PAYMENT_PROVIDER_UNAVAILABLE',
-      'The payment provider could not be reached',
-      `paystack ${spec.operation}${status === undefined ? '' : `: HTTP ${String(status)}`}`,
-    );
+    // Only the provider's own failures are translated. A TypeError from our code here is a bug, and
+    // dressing it as a provider outage would hide it behind a retry and point the operator at Paystack.
+    if (error instanceof ProviderHttpError) {
+      throw new ApiError(
+        502,
+        'PAYMENT_PROVIDER_UNAVAILABLE',
+        'The payment provider refused the request',
+        `paystack ${spec.operation}: HTTP ${String(error.status)}`,
+      );
+    }
+    if (error instanceof ProviderUnavailableError) {
+      throw new ApiError(
+        502,
+        'PAYMENT_PROVIDER_UNAVAILABLE',
+        'The payment provider could not be reached',
+        `paystack ${spec.operation}: ${error.reason}`,
+      );
+    }
+    throw error;
   }
 }
 
