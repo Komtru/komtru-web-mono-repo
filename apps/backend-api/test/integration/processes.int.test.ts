@@ -1,3 +1,4 @@
+import { randomBytes } from 'node:crypto';
 // Boots the real API and worker processes' wiring against the local Docker stack.
 // Skipped unless KOMTRU_INFRA_TESTS=1.
 import http from 'node:http';
@@ -12,7 +13,16 @@ import { startWorker } from '../../src/worker-process.js';
 import { directUrl, infraEnabled, pooledUrl, testRedisUrl } from '../support/db-urls.js';
 import { useTestDatabase, workerDatabase } from '../support/db.js';
 
-const base = { NODE_ENV: 'test', LOG_LEVEL: 'silent', PORT: '0', REDIS_URL: testRedisUrl() };
+// The real registry includes identity, which refuses to boot without a signing key — which is the
+// point of that refusal, so the test supplies a throwaway one rather than skipping the check.
+const base = {
+  NODE_ENV: 'test',
+  LOG_LEVEL: 'silent',
+  PORT: '0',
+  REDIS_URL: testRedisUrl(),
+  IDENTITY_SIGNING_KEY: randomBytes(32).toString('hex'),
+  IDENTITY_SIGNING_KEY_ID: 'test-key',
+};
 
 describe.runIf(infraEnabled)('process wiring', () => {
   useTestDatabase();
@@ -59,7 +69,7 @@ describe.runIf(infraEnabled)('process wiring', () => {
         return Promise.resolve();
       },
     });
-    const api = await startApi(env, [slow]);
+    const api = await startApi(env, () => [slow]);
     const { port } = api.server.address() as AddressInfo;
     const agent = new http.Agent({ keepAlive: true });
 
@@ -83,10 +93,10 @@ describe.runIf(infraEnabled)('process wiring', () => {
   });
 
   it('rejects when the port is already in use', async () => {
-    const first = await startApi(env, []);
+    const first = await startApi(env, () => []);
     const { port } = first.server.address() as AddressInfo;
     try {
-      await expect(startApi({ ...env, PORT: String(port) }, [])).rejects.toThrow(/EADDRINUSE/);
+      await expect(startApi({ ...env, PORT: String(port) }, () => [])).rejects.toThrow(/EADDRINUSE/);
     } finally {
       await first.stop();
     }
@@ -96,15 +106,15 @@ describe.runIf(infraEnabled)('process wiring', () => {
     const stopped: string[] = [];
     const ok = (name: string) => defineModule({ name, stop: () => (stopped.push(name), Promise.resolve()) });
     const broken = defineModule({ name: 'broken', stop: () => Promise.reject(new Error('boom')) });
-    const api = await startApi(env, [ok('first'), broken, ok('last')]);
+    const api = await startApi(env, () => [ok('first'), broken, ok('last')]);
     const result = await api.stop();
     expect(stopped).toEqual(['last', 'first']);
     expect(result).toEqual({ clean: false, failed: ['module:broken'], timedOut: false });
   });
 
   it.each([
-    ['API', () => startApi({ ...base, POSTGRES_URL: directUrl(workerDatabase()) }, [])],
-    ['worker', () => startWorker({ ...base, POSTGRES_URL: directUrl(workerDatabase()) }, [])],
+    ['API', () => startApi({ ...base, POSTGRES_URL: directUrl(workerDatabase()) }, () => [])],
+    ['worker', () => startWorker({ ...base, POSTGRES_URL: directUrl(workerDatabase()) }, () => [])],
   ])('refuses to start the %s as the schema owner', async (_name, start) => {
     await expect(start()).rejects.toBeInstanceOf(RuntimeRoleError);
   });

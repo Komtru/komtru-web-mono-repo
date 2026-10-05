@@ -1,9 +1,10 @@
 // A domain module is a folder under src/modules/<name>/ whose index.ts exports one KomtruModule.
 // The app mounts every module's routes under /v1 and runs its lifecycle hooks; modules talk to each
 // other only through their index.ts (enforced by eslint-rules/module-boundaries.mjs).
-import type { Router } from 'express';
+import type { Request, Router } from 'express';
 import type { Db } from '../db/index.js';
 import { mountRoutes, type MountDeps } from './http/mount.js';
+import type { Actor } from './http/principal.js';
 import type { RouteDefinition } from './http/route.js';
 import type { EventBus } from './events/bus.js';
 import type { InProcessEmitter } from './events/emitter.js';
@@ -37,6 +38,12 @@ export interface KomtruModule {
   queues?: QueueDefinition<never>[];
   /** Recurring jobs (`module.job-name`, cron in Africa/Lagos); only the worker schedules them. */
   schedules?: ScheduledJob[];
+  /**
+   * Who is calling. At most one module may answer this — identity does (T-031) — and `mountModules`
+   * wires it into every route's scope and permission check. A registry with no such module leaves
+   * every caller anonymous, which is what a process serving only PUBLIC routes wants.
+   */
+  resolveActor?: (req: Request) => Promise<Actor>;
   /** Runs at process start, in registry order (e.g. subscribing to events). */
   start?: (ctx: ModuleContext) => Promise<void>;
   /** Runs at shutdown, in reverse registry order. */
@@ -56,9 +63,18 @@ const assertUniqueNames = (modules: KomtruModule[]): void => {
 /** Returns the function createApp uses to mount every module's routes on /v1. */
 export function mountModules(modules: KomtruModule[], deps: MountDeps): (router: Router) => void {
   assertUniqueNames(modules);
+  const resolvers = modules.filter((module) => module.resolveActor !== undefined);
+  if (resolvers.length > 1) {
+    // Two answers to "who is calling" is not a merge conflict to resolve at runtime.
+    throw new Error(`more than one module resolves the actor: ${resolvers.map((m) => m.name).join(', ')}`);
+  }
+  const resolveActor = deps.resolveActor ?? resolvers[0]?.resolveActor;
   return mountRoutes(
     modules.flatMap((module) => module.routes ?? []),
-    deps,
+    {
+      ...deps,
+      ...(resolveActor ? { resolveActor } : {}),
+    },
   );
 }
 

@@ -3,7 +3,7 @@
 import { queueDeadLetteredEvent } from '@komtru/shared-types';
 import { loadConfig } from './config/env.js';
 import { assertNotOwner, createDb } from './db/index.js';
-import { modules as registry } from './modules/index.js';
+import { createModules, type ModuleBuilder } from './modules/index.js';
 import { createClients } from './platform/clients.js';
 import { createLogger } from './platform/logger.js';
 import { createEventBus } from './platform/events/bus.js';
@@ -14,7 +14,7 @@ import { pruneIdempotencyKeys } from './platform/http/idempotency.js';
 import { createQueueFactory } from './platform/queue/factory.js';
 import { createScheduleRegistry } from './platform/scheduler/registry.js';
 import { startScheduler, type RunningScheduler } from './platform/scheduler/scheduler.js';
-import { moduleClosers, type KomtruModule } from './platform/module.js';
+import { moduleClosers } from './platform/module.js';
 import { initSentry } from './platform/sentry.js';
 import type { RunningProcess } from './platform/run.js';
 import { gracefulShutdown } from './platform/shutdown.js';
@@ -26,7 +26,7 @@ export type RunningWorker = RunningProcess;
 
 export async function startWorker(
   env: NodeJS.ProcessEnv,
-  modules: KomtruModule[] = registry,
+  buildModules: ModuleBuilder = createModules,
 ): Promise<RunningWorker> {
   const config = loadConfig(env);
   const logger = createLogger(config, { process: 'worker' });
@@ -40,6 +40,7 @@ export async function startWorker(
   }
 
   const db = createDb(clients.pool);
+  const modules = buildModules({ db, redis: clients.redis, config, logger });
   // A dead-lettered job is the ops event T-023 left as a hook: published in its own transaction,
   // because there is no state change to ride along with, and never allowed to fail the worker.
   const queues = createQueueFactory({
