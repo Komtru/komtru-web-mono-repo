@@ -48,6 +48,8 @@
 
 ### T-047 — Fee schedule file
 
+- **Status:** Done (2026-10-05). Plan: `docs/superpowers/plans/2026-10-05-t-047-fee-schedule.md`
+- **Deferred:** the fee guard scans `apps/backend-api/src/modules` only; frontend bundles and database seeds (design §6.5's wider "nowhere else") are not scanned yet, and should be added when the first frontend or seed handles money. `payout_fee` is validated and served but has no calculator helper: the payout ticket (T-090) decides whether a withdrawal snapshots it the way a trade snapshots its fees.
 - **Touches:** `config/fees.yaml`, `packages/shared-types/src/fees/{schema,calculator}.ts`, `apps/backend-api/src/modules/config/fees.ts`, `tools/fee-version-check/**`, backend workflow step
 - **Depends on:** T-010, T-020
 - **Acceptance criteria:**
