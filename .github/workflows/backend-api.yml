@@ -55,9 +55,66 @@ jobs:
           cache-key: backend-api
       - run: pnpm exec turbo run typecheck --filter=@komtru/backend-api
 
+  # Unit and integration tests in one pass: with KOMTRU_INFRA_TESTS=1 the `*.int.test.ts` suites stop
+  # skipping themselves and the Vitest globalSetup migrates the template database these services host.
   test:
     needs: [lint, typecheck]
     runs-on: ubuntu-latest
+    env:
+      KOMTRU_INFRA_TESTS: '1'
+      KOMTRU_TEST_DIRECT_URL: postgresql://komtru:komtru@localhost:55432
+      KOMTRU_TEST_POOLED_URL: postgresql://komtru_app:komtru_app@localhost:56432
+    # Mirrors docker-compose.yml, on the same published ports, because the backend's integration
+    # tests still hard-code redis://localhost:56379 and default to those Postgres ports. Throwaway
+    # container credentials only; nothing here is a real secret.
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: komtru
+          POSTGRES_PASSWORD: komtru
+          POSTGRES_DB: komtru_v2_dev
+        ports:
+          - '55432:5432'
+        options: >-
+          --health-cmd "pg_isready -U komtru -d komtru_v2_dev"
+          --health-interval 2s
+          --health-timeout 3s
+          --health-retries 30
+
+      # Service containers share one network and resolve each other by service id, so DB_HOST is
+      # literally `postgres`. No DB_NAME, so the generated [databases] entry is `*` and the
+      # per-worker test databases route through PgBouncer too.
+      pgbouncer:
+        image: edoburu/pgbouncer:latest
+        env:
+          DB_HOST: postgres
+          DB_PORT: '5432'
+          DB_USER: komtru
+          DB_PASSWORD: komtru
+          AUTH_TYPE: scram-sha-256
+          POOL_MODE: transaction
+          MAX_CLIENT_CONN: '200'
+          DEFAULT_POOL_SIZE: '20'
+          ADMIN_USERS: komtru
+          LISTEN_PORT: '5432'
+        ports:
+          - '56432:5432'
+        options: >-
+          --health-cmd "nc -z 127.0.0.1 5432"
+          --health-interval 2s
+          --health-timeout 3s
+          --health-retries 30
+
+      redis:
+        image: redis:7-alpine
+        ports:
+          - '56379:6379'
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 2s
+          --health-timeout 3s
+          --health-retries 30
     steps:
       - uses: actions/checkout@v7
       - uses: ./.github/actions/setup

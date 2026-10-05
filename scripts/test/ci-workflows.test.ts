@@ -229,3 +229,59 @@ describe.each(APPS)('%s workflow', (app) => {
     expect(workflow.permissions).toEqual({ contents: 'read' });
   });
 });
+
+type ComposeService = { image: string; environment?: Record<string, string> };
+const compose = readYaml<{ services: Record<string, ComposeService> }>('docker-compose.yml');
+const backendTest = workflows.get('backend-api')!.jobs.test!;
+const services = backendTest.services ?? {};
+
+describe('backend-api service containers', () => {
+  it('runs the same images as docker-compose', () => {
+    for (const name of ['postgres', 'pgbouncer', 'redis']) {
+      expect(services[name]?.image).toBe(compose.services[name]?.image);
+    }
+  });
+
+  it('publishes them on the ports the backend tests look for', () => {
+    expect(services.postgres?.ports).toEqual([`${LOCAL_PORTS.postgres}:5432`]);
+    expect(services.pgbouncer?.ports).toEqual([`${LOCAL_PORTS.pgbouncer}:5432`]);
+    expect(services.redis?.ports).toEqual([`${LOCAL_PORTS.redis}:6379`]);
+  });
+
+  it('keeps the compose credentials, database and pooling mode', () => {
+    expect(services.postgres?.env).toEqual(compose.services.postgres?.environment);
+    expect(services.pgbouncer?.env).toEqual(compose.services.pgbouncer?.environment);
+    expect(services.pgbouncer?.env?.POOL_MODE).toBe('transaction');
+    expect(services.postgres?.env?.POSTGRES_DB).toBe(LOCAL_DATABASE.name);
+  });
+
+  it('health-checks every service, so the job waits for them', () => {
+    for (const name of ['postgres', 'pgbouncer', 'redis']) {
+      expect(services[name]?.options).toContain('--health-cmd');
+      expect(services[name]?.options).toContain('--health-retries');
+    }
+  });
+
+  it('turns the integration tests on and points them at those services', () => {
+    expect(backendTest.env?.KOMTRU_INFRA_TESTS).toBe('1');
+    expect(backendTest.env?.KOMTRU_TEST_DIRECT_URL).toBe(
+      `postgresql://${LOCAL_DATABASE.user}:${LOCAL_DATABASE.password}@localhost:${LOCAL_PORTS.postgres}`,
+    );
+    expect(backendTest.env?.KOMTRU_TEST_POOLED_URL).toBe(
+      `postgresql://${LOCAL_APP_ROLE.user}:${LOCAL_APP_ROLE.password}@localhost:${LOCAL_PORTS.pgbouncer}`,
+    );
+  });
+
+  it('matches the defaults the backend test helpers fall back to', () => {
+    const helper = read('apps/backend-api/test/support/db-urls.ts');
+    expect(helper).toContain(`?? '${backendTest.env?.KOMTRU_TEST_DIRECT_URL}'`);
+    expect(helper).toContain(`?? '${backendTest.env?.KOMTRU_TEST_POOLED_URL}'`);
+  });
+
+  it('gives service containers to the backend alone', () => {
+    for (const app of APPS.filter((name) => name !== 'backend-api')) {
+      expect(workflows.get(app)!.jobs.test?.services).toBeUndefined();
+      expect(workflows.get(app)!.jobs.test?.env).toBeUndefined();
+    }
+  });
+});
