@@ -27,7 +27,7 @@ export interface NotificationBinding<S extends z.ZodType = z.ZodType> {
 }
 
 export const defineBinding = <S extends z.ZodType>(binding: NotificationBinding<S>): NotificationBinding =>
-  binding as unknown as NotificationBinding;
+  binding;
 
 /**
  * Empty at T-045: no module publishes a user-facing event yet. T-031 and T-034 add the identity
