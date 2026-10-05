@@ -1,7 +1,6 @@
 // Type-level checks: the inferred types API code relies on.
 import { describe, expectTypeOf, it } from 'vitest';
-import type { CursorPageRequest, KoboJson, PageRequest } from '../src/index.js';
-import { koboSchema } from '../src/index.js';
+import type { CursorPageRequest, KoboJson, PageRequest, koboSchema } from '../src/index.js';
 import type { z } from 'zod';
 
 describe('inferred types', () => {
