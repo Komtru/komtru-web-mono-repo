@@ -2,6 +2,7 @@
 import type { Server } from 'node:http';
 import { createApp } from './app.js';
 import { loadConfig } from './config/env.js';
+import { assertNotOwner } from './db/index.js';
 import { modules as registry } from './modules/index.js';
 import { createClients, postgresCheck, redisCheck } from './platform/clients.js';
 import { healthRoutes } from './platform/health.js';
@@ -27,6 +28,12 @@ export async function startApi(
   const logger = createLogger(config, { process: 'api' });
   const sentry = initSentry(config, 'api');
   const clients = createClients(config);
+  try {
+    await assertNotOwner(clients.pool);
+  } catch (error) {
+    await clients.close();
+    throw error;
+  }
 
   for (const module of modules) await module.start?.();
 

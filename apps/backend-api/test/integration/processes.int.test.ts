@@ -2,21 +2,24 @@
 // Skipped unless KOMTRU_INFRA_TESTS=1.
 import http from 'node:http';
 import type { AddressInfo } from 'node:net';
-import { describe, expect, it } from 'vitest';
+import { beforeAll, describe, expect, it } from 'vitest';
+import { RuntimeRoleError } from '../../src/db/index.js';
 import { defineModule } from '../../src/platform/module.js';
 import { startApi } from '../../src/server.js';
 import { startWorker } from '../../src/worker-process.js';
+import { directUrl, infraEnabled, pooledUrl } from '../support/db-urls.js';
+import { useTestDatabase, workerDatabase } from '../support/db.js';
 
-const enabled = process.env.KOMTRU_INFRA_TESTS === '1';
-const env = {
-  NODE_ENV: 'test',
-  LOG_LEVEL: 'silent',
-  PORT: '0',
-  POSTGRES_URL: 'postgresql://komtru:komtru@localhost:56432/komtru_v2_dev',
-  REDIS_URL: 'redis://localhost:56379',
-};
+const base = { NODE_ENV: 'test', LOG_LEVEL: 'silent', PORT: '0', REDIS_URL: 'redis://localhost:56379' };
 
-describe.runIf(enabled)('process wiring', () => {
+describe.runIf(infraEnabled)('process wiring', () => {
+  useTestDatabase();
+  // Resolved lazily: the worker's database name is only known inside the test run.
+  let env: Record<string, string>;
+  beforeAll(() => {
+    env = { ...base, POSTGRES_URL: pooledUrl(workerDatabase()) };
+  });
+
   it('starts the API, serves readiness, and shuts down cleanly', async () => {
     const api = await startApi(env);
     const { port } = api.server.address() as AddressInfo;
@@ -88,6 +91,13 @@ describe.runIf(enabled)('process wiring', () => {
     const result = await api.stop();
     expect(stopped).toEqual(['last', 'first']);
     expect(result).toEqual({ clean: false, failed: ['module:broken'], timedOut: false });
+  });
+
+  it.each([
+    ['API', () => startApi({ ...base, POSTGRES_URL: directUrl(workerDatabase()) }, [])],
+    ['worker', () => startWorker({ ...base, POSTGRES_URL: directUrl(workerDatabase()) }, [])],
+  ])('refuses to start the %s as the schema owner', async (_name, start) => {
+    await expect(start()).rejects.toBeInstanceOf(RuntimeRoleError);
   });
 
   it('refuses to start without required configuration, naming what is missing', async () => {

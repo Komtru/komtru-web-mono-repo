@@ -14,7 +14,9 @@
     "lint": "eslint .",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
-    "test:int": "KOMTRU_INFRA_TESTS=1 vitest run test/integration"
+    "test:int": "KOMTRU_INFRA_TESTS=1 vitest run test/integration test/db",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "tsx --env-file-if-exists=.env src/db/migrate-cli.ts"
   },
   "devDependencies": {
     "@komtru/config": "workspace:*",
@@ -25,6 +27,7 @@
     "@types/node": "22.20.5",
     "@types/pg": "8.23.1",
     "@types/supertest": "7.2.1",
+    "drizzle-kit": "0.31.11",
     "eslint": "9.39.5",
     "supertest": "7.3.1",
     "tsx": "4.23.15",
@@ -37,6 +40,7 @@
     "@sentry/node": "11.4.0",
     "compression": "1.8.2",
     "cors": "2.8.6",
+    "drizzle-orm": "0.45.3",
     "express": "5.2.1",
     "helmet": "8.3.0",
     "ioredis": "5.11.1",
