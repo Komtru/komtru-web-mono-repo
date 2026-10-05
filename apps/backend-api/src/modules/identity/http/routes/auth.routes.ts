@@ -1,6 +1,5 @@
 // Identity's session routes. `defineRoute` is the only way to register one (design §4.4), so the
 // scope, the retry decision and the schemas are all declared here and checked at boot.
-import { type z } from 'zod';
 import { defineRoute, type RouteDefinition } from '../../../../platform/http/route.js';
 import { jwks, logout, refresh, type AuthControllerDeps } from '../controllers/auth.controller.js';
 import {
@@ -64,8 +63,3 @@ export function authRoutes(deps: AuthControllerDeps): RouteDefinition[] {
     }),
   ];
 }
-
-/** Named so a test can assert the registry without reaching into the route array by index. */
-export const AUTH_ROUTE_PATHS = ['/.well-known/jwks.json', '/auth/refresh', '/auth/logout'] as const;
-
-export type AuthRouteResponse = z.infer<typeof sessionResponseSchema>;

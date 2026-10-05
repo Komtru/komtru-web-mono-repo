@@ -68,6 +68,3 @@ export const actorFor = (principal: Principal): Actor => ({
 
 /** Anonymous with a reason, for a resolver that rejected the credential it was given. */
 export const rejectedActor = (failure: AuthFailure): Actor => ({ ...ANONYMOUS_ACTOR, failure });
-
-export const has = (principal: Principal, permission: string): boolean =>
-  principal.permissions.has(permission);
