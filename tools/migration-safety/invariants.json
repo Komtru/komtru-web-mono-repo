@@ -1,0 +1,114 @@
+{
+  "postgresMajor": 16,
+  "partialUniqueIndexes": [
+    {
+      "table": "identity.admin_role_assignments",
+      "name": "admin_role_active_unique",
+      "definition": "CREATE UNIQUE INDEX admin_role_active_unique ON identity.admin_role_assignments USING btree (user_id, role_code) WHERE (revoked_at IS NULL)"
+    },
+    {
+      "table": "identity.mfa_factors",
+      "name": "mfa_factors_one_default",
+      "definition": "CREATE UNIQUE INDEX mfa_factors_one_default ON identity.mfa_factors USING btree (user_id) WHERE (is_default AND (revoked_at IS NULL))"
+    },
+    {
+      "table": "identity.social_identities",
+      "name": "social_identities_one_per_provider",
+      "definition": "CREATE UNIQUE INDEX social_identities_one_per_provider ON identity.social_identities USING btree (user_id, provider) WHERE (unlinked_at IS NULL)"
+    },
+    {
+      "table": "identity.social_identities",
+      "name": "social_identities_provider_subject",
+      "definition": "CREATE UNIQUE INDEX social_identities_provider_subject ON identity.social_identities USING btree (provider, provider_user_id) WHERE (unlinked_at IS NULL)"
+    },
+    {
+      "table": "identity.user_emails",
+      "name": "user_emails_one_primary",
+      "definition": "CREATE UNIQUE INDEX user_emails_one_primary ON identity.user_emails USING btree (user_id) WHERE is_primary"
+    },
+    {
+      "table": "identity.user_emails",
+      "name": "user_emails_verified_unique",
+      "definition": "CREATE UNIQUE INDEX user_emails_verified_unique ON identity.user_emails USING btree (email_normal) WHERE (verified_at IS NOT NULL)"
+    },
+    {
+      "table": "identity.user_phones",
+      "name": "user_phones_one_primary",
+      "definition": "CREATE UNIQUE INDEX user_phones_one_primary ON identity.user_phones USING btree (user_id) WHERE is_primary"
+    },
+    {
+      "table": "identity.user_phones",
+      "name": "user_phones_verified_unique",
+      "definition": "CREATE UNIQUE INDEX user_phones_verified_unique ON identity.user_phones USING btree (phone_e164) WHERE (verified_at IS NOT NULL)"
+    }
+  ],
+  "checkConstraints": [
+    {
+      "table": "identity.account_recovery_requests",
+      "name": "recovery_reviewer_not_subject",
+      "definition": "CHECK (((reviewed_by IS NULL) OR (user_id IS NULL) OR (reviewed_by <> user_id)))"
+    },
+    {
+      "table": "identity.admin_action_approvals",
+      "name": "admin_action_distinct_approver",
+      "definition": "CHECK (((approved_by IS NULL) OR (approved_by <> requested_by)))"
+    },
+    {
+      "table": "identity.admin_action_approvals",
+      "name": "admin_action_self_approval",
+      "definition": "CHECK (((approved_by IS NULL) OR (approved_by <> subject_user_id)))"
+    },
+    {
+      "table": "identity.admin_role_assignments",
+      "name": "admin_role_distinct_approver",
+      "definition": "CHECK (((approved_by IS NULL) OR (approved_by <> granted_by)))"
+    },
+    {
+      "table": "identity.admin_role_assignments",
+      "name": "admin_role_no_self_grant",
+      "definition": "CHECK ((granted_by <> user_id))"
+    },
+    {
+      "table": "identity.admin_role_assignments",
+      "name": "admin_role_self_approval",
+      "definition": "CHECK (((approved_by IS NULL) OR (approved_by <> user_id)))"
+    },
+    {
+      "table": "identity.user_phones",
+      "name": "phone_e164_format",
+      "definition": "CHECK ((phone_e164 ~ '^\\+[1-9][0-9]{7,14}$'::text))"
+    },
+    {
+      "table": "identity.user_profiles",
+      "name": "profile_bio_len",
+      "definition": "CHECK (((bio IS NULL) OR (length(bio) <= 500)))"
+    },
+    {
+      "table": "identity.users",
+      "name": "users_username_format",
+      "definition": "CHECK (((username IS NULL) OR ((username)::text ~ '^[a-z][a-z0-9._]{2,29}$'::text)))"
+    },
+    {
+      "table": "identity.users",
+      "name": "users_username_pair",
+      "definition": "CHECK ((((username IS NULL) AND (username_skeleton IS NULL)) OR ((username IS NOT NULL) AND (username_skeleton IS NOT NULL))))"
+    }
+  ],
+  "triggers": [
+    {
+      "table": "identity.admin_role_assignments",
+      "name": "admin_role_dual_approval",
+      "definition": "CREATE TRIGGER admin_role_dual_approval BEFORE INSERT OR UPDATE ON identity.admin_role_assignments FOR EACH ROW EXECUTE FUNCTION identity.enforce_dual_approval()"
+    },
+    {
+      "table": "identity.identity_audit_log",
+      "name": "komtru_append_only",
+      "definition": "CREATE TRIGGER komtru_append_only BEFORE DELETE OR UPDATE ON identity.identity_audit_log FOR EACH ROW EXECUTE FUNCTION platform.reject_mutation()"
+    },
+    {
+      "table": "identity.roles",
+      "name": "roles_dual_approval_backfill",
+      "definition": "CREATE TRIGGER roles_dual_approval_backfill BEFORE UPDATE ON identity.roles FOR EACH ROW EXECUTE FUNCTION identity.enforce_dual_approval_backfill()"
+    }
+  ]
+}
