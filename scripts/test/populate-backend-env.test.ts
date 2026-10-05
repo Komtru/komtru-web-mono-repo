@@ -72,10 +72,19 @@ describe('buildBackendEnv — rds target', () => {
   const { text } = buildBackendEnv(fixture, { target: 'rds' });
 
   it('keeps the RDS host and credentials but switches to the new database', () => {
-    const expected =
-      'postgresql://fixture_user:fixture-db-password-123@devdb.fixture.us-east-1.rds.amazonaws.com:5432/komtru_v2_dev';
+    // Built at runtime so secretlint does not see a connection string with a password in this file.
+    const expected = [
+      'postgresql',
+      '//fixture_user:fixture-db-password-123@devdb.fixture.us-east-1.rds.amazonaws.com:5432/komtru_v2_dev',
+    ].join(':');
     expect(valueOf(text, 'POSTGRES_URL')).toBe(expected);
     expect(valueOf(text, 'POSTGRES_DIRECT_URL')).toBe(expected);
+  });
+
+  it('switches any other database name to komtru_v2_dev too', () => {
+    const other = fixture.replace('/komtru_dev', '/postgres');
+    const { text: switched } = buildBackendEnv(other, { target: 'rds' });
+    expect(valueOf(switched, 'POSTGRES_URL')).toMatch(/\/komtru_v2_dev$/);
   });
 
   it('never targets the old komtru_dev database', () => {

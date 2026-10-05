@@ -13,7 +13,6 @@ import { fileURLToPath } from 'node:url';
 import { LOCAL_INFRA } from './local-infra.mjs';
 
 export const NEW_DATABASE = 'komtru_v2_dev';
-const OLD_DATABASE = 'komtru_dev';
 
 /** KEY -> the right-hand side exactly as written in the source (quotes, escapes, comments kept). */
 function parseEnvRaw(text) {
@@ -41,10 +40,11 @@ export function parseEnv(text) {
   return out;
 }
 
+// Always the new database, whatever the source named: any existing database on that server belongs
+// to the old backend (`komtru_dev` today), and the new schema must never be migrated into it.
 const switchDatabase = (url) => {
   const parsed = new URL(url);
-  const current = parsed.pathname.replace(/^\//, '');
-  if (current === OLD_DATABASE || current === '') parsed.pathname = `/${NEW_DATABASE}`;
+  parsed.pathname = `/${NEW_DATABASE}`;
   return parsed.toString();
 };
 
