@@ -3,6 +3,8 @@
 // other only through their index.ts (enforced by eslint-rules/module-boundaries.mjs).
 import type { Router } from 'express';
 import type { Db } from '../db/index.js';
+import { mountRoutes, type MountDeps } from './http/mount.js';
+import type { RouteDefinition } from './http/route.js';
 import type { EventBus } from './events/bus.js';
 import type { InProcessEmitter } from './events/emitter.js';
 import type { HealthCheck } from './health.js';
@@ -24,8 +26,11 @@ export interface ModuleContext {
 
 export interface KomtruModule {
   name: string;
-  /** Registers this module's routes on the /v1 router. */
-  routes?: (router: Router) => void;
+  /**
+   * This module's routes, each built with `defineRoute`. There is no other way to register one:
+   * the registry's invariants (pagination, an explicit retryable decision) are checked at boot.
+   */
+  routes?: RouteDefinition[];
   /** Extra readiness checks the module needs (beyond Postgres and Redis). */
   healthChecks?: HealthCheck[];
   /** Queues this module consumes; the worker runs them, every process can produce to them. */
@@ -49,11 +54,12 @@ const assertUniqueNames = (modules: KomtruModule[]): void => {
 };
 
 /** Returns the function createApp uses to mount every module's routes on /v1. */
-export function mountModules(modules: KomtruModule[]): (router: Router) => void {
+export function mountModules(modules: KomtruModule[], deps: MountDeps): (router: Router) => void {
   assertUniqueNames(modules);
-  return (router) => {
-    for (const module of modules) module.routes?.(router);
-  };
+  return mountRoutes(
+    modules.flatMap((module) => module.routes ?? []),
+    deps,
+  );
 }
 
 export const moduleHealthChecks = (modules: KomtruModule[]): HealthCheck[] =>

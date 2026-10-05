@@ -3,7 +3,9 @@ import { describe, expect, it } from 'vitest';
 import { createApp } from '../../src/app.js';
 import { loadConfig } from '../../src/config/env.js';
 import { createLogger } from '../../src/platform/logger.js';
+import { defineRoute } from '../../src/platform/http/route.js';
 import { defineModule, moduleHealthChecks, mountModules } from '../../src/platform/module.js';
+import { z } from 'zod';
 
 const config = loadConfig({
   NODE_ENV: 'test',
@@ -15,24 +17,29 @@ const logger = createLogger(config);
 
 const trades = defineModule({
   name: 'trades',
-  routes: (router) => {
-    router.get('/trades/ping', (_req, res) => {
-      res.json({ module: 'trades' });
-    });
-  },
+  routes: [
+    defineRoute({
+      method: 'get',
+      path: '/trades/ping',
+      scope: 'PUBLIC',
+      summary: 'Module liveness',
+      schema: { response: z.object({ module: z.string() }) },
+      handler: () => Promise.resolve({ module: 'trades' }),
+    }),
+  ],
   healthChecks: [{ name: 'trades-cache', check: () => Promise.resolve() }],
 });
 
 describe('module registry', () => {
   it('mounts each module’s routes under /v1', async () => {
-    const app = createApp({ config, logger, mountV1: mountModules([trades]) });
+    const app = createApp({ config, logger, mountV1: mountModules([trades], { logger }) });
     const res = await request(app).get('/v1/trades/ping');
     expect(res.status).toBe(200);
     expect(res.body).toEqual({ module: 'trades' });
   });
 
   it('refuses two modules with the same name', () => {
-    expect(() => mountModules([trades, defineModule({ name: 'trades' })])).toThrow(
+    expect(() => mountModules([trades, defineModule({ name: 'trades' })], { logger })).toThrow(
       /duplicate module "trades"/,
     );
   });

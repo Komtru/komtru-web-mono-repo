@@ -7,6 +7,7 @@ import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
 import { createDb } from '../../src/db/index.js';
 import { publish } from '../../src/platform/events/publish.js';
+import { defineRoute } from '../../src/platform/http/route.js';
 import { defineModule, type ModuleContext } from '../../src/platform/module.js';
 import { startApi } from '../../src/server.js';
 import { startWorker } from '../../src/worker-process.js';
@@ -41,18 +42,31 @@ describe.runIf(infraEnabled)('domain events end to end', () => {
           });
           return Promise.resolve();
         },
-        routes: (router) => {
-          router.post('/probes/:id', async (req, res) => {
-            await context?.db.transaction((tx) =>
-              publish(tx, probeCreated, {
-                payload: { probeId: req.params.id },
-                aggregateType: 'probe',
-                aggregateId: req.params.id,
-              }),
-            );
-            res.status(202).end();
-          });
-        },
+        routes: [
+          defineRoute({
+            method: 'post',
+            path: '/probes/:id',
+            scope: 'PUBLIC',
+            summary: 'Publish a probe event',
+            retryable: false,
+            status: 202,
+            schema: {
+              params: z.object({ id: z.uuid() }),
+              response: z.object({ published: z.boolean() }),
+            },
+            handler: async ({ params }) => {
+              const { id } = params as { id: string };
+              await context?.db.transaction((tx) =>
+                publish(tx, probeCreated, {
+                  payload: { probeId: id },
+                  aggregateType: 'probe',
+                  aggregateId: id,
+                }),
+              );
+              return { published: true };
+            },
+          }),
+        ],
       });
     };
 
