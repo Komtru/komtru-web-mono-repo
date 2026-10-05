@@ -16,7 +16,8 @@
     "build": "tsc -p tsconfig.build.json",
     "lint": "eslint .",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "test:int": "KOMTRU_INFRA_TESTS=1 vitest run test/integration"
   },
   "devDependencies": {
     "@komtru/config": "workspace:*",
