@@ -156,7 +156,7 @@ Generated from `Komtru — UI Screens Living Master File.html` during planning (
 | LS1 | Language | Trust History · Account · Notifications — Mobile Web | 7109 | web-app-ui | T-126 |
 | TF1 | Set Up Two-Factor | Trust History · Account · Notifications — Mobile Web | 7145 | web-app-ui | T-111 |
 | TF2 | Save Your Backup Codes | Trust History · Account · Notifications — Mobile Web | 7169 | web-app-ui | T-111 |
-| Y2 | Role Switcher | Role Switcher — Mobile Web | 7210 | web-app-ui | T-110 |
+| Y2 | Role Switcher | Role Switcher — Mobile Web | 7210 | web-app-ui | T-110 (intentionally not built, design §6.3) |
 | AC5 | Leave a Review | Leave a Review — Mobile Web | 7251 | web-app-ui | T-127 |
 | SR1 | Rate This Buyer | Leave a Review — Mobile Web | 7281 | web-app-ui | T-127 |
 | SR2 | Respond to a Review | Leave a Review — Mobile Web | 7315 | web-app-ui | T-127 |

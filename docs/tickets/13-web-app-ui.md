@@ -15,7 +15,7 @@ One app for every consumer with no buyer or seller views (design C22, §6.3), pl
 ---
 
 ### T-110 — App scaffold and shells
-- **Screens:** OF1, D9, Y2 (not built: replaced by the single trades list, design C22)
+- **Screens:** OF1, D9, Y2 (not built: replaced by the single trades list, see design §6.3)
 - **Depends on:** T-017
 - **Acceptance criteria:** tablet shell behaviour (sidebar collapses to top nav) shared by every later tablet screen; app on port 3001 with mobile tab bar (Trades, Explore, Alerts, Messages, Account) and desktop sidebar; no role switcher and no separate seller tab bar; certified merchants see Shop in place of Explore; Account holds Payouts for anyone who has sold and a Park Agent item that opens the hub application or, once active, `park.komtru.com`; offline state via service worker; `passport.komtru.com` host rewrite to public profile routes; `/hub/*` operating URLs redirect to `park.komtru.com` (design C12).
 
