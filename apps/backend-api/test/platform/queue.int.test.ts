@@ -7,6 +7,7 @@ import { createQueueFactory, type QueueFactory } from '../../src/platform/queue/
 import { deadLetterCounter } from '../../src/platform/queue/metrics.js';
 import { BULL_PREFIX, createRedis } from '../../src/platform/redis/connections.js';
 import { infraEnabled } from '../support/db-urls.js';
+import { eventually } from '../support/eventually.js';
 
 const redisUrl = 'redis://localhost:56379';
 const logger = createLogger(
@@ -17,14 +18,6 @@ const ready = async (redis: ReturnType<typeof createRedis>) => {
   return redis;
 };
 const unique = (label: string) => `test.${label}-${randomUUID().slice(0, 8)}`;
-
-export const eventually = async (check: () => Promise<boolean> | boolean, timeoutMs = 5000) => {
-  const deadline = Date.now() + timeoutMs;
-  while (!(await check())) {
-    if (Date.now() > deadline) throw new Error('condition not met in time');
-    await new Promise((r) => setTimeout(r, 20));
-  }
-};
 
 describe.runIf(infraEnabled)('queue factory', () => {
   let factory: QueueFactory | undefined;

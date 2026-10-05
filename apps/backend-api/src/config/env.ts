@@ -33,6 +33,17 @@ const VARIABLES = {
   POSTGRES_POOL_MAX: { schema: int(1, 200), required: false },
   REDIS_URL: { schema: z.url(), required: true },
   SENTRY_DSN: { schema: z.url(), required: false },
+  SCHEDULER_TIMEZONE: {
+    schema: z.string().refine((tz) => {
+      try {
+        new Intl.DateTimeFormat('en', { timeZone: tz });
+        return true;
+      } catch {
+        return false;
+      }
+    }),
+    required: false,
+  },
   SENTRY_ENVIRONMENT: { schema: z.string().min(1), required: false },
 } satisfies Record<string, { schema: z.ZodType; required: boolean }>;
 
@@ -55,6 +66,8 @@ export interface AppConfig {
   };
   redis: { url: string };
   sentry: { dsn?: string; environment: string };
+  /** Cron schedules are evaluated in this IANA timezone. */
+  scheduler: { timezone: string };
 }
 
 export class ConfigError extends Error {
@@ -108,6 +121,7 @@ export function loadConfig(env: NodeJS.ProcessEnv): AppConfig {
       poolMax: v.POSTGRES_POOL_MAX ?? 10,
     },
     redis: { url: v.REDIS_URL as string },
+    scheduler: { timezone: v.SCHEDULER_TIMEZONE ?? 'Africa/Lagos' },
     sentry: {
       ...(v.SENTRY_DSN ? { dsn: v.SENTRY_DSN } : {}),
       environment: v.SENTRY_ENVIRONMENT ?? nodeEnv,
