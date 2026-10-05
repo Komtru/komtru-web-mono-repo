@@ -71,7 +71,9 @@ export function createIdempotencyGate({
   leaseTtlMs = LEASE_TTL_MS,
   ttlHours = IDEMPOTENCY_TTL_HOURS,
 }: IdempotencyOptions): IdempotencyGate {
-  return async ({ route, req, res, actor, body }, run) => {
+  return async ({ route, req, res, actor: caller, body }, run) => {
+    // The stable per-caller string: this is the table's `actor` column, not the whole principal.
+    const actor = caller.key;
     const key = req.get(IDEMPOTENCY_HEADER);
     // No key means the client is not asking for a retry guarantee, so there is nothing to store.
     if (!key) return run();

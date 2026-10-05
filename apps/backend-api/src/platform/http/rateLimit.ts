@@ -10,6 +10,7 @@ import { RateLimiterRedis, RateLimiterRes } from 'rate-limiter-flexible';
 import { ApiError } from '../errors.js';
 import type { Logger } from '../logger.js';
 import type { RateLimitGate } from './mount.js';
+import { ANONYMOUS_ACTOR_KEY } from './principal.js';
 import { routeLabel, type RateLimitSpec, type RouteDefinition } from './route.js';
 
 /** Under the app's `komtru:` ioredis prefix, so every limiter key is namespaced twice over. */
@@ -36,7 +37,7 @@ const subjectFor = (
   parsed?: { body: unknown; query: unknown; params: unknown },
 ): string | undefined => {
   if (kind === 'ip') return req.ip;
-  if (kind === 'user') return actor === 'anon' ? undefined : actor;
+  if (kind === 'user') return actor === ANONYMOUS_ACTOR_KEY ? undefined : actor;
   return parsed ? spec.identifierFrom?.(parsed)?.toLowerCase() : undefined;
 };
 
@@ -84,7 +85,7 @@ export function createRateLimitGate({
 
     for (const kind of spec.by) {
       if (PHASE[kind] !== phase) continue;
-      const subject = subjectFor(kind, spec, req, actor, parsed);
+      const subject = subjectFor(kind, spec, req, actor.key, parsed);
       // Nothing to key on (an anonymous caller on a per-user limit, a body with no identifier):
       // skip this key rather than collapsing every such caller into one shared bucket.
       if (!subject) continue;

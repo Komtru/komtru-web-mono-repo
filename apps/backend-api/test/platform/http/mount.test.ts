@@ -1,13 +1,41 @@
-import { paginatedSchema } from '@komtru/shared-types';
+import { paginatedSchema, type SessionScope } from '@komtru/shared-types';
 import request from 'supertest';
 import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import { createApp } from '../../../src/app.js';
 import { loadConfig } from '../../../src/config/env.js';
 import { mountRoutes } from '../../../src/platform/http/mount.js';
-import { defineRoute, type RouteDefinition } from '../../../src/platform/http/route.js';
+import {
+  ANONYMOUS_ACTOR,
+  actorFor,
+  type Actor,
+  type Principal,
+} from '../../../src/platform/http/principal.js';
+import { defineRoute, type RouteDefinition, type RouteScope } from '../../../src/platform/http/route.js';
 import { createLogger } from '../../../src/platform/logger.js';
 import { testRedisUrl } from '../../support/db-urls.js';
+
+/**
+ * These tests are about parsing, pagination and the gates, not about auth, so every route they
+ * mount gets a signed-in consumer. The enforcement itself has its own describe below.
+ */
+const signedIn: Actor = {
+  key: 'user:0199a2b3-c4d5-7e6f-8a9b-0c1d2e3f4a5b',
+  principal: {
+    userId: '0199a2b3-c4d5-7e6f-8a9b-0c1d2e3f4a5b',
+    publicId: 'KMT-U-7F3K9Q',
+    sessionId: '0199a2b3-c4d5-7e6f-8a9b-0c1d2e3f4a5c',
+    familyId: '0199a2b3-c4d5-7e6f-8a9b-0c1d2e3f4a5d',
+    scope: 'CONSUMER',
+    status: 'ACTIVE',
+    sessionsEpoch: 1,
+    amr: ['pwd'],
+    roles: [],
+    permissions: new Set<string>(),
+    companyMembership: null,
+  },
+};
+const asSignedIn = () => Promise.resolve(signedIn);
 
 const config = loadConfig({
   LOG_LEVEL: 'silent',
@@ -17,7 +45,12 @@ const config = loadConfig({
 const logger = createLogger(config);
 
 const appWith = (routes: RouteDefinition[], onUnexpected = () => {}) =>
-  createApp({ config, logger, onUnexpected, mountV1: mountRoutes(routes, { logger }) });
+  createApp({
+    config,
+    logger,
+    onUnexpected,
+    mountV1: mountRoutes(routes, { logger, resolveActor: asSignedIn }),
+  });
 
 const item = z.object({ id: z.uuid() });
 const ID = '0199a2b3-c4d5-7e6f-8a9b-0c1d2e3f4a5b';
@@ -221,11 +254,132 @@ describe('mountRoutes', () => {
     const app = createApp({
       config,
       logger,
-      mountV1: mountRoutes(routes, { logger, idempotency: idempotency as never }),
+      mountV1: mountRoutes(routes, {
+        logger,
+        idempotency: idempotency as never,
+        resolveActor: asSignedIn,
+      }),
     });
 
     await request(app).post('/v1/retryable').send({}).expect(200);
     await request(app).post('/v1/not-retryable').send({}).expect(200);
     expect(guarded).toEqual(['/retryable']);
+  });
+});
+
+describe('mountRoutes scope and permission enforcement', () => {
+  const probe = (scope: RouteScope, permission?: string, seen?: (actor: Actor) => void) =>
+    defineRoute({
+      method: 'get',
+      path: '/thing',
+      scope,
+      summary: 'Probe',
+      ...(permission ? { permission } : {}),
+      schema: { response: item },
+      handler: (ctx) => {
+        seen?.(ctx.actor);
+        return Promise.resolve({ id: ID });
+      },
+    });
+
+  const principal = (scope: SessionScope, permissions: string[] = []): Principal => ({
+    userId: ID,
+    publicId: 'KMT-U-7F3K9Q',
+    sessionId: '0199a2b3-c4d5-7e6f-8a9b-0c1d2e3f4a5c',
+    familyId: '0199a2b3-c4d5-7e6f-8a9b-0c1d2e3f4a5d',
+    scope,
+    status: 'ACTIVE',
+    sessionsEpoch: 1,
+    amr: ['pwd'],
+    roles: [],
+    permissions: new Set(permissions),
+    companyMembership: null,
+  });
+
+  const withActor = (routes: RouteDefinition[], actor: Actor) =>
+    createApp({
+      config,
+      logger,
+      mountV1: mountRoutes(routes, { logger, resolveActor: () => Promise.resolve(actor) }),
+    });
+
+  it('answers 401 and asks for a bearer token when a scoped route gets no credential', async () => {
+    const response = await request(withActor([probe('CONSUMER')], ANONYMOUS_ACTOR))
+      .get('/v1/thing')
+      .expect(401);
+    expect(response.body).toMatchObject({ code: 'UNAUTHENTICATED' });
+    expect(response.headers['www-authenticate']).toMatch(/^Bearer/);
+  });
+
+  it.each([
+    ['TOKEN_EXPIRED', 'TOKEN_EXPIRED'],
+    ['SESSION_REVOKED', 'SESSION_REVOKED'],
+    ['SESSION_EXPIRED', 'SESSION_REVOKED'],
+    ['EPOCH_STALE', 'SESSION_REVOKED'],
+    ['USER_INACTIVE', 'SESSION_REVOKED'],
+    ['TOKEN_INVALID', 'UNAUTHENTICATED'],
+  ] as const)(
+    'reports the %s failure as %s so the client knows whether to refresh',
+    async (failure, code) => {
+      const response = await request(withActor([probe('CONSUMER')], { ...ANONYMOUS_ACTOR, failure }))
+        .get('/v1/thing')
+        .expect(401);
+      expect(response.body).toMatchObject({ code });
+    },
+  );
+
+  it('answers 403, never 401, when a session of another scope calls the route', async () => {
+    const response = await request(withActor([probe('STAFF')], actorFor(principal('CONSUMER'))))
+      .get('/v1/thing')
+      .expect(403);
+    expect(response.body).toMatchObject({ code: 'FORBIDDEN' });
+  });
+
+  it('answers 403 without the route permission and runs the handler with it', async () => {
+    await request(withActor([probe('STAFF', 'user.suspend')], actorFor(principal('STAFF'))))
+      .get('/v1/thing')
+      .expect(403);
+    await request(withActor([probe('STAFF', 'user.suspend')], actorFor(principal('STAFF', ['user.suspend']))))
+      .get('/v1/thing')
+      .expect(200);
+  });
+
+  it('leaves a PUBLIC route anonymous rather than failing when the credential is bad', async () => {
+    const seen = vi.fn();
+    await request(
+      withActor([probe('PUBLIC', undefined, seen)], { ...ANONYMOUS_ACTOR, failure: 'TOKEN_EXPIRED' }),
+    )
+      .get('/v1/thing')
+      .expect(200);
+    expect(seen).toHaveBeenCalledWith(expect.objectContaining({ key: 'anon', principal: null }));
+  });
+
+  it('hands the handler the principal and keys on user:<id>', async () => {
+    const seen = vi.fn();
+    const actor = actorFor(principal('CONSUMER'));
+    await request(withActor([probe('CONSUMER', undefined, seen)], actor))
+      .get('/v1/thing')
+      .expect(200);
+    expect(actor.key).toBe(`user:${ID}`);
+    expect(seen).toHaveBeenCalledWith(actor);
+  });
+
+  it('refuses the request before the rate limiter spends a point on it', async () => {
+    const rateLimit = vi.fn(() => Promise.resolve());
+    const route: RouteDefinition = {
+      ...probe('STAFF'),
+      rateLimit: { points: 1, durationSeconds: 60, by: ['ip'] },
+    };
+    const app = createApp({
+      config,
+      logger,
+      mountV1: mountRoutes([route], {
+        logger,
+        rateLimit,
+        resolveActor: () => Promise.resolve(ANONYMOUS_ACTOR),
+      }),
+    });
+    await request(app).get('/v1/thing').expect(401);
+    expect(rateLimit).not.toHaveBeenCalled();
   });
 });

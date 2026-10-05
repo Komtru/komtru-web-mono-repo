@@ -371,14 +371,15 @@ describe.runIf(infraEnabled)('idempotency', () => {
         handler,
       }),
     ];
-    // The actor seam T-030 fills in: here, whoever the header says.
+    // The actor seam identity fills in (T-031): here, whoever the header says.
     const app = createApp({
       config,
       logger,
       mountV1: mountRoutes(routes, {
         logger,
         idempotency: gate,
-        resolveActor: (req) => String(req.headers['x-test-actor'] ?? 'anon'),
+        resolveActor: (req) =>
+          Promise.resolve({ key: String(req.headers['x-test-actor'] ?? 'anon'), principal: null }),
       }),
     });
 
