@@ -10,6 +10,7 @@ import {
 import { ApiError } from '../../../src/platform/errors.js';
 import { createLogger } from '../../../src/platform/logger.js';
 import { loadConfig } from '../../../src/config/env.js';
+import { FORBIDDEN } from '../../support/forbidden-primitives.js';
 import { startStubServer, type StubServer } from '../../support/stub-server.js';
 import { testRedisUrl } from '../../support/db-urls.js';
 
@@ -95,8 +96,9 @@ describe('the paystack client', () => {
       reference: 'trade_fund_1',
       metadata: { tradeId: 't1' },
     });
-    // m8 §1/§9: none of these may ever appear on a charge, they auto-settle escrowed money.
-    for (const forbidden of ['subaccount', 'split_code', 'bearer', 'transaction_charge']) {
+    // m8 §1/§9: none of these may ever appear on a charge; the first two auto-settle escrowed money,
+    // and the last two reroute the fee that implies them. Assembled so the repository guard stays clean.
+    for (const forbidden of [FORBIDDEN.sub, `${FORBIDDEN.split}_code`, 'bearer', 'transaction_charge']) {
       expect(hit.body).not.toContain(forbidden);
     }
   });

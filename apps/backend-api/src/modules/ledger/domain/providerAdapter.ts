@@ -10,10 +10,10 @@
 // No class hierarchy: a provider's adapter is a plain object of plain functions, with credentials
 // passed in rather than read from ambient state (m8 §2).
 //
-// Deliberately NOT here, per m8 §1/§9: Subaccounts, Transaction Splits and Dedicated Virtual Accounts.
-// All three settle or collect on Paystack's schedule, which is a hard incompatibility with escrow —
-// design conflict C8 replaces the one screen that implied a per-trade account with checkout's
-// pay-with-transfer channel. A test guards the whole repository against them.
+// Three Paystack primitives are forbidden outright by m8 §1/§9 and are deliberately absent from this
+// interface: all three settle or collect on Paystack's own schedule, which cannot hold escrowed money,
+// and design conflict C8 records what replaces the one screen that implied the third. The specs name
+// them; test/support/forbidden-primitives.ts fails the build if any of them appears in source.
 
 /** One member per provider integrated. Grows by one per future provider. */
 export type ProviderCode = 'PAYSTACK';

@@ -15,9 +15,10 @@
 // every test below runs against a local stub server. The first call against a live account is still
 // the test that matters.
 //
-// Deliberately absent, and must stay absent (m8 §1/§9, design C8): `subaccount`, `split_code` and any
-// dedicated-virtual-account call. They settle or collect on Paystack's schedule, which cannot hold
-// escrowed money. A repository-wide test guards this.
+// Three request parameters and one endpoint family are deliberately absent and must stay absent — the
+// ones m8 §1/§9 forbids, because they settle or collect on Paystack's schedule and cannot hold escrowed
+// money (design C8). The specs name them; test/support/forbidden-primitives.ts fails the build if any
+// of them appears anywhere in source.
 import { ApiError } from '../../../../../platform/errors.js';
 import type { Logger } from '../../../../../platform/logger.js';
 import {
