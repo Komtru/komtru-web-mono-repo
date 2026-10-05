@@ -20,7 +20,8 @@ const list = z.string().transform((v) =>
 /** One entry per environment variable: its schema and whether it may be absent. */
 const VARIABLES = {
   NODE_ENV: { schema: z.enum(NODE_ENVS), required: false },
-  PORT: { schema: int(1, 65535), required: false },
+  // 0 asks the OS for any free port (used by tests).
+  PORT: { schema: int(0, 65535), required: false },
   LOG_LEVEL: { schema: z.enum(LOG_LEVELS), required: false },
   LOG_FORMAT: { schema: z.enum(['json', 'pretty']), required: false },
   ALLOWED_ORIGINS: { schema: list, required: false },

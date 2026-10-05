@@ -1,2 +1,5 @@
-/** Placeholder until this workspace's own ticket replaces it. */
-export const workspace = '@komtru/backend-api' as const;
+// API process entrypoint. Run with `node --env-file-if-exists=.env dist/index.js`.
+import { runProcess } from './platform/run.js';
+import { startApi } from './server.js';
+
+await runProcess(() => startApi(process.env));

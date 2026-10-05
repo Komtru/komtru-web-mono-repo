@@ -7,11 +7,16 @@ import path from 'node:path';
 const MODULES_SEGMENT = `${path.sep}src${path.sep}modules${path.sep}`;
 const INDEX_FILES = new Set(['index.js', 'index.ts', 'index']);
 
-/** `/…/src/modules/trades/services/a.ts` → { module: 'trades', rest: 'services/a.ts' }, else null. */
+/**
+ * `/…/src/modules/trades/services/a.ts` → { module: 'trades', rest: 'services/a.ts' }.
+ * Returns null outside src/modules, and for files directly in src/modules (the registry, index.ts),
+ * which belong to no module.
+ */
 function locate(file) {
   const at = file.lastIndexOf(MODULES_SEGMENT);
   if (at === -1) return null;
   const [module, ...rest] = file.slice(at + MODULES_SEGMENT.length).split(path.sep);
+  if (rest.length === 0) return null;
   return { module, rest: rest.join('/') };
 }
 

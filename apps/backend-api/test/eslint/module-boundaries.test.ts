@@ -23,6 +23,7 @@ tester.run('module-boundaries', moduleBoundaries, {
     { filename: inTrades, code: "import { z } from 'zod';" },
     { filename: `${root}/modules/index.ts`, code: "import { trades } from './trades/index.js';" },
     { filename: inPlatform, code: "import type { Router } from 'express';" },
+    { filename: `${root}/server.ts`, code: "import { modules } from './modules/index.js';" },
   ],
   invalid: [
     {
