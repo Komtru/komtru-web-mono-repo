@@ -74,3 +74,16 @@ over the same template database — one drops it while the other is cloning from
 makes leftovers obvious: `DROP DATABASE` anything matching your prefix when you are done.
 
 Redis database 0 belongs to the local dev app. Give each parallel run a number from 1 to 15.
+
+## 5. The visual-check harness
+
+Every screen ticket ends by running the harness against each screen it owns:
+
+```bash
+pnpm visual-check --screen U4 --url http://localhost:3004/handover/KMT-88213
+```
+
+It needs the browser from step 2 and nothing else — the three brand webfonts travel with the tool,
+so a diff never shows a typography delta the reference never had. `docs/ui-review/README.md` is the
+full account: what it compares, the four frame widths it reads out of the reference, which artefacts
+are committed (the `.md` deviation lists) and which are not (the PNGs).

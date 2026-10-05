@@ -23,6 +23,9 @@ storybook-static/
 playwright-report/
 test-results/
 docs/ui-review/**/artifacts/
+# Visual-check screenshots: regenerated on every run, of a page that changes every commit. The
+# deviation lists beside them (docs/ui-review/**/*.md) are the committed half of the review.
+docs/ui-review/**/*.png
 
 # ---- OS / editor -----------------------------------------------------------
 .DS_Store

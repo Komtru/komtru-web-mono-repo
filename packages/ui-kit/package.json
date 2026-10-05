@@ -15,7 +15,8 @@
       "types": "./dist/fonts.d.ts",
       "default": "./dist/fonts.js"
     },
-    "./tokens.css": "./src/tokens.css"
+    "./tokens.css": "./src/tokens.css",
+    "./extract-tokens": "./scripts/extract-tokens.ts"
   },
   "scripts": {
     "build": "tsc -p tsconfig.build.json",

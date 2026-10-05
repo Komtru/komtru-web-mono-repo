@@ -48,6 +48,15 @@ jobs:
         # own changed. This is the suite that checks the repository itself: env templates, commit
         # rules, secret hygiene, the workflows in this directory and the screen index.
         run: pnpm test:repo
+      - name: Browser-gated suites
+        # The visual-check harness and the Playwright smoke test are gated on KOMTRU_BROWSER_TESTS=1
+        # so a fresh checkout without browsers stays green. Nothing else sets it, so without this
+        # step the only thing proving the harness still takes a correct screenshot never runs.
+        run: |
+          pnpm browsers:install
+          pnpm test:browser
+          KOMTRU_BROWSER_TESTS=1 pnpm exec turbo run test --filter=@komtru/visual-check --force
+
       - name: Every workspace package
         # Unfiltered, so a package no app imports yet is still linted, typechecked, tested and
         # built. Turbo's cache makes this cheap once the app workflows have run.
