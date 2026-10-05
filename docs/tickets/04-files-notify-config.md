@@ -1,0 +1,52 @@
+# Epic 04 — Files, notifications, configuration
+
+---
+
+### T-040 — Files and evidence (M20)
+
+- **Touches:** `src/modules/files/**`, migration `files_*`
+- **Depends on:** T-031, T-028, T-026
+- **Cannibalized:** `files/infrastructure/cloudinary.ts`, `files/domain/rotation.ts`, `files/domain/pools.ts` (T-001)
+- **Acceptance criteria:**
+  - `storage_accounts` seeded from the five Cloudinary credential prefixes in the reused `.env`; pools `PROFILE`, `CHAT_ATTACHMENT`, `TRADE_ASSET` (three rotated accounts).
+  - `POST /files/upload-url` returns signed params for a direct-to-Cloudinary `authenticated` upload with an opaque `public_id`; `POST /files/:id/finalize` reconciles size and type via a job; `GET /files/:id` returns a short-lived signed URL after the visibility check (`PUBLIC`, `PRIVATE_OWNER`, `PRIVATE_CASE` via `file_access_grants`, `INTERNAL_ONLY`).
+  - Every access decision for `KYC_DOCUMENT`, `DISPUTE_EVIDENCE` and `CUSTODY_EVIDENCE` (new category for Park photos, in the trade-asset pool) is written to `file_access_log`.
+  - Tombstoning destroys the asset via a job and keeps the row resolvable.
+  - Usage-sync scheduled job marks accounts `NEAR_QUOTA`/`DISABLED` and emits the storage-account events.
+  - Camera-capture metadata (server-received timestamp, uploader, hub id when present) stored with the record; the client's clock is never trusted.
+
+### T-041 — Avatars
+
+- **Touches:** `identity/services/avatar.service.ts`, `identity/http/me.controller.ts`
+- **Depends on:** T-040, T-030
+- **Acceptance criteria:** `POST /me/avatar { fileId }` and `DELETE /me/avatar` per M1 D7; `avatar_file_id` resolved to a signed URL at read time; provider avatars imported server-side through the same flow.
+
+### T-045 — Notifications delivery pipeline (M11)
+
+- **Touches:** `src/modules/notify/**`, migration `notify_*`
+- **Depends on:** T-024, T-028
+- **Acceptance criteria:**
+  - Templates as data with versions and locales; event-to-template mappings; one `notifications` row per send; attempt history.
+  - Send jobs on BullMQ with backoff and up to `NOTIFY_MAX_ATTEMPTS`; dead-lettered security notifications publish `notification.dead_lettered` (support opens a ticket in T-100).
+  - Security-critical templates bypass preferences and rate limits; others respect per-category, per-channel preferences (NP1) and per-user caps.
+  - Adapters: Mailjet (email), Termii (SMS), FCM (push); IN_APP feed (`GET /notifications`, mark-read) also pushed over the socket.
+  - Identity templates (OTP, new-device, password changed, session reuse) seeded; every later module ticket adds its own templates and mappings.
+
+### T-048 — Configuration (M17)
+
+- **Touches:** `src/modules/config/**`, migration `config_*`
+- **Depends on:** T-024, T-037
+- **Acceptance criteria:**
+  - `platform_settings` (namespace, key), `feature_flags`, append-only `config_change_log`; typed accessor with Redis cache invalidated by `config.setting_changed`.
+  - Seeds: every M17 §4 default, plus `park.handling_fee_minor = 30000`, `ledger.buyer_protection_fee_bps = 150`, `disputes.mediation_window_hours = 48`, `park.custody_ageing_hours = 48`, `park.pin_max_attempts = 3`, `trades.payment_deadline_hours`, `trades.delivery_deadline_days`.
+  - Admin endpoints per M17 §6 behind permissions; every change requires a reason and writes the change log and admin action log.
+  - Test: changing the Park fee affects the next release posting only, never past ones.
+
+### T-049 — Trade Standards by category
+
+- **Touches:** `config` schema `trade_standards`, `trade_categories`; `config/http/standards.controller.ts`
+- **Depends on:** T-048
+- **Acceptance criteria:**
+  - Launch categories Electronics and Fashion (HTML K1). Per category: inspection window hours, required item-spec fields (brand, model, serial/IMEI, condition for electronics), proof-media requirements for seller acceptance, whether IMEI verification applies, delivery deadline default.
+  - Read API for the CTS1 screen and for trade creation; changes are versioned and a trade snapshots the standard version it was created under.
+  - The only direction a buyer can move a window is longer (BEI1), capped by a config maximum.

@@ -1,0 +1,36 @@
+# ---- Secrets: never committed -------------------------------------------
+# The live backend credentials file mined from the old backend-apis repo.
+docs/specs/backend-apis.env
+*.env
+.env
+.env.*
+!.env.example
+!**/.env.example
+
+# ---- Dependencies & build output ------------------------------------------
+node_modules/
+.pnpm-store/
+dist/
+build/
+.next/
+out/
+coverage/
+.turbo/
+*.tsbuildinfo
+storybook-static/
+
+# ---- Test & tooling artifacts --------------------------------------------
+playwright-report/
+test-results/
+docs/ui-review/**/artifacts/
+
+# ---- OS / editor -----------------------------------------------------------
+.DS_Store
+.idea/
+.vscode/*
+!.vscode/extensions.json
+*.log
+
+# Originals kept at the repo root for the owner; the tracked copies live under docs/.
+/Komtru — UI Screens Living Master File.html
+/Kumtru — Master Build Prompt for Claude Code.md
