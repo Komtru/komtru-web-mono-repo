@@ -28,6 +28,7 @@ Every ticket in this file runs before feature work. Design reference: `docs/supe
 
 ### T-002 — Monorepo scaffold and shared config
 
+- **Status:** Done (2026-10-05). Plan: `docs/superpowers/plans/2026-10-05-t-002-monorepo-scaffold.md`.
 - **Touches:** `package.json`, `pnpm-workspace.yaml`, `turbo.json`, `.nvmrc`, `.npmrc`, `packages/config/**`, `.husky/**`, `commitlint.config.mjs`, `.editorconfig`, `README.md`, empty `apps/*` and `packages/*` with placeholder `package.json`
 - **Depends on:** T-001
 - **Decisions recorded here:** pnpm everywhere (the backend leaves Yarn), Turborepo, Node 22, Vitest, ESLint 9 flat config plus Prettier 3 (design §3.1).
