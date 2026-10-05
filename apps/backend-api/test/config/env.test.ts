@@ -44,6 +44,14 @@ describe('loadConfig', () => {
     });
   });
 
+  it('schedules in Africa/Lagos unless told otherwise, and rejects an unknown timezone', () => {
+    expect(loadConfig(minimal).scheduler.timezone).toBe('Africa/Lagos');
+    expect(loadConfig({ ...minimal, SCHEDULER_TIMEZONE: 'UTC' }).scheduler.timezone).toBe('UTC');
+    expect(failure({ ...minimal, SCHEDULER_TIMEZONE: 'Mars/Olympus' }).invalid).toEqual([
+      'SCHEDULER_TIMEZONE',
+    ]);
+  });
+
   it('logs JSON in production by default', () => {
     expect(loadConfig({ ...minimal, NODE_ENV: 'production' }).log.format).toBe('json');
   });

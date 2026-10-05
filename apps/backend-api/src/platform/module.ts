@@ -3,7 +3,15 @@
 // other only through their index.ts (enforced by eslint-rules/module-boundaries.mjs).
 import type { Router } from 'express';
 import type { HealthCheck } from './health.js';
+import type { QueueDefinition, QueueFactory } from './queue/factory.js';
+import type { ScheduledJob } from './scheduler/registry.js';
 import type { Closer } from './shutdown.js';
+
+/** What a module gets at start. */
+export interface ModuleContext {
+  /** Producers work in every process; consumers run only in the worker. */
+  queues: QueueFactory;
+}
 
 export interface KomtruModule {
   name: string;
@@ -11,8 +19,12 @@ export interface KomtruModule {
   routes?: (router: Router) => void;
   /** Extra readiness checks the module needs (beyond Postgres and Redis). */
   healthChecks?: HealthCheck[];
-  /** Runs at process start, in registry order (e.g. subscribing to events, starting workers). */
-  start?: () => Promise<void>;
+  /** Queues this module consumes; the worker runs them, every process can produce to them. */
+  queues?: QueueDefinition<never>[];
+  /** Recurring jobs (`module.job-name`, cron in Africa/Lagos); only the worker schedules them. */
+  schedules?: ScheduledJob[];
+  /** Runs at process start, in registry order (e.g. subscribing to events). */
+  start?: (ctx: ModuleContext) => Promise<void>;
   /** Runs at shutdown, in reverse registry order. */
   stop?: () => Promise<void>;
 }

@@ -1,9 +1,10 @@
 // Connections to Postgres (through PgBouncer) and Redis, shared by the whole process.
 // T-021 and T-023 build the database and queue layers on these; this file only creates and closes them.
-import { Redis } from 'ioredis';
+import type { Redis } from 'ioredis';
 import pg from 'pg';
 import type { AppConfig } from '../config/env.js';
 import type { HealthCheck } from './health.js';
+import { createRedis } from './redis/connections.js';
 
 export interface Clients {
   pool: pg.Pool;
@@ -22,12 +23,7 @@ export function createClients(config: AppConfig): Clients {
   // An idle client erroring (e.g. the server restarting) must not crash the process.
   pool.on('error', () => {});
 
-  const redis = new Redis(config.redis.url, {
-    lazyConnect: false,
-    maxRetriesPerRequest: 1,
-    enableOfflineQueue: false,
-  });
-  redis.on('error', () => {});
+  const redis = createRedis(config.redis.url);
 
   return {
     pool,

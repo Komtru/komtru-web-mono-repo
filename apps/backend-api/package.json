@@ -38,8 +38,10 @@
   "dependencies": {
     "@komtru/shared-types": "workspace:*",
     "@sentry/node": "11.4.0",
+    "bullmq": "6.3.11",
     "compression": "1.8.2",
     "cors": "2.8.6",
+    "cron-parser": "5.10.1",
     "drizzle-orm": "0.45.3",
     "express": "5.2.1",
     "helmet": "8.3.0",
