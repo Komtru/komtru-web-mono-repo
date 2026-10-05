@@ -2,8 +2,10 @@
   "extends": "@komtru/config/tsconfig/library.json",
   "compilerOptions": {
     "declaration": true,
+    "lib": ["ES2023", "DOM", "DOM.Iterable"],
+    "jsx": "react-jsx",
     "types": ["node"]
   },
   "include": ["src"],
-  "exclude": ["src/**/*.test.ts"]
+  "exclude": ["src/**/*.test.ts", "src/**/*.test.tsx"]
 }
