@@ -1,5 +1,5 @@
 {
-  "id": "101c8a61-682c-45da-9fdd-7a856312c73c",
+  "id": "91d39172-5bc2-4e55-bb5c-1941fbf009b2",
   "prevId": "f26692b4-ee1b-4109-b328-da58874baceb",
   "version": "7",
   "dialect": "postgresql",
@@ -75,6 +75,13 @@
           "primaryKey": false,
           "notNull": true
         },
+        "created_xid": {
+          "name": "created_xid",
+          "type": "xid8",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "pg_current_xact_id()"
+        },
         "published_at": {
           "name": "published_at",
           "type": "timestamp with time zone",
@@ -117,6 +124,7 @@
             }
           ],
           "isUnique": false,
+          "where": "\"platform\".\"outbox\".\"published_at\" IS NOT NULL",
           "concurrently": false,
           "method": "btree",
           "with": {}

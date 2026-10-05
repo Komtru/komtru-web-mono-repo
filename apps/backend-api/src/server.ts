@@ -8,6 +8,7 @@ import { createClients, postgresCheck, redisCheck } from './platform/clients.js'
 import { healthRoutes } from './platform/health.js';
 import { createLogger } from './platform/logger.js';
 import { createEventBus } from './platform/events/bus.js';
+import { createInProcessEmitter } from './platform/events/emitter.js';
 import { createQueueFactory } from './platform/queue/factory.js';
 import { moduleClosers, moduleHealthChecks, mountModules, type KomtruModule } from './platform/module.js';
 import { initSentry } from './platform/sentry.js';
@@ -43,9 +44,10 @@ export async function startApi(
   const queues = createQueueFactory({ redisUrl: config.redis.url, logger });
   const db = createDb(clients.pool);
   const events = createEventBus({ db, queues, logger, role: 'api' });
+  const emitter = createInProcessEmitter(logger);
   for (const definition of modules.flatMap((m) => m.queues ?? [])) queues.define(definition);
   try {
-    for (const module of modules) await module.start?.({ queues, events, db });
+    for (const module of modules) await module.start?.({ queues, events, emitter, db });
   } catch (error) {
     await gracefulShutdown({
       closers: [

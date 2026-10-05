@@ -6,6 +6,7 @@
 // the row and does nothing; a handler that throws takes its marker down with its writes, so the
 // retry runs the whole thing again.
 import { eventEnvelopeSchema, type EventDefinition, type EventEnvelope } from '@komtru/shared-types';
+import { UnrecoverableError } from 'bullmq';
 import { and, eq } from 'drizzle-orm';
 import type { z } from 'zod';
 import type { Db } from '../../db/index.js';
@@ -25,8 +26,10 @@ export interface EventSubscription<S extends z.ZodType = z.ZodType> {
   handler: (envelope: EventEnvelope<z.output<S>>, tx: Tx) => Promise<void>;
   attempts?: number;
   /**
-   * One at a time by default: the relay enqueues an aggregate's events in order, and a concurrent
-   * worker would undo that. Raise it only for a handler whose order does not matter.
+   * One at a time by default, so a subscriber's queue is worked in the order the relay enqueued it.
+   * Note this is not an ordering guarantee: a failed job waits out its backoff while BullMQ runs
+   * the next one, so a handler must be commutative or carry its own guard. Raise it only for a
+   * handler whose order plainly does not matter.
    */
   concurrency?: number;
 }
@@ -73,6 +76,12 @@ export function createEventBus({ db, queues, logger, role }: EventBusOptions): E
       concurrency: subscription.concurrency ?? 1,
       process: async (data) => {
         const envelope = eventEnvelopeSchema.parse(data);
+        if (envelope.version !== event.version) {
+          // Deterministic: retrying it five times only delays the dead-letter and its alert.
+          throw new UnrecoverableError(
+            `event ${envelope.eventType} v${envelope.version} reached '${name}', which handles v${event.version}`,
+          );
+        }
         const payload = event.payload.parse(envelope.payload);
         await db.transaction(async (tx) => {
           const claimed = await tx

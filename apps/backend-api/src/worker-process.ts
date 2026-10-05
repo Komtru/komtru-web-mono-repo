@@ -7,6 +7,7 @@ import { modules as registry } from './modules/index.js';
 import { createClients } from './platform/clients.js';
 import { createLogger } from './platform/logger.js';
 import { createEventBus } from './platform/events/bus.js';
+import { createInProcessEmitter } from './platform/events/emitter.js';
 import { publishInOwnTransaction } from './platform/events/publish.js';
 import { startOutboxRelay, type RunningRelay } from './platform/events/relay.js';
 import { createQueueFactory } from './platform/queue/factory.js';
@@ -56,6 +57,7 @@ export async function startWorker(
     },
   });
   const events = createEventBus({ db, queues, logger, role: 'worker' });
+  const emitter = createInProcessEmitter(logger);
   let scheduler: RunningScheduler | undefined;
   let relay: RunningRelay | undefined;
   try {
@@ -64,7 +66,7 @@ export async function startWorker(
       for (const definition of module.queues ?? []) queues.consume(definition);
       for (const job of module.schedules ?? []) registry.register(job);
     }
-    for (const module of modules) await module.start?.({ queues, events, db });
+    for (const module of modules) await module.start?.({ queues, events, emitter, db });
     scheduler = await startScheduler({
       registry,
       redisUrl: config.redis.url,
@@ -76,10 +78,9 @@ export async function startWorker(
     relay = startOutboxRelay({ db, bus: events, queues, logger });
   } catch (error) {
     // Nothing was consumed yet (consumers start only below); release everything that was opened.
-    const startingRelay = relay;
     await gracefulShutdown({
+      // The relay is started on the last line of the try, so it cannot be running here.
       closers: [
-        ...(startingRelay ? [{ name: 'events-relay', close: () => startingRelay.stop() }] : []),
         { name: 'queues', close: () => queues.close() },
         ...moduleClosers(modules),
         { name: 'clients', close: () => clients.close() },

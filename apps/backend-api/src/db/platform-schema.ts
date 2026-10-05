@@ -3,6 +3,7 @@
 import { sql } from 'drizzle-orm';
 import {
   bigserial,
+  customType,
   index,
   integer,
   jsonb,
@@ -14,6 +15,9 @@ import {
 } from 'drizzle-orm/pg-core';
 
 export const platform = pgSchema('platform');
+
+/** Postgres's 64-bit transaction id. The relay compares it against the current snapshot's xmin. */
+const xid8 = customType<{ data: string; driverData: string }>({ dataType: () => 'xid8' });
 
 /**
  * One row per domain event, written in the same transaction as the state change that caused it.
@@ -36,6 +40,14 @@ export const outbox = platform.table(
     causationId: uuid('causation_id'),
     actor: jsonb('actor').notNull(),
     payload: jsonb('payload').notNull(),
+    /**
+     * The transaction that wrote the row. `seq` is handed out at INSERT, so a slow transaction can
+     * commit a lower seq after a faster one; the relay publishes a row only once this xid is older
+     * than every transaction still running, after which no older row can still appear.
+     */
+    createdXid: xid8('created_xid')
+      .notNull()
+      .default(sql`pg_current_xact_id()`),
     publishedAt: timestamp('published_at', { withTimezone: true }),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
@@ -44,7 +56,11 @@ export const outbox = platform.table(
     index('outbox_unpublished_idx')
       .on(table.seq)
       .where(sql`${table.publishedAt} IS NULL`),
-    index('outbox_published_at_idx').on(table.publishedAt),
+    // Only the pruner reads this, and only published rows: partial, so the hot insert path pays
+    // nothing for it.
+    index('outbox_published_at_idx')
+      .on(table.publishedAt)
+      .where(sql`${table.publishedAt} IS NOT NULL`),
   ],
 );
 

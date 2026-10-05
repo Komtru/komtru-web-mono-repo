@@ -1,13 +1,19 @@
 // The outbox relay against a real database, with the queue factory stubbed. Skipped unless KOMTRU_INFRA_TESTS=1.
 import { defineEvent, type EventEnvelope } from '@komtru/shared-types';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import { loadConfig } from '../../../src/config/env.js';
 import { createEventBus } from '../../../src/platform/events/bus.js';
 import { publish } from '../../../src/platform/events/publish.js';
-import { startOutboxRelay, type RunningRelay } from '../../../src/platform/events/relay.js';
+import { outboxMetrics } from '../../../src/platform/events/metrics.js';
+import {
+  OUTBOX_RELAY_LOCK_KEY,
+  startOutboxRelay,
+  type RunningRelay,
+} from '../../../src/platform/events/relay.js';
 import { createLogger } from '../../../src/platform/logger.js';
 import type { QueueDefinition, QueueFactory } from '../../../src/platform/queue/factory.js';
+import { eventually } from '../../support/eventually.js';
 import { infraEnabled } from '../../support/db-urls.js';
 import { useTestDatabase } from '../../support/db.js';
 
@@ -34,32 +40,49 @@ interface Enqueued {
   options: { jobId?: string };
 }
 
-/** Records every enqueue; `failOnce` makes the next one throw, as a Redis outage would. */
+interface BulkJob {
+  name: string;
+  data: Enqueued['envelope'];
+  opts: Enqueued['options'];
+}
+
+/** Records every enqueue; `failNext` makes the next addBulk throw, as a Redis outage would. */
 const stubQueues = () => {
   const enqueued: Enqueued[] = [];
+  const bulkSizes: number[] = [];
   let failures = 0;
+  let hang = false;
   const factory = {
     define: () => {},
     consume: (definition: QueueDefinition<unknown>) => definition as never,
     producer: (queue: string) => ({
-      add: (_name: string, envelope: Enqueued['envelope'], options: Enqueued['options']) => {
+      addBulk: (jobs: BulkJob[]) => {
+        if (hang) return new Promise(() => {}); // a Redis that accepts the call and never answers
         if (failures > 0) {
           failures -= 1;
           return Promise.reject(new Error('redis unavailable'));
         }
-        enqueued.push({ queue, envelope, options });
-        return Promise.resolve({});
+        bulkSizes.push(jobs.length);
+        for (const job of jobs) enqueued.push({ queue, envelope: job.data, options: job.opts });
+        return Promise.resolve([]);
       },
     }),
     run: () => {},
     close: async () => {},
   } as unknown as QueueFactory;
-  return { factory, enqueued, failNext: (times = 1) => (failures = times) };
+  return {
+    factory,
+    enqueued,
+    bulkSizes,
+    failNext: (times = 1) => (failures = times),
+    hangForever: () => (hang = true),
+  };
 };
 
 describe.runIf(infraEnabled)('outbox relay', () => {
   const t = useTestDatabase();
   let relay: RunningRelay | undefined;
+  beforeEach(() => outboxMetrics.reset());
   afterEach(async () => {
     await relay?.stop();
     relay = undefined;
@@ -91,7 +114,14 @@ describe.runIf(infraEnabled)('outbox relay', () => {
     const queues = stubQueues();
     const bus = busWith(queues.factory, ['ledger.on-trade-completed', 'notify.on-trade-completed']);
     const envelope = await emit(1);
-    relay = startOutboxRelay({ db: t.db(), bus, queues: queues.factory, logger, pollMs: 0 });
+    relay = startOutboxRelay({
+      db: t.db(),
+      bus,
+      queues: queues.factory,
+      logger,
+      pollMs: 0,
+      watermarkTimeoutMs: 0,
+    });
 
     expect(await relay.tick()).toBe(1);
 
@@ -118,7 +148,14 @@ describe.runIf(infraEnabled)('outbox relay', () => {
     const queues = stubQueues();
     const bus = busWith(queues.factory, ['ledger.on-trade-completed']);
     await t.db().transaction((tx) => publish(tx, unwatched, { payload: { userId: TRADE_ID } }));
-    relay = startOutboxRelay({ db: t.db(), bus, queues: queues.factory, logger, pollMs: 0 });
+    relay = startOutboxRelay({
+      db: t.db(),
+      bus,
+      queues: queues.factory,
+      logger,
+      pollMs: 0,
+      watermarkTimeoutMs: 0,
+    });
 
     expect(await relay.tick()).toBe(1);
     expect(queues.enqueued).toHaveLength(0);
@@ -129,20 +166,35 @@ describe.runIf(infraEnabled)('outbox relay', () => {
     const queues = stubQueues();
     const bus = busWith(queues.factory, ['ledger.on-trade-completed']);
     for (const step of [1, 2, 3]) await emit(step);
-    relay = startOutboxRelay({ db: t.db(), bus, queues: queues.factory, logger, pollMs: 0 });
+    relay = startOutboxRelay({
+      db: t.db(),
+      bus,
+      queues: queues.factory,
+      logger,
+      pollMs: 0,
+      watermarkTimeoutMs: 0,
+    });
 
     expect(await relay.tick()).toBe(3);
     expect(queues.enqueued.map((e) => e.envelope.payload.step)).toEqual([1, 2, 3]);
   });
 
-  it('leaves the row unpublished when the enqueue fails, and stops the batch there', async () => {
+  it('leaves the batch unpublished when the enqueue fails', async () => {
     const queues = stubQueues();
     const bus = busWith(queues.factory, ['ledger.on-trade-completed']);
     for (const step of [1, 2]) await emit(step);
-    relay = startOutboxRelay({ db: t.db(), bus, queues: queues.factory, logger, pollMs: 0 });
+    relay = startOutboxRelay({
+      db: t.db(),
+      bus,
+      queues: queues.factory,
+      logger,
+      pollMs: 0,
+      watermarkTimeoutMs: 0,
+    });
     queues.failNext();
 
-    expect(await relay.tick()).toBe(0);
+    // The tick fails rather than publishing half a batch; the loop counts it and backs off.
+    await expect(relay.tick()).rejects.toThrow('redis unavailable');
     expect(queues.enqueued).toHaveLength(0);
     expect(await unpublished()).toBe(2);
 
@@ -156,7 +208,14 @@ describe.runIf(infraEnabled)('outbox relay', () => {
     const bus = busWith(queues.factory, ['ledger.on-trade-completed']);
     await emit(1);
     await emit(2);
-    relay = startOutboxRelay({ db: t.db(), bus, queues: queues.factory, logger, pollMs: 0 });
+    relay = startOutboxRelay({
+      db: t.db(),
+      bus,
+      queues: queues.factory,
+      logger,
+      pollMs: 0,
+      watermarkTimeoutMs: 0,
+    });
 
     const locker = await t.app().connect();
     try {
@@ -182,6 +241,7 @@ describe.runIf(infraEnabled)('outbox relay', () => {
       queues: queues.factory,
       logger,
       pollMs: 0,
+      watermarkTimeoutMs: 0,
       outboxRetentionDays: 14,
       processedRetentionDays: 30,
     });
@@ -210,10 +270,192 @@ describe.runIf(infraEnabled)('outbox relay', () => {
     expect(markers[0]?.n).toBe(0);
   });
 
+  it('waits for an older uncommitted transaction before publishing a newer event', async () => {
+    // seq is handed out at INSERT, not at COMMIT: without a commit watermark the relay would
+    // publish the later event first and invert the order of two events on one aggregate.
+    const queues = stubQueues();
+    const bus = busWith(queues.factory, ['ledger.on-trade-completed']);
+    relay = startOutboxRelay({
+      db: t.db(),
+      bus,
+      queues: queues.factory,
+      logger,
+      pollMs: 0,
+      // Long enough that the first tick cannot bypass the watermark, short enough that an unrelated
+      // long transaction elsewhere on the instance (other test databases, a dump) cannot wedge the
+      // test: the bounded wait is itself part of the contract.
+      watermarkTimeoutMs: 2_000,
+    });
+
+    const slow = await t.app().connect();
+    try {
+      await slow.query('BEGIN');
+      await slow.query(
+        `INSERT INTO platform.outbox (event_id, event_type, version, aggregate_type, aggregate_id, actor, payload)
+         VALUES (gen_random_uuid(), 'trades.trade.completed', 1, 'trade', $1, '{"type":"SYSTEM"}'::jsonb, $2::jsonb)`,
+        [TRADE_ID, JSON.stringify({ tradeId: TRADE_ID, step: 1 })],
+      );
+      await emit(2); // later seq, commits first
+
+      expect(await relay.tick()).toBe(0);
+      expect(queues.enqueued).toHaveLength(0);
+
+      await slow.query('COMMIT');
+    } finally {
+      slow.release();
+    }
+
+    const running = relay;
+    await eventually(async () => (await running.tick()) > 0, 15_000);
+    expect(queues.enqueued.map((e) => e.envelope.payload.step)).toEqual([1, 2]);
+    expect(await unpublished()).toBe(0);
+  }, 30_000);
+
+  it('runs one relay at a time across the fleet', async () => {
+    const queues = stubQueues();
+    const bus = busWith(queues.factory, ['ledger.on-trade-completed']);
+    await emit(1);
+    relay = startOutboxRelay({
+      db: t.db(),
+      bus,
+      queues: queues.factory,
+      logger,
+      pollMs: 0,
+      watermarkTimeoutMs: 0,
+    });
+
+    const other = await t.app().connect();
+    try {
+      await other.query('BEGIN');
+      await other.query('SELECT pg_advisory_xact_lock($1)', [OUTBOX_RELAY_LOCK_KEY]);
+
+      // Another worker holds the relay lock: this tick does nothing rather than racing it.
+      expect(await relay.tick()).toBe(0);
+      expect(queues.enqueued).toHaveLength(0);
+
+      await other.query('ROLLBACK');
+    } finally {
+      other.release();
+    }
+    expect(await relay.tick()).toBe(1);
+  });
+
+  it('enqueues a subscriber queue in one round trip', async () => {
+    const queues = stubQueues();
+    const bus = busWith(queues.factory, ['ledger.on-trade-completed', 'notify.on-trade-completed']);
+    for (const step of [1, 2, 3]) await emit(step);
+    relay = startOutboxRelay({
+      db: t.db(),
+      bus,
+      queues: queues.factory,
+      logger,
+      pollMs: 0,
+      watermarkTimeoutMs: 0,
+    });
+
+    expect(await relay.tick()).toBe(3);
+    // One call per subscriber queue, not one per event: the Postgres transaction stays open for
+    // two Redis round trips instead of six.
+    expect(queues.bulkSizes).toEqual([3, 3]);
+  });
+
+  it('abandons the tick when Redis accepts the call and never answers', async () => {
+    const queues = stubQueues();
+    const bus = busWith(queues.factory, ['ledger.on-trade-completed']);
+    await emit(1);
+    relay = startOutboxRelay({
+      db: t.db(),
+      bus,
+      queues: queues.factory,
+      logger,
+      pollMs: 0,
+      watermarkTimeoutMs: 0,
+      enqueueTimeoutMs: 150,
+    });
+    queues.hangForever();
+
+    await expect(relay.tick()).rejects.toThrow(/enqueue/i);
+    expect(await unpublished()).toBe(1);
+  });
+
+  it('marks a malformed row published rather than blocking every event behind it', async () => {
+    const queues = stubQueues();
+    const bus = busWith(queues.factory, ['ledger.on-trade-completed']);
+    await t.app().query(
+      `INSERT INTO platform.outbox (event_id, event_type, version, actor, payload)
+       VALUES (gen_random_uuid(), 'trades.trade.completed', 1, '"not-an-actor"'::jsonb, '{}'::jsonb)`,
+    );
+    await emit(1);
+    relay = startOutboxRelay({
+      db: t.db(),
+      bus,
+      queues: queues.factory,
+      logger,
+      pollMs: 0,
+      watermarkTimeoutMs: 0,
+    });
+
+    expect(await relay.tick()).toBe(2);
+    expect(queues.enqueued.map((e) => e.envelope.payload.step)).toEqual([1]);
+    expect(await unpublished()).toBe(0);
+    expect(outboxMetrics.snapshot().unprocessable).toBe(1);
+  });
+
+  it('reports the backlog so an alert can see events stop flowing', async () => {
+    const queues = stubQueues();
+    const bus = busWith(queues.factory, ['ledger.on-trade-completed']);
+    for (const step of [1, 2]) await emit(step);
+    relay = startOutboxRelay({
+      db: t.db(),
+      bus,
+      queues: queues.factory,
+      logger,
+      pollMs: 0,
+      watermarkTimeoutMs: 0,
+    });
+
+    await relay.measureBacklog();
+    expect(outboxMetrics.snapshot().backlog).toBe(2);
+    expect(outboxMetrics.snapshot().oldestUnpublishedAgeMs).toBeGreaterThanOrEqual(0);
+
+    await relay.tick();
+    await relay.measureBacklog();
+    expect(outboxMetrics.snapshot().backlog).toBe(0);
+    expect(outboxMetrics.snapshot().oldestUnpublishedAgeMs).toBeNull();
+  });
+
+  it('prunes more rows than one batch holds', async () => {
+    const queues = stubQueues();
+    const bus = busWith(queues.factory, []);
+    for (let step = 0; step < 5; step += 1) await emit(step);
+    relay = startOutboxRelay({
+      db: t.db(),
+      bus,
+      queues: queues.factory,
+      logger,
+      pollMs: 0,
+      watermarkTimeoutMs: 0,
+      pruneBatchSize: 2,
+    });
+    await relay.tick();
+    await t.app().query(`UPDATE platform.outbox SET published_at = now() - interval '20 days'`);
+
+    expect((await relay.prune()).outbox).toBe(5);
+    const { rows } = await t.app().query<{ n: number }>('SELECT count(*)::int AS n FROM platform.outbox');
+    expect(rows[0]?.n).toBe(0);
+  });
+
   it('polls on its own until stopped', async () => {
     const queues = stubQueues();
     const bus = busWith(queues.factory, ['ledger.on-trade-completed']);
-    relay = startOutboxRelay({ db: t.db(), bus, queues: queues.factory, logger, pollMs: 10 });
+    relay = startOutboxRelay({
+      db: t.db(),
+      bus,
+      queues: queues.factory,
+      logger,
+      pollMs: 10,
+      watermarkTimeoutMs: 0,
+    });
     await emit(1);
 
     await vi.waitFor(() => expect(queues.enqueued).toHaveLength(1), { timeout: 5000 });

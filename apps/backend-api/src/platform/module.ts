@@ -4,6 +4,7 @@
 import type { Router } from 'express';
 import type { Db } from '../db/index.js';
 import type { EventBus } from './events/bus.js';
+import type { InProcessEmitter } from './events/emitter.js';
 import type { HealthCheck } from './health.js';
 import type { QueueDefinition, QueueFactory } from './queue/factory.js';
 import type { ScheduledJob } from './scheduler/registry.js';
@@ -15,6 +16,8 @@ export interface ModuleContext {
   queues: QueueFactory;
   /** Publish inside a caller's transaction; subscribe in start() (handlers run in the worker). */
   events: EventBus;
+  /** In-process only, lossy by design: cache invalidation and socket fan-out, nothing durable. */
+  emitter: InProcessEmitter;
   /** The runtime pool, as komtru_app through PgBouncer. */
   db: Db;
 }

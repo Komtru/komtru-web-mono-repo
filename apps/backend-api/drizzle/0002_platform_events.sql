@@ -10,6 +10,7 @@ CREATE TABLE "platform"."outbox" (
 	"causation_id" uuid,
 	"actor" jsonb NOT NULL,
 	"payload" jsonb NOT NULL,
+	"created_xid" "xid8" DEFAULT pg_current_xact_id() NOT NULL,
 	"published_at" timestamp with time zone,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	CONSTRAINT "outbox_event_id_unique" UNIQUE("event_id")
@@ -23,5 +24,5 @@ CREATE TABLE "platform"."processed_events" (
 );
 --> statement-breakpoint
 CREATE INDEX "outbox_unpublished_idx" ON "platform"."outbox" USING btree ("seq") WHERE "platform"."outbox"."published_at" IS NULL;--> statement-breakpoint
-CREATE INDEX "outbox_published_at_idx" ON "platform"."outbox" USING btree ("published_at");--> statement-breakpoint
+CREATE INDEX "outbox_published_at_idx" ON "platform"."outbox" USING btree ("published_at") WHERE "platform"."outbox"."published_at" IS NOT NULL;--> statement-breakpoint
 CREATE INDEX "processed_events_processed_at_idx" ON "platform"."processed_events" USING btree ("processed_at");

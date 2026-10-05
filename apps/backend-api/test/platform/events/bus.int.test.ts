@@ -1,6 +1,7 @@
 // The event bus against a real database, with the queue factory stubbed so delivery is deterministic.
 // Skipped unless KOMTRU_INFRA_TESTS=1.
 import { defineEvent, type EventEnvelope } from '@komtru/shared-types';
+import { UnrecoverableError } from 'bullmq';
 import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import { loadConfig } from '../../../src/config/env.js';
@@ -135,6 +136,25 @@ describe.runIf(infraEnabled)('event bus', () => {
       queues.deliver('events.ledger.on-trade-completed', envelope({ payload: { tradeId: 'nope' } })),
     ).rejects.toThrow();
     expect(handler).not.toHaveBeenCalled();
+  });
+
+  it('dead-letters an envelope whose version the subscriber does not handle', async () => {
+    const queues = stubQueues();
+    const bus = createEventBus({ db: t.db(), queues: queues.factory, logger, role: 'worker' });
+    const handler = vi.fn(async () => {});
+    bus.subscribe({
+      name: 'ledger.on-trade-completed',
+      event: defineEvent('trades.trade.completed', 2, z.object({ tradeId: z.uuid() })),
+      handler,
+    });
+
+    // UnrecoverableError, not a retry: the mismatch is deterministic, so five attempts only delay
+    // the dead-letter and the alert that goes with it.
+    const delivery = queues.deliver('events.ledger.on-trade-completed', envelope({ version: 1 }));
+    await expect(delivery).rejects.toBeInstanceOf(UnrecoverableError);
+    await expect(delivery).rejects.toThrow(/v1 reached 'ledger.on-trade-completed', which handles v2/);
+    expect(handler).not.toHaveBeenCalled();
+    expect((await processed()).rows).toHaveLength(0);
   });
 
   it('rejects a duplicate subscriber name', () => {
