@@ -21,3 +21,11 @@ export {
   type JournalEntryRow,
   type LedgerEntryRow,
 } from './infrastructure/postgres/journalRepository.js';
+export {
+  accountBalance,
+  ownerBalances,
+  trialBalance,
+  type AccountBalance,
+  type TrialBalanceRow,
+} from './infrastructure/postgres/balancesRepository.js';
+export { postJournal, type PostedJournal } from './services/journal.service.js';

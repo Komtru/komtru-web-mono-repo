@@ -69,11 +69,20 @@ export const accountScopeId = (ref: AccountRef): string => {
 export const accountKey = (ref: AccountRef, currency: string = DEFAULT_CURRENCY): string =>
   `${currency}:${ref.type}:${accountScopeId(ref)}`;
 
+/**
+ * SETTLEMENT_CLEARING is credit-normal, which M8 §5's table calls "Asset (transitional)". §5's label
+ * and §4's worked example disagree, and §4 is the one that balances: it credits clearing when a
+ * payout is initiated and debits it when the bank confirms, with the cash leaving
+ * PLATFORM_ESCROW_POOL only at confirmation. Between those two postings the money is still in our
+ * provider balance and still owed to the seller, so clearing is a liability — an in-flight
+ * obligation — not cash in transit. Classified from the postings, not from the table.
+ */
 const CREDIT_BALANCE: ReadonlySet<LedgerAccountType> = new Set<LedgerAccountType>([
   'USER_ESCROW_LIABILITY',
   'USER_PAYABLE',
   'PLATFORM_FEE_REVENUE',
   'BUYER_PROTECTION_FEE_REVENUE',
+  'SETTLEMENT_CLEARING',
 ]);
 
 /**

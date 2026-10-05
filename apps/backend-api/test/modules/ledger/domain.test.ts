@@ -1,5 +1,6 @@
 // The ledger's pure half: how an account is named, which way each account's balance runs, and the
 // balance check a caller hits before the database does. No infrastructure.
+import { koboSchema } from '@komtru/shared-types';
 import { describe, expect, it } from 'vitest';
 import {
   accountKey,
@@ -73,9 +74,8 @@ describe('ledger account identity', () => {
 });
 
 describe('ledger account nature', () => {
-  it('runs assets on the debit side', () => {
+  it('runs the only asset on the debit side', () => {
     expect(normalBalance('PLATFORM_ESCROW_POOL')).toBe('DEBIT');
-    expect(normalBalance('SETTLEMENT_CLEARING')).toBe('DEBIT');
   });
 
   it('runs liabilities and revenue on the credit side', () => {
@@ -83,6 +83,13 @@ describe('ledger account nature', () => {
     expect(normalBalance('USER_PAYABLE')).toBe('CREDIT');
     expect(normalBalance('PLATFORM_FEE_REVENUE')).toBe('CREDIT');
     expect(normalBalance('BUYER_PROTECTION_FEE_REVENUE')).toBe('CREDIT');
+  });
+
+  // M8 §5's table calls this an asset; M8 §4's postings credit it on payout initiation and debit it
+  // on confirmation, with the cash leaving the pool only at confirmation. The postings balance and
+  // the label does not, so the postings win: clearing is an in-flight obligation.
+  it('runs settlement clearing on the credit side, as M8 §4 posts it', () => {
+    expect(normalBalance('SETTLEMENT_CLEARING')).toBe('CREDIT');
   });
 
   it('signs an amount against the account’s own nature', () => {
@@ -225,6 +232,7 @@ describe('ledgerJournalPostedEvent', () => {
         },
       ],
     });
-    expect(parsed.lines[0]?.amountMinor).toBe(4_750_000n);
+    expect(parsed.lines[0]?.amountMinor).toBe('4750000');
+    expect(koboSchema.parse(parsed.lines[0]?.amountMinor)).toBe(4_750_000n);
   });
 });
