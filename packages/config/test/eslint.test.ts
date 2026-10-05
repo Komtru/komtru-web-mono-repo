@@ -22,6 +22,11 @@ describe('komtruEslint', () => {
     expect(messages.map((m) => m.ruleId)).toContain('@typescript-eslint/no-floating-promises');
   });
 
+  it('reports a raw hex colour through the shared plugin', async () => {
+    const messages = await lint('raw-hex.ts');
+    expect(messages.map((m) => m.ruleId)).toEqual(['komtru-design/no-raw-hex']);
+  });
+
   it('reports nothing on clean code', async () => {
     expect(await lint('clean.ts')).toEqual([]);
   });
