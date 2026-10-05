@@ -14,6 +14,7 @@
   - Graceful shutdown drains HTTP, closes pools and awaits workers.
   - Module bootstrap pattern (`bootstrap.ts` per module) and route registry (`/v1` prefix).
   - ESLint `no-restricted-imports` fails when a module imports another module's internals; a fixture test proves it.
+- **Status:** Done (2026-10-05). Plan: `docs/superpowers/plans/2026-10-05-t-020-backend-skeleton.md`. Each module exports one `KomtruModule` from its `index.ts` (instead of a `bootstrap.ts`), and the boundary check is a custom rule, `komtru/module-boundaries`, rather than `no-restricted-imports`.
 
 ### T-021 — Database foundation
 
