@@ -1,0 +1,3 @@
+node scripts/check-secrets-ignored.mjs
+# --no-stash: the git stash stack is shared by every worktree; per-ticket worktrees run in parallel.
+pnpm exec lint-staged --no-stash
