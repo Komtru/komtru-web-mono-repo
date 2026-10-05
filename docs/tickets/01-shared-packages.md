@@ -4,6 +4,7 @@
 
 ### T-010 — `shared-types` foundations
 
+- **Status:** Done (2026-10-05). Plan: `docs/superpowers/plans/2026-10-05-t-010-shared-types.md`.
 - **Touches:** `packages/shared-types/src/{money,pagination,errors,ids,enums,index}.ts`
 - **Depends on:** T-002
 - **Acceptance criteria:**
