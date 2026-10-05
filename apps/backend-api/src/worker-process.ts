@@ -10,6 +10,7 @@ import { createEventBus } from './platform/events/bus.js';
 import { createInProcessEmitter } from './platform/events/emitter.js';
 import { publishInOwnTransaction } from './platform/events/publish.js';
 import { startOutboxRelay, type RunningRelay } from './platform/events/relay.js';
+import { pruneIdempotencyKeys } from './platform/http/idempotency.js';
 import { createQueueFactory } from './platform/queue/factory.js';
 import { createScheduleRegistry } from './platform/scheduler/registry.js';
 import { startScheduler, type RunningScheduler } from './platform/scheduler/scheduler.js';
@@ -17,6 +18,9 @@ import { moduleClosers, type KomtruModule } from './platform/module.js';
 import { initSentry } from './platform/sentry.js';
 import type { RunningProcess } from './platform/run.js';
 import { gracefulShutdown } from './platform/shutdown.js';
+
+/** Hourly: the table's rows live 24 hours, so this is housekeeping, not a hot path. */
+const IDEMPOTENCY_PRUNE_INTERVAL_MS = 60 * 60 * 1000;
 
 export type RunningWorker = RunningProcess;
 
@@ -60,6 +64,7 @@ export async function startWorker(
   const emitter = createInProcessEmitter(logger);
   let scheduler: RunningScheduler | undefined;
   let relay: RunningRelay | undefined;
+  let idempotencyPruner: NodeJS.Timeout | undefined;
   try {
     const registry = createScheduleRegistry();
     for (const module of modules) {
@@ -76,6 +81,16 @@ export async function startWorker(
     // Started last: every subscriber is registered by now, so no event is relayed to a queue
     // nobody consumes yet.
     relay = startOutboxRelay({ db, bus: events, queues, logger });
+    // Nothing else bounds platform.idempotency_keys: an anonymous caller on a public retryable
+    // route would write rows into Postgres forever.
+    idempotencyPruner = setInterval(() => {
+      void pruneIdempotencyKeys(db)
+        .then((removed) => {
+          if (removed) logger.info({ removed }, 'idempotency: pruned spent keys');
+        })
+        .catch((error: unknown) => logger.error({ err: error }, 'idempotency: prune failed'));
+    }, IDEMPOTENCY_PRUNE_INTERVAL_MS);
+    idempotencyPruner.unref();
   } catch (error) {
     // Nothing was consumed yet (consumers start only below); release everything that was opened.
     await gracefulShutdown({
@@ -93,6 +108,7 @@ export async function startWorker(
   queues.run();
   const runningScheduler = scheduler;
   const runningRelay = relay;
+  const runningPruner = idempotencyPruner;
   logger.info('worker started');
 
   const reportFatal = (error: unknown, origin: string) => {
@@ -108,6 +124,7 @@ export async function startWorker(
         closers: [
           { name: 'scheduler', close: () => runningScheduler.stop() },
           { name: 'events-relay', close: () => runningRelay.stop() },
+          { name: 'idempotency-pruner', close: () => Promise.resolve(void clearInterval(runningPruner)) },
           { name: 'queues', close: () => queues.close() },
           ...moduleClosers(modules),
           { name: 'clients', close: () => clients.close() },

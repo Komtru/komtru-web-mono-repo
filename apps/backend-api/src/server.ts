@@ -8,6 +8,8 @@ import { createClients, postgresCheck, redisCheck } from './platform/clients.js'
 import { healthRoutes } from './platform/health.js';
 import { createLogger } from './platform/logger.js';
 import { createEventBus } from './platform/events/bus.js';
+import { createIdempotencyGate } from './platform/http/idempotency.js';
+import { createRateLimitGate } from './platform/http/rateLimit.js';
 import { createInProcessEmitter } from './platform/events/emitter.js';
 import { createQueueFactory } from './platform/queue/factory.js';
 import { moduleClosers, moduleHealthChecks, mountModules, type KomtruModule } from './platform/module.js';
@@ -66,7 +68,11 @@ export async function startApi(
     config,
     logger,
     isDraining: () => draining,
-    mountV1: mountModules(modules),
+    mountV1: mountModules(modules, {
+      logger,
+      idempotency: createIdempotencyGate({ db, redis: clients.redis, logger }),
+      rateLimit: createRateLimitGate({ redis: clients.redis, logger }),
+    }),
     mountRoot: healthRoutes([
       postgresCheck(clients.pool),
       redisCheck(clients.redis),

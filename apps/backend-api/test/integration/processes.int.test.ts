@@ -4,6 +4,8 @@ import http from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { RuntimeRoleError } from '../../src/db/index.js';
+import { z } from 'zod';
+import { defineRoute } from '../../src/platform/http/route.js';
 import { defineModule } from '../../src/platform/module.js';
 import { startApi } from '../../src/server.js';
 import { startWorker } from '../../src/worker-process.js';
@@ -39,12 +41,19 @@ describe.runIf(infraEnabled)('process wiring', () => {
     const stopped: string[] = [];
     const slow = defineModule({
       name: 'slow',
-      routes: (router) => {
-        router.get('/slow', async (_req, res) => {
-          await new Promise((r) => setTimeout(r, 300));
-          res.json({ done: true });
-        });
-      },
+      routes: [
+        defineRoute({
+          method: 'get',
+          path: '/slow',
+          scope: 'PUBLIC',
+          summary: 'A request that is still running when shutdown starts',
+          schema: { response: z.object({ done: z.boolean() }) },
+          handler: async () => {
+            await new Promise((r) => setTimeout(r, 300));
+            return { done: true };
+          },
+        }),
+      ],
       stop: () => {
         stopped.push('slow');
         return Promise.resolve();
