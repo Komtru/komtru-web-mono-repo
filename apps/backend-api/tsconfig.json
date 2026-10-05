@@ -3,14 +3,7 @@
   "compilerOptions": {
     "noEmit": true,
     "rootDir": ".",
-    "types": [
-      "node"
-    ]
+    "types": ["node"]
   },
-  "include": [
-    "src",
-    "test",
-    "*.config.ts",
-    "*.config.mjs"
-  ]
+  "include": ["src", "test", "*.config.ts", "*.config.mjs"]
 }

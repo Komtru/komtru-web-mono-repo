@@ -31,11 +31,13 @@
 ### Task 1: Root workspace and `@komtru/config`
 
 **Files:**
+
 - Create: `package.json`, `pnpm-workspace.yaml`, `turbo.json`, `.nvmrc` (`22`), `.npmrc` (`engine-strict=true`, `auto-install-peers=true`), `.editorconfig`, `.prettierrc.json` (re-exports config), `.prettierignore`, `eslint.config.mjs`
 - Create: `packages/config/package.json`, `packages/config/tsconfig/{base,node,library}.json`, `packages/config/eslint/index.mjs`, `packages/config/prettier/index.json`, `packages/config/vitest/preset.ts`
 - Test: `packages/config/test/eslint.test.ts`, `packages/config/test/fixtures/floating-promise.ts`
 
 **Interfaces:**
+
 - Produces: `@komtru/config/tsconfig/base.json` (strict, `noUncheckedIndexedAccess`, `exactOptionalPropertyTypes: false`, ES2022, `moduleResolution: bundler`), `node.json` (extends base, `module: NodeNext`), `library.json` (extends base, `declaration: true`). `@komtru/config/eslint` default export `komtruEslint({ tsconfigRootDir, react?: boolean })` returning a flat-config array (typescript-eslint `recommendedTypeChecked` + prettier compat). `@komtru/config/vitest` exports `defineKomtruVitest(overrides)`.
 
 - [ ] **Step 1: Write the failing test** — `eslint.test.ts`: lints `fixtures/floating-promise.ts` (`async function f(){}; f();`) with `komtruEslint` and asserts one message with ruleId `@typescript-eslint/no-floating-promises`; lints a clean fixture and asserts zero messages.
@@ -47,9 +49,11 @@
 ### Task 2: Placeholder apps and packages
 
 **Files:**
+
 - Create for each of `apps/{backend-api,web-app-ui,operations-app,logistics-ops,park-agent-app}` and `packages/{shared-types,ui-kit,api-client}`: `package.json`, `tsconfig.json`, `eslint.config.mjs`, `vitest.config.ts`, `src/index.ts`, `test/index.test.ts`
 
 **Interfaces:**
+
 - Produces: each workspace exports `export const workspace = '<package name>' as const;` from `src/index.ts`; scripts `build` (`tsc -p tsconfig.json` to `dist/`), `lint` (`eslint .`), `typecheck` (`tsc --noEmit`), `test` (`vitest run`).
 
 - [ ] **Step 1: Write the failing tests** — each `test/index.test.ts` asserts `workspace` equals its package name.
@@ -61,10 +65,12 @@
 ### Task 3: Commit hygiene and secret guard
 
 **Files:**
+
 - Create: `commitlint.config.mjs`, `.husky/pre-commit` (`pnpm exec lint-staged`), `.husky/commit-msg` (`pnpm exec commitlint --edit "$1"`), `lint-staged` block in root `package.json`, `scripts/check-secrets-ignored.mjs`
 - Test: `scripts/test/commitlint.test.ts`, `scripts/test/secrets-ignored.test.ts`, `scripts/vitest.config.ts`
 
 **Interfaces:**
+
 - Produces: root script `test:repo` (runs `vitest run --config scripts/vitest.config.ts`), wired into root `test` after turbo.
 
 - [ ] **Step 1: Write the failing tests** — commitlint: `feat(identity): add login` passes, `fixed stuff` fails. Secrets: `git check-ignore docs/specs/backend-apis.env`, `.env`, `apps/backend-api/.env` all exit 0; `apps/backend-api/.env.example` exits 1.
@@ -76,6 +82,7 @@
 ### Task 4: README and fresh-clone verification
 
 **Files:**
+
 - Create: `README.md` (layout, prerequisites Node 22 + pnpm 10, commands, ticket process pointer to `docs/TICKETS.md`)
 
 - [ ] **Step 1:** Write README.

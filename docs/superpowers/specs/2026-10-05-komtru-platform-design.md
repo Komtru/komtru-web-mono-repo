@@ -25,7 +25,7 @@ This document records what will be built, every place the inputs disagree and ho
 - The old backend's live credentials are reused, except the database name (§3.4).
 - Komtru is pre-launch. No production data migrates from the old system.
 - "Every screen in the HTML" means the 210 numbered screens in the reference, mapped to apps in §8.3.
-- Where the HTML and a module spec disagree on *behaviour*, the HTML wins for user-facing flow and the spec wins for data integrity and money rules (§2).
+- Where the HTML and a module spec disagree on _behaviour_, the HTML wins for user-facing flow and the spec wins for data integrity and money rules (§2).
 
 ### Success criteria
 
@@ -51,31 +51,31 @@ When a lower source conflicts with a higher one, the higher wins and the ticket 
 
 ### 3.1 Monorepo
 
-| Concern | Choice | Note |
-|---|---|---|
-| Package manager | **pnpm 10** for everything | The backend moves off Yarn so one lockfile covers all apps. |
-| Task runner | **Turborepo** | Remote cache optional; local plus CI cache from day one. |
-| Runtime | **Node 22 LTS** | Matches the old `.nvmrc` and the local machine. |
-| Language | TypeScript 5, `strict` | Shared base `tsconfig` in `packages/config`. |
-| Lint/format | ESLint 9 flat config plus Prettier 3, one shared config | Includes a module-boundary rule for the backend (§4.2). |
-| Commits | Husky, lint-staged, commitlint (conventional) | Kept from the old backend. |
-| Tests | **Vitest** everywhere, Playwright for e2e and visual checks | Replaces Jest. Vitest runs TS and ESM natively, one runner across backend and frontends. |
+| Concern         | Choice                                                      | Note                                                                                     |
+| --------------- | ----------------------------------------------------------- | ---------------------------------------------------------------------------------------- |
+| Package manager | **pnpm 10** for everything                                  | The backend moves off Yarn so one lockfile covers all apps.                              |
+| Task runner     | **Turborepo**                                               | Remote cache optional; local plus CI cache from day one.                                 |
+| Runtime         | **Node 22 LTS**                                             | Matches the old `.nvmrc` and the local machine.                                          |
+| Language        | TypeScript 5, `strict`                                      | Shared base `tsconfig` in `packages/config`.                                             |
+| Lint/format     | ESLint 9 flat config plus Prettier 3, one shared config     | Includes a module-boundary rule for the backend (§4.2).                                  |
+| Commits         | Husky, lint-staged, commitlint (conventional)               | Kept from the old backend.                                                               |
+| Tests           | **Vitest** everywhere, Playwright for e2e and visual checks | Replaces Jest. Vitest runs TS and ESM natively, one runner across backend and frontends. |
 
 ### 3.2 Backend (`apps/backend-api`)
 
-| Concern | Choice | Change from old build? |
-|---|---|---|
-| HTTP | Express 5 | Same. |
-| ORM/migrations | **Drizzle ORM plus drizzle-kit** | Kept. Schema-per-module convention kept. |
-| Validation | **zod**, schemas shared via `packages/shared-types` | Changed from Joi so frontend and backend share one schema per DTO. |
-| Database | PostgreSQL 15+ (16 locally) | Same. |
-| Pooling | **PgBouncer, transaction mode**, from the first commit | New. Migrations use a direct URL. App code avoids session state (no session-level prepared statements, no advisory locks across statements, no LISTEN/NOTIFY). |
-| Queue/jobs | BullMQ on Redis, job scheduler for crons | Same. |
-| Realtime | Socket.IO with the Redis adapter | Same, per the socket setup guide. |
-| Logging | pino, JSON in production, request-id correlation | Same. |
-| Error tracking | **Sentry** (`@sentry/node`) in API and worker | New. Needs a DSN (§12). |
-| Rate limiting | `rate-limiter-flexible` on Redis | Changed from in-memory `express-rate-limit` so limits hold across instances. |
-| Process model | Separate API and worker processes from one build | Same. Deploy runtime pending §12 Q1. |
+| Concern        | Choice                                                 | Change from old build?                                                                                                                                         |
+| -------------- | ------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| HTTP           | Express 5                                              | Same.                                                                                                                                                          |
+| ORM/migrations | **Drizzle ORM plus drizzle-kit**                       | Kept. Schema-per-module convention kept.                                                                                                                       |
+| Validation     | **zod**, schemas shared via `packages/shared-types`    | Changed from Joi so frontend and backend share one schema per DTO.                                                                                             |
+| Database       | PostgreSQL 15+ (16 locally)                            | Same.                                                                                                                                                          |
+| Pooling        | **PgBouncer, transaction mode**, from the first commit | New. Migrations use a direct URL. App code avoids session state (no session-level prepared statements, no advisory locks across statements, no LISTEN/NOTIFY). |
+| Queue/jobs     | BullMQ on Redis, job scheduler for crons               | Same.                                                                                                                                                          |
+| Realtime       | Socket.IO with the Redis adapter                       | Same, per the socket setup guide.                                                                                                                              |
+| Logging        | pino, JSON in production, request-id correlation       | Same.                                                                                                                                                          |
+| Error tracking | **Sentry** (`@sentry/node`) in API and worker          | New. Needs a DSN (§12).                                                                                                                                        |
+| Rate limiting  | `rate-limiter-flexible` on Redis                       | Changed from in-memory `express-rate-limit` so limits hold across instances.                                                                                   |
+| Process model  | Separate API and worker processes from one build       | Same. Deploy runtime pending §12 Q1.                                                                                                                           |
 
 ### 3.3 Frontends
 
@@ -129,33 +129,33 @@ Each module lives in `apps/backend-api/src/modules/<name>/` with `domain/`, `ser
 
 Modules and Postgres schemas:
 
-| Module | Schema | Spec |
-|---|---|---|
-| `platform` (outbox, idempotency, processed events) | `platform` | master prompt §2 |
-| `identity` | `identity` | M1 |
-| `files` | `files` | M20 |
-| `notify` | `notify` | M11 |
-| `config` | `config` | M17 |
-| `geo` (states, cities, city requests) | `geo` | owner ruling, §7.8 |
-| `trust` | `trust` | M6 |
-| `merchant` | `merchant` | M5 |
-| `search` | `search` | M19 |
-| `trades` | `trade` | M7 (reconciled, §6) |
-| `orders` | `orders` | M9 |
-| `ledger` | `ledger` | M8 + m8 plan |
-| `disputes` | `disputes` | M3 |
-| `logistics` | `logistics` | m2 build spec |
-| `park` | `park` | master prompt §3 |
-| `support` | `support` | M10 |
-| `risk` | `risk` | M13 |
-| `reputation` | `reputation` | M12 |
-| `admin` | `admin` | M14 (adapted, §5 C2) |
-| `compliance` | `compliance` | M15 |
-| `analytics` | `analytics` | M16 |
-| `growth` | `growth` | M18 |
-| `cases` | `cases` | HTML P0-01/P0-02 |
-| `messaging` | `messaging` | HTML C9/S9/AC7, socket guide |
-| `devices` (IMEI lookup) | `devices` | HTML AC4/IF1 |
+| Module                                             | Schema       | Spec                         |
+| -------------------------------------------------- | ------------ | ---------------------------- |
+| `platform` (outbox, idempotency, processed events) | `platform`   | master prompt §2             |
+| `identity`                                         | `identity`   | M1                           |
+| `files`                                            | `files`      | M20                          |
+| `notify`                                           | `notify`     | M11                          |
+| `config`                                           | `config`     | M17                          |
+| `geo` (states, cities, city requests)              | `geo`        | owner ruling, §7.8           |
+| `trust`                                            | `trust`      | M6                           |
+| `merchant`                                         | `merchant`   | M5                           |
+| `search`                                           | `search`     | M19                          |
+| `trades`                                           | `trade`      | M7 (reconciled, §6)          |
+| `orders`                                           | `orders`     | M9                           |
+| `ledger`                                           | `ledger`     | M8 + m8 plan                 |
+| `disputes`                                         | `disputes`   | M3                           |
+| `logistics`                                        | `logistics`  | m2 build spec                |
+| `park`                                             | `park`       | master prompt §3             |
+| `support`                                          | `support`    | M10                          |
+| `risk`                                             | `risk`       | M13                          |
+| `reputation`                                       | `reputation` | M12                          |
+| `admin`                                            | `admin`      | M14 (adapted, §5 C2)         |
+| `compliance`                                       | `compliance` | M15                          |
+| `analytics`                                        | `analytics`  | M16                          |
+| `growth`                                           | `growth`     | M18                          |
+| `cases`                                            | `cases`      | HTML P0-01/P0-02             |
+| `messaging`                                        | `messaging`  | HTML C9/S9/AC7, socket guide |
+| `devices` (IMEI lookup)                            | `devices`    | HTML AC4/IF1                 |
 
 Nothing lives in `public`. Same-schema foreign keys are real with explicit `onDelete`. Cross-schema references are plain `uuid` columns.
 
@@ -169,15 +169,15 @@ Envelope (M1 §11): `{ eventId, eventType, version, occurredAt, correlationId, c
 
 ### 4.4 Scale-from-day-one mechanisms
 
-| Requirement | Mechanism | Enforced by |
-|---|---|---|
-| Every list paginated | `paginate()` helper (cursor by default, page/limit allowed for admin tables), shared `Paginated<T>` contract | A route-registry test fails if a `GET` collection route lacks pagination params |
-| External I/O only via BullMQ | Provider adapters live in `infrastructure/providers`, callable only from `jobs/` | Lint rule plus a test that request handlers never import adapters |
-| Idempotency keys | `Idempotency-Key` middleware backed by `platform.idempotency_keys`: unique on scope, key and actor; stores request hash and response; a short Redis lock covers in-flight duplicates | Required on every mutating route that declares `retryable: true`; all Park custody routes, funding, payouts and trade transitions declare it |
-| Redis rate limits | Per-IP, per-identifier and per-user limiters; PIN limiter per parcel, agent and hub | Auth and PIN route tests |
-| Pooling | PgBouncer in Docker Compose, CI and deployed environments | Integration tests run through PgBouncer |
-| Logging plus Sentry | pino with request id and principal id; Sentry in API, worker and all Next apps | Bootstrapped in the skeleton ticket before any module exists |
-| Stateless processes | No in-memory sessions, queues or rate limits; socket fan-out via the Redis adapter | Integration test runs two API instances against one Redis |
+| Requirement                  | Mechanism                                                                                                                                                                            | Enforced by                                                                                                                                  |
+| ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| Every list paginated         | `paginate()` helper (cursor by default, page/limit allowed for admin tables), shared `Paginated<T>` contract                                                                         | A route-registry test fails if a `GET` collection route lacks pagination params                                                              |
+| External I/O only via BullMQ | Provider adapters live in `infrastructure/providers`, callable only from `jobs/`                                                                                                     | Lint rule plus a test that request handlers never import adapters                                                                            |
+| Idempotency keys             | `Idempotency-Key` middleware backed by `platform.idempotency_keys`: unique on scope, key and actor; stores request hash and response; a short Redis lock covers in-flight duplicates | Required on every mutating route that declares `retryable: true`; all Park custody routes, funding, payouts and trade transitions declare it |
+| Redis rate limits            | Per-IP, per-identifier and per-user limiters; PIN limiter per parcel, agent and hub                                                                                                  | Auth and PIN route tests                                                                                                                     |
+| Pooling                      | PgBouncer in Docker Compose, CI and deployed environments                                                                                                                            | Integration tests run through PgBouncer                                                                                                      |
+| Logging plus Sentry          | pino with request id and principal id; Sentry in API, worker and all Next apps                                                                                                       | Bootstrapped in the skeleton ticket before any module exists                                                                                 |
+| Stateless processes          | No in-memory sessions, queues or rate limits; socket fan-out via the Redis adapter                                                                                                   | Integration test runs two API instances against one Redis                                                                                    |
 
 Flows that look synchronous are made asynchronous rather than breaking the BullMQ rule. Paystack charges start client-side through Paystack Inline using a server-issued reference, and the webhook plus a verify job confirm them. Bank-name resolution, KYC checks and IMEI lookups create a pending record, run in a job, and push the result over the socket.
 
@@ -187,32 +187,32 @@ Flows that look synchronous are made asynchronous rather than breaking the BullM
 
 ## 5. Conflicts found and how they are resolved
 
-| # | Conflict | Resolution | Source of truth |
-|---|---|---|---|
-| C1 | M7 spec state machine vs. old code's simplified `OPEN/AGREED/PROTECTED` vs. HTML flows (acceptance before funding, counter-proposals, post-funding cancellation, delivery deadlines, auto-release) | One reconciled machine, §6 | HTML for flow, M7 for gates and audit |
-| C2 | M14 D1 wants a separate `admin_users` table; M1 D2, m2 §2 and the master prompt want one `users` table with scoped sessions | Same `users` row; staff via `STAFF` scope and role assignments in `identity`. M14 keeps impersonation and the admin action log only | Master prompt |
-| C3 | M2 conceptual spec (`logistics_partners`, `pickup_requests`, `shipments`) vs. m2 build spec (`logistics_companies`, members, packages) | m2 build spec. M2's provenance vocabulary survives as the delivery-signal source enum, extended with `PARK_CUSTODY` | m2 build spec |
-| C4 | M8 spec: Flutterwave secondary adapter, batched payouts. m8 plan: Paystack only, Refund API for buyers, payout preference modes | m8 plan. Every money row is provider-tagged so a second provider is additive | m8 plan |
-| C5 | Old ledger used single-sided balance entries; M8 requires double-entry | Double-entry per M8 §4–5, with the m8 plan's tables layered on | M8 |
-| C6 | m2 open questions §13.1–3 (where rejections are logged, the confirmDelivery split, the inspection-period format) | Rejections go to a new append-only `trade.trade_activity` log. Delivery and receipt are separate states (§6). Inspection window is an integer `inspection_window_hours` sourced from Trade Standards | M7 spec plus HTML CTS1 |
-| C7 | HTML V1 shows a "Logistics fee ₦3,500" line in the buyer's total; m2 §11 says no shipping price ever touches the platform | Line omitted; deviation noted on the funding UI ticket. Open decision Q5 | m2 §11 |
-| C8 | HTML V2 shows a per-trade virtual bank account; m8 §9 forbids Dedicated Virtual Accounts | Use Paystack checkout's pay-with-transfer channel, which issues a temporary per-transaction account. The screen's promise still holds. Q6 | m8 plan |
-| C9 | HTML AB7 "Komtru Wallet" top-up; no spec has stored value, and it raises licensing questions | Blocked on Q3; default is the screen behind a disabled flag with no money movement | Owner decision |
-| C10 | HTML V1 Buyer Protection Fee 1.5% paid by the buyer; M8's worked example deducts 5% from the seller | Buyer-side fee from the HTML, set in the fee file (§6.5) as `buyer_protection_fee.rate_bps: 150`. Q4 covers refund treatment | HTML |
-| C11 | Master prompt models a fixed ₦300 platform rate, and HTML PE1/PH4 show hubs earning and withdrawing it through Komtru | Superseded by C23: the handling fee never enters Komtru's books. Neither Park hubs nor courier companies are payees | Owner |
-| C12 | HTML puts Park Agent screens at `app.komtru.com/hub/*` inside the consumer app; master prompt requires a separate `park-agent-app` | Split by auth state (§7.6): application and status screens stay in `web-app-ui` under consumer scope; operating screens move to `park-agent-app`. Old `/hub/*` operating URLs redirect to `park.komtru.com` | Master prompt |
-| C13 | HTML Y1 adds a 48-hour auto-mediation window and "replacement" or "refund with return" outcomes; M3 has only an evidence window and four money outcomes | New first dispute state `MEDIATION` (48h, config). Parties can agree one of M3's four money outcomes; return and replacement are recorded as agreed notes with self-arranged return shipping. Q10 | HTML plus M3 |
-| C14 | HTML "AI-suggested — not a decision" advisory boxes; no spec defines the AI | `cases.advisory` interface with a deterministic rule-based v1. An LLM-backed provider can plug in later. Q9 | HTML |
-| C15 | No spec covers trade messaging, Trade Standards, IMEI lookup, trade proposal review, or the universal case model, but the HTML does | Each gets its own module and ticket, scoped to what the screens need | HTML |
-| C16 | M6 recommends Dojah plus Smile ID; no KYC or IMEI credentials exist in the `.env` | Adapter interface plus a deterministic fake adapter for dev and test; real adapters are wired but disabled until credentials arrive. Q7 | M6 |
-| C17 | M1 recommends Google plus Apple only; the old build and the `.env` include Facebook | All three. The M1 enum already includes `FACEBOOK` and credentials exist | Old build, M1 enum |
-| C18 | M5 leaves stock timing open (reserve at order vs. decrement at delivery) | Reserve at funding, release on cancellation or refund, never below zero (DB check) | Engineering default |
-| C19 | M1/M7 gate selling behind an opt-in `SELLER` capability, and the HTML's role switcher gives every account a Buyer lens next to Merchant | Owner ruling 2026-10-05: every account can buy or sell, and the initiator picks the side per trade. Certified merchants can only sell. The `SELLER` capability gate is removed. See §6.3 | Owner |
-| C20 | The HTML makes business verification optional at SO3 and shows only automated KYB review (AC10) | Owner ruling 2026-10-05: merchant certification is an application with mandatory CAC documents, approved by a human in operations-app. Automated CAC checks are evidence for the reviewer, not the decision | Owner |
-| C22 | HTML Y2 role switcher and separate seller tab bar vs. owner's "no switch" | Owner ruling 2026-10-05: one trades list across both sides, no role views (§6.3) | Owner |
-| C23 | Master prompt's ₦300 platform rate and HTML PE1/PH4 hub earnings and withdrawals | Owner ruling 2026-10-05: agents collect ₦300–₦500 in cash directly from the buyer. Komtru only tells the buyer to expect it. No ledger entries, hub payout accounts, earnings or withdrawals | Owner |
-| C24 | No spec ties Park availability to location; the HTML ship step offers Park Hub Transit unconditionally | Owner ruling 2026-10-05: Park can be chosen only for cities where an onboarded, operating hub exists (§7.8) | Owner |
-| C21 | M17 D1 puts tunable defaults in a database settings table editable at runtime; the owner wants every fee and cut in an easily configurable file | Owner ruling 2026-10-05: one version-controlled fee file is the only source of fee and cut values (§6.5). M17's table keeps non-money tunables such as windows and retry caps | Owner |
+| #   | Conflict                                                                                                                                                                                           | Resolution                                                                                                                                                                                                  | Source of truth                       |
+| --- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------- |
+| C1  | M7 spec state machine vs. old code's simplified `OPEN/AGREED/PROTECTED` vs. HTML flows (acceptance before funding, counter-proposals, post-funding cancellation, delivery deadlines, auto-release) | One reconciled machine, §6                                                                                                                                                                                  | HTML for flow, M7 for gates and audit |
+| C2  | M14 D1 wants a separate `admin_users` table; M1 D2, m2 §2 and the master prompt want one `users` table with scoped sessions                                                                        | Same `users` row; staff via `STAFF` scope and role assignments in `identity`. M14 keeps impersonation and the admin action log only                                                                         | Master prompt                         |
+| C3  | M2 conceptual spec (`logistics_partners`, `pickup_requests`, `shipments`) vs. m2 build spec (`logistics_companies`, members, packages)                                                             | m2 build spec. M2's provenance vocabulary survives as the delivery-signal source enum, extended with `PARK_CUSTODY`                                                                                         | m2 build spec                         |
+| C4  | M8 spec: Flutterwave secondary adapter, batched payouts. m8 plan: Paystack only, Refund API for buyers, payout preference modes                                                                    | m8 plan. Every money row is provider-tagged so a second provider is additive                                                                                                                                | m8 plan                               |
+| C5  | Old ledger used single-sided balance entries; M8 requires double-entry                                                                                                                             | Double-entry per M8 §4–5, with the m8 plan's tables layered on                                                                                                                                              | M8                                    |
+| C6  | m2 open questions §13.1–3 (where rejections are logged, the confirmDelivery split, the inspection-period format)                                                                                   | Rejections go to a new append-only `trade.trade_activity` log. Delivery and receipt are separate states (§6). Inspection window is an integer `inspection_window_hours` sourced from Trade Standards        | M7 spec plus HTML CTS1                |
+| C7  | HTML V1 shows a "Logistics fee ₦3,500" line in the buyer's total; m2 §11 says no shipping price ever touches the platform                                                                          | Line omitted; deviation noted on the funding UI ticket. Open decision Q5                                                                                                                                    | m2 §11                                |
+| C8  | HTML V2 shows a per-trade virtual bank account; m8 §9 forbids Dedicated Virtual Accounts                                                                                                           | Use Paystack checkout's pay-with-transfer channel, which issues a temporary per-transaction account. The screen's promise still holds. Q6                                                                   | m8 plan                               |
+| C9  | HTML AB7 "Komtru Wallet" top-up; no spec has stored value, and it raises licensing questions                                                                                                       | Blocked on Q3; default is the screen behind a disabled flag with no money movement                                                                                                                          | Owner decision                        |
+| C10 | HTML V1 Buyer Protection Fee 1.5% paid by the buyer; M8's worked example deducts 5% from the seller                                                                                                | Buyer-side fee from the HTML, set in the fee file (§6.5) as `buyer_protection_fee.rate_bps: 150`. Q4 covers refund treatment                                                                                | HTML                                  |
+| C11 | Master prompt models a fixed ₦300 platform rate, and HTML PE1/PH4 show hubs earning and withdrawing it through Komtru                                                                              | Superseded by C23: the handling fee never enters Komtru's books. Neither Park hubs nor courier companies are payees                                                                                         | Owner                                 |
+| C12 | HTML puts Park Agent screens at `app.komtru.com/hub/*` inside the consumer app; master prompt requires a separate `park-agent-app`                                                                 | Split by auth state (§7.6): application and status screens stay in `web-app-ui` under consumer scope; operating screens move to `park-agent-app`. Old `/hub/*` operating URLs redirect to `park.komtru.com` | Master prompt                         |
+| C13 | HTML Y1 adds a 48-hour auto-mediation window and "replacement" or "refund with return" outcomes; M3 has only an evidence window and four money outcomes                                            | New first dispute state `MEDIATION` (48h, config). Parties can agree one of M3's four money outcomes; return and replacement are recorded as agreed notes with self-arranged return shipping. Q10           | HTML plus M3                          |
+| C14 | HTML "AI-suggested — not a decision" advisory boxes; no spec defines the AI                                                                                                                        | `cases.advisory` interface with a deterministic rule-based v1. An LLM-backed provider can plug in later. Q9                                                                                                 | HTML                                  |
+| C15 | No spec covers trade messaging, Trade Standards, IMEI lookup, trade proposal review, or the universal case model, but the HTML does                                                                | Each gets its own module and ticket, scoped to what the screens need                                                                                                                                        | HTML                                  |
+| C16 | M6 recommends Dojah plus Smile ID; no KYC or IMEI credentials exist in the `.env`                                                                                                                  | Adapter interface plus a deterministic fake adapter for dev and test; real adapters are wired but disabled until credentials arrive. Q7                                                                     | M6                                    |
+| C17 | M1 recommends Google plus Apple only; the old build and the `.env` include Facebook                                                                                                                | All three. The M1 enum already includes `FACEBOOK` and credentials exist                                                                                                                                    | Old build, M1 enum                    |
+| C18 | M5 leaves stock timing open (reserve at order vs. decrement at delivery)                                                                                                                           | Reserve at funding, release on cancellation or refund, never below zero (DB check)                                                                                                                          | Engineering default                   |
+| C19 | M1/M7 gate selling behind an opt-in `SELLER` capability, and the HTML's role switcher gives every account a Buyer lens next to Merchant                                                            | Owner ruling 2026-10-05: every account can buy or sell, and the initiator picks the side per trade. Certified merchants can only sell. The `SELLER` capability gate is removed. See §6.3                    | Owner                                 |
+| C20 | The HTML makes business verification optional at SO3 and shows only automated KYB review (AC10)                                                                                                    | Owner ruling 2026-10-05: merchant certification is an application with mandatory CAC documents, approved by a human in operations-app. Automated CAC checks are evidence for the reviewer, not the decision | Owner                                 |
+| C22 | HTML Y2 role switcher and separate seller tab bar vs. owner's "no switch"                                                                                                                          | Owner ruling 2026-10-05: one trades list across both sides, no role views (§6.3)                                                                                                                            | Owner                                 |
+| C23 | Master prompt's ₦300 platform rate and HTML PE1/PH4 hub earnings and withdrawals                                                                                                                   | Owner ruling 2026-10-05: agents collect ₦300–₦500 in cash directly from the buyer. Komtru only tells the buyer to expect it. No ledger entries, hub payout accounts, earnings or withdrawals                | Owner                                 |
+| C24 | No spec ties Park availability to location; the HTML ship step offers Park Hub Transit unconditionally                                                                                             | Owner ruling 2026-10-05: Park can be chosen only for cities where an onboarded, operating hub exists (§7.8)                                                                                                 | Owner                                 |
+| C21 | M17 D1 puts tunable defaults in a database settings table editable at runtime; the owner wants every fee and cut in an easily configurable file                                                    | Owner ruling 2026-10-05: one version-controlled fee file is the only source of fee and cut values (§6.5). M17's table keeps non-money tunables such as windows and retry caps                               | Owner                                 |
 
 ---
 
@@ -270,7 +270,6 @@ DISPUTED ──M3 resolved──▶ RESOLVED_REFUNDED | RESOLVED_RELEASED   (amo
 
 Trades never touch money. They write `escrow_action_requests` and publish events through the outbox. The ledger posts journal entries and answers with `payment.escrow_funded`, `payment.escrow_released` or `payment.escrow_refunded`. The funding total is the item price plus the buyer protection fee. On release the seller is credited the item price minus any seller or merchant commission, and the fee and commission are recognised as revenue. Every amount comes from the trade's fee snapshot (§6.5).
 
-
 ### 6.5 Fees and cuts: one config file (C21)
 
 **Owner ruling, 2026-10-05.** Every fee and every platform cut lives in one file, `config/fees.yaml` at the repo root. No fee amount or rate appears anywhere else: not in code, not in database seeds, not in frontend bundles.
@@ -281,27 +280,27 @@ Trades never touch money. They write `escrow_action_requests` and publish events
 version: 2026-10-05.1
 currency: NGN
 
-buyer_protection_fee:          # paid by the buyer on top of the item price (HTML V1)
-  rate_bps: 150                # 1.5%
+buyer_protection_fee: # paid by the buyer on top of the item price (HTML V1)
+  rate_bps: 150 # 1.5%
   min_minor: 0
-  max_minor: null              # null = no cap
-  refundable_on_full_refund: true   # Q4
+  max_minor: null # null = no cap
+  refundable_on_full_refund: true # Q4
 
-seller_commission:             # platform cut from a casual seller's proceeds at release
-  rate_bps: 0                  # Q14
-  min_minor: 0
-  max_minor: null
-
-merchant_commission:           # platform cut from a certified merchant's proceeds at release
-  rate_bps: 0                  # Q14
+seller_commission: # platform cut from a casual seller's proceeds at release
+  rate_bps: 0 # Q14
   min_minor: 0
   max_minor: null
 
-park_cash_handling_fee:        # INFORMATIONAL ONLY (C23): shown to buyers, never charged,
-  min_minor: 30000             # collected, posted or paid out by Komtru. The buyer pays the
-  max_minor: 50000             # park agent this amount in cash at pickup.
+merchant_commission: # platform cut from a certified merchant's proceeds at release
+  rate_bps: 0 # Q14
+  min_minor: 0
+  max_minor: null
 
-payout_fee:                    # charged on each seller withdrawal
+park_cash_handling_fee: # INFORMATIONAL ONLY (C23): shown to buyers, never charged,
+  min_minor: 30000 # collected, posted or paid out by Komtru. The buyer pays the
+  max_minor: 50000 # park agent this amount in cash at pickup.
+
+payout_fee: # charged on each seller withdrawal
   amount_minor: 0
 ```
 
@@ -311,6 +310,7 @@ payout_fee:                    # charged on each seller withdrawal
 - **One calculator.** `computeTradeFees(itemMinor, sellerKind, schedule)` in `packages/shared-types` is pure, integer-only, and rounds half up to the kobo. The backend uses it for postings, and frontends display results from the API rather than computing totals themselves.
 - **Reading fees.** `GET /config/fees` serves the current schedule for display: V1's fee breakdown, the Park cash-fee notices, and the read-only fee panel in operations-app.
 - **Enforcement.** A test fails if ledger, trades, park or merchant code contains a numeric literal equal to any value in the fee file, or imports fees from anywhere except the fee module.
+
 ---
 
 ## 7. Park design
@@ -325,15 +325,15 @@ payout_fee:                    # charged on each seller withdrawal
 
 ### 7.2 Data model (`park` schema, plus Park's rows in `logistics`)
 
-| Table | Purpose | Key constraints |
-|---|---|---|
-| `park_hubs` | Terminal: code (`H-JIB-004`), name, operator business (`God is Good Motors`), branch, `city_id` (catalog city, §7.8), street address, landmark, optional GPS pin, `status` (`PENDING`, `ACTIVE`, `SUSPENDED`), `operating_state` (`OPEN`, `CLOSED`, `FULL`, `UNABLE_TO_RECEIVE`), operating hours, authorization `verified_at` / `review_due_at` | Unique code. Partial unique on normalised (operator, branch, address) for live hubs, which stops duplicate claims of one terminal (gap audit item 1) |
-| `park_hub_applications` | Onboarding case: applicant user, origin (`SELF_SERVE` from PH1–PH5, `TRUSTOPS_REGISTERED` from TO-PA6/TO-PA10), step data, evidence file refs (identity, authorization, mandatory photo gate), payout account ref, `status` (`DRAFT`, `SUBMITTED`, `IN_REVIEW`, `CHANGES_REQUESTED`, `APPROVED`, `REJECTED`), assigned reviewer, SLA | Submit blocked without authorization evidence |
-| `park_hub_agents` | Hub ↔ member assignment: `can_receive`, `can_inspect`, `can_release`, `can_add_staff`, `role_label` (`PRIMARY_AGENT`, `STAFF`), `status` (`INVITED`, `ACTIVE`, `SUSPENDED`, `REMOVED`), granted/revoked by and at | Rows are never deleted. Partial unique: one live row per (hub, member); one live `PRIMARY_AGENT` per hub. `can_release` requires a TrustOps approver id (check constraint) |
-| `park_parcels` | One per trade: soft `trade_id` (unique), origin and destination hub FKs, waybill, transit carrier, driver phone, plate, `status` (`AWAITING_SOURCE_DROPOFF`, `AT_SOURCE_HUB`, `IN_TRANSIT`, `AT_DESTINATION_HUB`, `RELEASED`, `EXCEPTION`), `status_before_exception` | Unique `trade_id`. `canTransition` plus 409. Origin may equal destination, which skips `IN_TRANSIT` |
-| `park_custody_events` | Append-only: parcel, hub, actor member, `kind` (`DROPOFF_RECEIVED`, `ARRIVAL_LOGGED`, `INSPECTED`, `PIN_ATTEMPT`, `RELEASED`, `EXCEPTION_RAISED`, `EXCEPTION_CLEARED`, `DISPATCHED`), seal state (`INTACT`, `DAMAGED`, `TAMPERED`), photo `file_id` (M20 `TRADE_ASSET` pool, `PRIVATE_CASE`), `occurred_at` from the server | Update and delete blocked by trigger |
-| `park_handover_pins` | One per parcel and leg (`DROPOFF`, `PICKUP`): `pin_hash` (domain-separated HMAC), `pin_enc` (AES-GCM, revealed only to the leg's rightful party), `attempts_count`, `max_attempts` (3), `locked_at`, `verified_at` | Never plaintext. Partial unique: one live PIN per (parcel, leg) |
-| Fee file entry `park_cash_handling_fee` (§6.5) | ₦300–₦500 range shown to buyers as a cash-at-pickup notice (C23) | Display only. No price, fee or payout column exists in the `park` schema |
+| Table                                          | Purpose                                                                                                                                                                                                                                                                                                                                          | Key constraints                                                                                                                                                            |
+| ---------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `park_hubs`                                    | Terminal: code (`H-JIB-004`), name, operator business (`God is Good Motors`), branch, `city_id` (catalog city, §7.8), street address, landmark, optional GPS pin, `status` (`PENDING`, `ACTIVE`, `SUSPENDED`), `operating_state` (`OPEN`, `CLOSED`, `FULL`, `UNABLE_TO_RECEIVE`), operating hours, authorization `verified_at` / `review_due_at` | Unique code. Partial unique on normalised (operator, branch, address) for live hubs, which stops duplicate claims of one terminal (gap audit item 1)                       |
+| `park_hub_applications`                        | Onboarding case: applicant user, origin (`SELF_SERVE` from PH1–PH5, `TRUSTOPS_REGISTERED` from TO-PA6/TO-PA10), step data, evidence file refs (identity, authorization, mandatory photo gate), payout account ref, `status` (`DRAFT`, `SUBMITTED`, `IN_REVIEW`, `CHANGES_REQUESTED`, `APPROVED`, `REJECTED`), assigned reviewer, SLA             | Submit blocked without authorization evidence                                                                                                                              |
+| `park_hub_agents`                              | Hub ↔ member assignment: `can_receive`, `can_inspect`, `can_release`, `can_add_staff`, `role_label` (`PRIMARY_AGENT`, `STAFF`), `status` (`INVITED`, `ACTIVE`, `SUSPENDED`, `REMOVED`), granted/revoked by and at                                                                                                                                | Rows are never deleted. Partial unique: one live row per (hub, member); one live `PRIMARY_AGENT` per hub. `can_release` requires a TrustOps approver id (check constraint) |
+| `park_parcels`                                 | One per trade: soft `trade_id` (unique), origin and destination hub FKs, waybill, transit carrier, driver phone, plate, `status` (`AWAITING_SOURCE_DROPOFF`, `AT_SOURCE_HUB`, `IN_TRANSIT`, `AT_DESTINATION_HUB`, `RELEASED`, `EXCEPTION`), `status_before_exception`                                                                            | Unique `trade_id`. `canTransition` plus 409. Origin may equal destination, which skips `IN_TRANSIT`                                                                        |
+| `park_custody_events`                          | Append-only: parcel, hub, actor member, `kind` (`DROPOFF_RECEIVED`, `ARRIVAL_LOGGED`, `INSPECTED`, `PIN_ATTEMPT`, `RELEASED`, `EXCEPTION_RAISED`, `EXCEPTION_CLEARED`, `DISPATCHED`), seal state (`INTACT`, `DAMAGED`, `TAMPERED`), photo `file_id` (M20 `TRADE_ASSET` pool, `PRIVATE_CASE`), `occurred_at` from the server                      | Update and delete blocked by trigger                                                                                                                                       |
+| `park_handover_pins`                           | One per parcel and leg (`DROPOFF`, `PICKUP`): `pin_hash` (domain-separated HMAC), `pin_enc` (AES-GCM, revealed only to the leg's rightful party), `attempts_count`, `max_attempts` (3), `locked_at`, `verified_at`                                                                                                                               | Never plaintext. Partial unique: one live PIN per (parcel, leg)                                                                                                            |
+| Fee file entry `park_cash_handling_fee` (§6.5) | ₦300–₦500 range shown to buyers as a cash-at-pickup notice (C23)                                                                                                                                                                                                                                                                                 | Display only. No price, fee or payout column exists in the `park` schema                                                                                                   |
 
 ### 7.3 Auth and authorization
 
@@ -363,10 +363,10 @@ payout_fee:                    # charged on each seller withdrawal
 type DeliverySignalPayload = {
   tradeId: string;
   source: 'PARTNER_PORTAL' | 'PARK_CUSTODY' | 'SELLER_SELF_REPORT' | 'BUYER_CONFIRMATION';
-  occurredAt: string;            // ISO, server time
+  occurredAt: string; // ISO, server time
   actorUserId: string | null;
   reference: { kind: 'LOGISTICS_PACKAGE' | 'PARK_PARCEL'; id: string } | null;
-  hubId?: string;                // PARK_CUSTODY only
+  hubId?: string; // PARK_CUSTODY only
 };
 ```
 
@@ -374,12 +374,12 @@ The trade-side consumer (delivery → inspection → buyer confirms or auto-comp
 
 ### 7.6 Which app owns which Park screen
 
-| Screens | App | Scope |
-|---|---|---|
-| PH1–PH6, PA7, PA8, reached from an Account item | `web-app-ui` (`/hub/register`, `/hub/application`) | `CONSUMER` |
-| U1–U6, PE1, PA9, PA10 | `park-agent-app` | `LOGISTICS` + Park membership |
-| PH7, TO-PA1–TO-PA11, NAV, P0-04, P0-05, P0-07 | `operations-app` | `STAFF` + `park.*` permissions |
-| AB1, AB2 (buyer pickup PIN), X2 (seller chooses Park Hub Transit) | `web-app-ui` | `CONSUMER` |
+| Screens                                                           | App                                                | Scope                          |
+| ----------------------------------------------------------------- | -------------------------------------------------- | ------------------------------ |
+| PH1–PH6, PA7, PA8, reached from an Account item                   | `web-app-ui` (`/hub/register`, `/hub/application`) | `CONSUMER`                     |
+| U1–U6, PE1, PA9, PA10                                             | `park-agent-app`                                   | `LOGISTICS` + Park membership  |
+| PH7, TO-PA1–TO-PA11, NAV, P0-04, P0-05, P0-07                     | `operations-app`                                   | `STAFF` + `park.*` permissions |
+| AB1, AB2 (buyer pickup PIN), X2 (seller chooses Park Hub Transit) | `web-app-ui`                                       | `CONSUMER`                     |
 
 ### 7.7 Money (C23)
 
@@ -407,6 +407,7 @@ The trade-side consumer (delivery → inspection → buyer confirms or auto-comp
 - **Where it is enforced.** The ship step (X2) offers Park only when the delivery city is serviceable, and then lists that city's hubs to pick from. Otherwise the option is shown disabled with "Park isn't available in Jos yet". The backend re-checks when the parcel is created and returns `409 PARK_NOT_AVAILABLE_IN_CITY`. The ships-from city must also be serviceable, because the seller drops the parcel at a hub there (Q15).
 - **Coverage changing mid-trade.** If a destination hub is suspended or closes while a parcel is on its way, a custody case opens so TrustOps can redirect the parcel to another hub in that city or agree another route with the parties.
 - **Visibility.** `GET /park/coverage` lists serviceable cities, paginated, and `GET /park/coverage/cities/:cityId/hubs` lists a city's available hubs. operations-app shows coverage by state and city, including cities with hubs in onboarding.
+
 ---
 
 ## 8. Frontend architecture and UI fidelity
@@ -417,11 +418,11 @@ The trade-side consumer (delivery → inspection → buyer confirms or auto-comp
 
 ### 8.2 Responsive rules (from the HTML)
 
-Mobile is the baseline. Only layouts the HTML shows changing shape get desktop treatments (D1–D9, P2-D*, P3-D*, AN2). Tablet inherits the desktop shell with sidebar becoming top nav or collapsed rail (T1–T5, P2-T*, P3-T*, TO-PA9). Breakpoints: base, `sm` 640, `md` 768, `lg` 1024. Consumer and Park screens are mobile *web* (browser chrome), not native-feeling.
+Mobile is the baseline. Only layouts the HTML shows changing shape get desktop treatments (D1–D9, P2-D*, P3-D*, AN2). Tablet inherits the desktop shell with sidebar becoming top nav or collapsed rail (T1–T5, P2-T*, P3-T*, TO-PA9). Breakpoints: base, `sm` 640, `md` 768, `lg` 1024. Consumer and Park screens are mobile _web_ (browser chrome), not native-feeling.
 
 ### 8.3 Screen-to-app map (210 reference screens)
 
-- **web-app-ui:** E*, TOS*, OB*, AC1–AC8, OF1, Z1–Z5, SE*, F*, K*, I*, MI*, P2-*, G*, CTS1, BEI*, AC4, IF1, G3, Q1, R1, C1–C10, CT*, AR1, CR*, SC*, V*, AB1–AB7, DE*, H*, Y1, AC6, SO*, S1–S10, EL*, W*, BR1, BVR1, SD1, X*, AN*, M1–M3, WF1, PR1, J*, AS*, VF1, CA*, LS1, TF*, Y2, AC5, SR*, NP1, AC7, MC1, L1, D1–D9, T1–T5, PH1–PH6, PA7, PA8, P0-03, P3-*.
+- **web-app-ui:** E*, TOS*, OB*, AC1–AC8, OF1, Z1–Z5, SE*, F*, K*, I*, MI*, P2-_, G_, CTS1, BEI*, AC4, IF1, G3, Q1, R1, C1–C10, CT*, AR1, CR*, SC*, V*, AB1–AB7, DE*, H*, Y1, AC6, SO*, S1–S10, EL*, W*, BR1, BVR1, SD1, X*, AN*, M1–M3, WF1, PR1, J*, AS*, VF1, CA*, LS1, TF*, Y2, AC5, SR*, NP1, AC7, MC1, L1, D1–D9, T1–T5, PH1–PH6, PA7, PA8, P0-03, P3-*.
 - **operations-app:** N1, N2, P1, Z6, TO1, AC9, AC9b, AC10, PH7, NAV, TO-PA1–TO-PA11, P0-01, P0-02, P0-04–P0-07, plus spec-only screens with no reference (tickets, directory, audit timeline, config, analytics, notification dead-letter, logistics companies and packages per m2 §9).
 - **park-agent-app:** U1–U6, PE1, PA9, PA10.
 - **logistics-ops:** no reference screens exist. Built from m2 §8 using `ui-kit` and the TrustOps desktop shell patterns; the visual check is "design-system conformance" instead of screenshot-vs-reference.
@@ -460,16 +461,16 @@ Skimmed all four old repos and their `.claude/` folders. The `.claude/` folders 
 
 **Lift verbatim, then re-test and re-review:**
 
-| Piece (old path under `backend-apis/src/modules/`) | Why it earns a lift | Target ticket |
-|---|---|---|
-| `identity/domain/username/skeleton.ts` (+ `reserved.ts`) | Subtle, versioned confusable folding with a reasoned narrow-glyph variant; already debugged against M1 §6.3 | T-033 |
-| `utils/encryption.ts` | AES-256-GCM with a versioned wire format; matches the reused `ENCRYPTION_KEY` | T-026 |
-| `identity/infrastructure/crypto.ts` | Domain-separated HMAC, length-safe constant-time compare, unbiased numeric codes | T-026 |
-| `identity/domain/credential/hashing.ts`, `breach.ts` | OWASP argon2id parameters with rehash; k-anonymity HIBP check | T-032 |
-| `identity/domain/identifiers.ts` | Email normalisation (provider folding), E.164 phones, masking, public ids | T-026 |
-| `files/infrastructure/cloudinary.ts`, `files/domain/rotation.ts`, `files/domain/pools.ts` | Hand-rolled multi-account signing without the global-singleton SDK; quota-aware rotation | T-040 |
-| `ledger/domain/providerAdapter.ts`, `ledger/infrastructure/providers/paystack/{client,webhook}.ts` | The m8 interface verbatim; HMAC-SHA512 raw-body verification that fails closed | T-071 |
-| `scheduler/domain/registry.ts`, `scheduler/infrastructure/queue.ts` | BullMQ job scheduler with stable ids and orphan pruning | T-023 |
+| Piece (old path under `backend-apis/src/modules/`)                                                 | Why it earns a lift                                                                                         | Target ticket |
+| -------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- | ------------- |
+| `identity/domain/username/skeleton.ts` (+ `reserved.ts`)                                           | Subtle, versioned confusable folding with a reasoned narrow-glyph variant; already debugged against M1 §6.3 | T-033         |
+| `utils/encryption.ts`                                                                              | AES-256-GCM with a versioned wire format; matches the reused `ENCRYPTION_KEY`                               | T-026         |
+| `identity/infrastructure/crypto.ts`                                                                | Domain-separated HMAC, length-safe constant-time compare, unbiased numeric codes                            | T-026         |
+| `identity/domain/credential/hashing.ts`, `breach.ts`                                               | OWASP argon2id parameters with rehash; k-anonymity HIBP check                                               | T-032         |
+| `identity/domain/identifiers.ts`                                                                   | Email normalisation (provider folding), E.164 phones, masking, public ids                                   | T-026         |
+| `files/infrastructure/cloudinary.ts`, `files/domain/rotation.ts`, `files/domain/pools.ts`          | Hand-rolled multi-account signing without the global-singleton SDK; quota-aware rotation                    | T-040         |
+| `ledger/domain/providerAdapter.ts`, `ledger/infrastructure/providers/paystack/{client,webhook}.ts` | The m8 interface verbatim; HMAC-SHA512 raw-body verification that fails closed                              | T-071         |
+| `scheduler/domain/registry.ts`, `scheduler/infrastructure/queue.ts`                                | BullMQ job scheduler with stable ids and orphan pruning                                                     | T-023         |
 
 **Use as reference, rewrite:** `identity/domain/session/tokens.ts`, `identity/domain/social/linking.ts` (sound logic, no tests), `socket/*` (rewrite per the socket guide with tests), `logistics/*` (small; the new schema adds Park and packages), `notify/*`.
 
@@ -481,25 +482,25 @@ Skimmed all four old repos and their `.claude/` folders. The `.claude/` folders 
 
 Each has a default that tickets ship with if no answer arrives. Only Q1 blocks anything outright, and it blocks deploy jobs only.
 
-| # | Question | Default if unanswered | Blocks |
-|---|---|---|---|
-| Q1 | Where does each app deploy, and which GitHub remote is the new repo? Old apps run under PM2 with no deploy automation. | Deploy jobs written against an SSH + PM2 target, plus a Dockerfile per app; dispatch runs as dry-runs | Deploy jobs, T-004 dispatch validation |
-| Q2 | Who bears the ₦300 Park handling fee? | **Answered 2026-10-05:** the buyer pays the agent ₦300–₦500 in cash; Komtru only displays it (C23) | — |
-| Q3 | Ship the Komtru Wallet (AB7)? Stored value likely needs CBN licensing. | Screen built behind a disabled flag; no wallet ledger | T-077 |
-| Q4 | Is the 1.5% Buyer Protection Fee refunded on cancellation and full refund? | Refunded on every full refund; retained on partial dispute outcomes | Nothing |
-| Q5 | Confirm dropping V1's "Logistics fee" line (m2 §11) | Dropped | Nothing |
-| Q6 | Confirm Paystack pay-with-transfer for V2 instead of a DVA | Pay-with-transfer | Nothing |
-| Q7 | KYC (Dojah/Smile ID) and IMEI-lookup provider accounts | Fake adapters in dev/test; real adapters disabled until credentials exist | Real verification only |
-| Q8 | Provision Sentry and PgBouncer (or RDS Proxy) for deployed environments; create `komtru_v2_dev` | Local Docker equivalents; Sentry no-ops without a DSN | Deployed observability |
-| Q9 | AI advisory: rule-based v1, or an LLM provider now? | Rule-based behind an interface | Nothing |
-| Q10 | Dispute mediation: are "replacement" and "refund with return" real outcomes needing return logistics? | Recorded as agreed notes; return shipping self-arranged | Nothing |
-| Q11 | Are storefront, listings and the listing-based discovery screens merchant-only, with casual sellers using trade proposals only? | Yes, merchant-only | Nothing |
-| Q12 | Must a casual, non-merchant seller still pass NIN/BVN plus liveness (level 2) before their trade can be funded? | Yes, to protect payouts | Nothing |
-| Q13 | Confirm the merchant application form fields in §6.3 | As listed in §6.3 | Nothing |
-| Q15 | Must the seller's ships-from city also have a hub, since the seller drops the parcel at one? | Yes, both cities must be serviceable | Nothing |
-| Q16 | Which cities seed the catalog? | Every state capital plus major commercial cities, reviewed by the owner before T-046 merges; TrustOps adds more as hubs onboard | Nothing |
-| Q17 | Should address dropdowns list every catalog city, or only cities with Park coverage? | Every active catalog city. Park coverage only decides whether Park can be chosen, so trades with couriers or self-arranged shipping work anywhere listed | Nothing |
-| Q14 | What platform cut, if any, comes out of seller and merchant proceeds? The HTML shows only the buyer fee | 0% for both, set in the fee file | Nothing |
+| #   | Question                                                                                                                        | Default if unanswered                                                                                                                                    | Blocks                                 |
+| --- | ------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------- |
+| Q1  | Where does each app deploy, and which GitHub remote is the new repo? Old apps run under PM2 with no deploy automation.          | Deploy jobs written against an SSH + PM2 target, plus a Dockerfile per app; dispatch runs as dry-runs                                                    | Deploy jobs, T-004 dispatch validation |
+| Q2  | Who bears the ₦300 Park handling fee?                                                                                           | **Answered 2026-10-05:** the buyer pays the agent ₦300–₦500 in cash; Komtru only displays it (C23)                                                       | —                                      |
+| Q3  | Ship the Komtru Wallet (AB7)? Stored value likely needs CBN licensing.                                                          | Screen built behind a disabled flag; no wallet ledger                                                                                                    | T-077                                  |
+| Q4  | Is the 1.5% Buyer Protection Fee refunded on cancellation and full refund?                                                      | Refunded on every full refund; retained on partial dispute outcomes                                                                                      | Nothing                                |
+| Q5  | Confirm dropping V1's "Logistics fee" line (m2 §11)                                                                             | Dropped                                                                                                                                                  | Nothing                                |
+| Q6  | Confirm Paystack pay-with-transfer for V2 instead of a DVA                                                                      | Pay-with-transfer                                                                                                                                        | Nothing                                |
+| Q7  | KYC (Dojah/Smile ID) and IMEI-lookup provider accounts                                                                          | Fake adapters in dev/test; real adapters disabled until credentials exist                                                                                | Real verification only                 |
+| Q8  | Provision Sentry and PgBouncer (or RDS Proxy) for deployed environments; create `komtru_v2_dev`                                 | Local Docker equivalents; Sentry no-ops without a DSN                                                                                                    | Deployed observability                 |
+| Q9  | AI advisory: rule-based v1, or an LLM provider now?                                                                             | Rule-based behind an interface                                                                                                                           | Nothing                                |
+| Q10 | Dispute mediation: are "replacement" and "refund with return" real outcomes needing return logistics?                           | Recorded as agreed notes; return shipping self-arranged                                                                                                  | Nothing                                |
+| Q11 | Are storefront, listings and the listing-based discovery screens merchant-only, with casual sellers using trade proposals only? | Yes, merchant-only                                                                                                                                       | Nothing                                |
+| Q12 | Must a casual, non-merchant seller still pass NIN/BVN plus liveness (level 2) before their trade can be funded?                 | Yes, to protect payouts                                                                                                                                  | Nothing                                |
+| Q13 | Confirm the merchant application form fields in §6.3                                                                            | As listed in §6.3                                                                                                                                        | Nothing                                |
+| Q15 | Must the seller's ships-from city also have a hub, since the seller drops the parcel at one?                                    | Yes, both cities must be serviceable                                                                                                                     | Nothing                                |
+| Q16 | Which cities seed the catalog?                                                                                                  | Every state capital plus major commercial cities, reviewed by the owner before T-046 merges; TrustOps adds more as hubs onboard                          | Nothing                                |
+| Q17 | Should address dropdowns list every catalog city, or only cities with Park coverage?                                            | Every active catalog city. Park coverage only decides whether Park can be chosen, so trades with couriers or self-arranged shipping work anywhere listed | Nothing                                |
+| Q14 | What platform cut, if any, comes out of seller and merchant proceeds? The HTML shows only the buyer fee                         | 0% for both, set in the fee file                                                                                                                         | Nothing                                |
 
 ---
 
