@@ -127,6 +127,13 @@
       "when": 1791238032066,
       "tag": "0017_trade_append_only",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1791238230239,
+      "tag": "0018_trade_state_machine",
+      "breakpoints": true
     }
   ]
 }
