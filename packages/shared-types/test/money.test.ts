@@ -1,8 +1,11 @@
 import fc from 'fast-check';
+import { z } from 'zod';
 import { describe, expect, it } from 'vitest';
 import {
   applyBps,
   formatNaira,
+  KOBO_MAX,
+  KOBO_MIN,
   koboSchema,
   koboToJson,
   nairaToKobo,
@@ -19,6 +22,21 @@ describe('koboSchema', () => {
   it.each([45200000, '452000.5', '1e5', '', ' 100', '0x10', '+5'])('rejects %j', (input) => {
     expect(koboSchema.safeParse(input).success).toBe(false);
   });
+
+  it('accepts the Postgres BIGINT range and rejects anything beyond it', () => {
+    expect(koboSchema.parse(KOBO_MAX.toString())).toBe(KOBO_MAX);
+    expect(koboSchema.parse(KOBO_MIN.toString())).toBe(KOBO_MIN);
+    expect(koboSchema.safeParse((KOBO_MAX + 1n).toString()).success).toBe(false);
+    expect(koboSchema.safeParse((KOBO_MIN - 1n).toString()).success).toBe(false);
+    expect(koboSchema.safeParse('9'.repeat(1000)).success).toBe(false);
+  });
+
+  it('encodes bigint back to the wire string (two-way codec)', () => {
+    expect(koboSchema.encode(45200000n)).toBe('45200000');
+    const dto = z.object({ total: koboSchema });
+    expect(dto.encode({ total: -150000n })).toEqual({ total: '-150000' });
+    expect(JSON.stringify(dto.encode({ total: KOBO_MAX }))).toBe(`{"total":"${KOBO_MAX}"}`);
+  });
 });
 
 describe('positiveKoboSchema', () => {
@@ -26,6 +44,10 @@ describe('positiveKoboSchema', () => {
     expect(positiveKoboSchema.parse('1')).toBe(1n);
     expect(positiveKoboSchema.safeParse('0').success).toBe(false);
     expect(positiveKoboSchema.safeParse('-1').success).toBe(false);
+  });
+
+  it('encodes a price back to its wire string', () => {
+    expect(positiveKoboSchema.encode(678000n)).toBe('678000');
   });
 });
 
@@ -56,9 +78,12 @@ describe('nairaToKobo', () => {
     expect(nairaToKobo(text)).toBe(kobo);
   });
 
-  it.each(['1.234', 'abc', '', '12a', '1..2', '₦'])('rejects %j', (text) => {
-    expect(() => nairaToKobo(text)).toThrow(RangeError);
-  });
+  it.each(['1.234', 'abc', '', '12a', '1..2', '₦', '1,000,00', '1,0', ',100', '1000,000'])(
+    'rejects %j',
+    (text) => {
+      expect(() => nairaToKobo(text)).toThrow(RangeError);
+    },
+  );
 });
 
 describe('applyBps', () => {
@@ -79,7 +104,7 @@ describe('applyBps', () => {
 });
 
 describe('round trips (property)', () => {
-  const amounts = fc.bigInt({ min: -(10n ** 20n), max: 10n ** 20n });
+  const amounts = fc.bigInt({ min: KOBO_MIN, max: KOBO_MAX });
 
   it('JSON string ↔ bigint is exact, including beyond Number.MAX_SAFE_INTEGER', () => {
     fc.assert(fc.property(amounts, (k) => koboSchema.parse(koboToJson(k)) === k));

@@ -3,18 +3,31 @@
 // precision past 2^53. Every amount crossing an API boundary goes through `koboSchema`.
 import { z } from 'zod';
 
-const KOBO_PATTERN = /^-?\d+$/;
+/** Postgres BIGINT bounds: every amount must fit the column it is stored in. */
+export const KOBO_MAX = 9_223_372_036_854_775_807n;
+export const KOBO_MIN = -9_223_372_036_854_775_808n;
 
-/** A JSON amount in kobo: a string of digits, optionally negative (ledger balances can be). */
-export const koboSchema = z
+// At most 19 digits: anything longer is out of range, and is rejected before BigInt() parses it.
+const KOBO_WIRE = z
   .string()
-  .regex(KOBO_PATTERN, 'Amount must be a whole number of kobo, as a string of digits')
-  .transform((value) => BigInt(value));
+  .regex(/^-?\d{1,19}$/, 'Amount must be a whole number of kobo, as a string of digits');
+
+/**
+ * A JSON amount in kobo: a string of digits, optionally negative (ledger balances can be).
+ * A two-way codec: `parse`/`decode` turn the wire string into bigint, and `encode` turns bigint back
+ * into the wire string, so a response DTO containing money serialises with `schema.encode(dto)`.
+ */
+export const koboSchema = z.codec(KOBO_WIRE, z.bigint().min(KOBO_MIN).max(KOBO_MAX), {
+  decode: (value) => BigInt(value),
+  encode: (kobo) => kobo.toString(),
+});
 
 /** A price or payment: strictly greater than zero. */
 export const positiveKoboSchema = koboSchema.refine((kobo) => kobo > 0n, 'Amount must be greater than zero');
 
 export type Kobo = bigint;
+/** The wire form of an amount, as clients send and receive it. */
+export type KoboJson = z.input<typeof koboSchema>;
 
 export const koboToJson = (kobo: Kobo): string => kobo.toString();
 
@@ -30,7 +43,9 @@ export function formatNaira(kobo: Kobo, options: { showKobo?: boolean } = {}): s
   return `${sign}₦${naira}${showKobo ? `.${fraction}` : ''}`;
 }
 
-const NAIRA_TEXT = /^(-)?₦?((?:\d|,(?=\d))+)(?:\.(\d{1,2}))?$/;
+// Thousands separators must sit every three digits (`1,000,000`), or be absent (`1000000`). A comma
+// anywhere else (`1,000,00`, typed by someone used to decimal commas) is an error, never a guess.
+const NAIRA_TEXT = /^(-)?₦?(\d{1,3}(?:,\d{3})+|\d+)(?:\.(\d{1,2}))?$/;
 
 /** Parses typed naira (`"452,000.50"`, `"₦1,500.5"`) into kobo exactly, without floating point. */
 export function nairaToKobo(input: string): Kobo {
