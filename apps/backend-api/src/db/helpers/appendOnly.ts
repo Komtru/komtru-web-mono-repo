@@ -2,6 +2,9 @@
 // (`pnpm db:generate --custom`) right after the migration that creates the table:
 //   UPDATE and DELETE raise KT001 for everyone, the owner included (platform.reject_mutation);
 //   komtru_app gets INSERT and SELECT only, and grantRuntimeAccess() keeps it that way.
+// A row trigger does not fire on TRUNCATE, so the owner can still empty the table — deliberately,
+// because the test harness truncates between tests and an owner who can TRUNCATE can also DROP.
+// komtru_app cannot: the REVOKE below takes TRUNCATE with it.
 import { APPEND_ONLY_TRIGGER, RUNTIME_ROLE } from '../roles.js';
 
 const IDENTIFIER = /^[a-z_][a-z0-9_]{0,62}$/;

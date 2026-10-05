@@ -28,6 +28,11 @@ export async function grantRuntimeAccess(client: pg.ClientBase): Promise<void> {
   await client.query(`REVOKE CREATE, TEMPORARY ON DATABASE ${database} FROM PUBLIC`);
   await client.query(`REVOKE CREATE, TEMPORARY ON DATABASE ${database} FROM ${role}`);
   await client.query(`GRANT CONNECT ON DATABASE ${database} TO ${role}`);
+  // Extensions live in public, and an extension type's operators are only resolvable when the schema
+  // holding them is both in search_path and usable: without this, komtru_app's `citext = citext`
+  // falls back to `text =`, so `username = 'janedoe'` silently misses 'JaneDoe' while the unique
+  // index still fires. USAGE is not CREATE — verifyLockdown() still proves the role cannot build here.
+  await client.query(`GRANT USAGE ON SCHEMA public TO ${role}`);
   const { rows: schemas } = await client.query<{ name: string }>(
     `SELECT nspname AS name FROM pg_namespace
       WHERE nspname <> ALL($1::text[]) AND nspname NOT LIKE 'pg\\_%'`,

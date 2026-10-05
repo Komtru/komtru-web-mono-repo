@@ -109,4 +109,19 @@ describe.runIf(infraEnabled)('runtime role', () => {
     await expect(assertNotOwner(t.owner())).rejects.toBeInstanceOf(RuntimeRoleError);
     await expect(assertNotOwner(t.app())).resolves.toBeUndefined();
   });
+
+  it('lets the runtime role resolve the citext type and its operators', async () => {
+    const { rows } = await t
+      .app()
+      .query<{ same: boolean }>(`SELECT 'Alice'::citext = 'alice'::citext AS same`);
+    expect(rows[0]?.same).toBe(true);
+  });
+
+  it('gives the runtime role USAGE on public without CREATE', async () => {
+    const { rows } = await t.app().query<{ usage: boolean; create: boolean }>(
+      `SELECT has_schema_privilege('komtru_app', 'public', 'USAGE') AS usage,
+              has_schema_privilege('komtru_app', 'public', 'CREATE') AS create`,
+    );
+    expect(rows[0]).toEqual({ usage: true, create: false });
+  });
 });
