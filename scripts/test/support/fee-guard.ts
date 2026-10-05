@@ -31,15 +31,44 @@ const FORBIDDEN_SYMBOLS = new Set([
   'snapshotParkCashFee',
   'parseFeeSchedule',
   'feeScheduleSchema',
-  'getFeeSchedule',
 ]);
+
+/**
+ * Modules that must post from a trade's stored snapshot. Reading the *live* schedule here — even
+ * through the sanctioned barrel — recomputes a fee for an already-accepted trade, which is the
+ * retroactive-repricing bug the snapshot exists to prevent. A quote endpoint would be a legitimate
+ * caller; none of these are.
+ */
+const SNAPSHOT_ONLY = ['ledger', 'trades', 'park', 'merchant'];
+const LIVE_READS = ['getFeeSchedule', 'applyBps'];
 
 /** Below this a value is indistinguishable from an array index or a loop bound. */
 const DISTINCTIVE = 10;
 
-const SHARED_TYPES = /import\s+(?:type\s+)?([^'";]*?)\s*from\s*['"]@komtru\/shared-types['"]/g;
+/** `// fee-guard-ignore: <reason>` on the line, for a constant that genuinely is not a fee. */
+export const IGNORE_MARKER = 'fee-guard-ignore';
+
+/**
+ * A guarded number is a fee literal unless its line is plainly about something else. `30000` is a
+ * fee cap AND the most ordinary 30-second timeout there is; flagging every one would get the guard
+ * switched off, and missing every one would make it useless. So: guard by default, and exclude the
+ * units that are unmistakably not money. A missed fee literal costs more than a noisy one, which is
+ * why this is a short denylist rather than a long allowlist.
+ */
+const NOT_MONEY =
+  /(?<![a-z])(ms|millis|milliseconds?|seconds?|secs?|minutes?|hours?|days?|timeout|ttl|delay|interval|poll|backoff|retry|retries|attempts?|port|offset|index|length|size|bytes?|width|height|px|limit|concurrency|depth)(?![a-z])/i;
+
+/** `import … from`, `export … from`, `require(…)` and `await import(…)` all reach the package. */
+const SHARED_TYPES =
+  /(?:import|export)\s+(?:type\s+)?([^'";]*?)\s*from\s*['"]@komtru\/shared-types['"]|(?:require|import)\(\s*['"]@komtru\/shared-types['"]\s*\)/g;
+/** A relative path into the fee module that is not its barrel: the deep import the barrel forbids. */
+const DEEP_CONFIG_IMPORT = /['"][^'"]*\/config\/(?!index)[^'"]*['"]/g;
+/** The file itself, however the path is spelled. */
+const FEES_FILE_MENTION = /fees\.ya?ml/gi;
 /** A whole numeric token, tolerating `_` separators and a bigint `n` suffix; not part of an identifier. */
 const NUMBER = /(?<![\w$.])\d[\d_]*n?(?![\w$.])/g;
+/** A decimal fraction, for a rate written as `0.015` or `1.5` rather than in basis points. */
+const DECIMAL = /(?<![\w$.])\d+\.\d+(?![\w$.])/g;
 
 /** Every scalar leaf of the fee file, flattened. */
 function leaves(value: unknown, into: unknown[] = []): unknown[] {
@@ -66,6 +95,33 @@ export function feeValuesToGuard(scheduleText: string): string[] {
   }
   if (typeof file.version === 'string') values.add(file.version);
   return [...values];
+}
+
+/**
+ * Each basis-point rate as the decimal fractions someone would write instead: 150 bps is `0.015` as
+ * a multiplier and `1.5` as a percentage. Both are a fee literal AND a float in a money path.
+ */
+export function feeFractionsToGuard(scheduleText: string): string[] {
+  const fractions = new Set<string>();
+  for (const [key, value] of flatten(parse(scheduleText))) {
+    if (key.endsWith('rate_bps') && typeof value === 'number' && value > 0) {
+      fractions.add(String(value / 10_000));
+      fractions.add(String(value / 100));
+    }
+  }
+  return [...fractions];
+}
+
+/** Dotted key to scalar, for the rate lookup above. */
+function flatten(value: unknown, prefix = '', into: [string, unknown][] = []): [string, unknown][] {
+  if (value !== null && typeof value === 'object') {
+    for (const [key, child] of Object.entries(value)) {
+      flatten(child, prefix ? `${prefix}.${key}` : key, into);
+    }
+  } else {
+    into.push([prefix, value]);
+  }
+  return into;
 }
 
 /**
@@ -114,9 +170,14 @@ async function* walk(dir: string): AsyncGenerator<string> {
 }
 
 /** Scans a backend module tree (`src/modules`) for fee literals and fee reads that skip the module. */
-export async function findFeeViolations(root: string, values: string[]): Promise<FeeGuardViolation[]> {
+export async function findFeeViolations(
+  root: string,
+  values: string[],
+  decimalRates: string[] = [],
+): Promise<FeeGuardViolation[]> {
   const numeric = new Set(values.filter((value) => /^\d+$/.test(value)));
   const textual = values.filter((value) => !/^\d+$/.test(value));
+  const fractions = new Set(decimalRates);
   const violations: FeeGuardViolation[] = [];
 
   for await (const file of walk(root)) {
@@ -125,25 +186,50 @@ export async function findFeeViolations(root: string, values: string[]): Promise
     const source = stripComments(await readFile(file, 'utf8'));
     const at = (index: number) => ({ file: relative, line: lineAt(source, index) });
 
+    const lines = source.split('\n');
+    const lineOf = (index: number) => lines[lineAt(source, index) - 1] ?? '';
+    // Comments are blanked before this runs, so the opt-out is read from the raw source. A guard
+    // with no escape hatch gets deleted the first time it fires on a legitimate constant.
+    const raw = (await readFile(file, 'utf8')).split('\n');
+    const ignored = (index: number) => (raw[lineAt(source, index) - 1] ?? '').includes(IGNORE_MARKER);
+
     for (const match of source.matchAll(NUMBER)) {
       const value = match[0].replaceAll('_', '').replace(/n$/, '');
-      if (numeric.has(value)) {
+      if (numeric.has(value) && !NOT_MONEY.test(lineOf(match.index)) && !ignored(match.index)) {
         violations.push({ ...at(match.index), detail: value, kind: 'fee-literal' });
       }
     }
+    // The same rate written as a decimal fraction: `Math.round(amount * 0.015)` is exactly how
+    // someone reimplements 1.5%, and it is a float in a money path as well as a fee literal.
+    for (const match of source.matchAll(DECIMAL)) {
+      if (fractions.has(match[0]) && !NOT_MONEY.test(lineOf(match.index)) && !ignored(match.index)) {
+        violations.push({ ...at(match.index), detail: match[0], kind: 'fee-literal' });
+      }
+    }
     for (const value of textual) {
-      const index = source.indexOf(value);
-      if (index !== -1) violations.push({ ...at(index), detail: value, kind: 'fee-literal' });
+      // A token-boundary search: `indexOf` would report version 2026-10-05.10 as 2026-10-05.1.
+      const token = new RegExp(`(?<![\\w.-])${value.replaceAll('.', '\\.')}(?![\\w.-])`);
+      const found = token.exec(source);
+      if (found) violations.push({ ...at(found.index), detail: value, kind: 'fee-literal' });
     }
 
-    const yaml = source.indexOf('fees.yaml');
-    if (yaml !== -1) {
-      violations.push({ ...at(yaml), detail: 'config/fees.yaml', kind: 'fee-read-bypass' });
+    for (const match of source.matchAll(FEES_FILE_MENTION)) {
+      violations.push({ ...at(match.index), detail: 'config/fees.yaml', kind: 'fee-read-bypass' });
+    }
+    for (const match of source.matchAll(DEEP_CONFIG_IMPORT)) {
+      violations.push({ ...at(match.index), detail: match[0], kind: 'fee-read-bypass' });
+    }
+    if (SNAPSHOT_ONLY.includes(relative.split(path.sep)[0] ?? '')) {
+      for (const symbol of LIVE_READS) {
+        const used = new RegExp(`(?<![\\w$])${symbol}(?![\\w$])`).exec(source);
+        if (used) violations.push({ ...at(used.index), detail: symbol, kind: 'fee-read-bypass' });
+      }
     }
     for (const match of source.matchAll(SHARED_TYPES)) {
-      const clause = match[1] ?? '';
-      // A namespace import hides which symbols are used, so the whole file is checked for them.
-      const scope = /^\*\s+as\s/.test(clause.trim()) ? source : clause;
+      const clause = match[1];
+      // A namespace import, a require() and a dynamic import() all hide which symbols are used, so
+      // the whole file is the scope.
+      const scope = clause === undefined || /^\*\s+as\s/.test(clause.trim()) ? source : clause;
       for (const symbol of FORBIDDEN_SYMBOLS) {
         if (new RegExp(`(?<![\\w$])${symbol}(?![\\w$])`).test(scope)) {
           violations.push({ ...at(match.index), detail: symbol, kind: 'fee-read-bypass' });

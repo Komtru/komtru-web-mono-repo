@@ -19,7 +19,10 @@ const app = createApp({
   config,
   logger,
   onUnexpected: () => {},
-  mountV1: mountRoutes(configModule.routes ?? [], { logger }),
+  // The route declares a rate limit, and mountRoutes refuses to mount a declared control it cannot
+  // supply (T-025). The limiter itself is tested in test/platform/http/rate-limit.int.test.ts; here
+  // it passes everything through so this file tests the route and nothing else.
+  mountV1: mountRoutes(configModule.routes ?? [], { logger, rateLimit: async () => {} }),
 });
 
 describe('GET /v1/config/fees', () => {

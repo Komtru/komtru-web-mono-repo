@@ -58,21 +58,33 @@ const feeFileSchema = z.strictObject({
   payout_fee: z.strictObject({ amount_minor: amount }),
 });
 
+// `readonly` throughout, and frozen at parse time. The whole premise of this ticket is that
+// config/fees.yaml is the only place a fee is set; a process-global mutable singleton would be a
+// second place, reachable from any module and invisible to both the fee guard and the version check.
 export interface FeeBand {
-  rateBps: number;
-  minMinor: Kobo;
-  maxMinor: Kobo | null;
+  readonly rateBps: number;
+  readonly minMinor: Kobo;
+  readonly maxMinor: Kobo | null;
 }
 
 export interface FeeSchedule {
-  version: string;
-  currency: Currency;
-  buyerProtectionFee: FeeBand & { refundableOnFullRefund: boolean };
-  sellerCommission: FeeBand;
-  merchantCommission: FeeBand;
+  readonly version: string;
+  readonly currency: Currency;
+  readonly buyerProtectionFee: FeeBand & { readonly refundableOnFullRefund: boolean };
+  readonly sellerCommission: FeeBand;
+  readonly merchantCommission: FeeBand;
   /** Informational only (C23): the buyer pays a Park agent this in cash; Komtru never touches it. */
-  parkCashHandlingFee: { minMinor: Kobo; maxMinor: Kobo };
-  payoutFee: { amountMinor: Kobo };
+  readonly parkCashHandlingFee: { readonly minMinor: Kobo; readonly maxMinor: Kobo };
+  readonly payoutFee: { readonly amountMinor: Kobo };
+}
+
+/** Freezes the schedule and every band in it, so `readonly` holds at runtime and not only in types. */
+export function deepFreezeSchedule<T>(value: T): T {
+  if (value !== null && typeof value === 'object') {
+    for (const child of Object.values(value)) deepFreezeSchedule(child);
+    Object.freeze(value);
+  }
+  return value;
 }
 
 /** Thrown when config/fees.yaml does not match this schema. Names the keys, never the values. */
@@ -110,7 +122,9 @@ export const feeScheduleSchema: z.ZodType<FeeSchedule, unknown> = feeFileSchema.
  */
 export function parseFeeSchedule(value: unknown, source = 'the fee schedule'): FeeSchedule {
   const result = feeScheduleSchema.safeParse(value);
-  if (result.success) return result.data;
+  // Frozen before anyone can hold a reference: the schedule is read once at boot and shared by every
+  // module, so a single stray assignment would reprice the whole process until it restarts.
+  if (result.success) return deepFreezeSchedule(result.data);
   const problems = result.error.issues.map(
     (issue) => `${issue.path.join('.') || '<root>'}: ${issue.message}`,
   );

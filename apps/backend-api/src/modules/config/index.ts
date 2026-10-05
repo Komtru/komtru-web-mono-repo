@@ -5,7 +5,14 @@
 import { defineModule } from '../../platform/module.js';
 import { feesRoute } from './routes.js';
 
-export { findFeesFile, getFeeSchedule, loadFeeSchedule, snapshotFees } from './fees.js';
+export {
+  feeScheduleSource,
+  findFeesFile,
+  getFeeSchedule,
+  loadFeeSchedule,
+  snapshotFees,
+  snapshotParkCashFee,
+} from './fees.js';
 export { feeScheduleResponseSchema } from './routes.js';
 
 export const configModule = defineModule({ name: 'config', routes: [feesRoute] });

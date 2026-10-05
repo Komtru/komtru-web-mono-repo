@@ -2,7 +2,7 @@
 // it and every frontend displays what the API returns rather than recomputing a total of its own.
 import { z } from 'zod';
 import { currencySchema, type Currency } from '../enums.js';
-import { applyBps, type Kobo } from '../money.js';
+import { applyBps, koboJsonSchema, type Kobo } from '../money.js';
 import { sellerKindSchema, type FeeBand, type FeeSchedule, type SellerKind } from './schema.js';
 
 export interface TradeFees {
@@ -34,6 +34,15 @@ const commissionBand = (sellerKind: SellerKind, schedule: FeeSchedule): [FeeBand
     ? [schedule.merchantCommission, 'merchant_commission']
     : [schedule.sellerCommission, 'seller_commission'];
 
+/** The Park snapshot gets the same validation on the way back out of JSONB as the trade snapshot. */
+export const parkCashFeeSnapshotSchema = z.strictObject({
+  version: z.string().min(1),
+  currency: currencySchema,
+  takenAt: z.iso.datetime(),
+  minMinor: koboJsonSchema,
+  maxMinor: koboJsonSchema,
+});
+
 /**
  * `park_cash_handling_fee` and `payout_fee` are deliberately absent: the Park fee is cash the buyer
  * hands an agent and never enters Komtru's books (C23), and the payout fee is charged per
@@ -43,6 +52,10 @@ export function computeTradeFees(itemMinor: Kobo, sellerKind: SellerKind, schedu
   if (typeof itemMinor !== 'bigint') {
     throw new TypeError('computeTradeFees takes an item price in kobo as a bigint, never a number');
   }
+  // Checked, not trusted: this value arrives from a database column or a request body, it decides
+  // which cut the platform takes, and an unrecognised kind would otherwise fall through to the
+  // casual band silently — including the day a third seller kind is added.
+  sellerKindSchema.parse(sellerKind);
   if (itemMinor < 0n) throw new RangeError('computeTradeFees takes a non-negative item price');
 
   const buyerProtectionFeeMinor = charge(itemMinor, schedule.buyerProtectionFee);
@@ -104,32 +117,57 @@ export interface FeeSnapshot {
   };
 }
 
-/** Matches `KOBO_WIRE` in money.ts: at most 19 digits, so every amount fits a BIGINT column. */
-const wireAmount = z.string().regex(/^\d{1,19}$/, 'Amount must be a whole number of kobo, as digits');
+/** One money vocabulary for the whole platform: digits, and inside the BIGINT range (money.ts). */
+const wireAmount = koboJsonSchema;
 
-export const feeSnapshotSchema = z.strictObject({
-  version: z.string().min(1),
-  currency: currencySchema,
-  takenAt: z.iso.datetime(),
-  sellerKind: sellerKindSchema,
-  amounts: z.strictObject({
-    itemMinor: wireAmount,
-    buyerProtectionFeeMinor: wireAmount,
-    buyerTotalMinor: wireAmount,
-    commissionMinor: wireAmount,
-    sellerProceedsMinor: wireAmount,
-    platformRevenueMinor: wireAmount,
-  }),
-  terms: z.strictObject({
-    buyerProtectionBps: z.int().min(0).max(10_000),
-    buyerProtectionMinMinor: wireAmount,
-    buyerProtectionMaxMinor: wireAmount.nullable(),
-    buyerProtectionRefundableOnFullRefund: z.boolean(),
-    commissionBps: z.int().min(0).max(10_000),
-    commissionMinMinor: wireAmount,
-    commissionMaxMinor: wireAmount.nullable(),
-  }),
-});
+export const feeSnapshotSchema = z
+  .strictObject({
+    version: z.string().min(1),
+    currency: currencySchema,
+    takenAt: z.iso.datetime(),
+    sellerKind: sellerKindSchema,
+    amounts: z.strictObject({
+      itemMinor: wireAmount,
+      buyerProtectionFeeMinor: wireAmount,
+      buyerTotalMinor: wireAmount,
+      commissionMinor: wireAmount,
+      sellerProceedsMinor: wireAmount,
+      platformRevenueMinor: wireAmount,
+    }),
+    terms: z.strictObject({
+      buyerProtectionBps: z.int().min(0).max(10_000),
+      buyerProtectionMinMinor: wireAmount,
+      buyerProtectionMaxMinor: wireAmount.nullable(),
+      buyerProtectionRefundableOnFullRefund: z.boolean(),
+      commissionBps: z.int().min(0).max(10_000),
+      commissionMinMinor: wireAmount,
+      commissionMaxMinor: wireAmount.nullable(),
+    }),
+  })
+  // The ledger posts real money from a snapshot read back out of JSONB, so the schema is the last
+  // line of defence against a hand-edited row, a bad backfill or a serialisation bug. Amounts that
+  // validate individually but do not add up are exactly the shape such a bug takes.
+  .refine((snapshot) => {
+    // Every check still runs after an amount failed its own format check, so this must not be the
+    // thing that throws: an amount that is not digits is already reported, and cannot be added up.
+    if (Object.values(snapshot.amounts).some((value) => !/^\d{1,19}$/.test(value))) return true;
+    const at = (key: keyof FeeSnapshot['amounts']) => BigInt(snapshot.amounts[key]);
+    return (
+      at('buyerTotalMinor') === at('itemMinor') + at('buyerProtectionFeeMinor') &&
+      at('itemMinor') === at('sellerProceedsMinor') + at('commissionMinor') &&
+      at('platformRevenueMinor') === at('buyerProtectionFeeMinor') + at('commissionMinor')
+    );
+  }, 'Snapshot amounts do not add up');
+
+/**
+ * Turns a stored snapshot's amounts back into `Kobo`. The ledger would otherwise call `BigInt(...)`
+ * at every posting site, which is both boilerplate and a place a `Number()` could creep in.
+ */
+export const decodeSnapshotAmounts = (snapshot: FeeSnapshot): Record<keyof FeeSnapshot['amounts'], Kobo> =>
+  Object.fromEntries(Object.entries(snapshot.amounts).map(([key, value]) => [key, BigInt(value)])) as Record<
+    keyof FeeSnapshot['amounts'],
+    Kobo
+  >;
 
 const wire = (amount: Kobo): string => amount.toString();
 const wireOrNull = (amount: Kobo | null): string | null => (amount === null ? null : amount.toString());
@@ -141,6 +179,7 @@ export function snapshotFees(
   schedule: FeeSchedule,
   takenAt: Date = new Date(),
 ): FeeSnapshot {
+  if (Number.isNaN(takenAt.getTime())) throw new RangeError('snapshotFees takes a valid takenAt date');
   const fees = computeTradeFees(itemMinor, sellerKind, schedule);
   const [commission] = commissionBand(sellerKind, schedule);
   const protection = schedule.buyerProtectionFee;

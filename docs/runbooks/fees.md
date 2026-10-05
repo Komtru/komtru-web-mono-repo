@@ -92,3 +92,27 @@ rather than the ESLint configuration, so turning off `komtru/module-boundaries` 
 
 If it fires on you, the fix is almost always to take the amount from the trade's fee snapshot, or to
 call `getFeeSchedule()` from the config module.
+
+## What the guard does and does not catch
+
+`pnpm test:repo` fails if backend module code outside `src/modules/config` contains a fee value from
+`config/fees.yaml`, names the file, imports a fee symbol from `@komtru/shared-types` instead of the
+config module, reaches past the module's barrel, or — in `ledger`, `trades`, `park` and `merchant` —
+reads the _live_ schedule at all. Those modules must post from a trade's stored snapshot: recomputing
+from the live file would reprice a trade that was already accepted.
+
+It deliberately does not catch:
+
+- values below 10, which are indistinguishable from an array index or a loop bound;
+- a fee assembled by arithmetic (`15 * 10`) or written in another base — a text scanner cannot;
+- anything outside `apps/backend-api/src/modules` (frontend bundles and database seeds are recorded
+  as deferred on the ticket).
+
+When a guarded number is genuinely not a fee, say so on the line rather than deleting the check:
+
+```ts
+const RETRY_WINDOW_MS = 30000; // fee-guard-ignore: a timeout, not the buyer-protection cap
+```
+
+The guard already ignores lines whose wording is plainly about time, size or counts, so this is for
+the cases it cannot tell apart.

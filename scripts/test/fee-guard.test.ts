@@ -40,12 +40,15 @@ describe('feeValuesToGuard', () => {
 });
 
 describe('findFeeViolations', () => {
-  it('finds a fee literal in ledger code', async () => {
+  it('finds a fee literal in ledger code, and the live recompute around it', async () => {
     const root = await tree({
       'ledger/services/release.service.ts': 'const fee = applyBps(amount, 150n);\n',
     });
+    // Two findings, and both matter: the rate is hard-coded, and computing a fee in ledger code at
+    // all means it is not posting from the trade's snapshot.
     await expect(findFeeViolations(root, VALUES)).resolves.toMatchObject([
       { file: 'ledger/services/release.service.ts', kind: 'fee-literal', detail: '150' },
+      { file: 'ledger/services/release.service.ts', kind: 'fee-read-bypass', detail: 'applyBps' },
     ]);
   });
 
@@ -68,8 +71,39 @@ describe('findFeeViolations', () => {
     const root = await tree({
       'trades/services/terms.service.ts': "readFileSync('../../../config/fees.yaml');\n",
     });
-    await expect(findFeeViolations(root, VALUES)).resolves.toMatchObject([{ kind: 'fee-read-bypass' }]);
+    // The path also reaches into the config module past its barrel, which is its own finding.
+    await expect(findFeeViolations(root, VALUES)).resolves.toMatchObject([
+      { kind: 'fee-read-bypass', detail: 'config/fees.yaml' },
+      { kind: 'fee-read-bypass' },
+    ]);
   });
+
+  it.each([
+    ["import { getFeeSchedule } from '../../config/fees.js';", 'a deep import past the barrel'],
+    ["export { computeTradeFees } from '@komtru/shared-types';", 'a re-export'],
+    ["const { snapshotFees } = await import('@komtru/shared-types');", 'a dynamic import'],
+    ["readFileSync('config/FEES.YAML');", 'the file named in another case'],
+  ])('finds %s (%s)', async (code) => {
+    const root = await tree({ 'trades/services/terms.service.ts': `${code}\n` });
+    const found = await findFeeViolations(root, VALUES);
+    expect(found.map((violation) => violation.kind)).toContain('fee-read-bypass');
+  });
+
+  it('finds a rate written as a decimal fraction, which is also a float in a money path', async () => {
+    const root = await tree({
+      'ledger/services/release.service.ts': 'const protectionFee = Math.round(total * 0.015);\n',
+    });
+    const found = await findFeeViolations(root, VALUES, ['0.015', '1.5']);
+    expect(found).toMatchObject([{ kind: 'fee-literal', detail: '0.015' }]);
+  });
+
+  it.each(['const TIMEOUT_MS = 30000;', 'const POLL_INTERVAL = 150;', 'const MAX_ATTEMPTS = 150;'])(
+    'leaves %s alone, because a guard that cries wolf gets switched off',
+    async (code) => {
+      const root = await tree({ 'ledger/services/release.service.ts': `${code}\n` });
+      await expect(findFeeViolations(root, VALUES)).resolves.toEqual([]);
+    },
+  );
 
   it.each(['computeTradeFees', 'snapshotFees', 'parseFeeSchedule', 'feeScheduleSchema'])(
     'finds a module importing %s straight from shared-types instead of using the fee module',
