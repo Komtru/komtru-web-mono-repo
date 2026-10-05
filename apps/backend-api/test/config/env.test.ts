@@ -91,3 +91,92 @@ describe('loadConfig', () => {
     expect(error.message).not.toContain('maybe');
   });
 });
+
+describe('loadConfig: notifications', () => {
+  const fcmServiceAccount = JSON.stringify({
+    client_email: 'notify@komtru.iam.gserviceaccount.com',
+    // Deliberately not PEM-shaped: loadConfig only needs a non-empty string, and a literal that
+    // looks like a key trips the repository's secret scanner.
+    private_key: 'not-a-real-key',
+    token_uri: 'https://oauth2.googleapis.com/token',
+  });
+
+  it('applies the M11 defaults', () => {
+    expect(loadConfig(minimal).notify).toMatchObject({
+      defaultLocale: 'en-NG',
+      maxAttempts: 5,
+      retryBaseDelayMs: 2000,
+      rateLimitWindowMinutes: 60,
+      rateLimitMaxPerWindow: 20,
+    });
+  });
+
+  it('defaults SMS and push to dry run outside production', () => {
+    expect(loadConfig({ ...minimal, NODE_ENV: 'development' }).notify).toMatchObject({
+      smsDryRun: true,
+      pushDryRun: true,
+    });
+  });
+
+  it('sends for real in production unless told otherwise', () => {
+    expect(loadConfig({ ...minimal, NODE_ENV: 'production' }).notify).toMatchObject({
+      smsDryRun: false,
+      pushDryRun: false,
+    });
+  });
+
+  it('lets production keep a channel in dry run', () => {
+    const config = loadConfig({ ...minimal, NODE_ENV: 'production', NOTIFY_SMS_DRY_RUN: 'true' });
+    expect(config.notify).toMatchObject({ smsDryRun: true, pushDryRun: false });
+  });
+
+  it('leaves the mailjet block absent until every credential is set', () => {
+    expect(loadConfig({ ...minimal, MAILJET_API_KEY: 'k' }).notify.mailjet).toBeUndefined();
+  });
+
+  it('builds the mailjet block once every credential is set', () => {
+    const config = loadConfig({
+      ...minimal,
+      MAILJET_API_KEY: 'k',
+      MAILJET_API_SECRET: 's',
+      MAILJET_FROM_EMAIL: 'no-reply@komtru.com',
+      MAILJET_SANDBOX: 'true',
+    });
+    expect(config.notify.mailjet).toEqual({
+      apiKey: 'k',
+      apiSecret: 's',
+      fromEmail: 'no-reply@komtru.com',
+      fromName: 'Komtru',
+      sandbox: true,
+    });
+  });
+
+  it('leaves the termii block absent without a base URL', () => {
+    expect(
+      loadConfig({ ...minimal, TERMII_API_KEY: 'k', TERMII_SENDER_ID: 'Komtru' }).notify.termii,
+    ).toBeUndefined();
+  });
+
+  it('builds the fcm block from the service account', () => {
+    const config = loadConfig({
+      ...minimal,
+      FCM_PROJECT_ID: 'komtru',
+      FCM_SERVICE_ACCOUNT_JSON: fcmServiceAccount,
+    });
+    expect(config.notify.fcm).toMatchObject({
+      projectId: 'komtru',
+      clientEmail: 'notify@komtru.iam.gserviceaccount.com',
+      tokenUri: 'https://oauth2.googleapis.com/token',
+    });
+  });
+
+  it('rejects a malformed FCM service account by name, without its contents', () => {
+    const error = failure({ ...minimal, FCM_SERVICE_ACCOUNT_JSON: '{"private_key": "leaked"}' });
+    expect(error.invalid).toContain('FCM_SERVICE_ACCOUNT_JSON');
+    expect(error.message).not.toContain('leaked');
+  });
+
+  it('rejects a non-positive attempt cap', () => {
+    expect(failure({ ...minimal, NOTIFY_MAX_ATTEMPTS: '0' }).invalid).toContain('NOTIFY_MAX_ATTEMPTS');
+  });
+});
