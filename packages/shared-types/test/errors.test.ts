@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { isProblemDetails, PROBLEM_CODES, problemDetailsSchema, problemTypeUri } from '../src/errors.js';
+import {
+  isProblemDetails,
+  knownProblemCode,
+  PROBLEM_CODES,
+  problemDetailsSchema,
+  problemTypeUri,
+} from '../src/errors.js';
 
 const valid = {
   type: 'https://docs.komtru.com/problems/invalid-transition',
@@ -43,6 +49,26 @@ describe('problemDetailsSchema', () => {
         'IDEMPOTENCY_KEY_REUSED',
       ]),
     );
+  });
+});
+
+describe('client tolerance', () => {
+  it('keeps RFC 9457 extension members such as traceId', () => {
+    const parsed = problemDetailsSchema.parse({ ...valid, traceId: 'abc123' }) as Record<string, unknown>;
+    expect(parsed.traceId).toBe('abc123');
+  });
+
+  it('still recognises a problem whose code a newer server added', () => {
+    const future = { ...valid, code: 'SOME_FUTURE_CODE' };
+    expect(isProblemDetails(future)).toBe(true);
+    expect(isProblemDetails(future) && knownProblemCode(future)).toBeUndefined();
+    expect(knownProblemCode(valid)).toBe('INVALID_TRANSITION');
+  });
+
+  it('accepts about:blank and rejects non-https type URIs', () => {
+    expect(problemDetailsSchema.safeParse({ ...valid, type: 'about:blank' }).success).toBe(true);
+    expect(problemDetailsSchema.safeParse({ ...valid, type: 'javascript:alert(1)' }).success).toBe(false);
+    expect(problemDetailsSchema.safeParse({ ...valid, type: 'http://example.com/p' }).success).toBe(false);
   });
 });
 
