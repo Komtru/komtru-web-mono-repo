@@ -113,6 +113,20 @@
       "when": 1791229390662,
       "tag": "0015_identity_desc_indexes",
       "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1791237915374,
+      "tag": "0016_trade_schema",
+      "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1791238032066,
+      "tag": "0017_trade_append_only",
+      "breakpoints": true
     }
   ]
 }
