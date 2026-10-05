@@ -25,12 +25,12 @@
 
 ## Open decisions for the owner
 
-Full wording and defaults are in design §12. Owner rulings of 2026-10-05 on trade roles, merchant certification and the fee file are recorded as decisions C19–C21 in design §5, with detail in §6.3 and §6.5. Only Q1 blocks work outright, and only the deploy steps.
+Full wording and defaults are in design §12. Owner rulings of 2026-10-05 on trade roles, merchant certification and the fee file are recorded as decisions C19–C23 in design §5, with detail in §6.3 and §6.5. Only Q1 blocks work outright, and only the deploy steps.
 
 | # | Decision | Default | Blocks |
 |---|---|---|---|
 | Q1 | Hosting target per app and the GitHub remote | SSH + PM2 deploy step, Dockerfile per app | T-005, remote CI dispatch, T-183 push |
-| Q2 | Who bears the ₦300 Park handling fee | Platform-funded expense | — |
+| Q2 | Who bears the ₦300 Park handling fee | **Answered:** buyer pays the agent ₦300–₦500 in cash; Komtru only displays it | — |
 | Q3 | Ship the Komtru Wallet (AB7)? | Screen behind a disabled flag, no wallet ledger | T-077, T-131 |
 | Q4 | Refund the 1.5% Buyer Protection Fee on full refunds? | Yes on full refunds, retained on partial outcomes | — |
 | Q5 | Drop V1's "Logistics fee" line (m2 §11) | Dropped | — |
@@ -126,10 +126,10 @@ T-001 → T-002 → T-003 → T-020 → T-021 → T-030 → T-031 → T-032 → 
 | [T-086](tickets/10-logistics.md) | Logistics auth, companies and members | 10 — Logistics companies (m2 build spec) | T-085, T-031, T-037, T-038 | 11 | Waiting |
 | [T-087](tickets/10-logistics.md) | Package pipeline and ship-to-company | 10 — Logistics companies (m2 build spec) | T-086, T-064 | 14 | Waiting |
 | [T-090](tickets/11-park.md) | Park schema | 11 — Park custody | T-085 | 6 | Waiting |
-| [T-091](tickets/11-park.md) | Hub onboarding, activation and lifecycle | 11 — Park custody | T-090, T-086, T-050, T-073, T-107 | 12 | Waiting |
+| [T-091](tickets/11-park.md) | Hub onboarding, activation and lifecycle | 11 — Park custody | T-090, T-086, T-050, T-107 | 12 | Waiting |
 | [T-092](tickets/11-park.md) | Custody operations API | 11 — Park custody | T-091, T-040 | 13 | Waiting |
-| [T-093](tickets/11-park.md) | Park and trade integration | 11 — Park custody | T-092, T-064, T-065, T-047 | 15 | Waiting |
-| [T-094](tickets/11-park.md) | Hub earnings and withdrawals | 11 — Park custody | T-093, T-073 | 16 | Waiting |
+| [T-093](tickets/11-park.md) | Park and trade integration | 11 — Park custody | T-092, T-064, T-065 | 15 | Waiting |
+| [T-094](tickets/11-park.md) | Park cash-fee notices and handover log | 11 — Park custody | T-093, T-047 | 16 | Waiting |
 | [T-095](tickets/11-park.md) | Park TrustOps read models | 11 — Park custody | T-093, T-107 | 16 | Waiting |
 | [T-100](tickets/12-ops-domains.md) | Support tickets (M10) | 12 — Support, risk, reputation, administration, compliance, analytics, growth, cases, messaging | T-045, T-040, T-037 | 10 | Waiting |
 | [T-101](tickets/12-ops-domains.md) | Risk and fraud (M13) | 12 — Support, risk, reputation, administration, compliance, analytics, growth, cases, messaging | T-024, T-037, T-048 | 11 | Waiting |
@@ -160,7 +160,7 @@ T-001 → T-002 → T-003 → T-020 → T-021 → T-030 → T-031 → T-032 → 
 | [T-127](tickets/13-web-app-ui.md) | Reviews | 13 — `web-app-ui` (app.komtru.com, passport.komtru.com) | T-102, T-110 | 17 | Waiting |
 | [T-128](tickets/13-web-app-ui.md) | Messaging | 13 — `web-app-ui` (app.komtru.com, passport.komtru.com) | T-108, T-110 | 14 | Waiting |
 | [T-129](tickets/13-web-app-ui.md) | Help and support | 13 — `web-app-ui` (app.komtru.com, passport.komtru.com) | T-100, T-110 | 11 | Waiting |
-| [T-130](tickets/13-web-app-ui.md) | Park Hub application (consumer lens) | 13 — `web-app-ui` (app.komtru.com, passport.komtru.com) | T-091, T-110 | 13 | Waiting |
+| [T-130](tickets/13-web-app-ui.md) | Park Hub application | 13 — `web-app-ui` (app.komtru.com, passport.komtru.com) | T-091, T-110 | 13 | Waiting |
 | [T-131](tickets/13-web-app-ui.md) | Wallet top-up | 13 — `web-app-ui` (app.komtru.com, passport.komtru.com) | T-077, T-110, T-117 | 18 | Blocked (Q3) |
 | [T-140](tickets/14-operations-app.md) | Console scaffold, shell and staff auth | 14 — `operations-app` (ops.komtru.com, TrustOps console) | T-017, T-037, T-038 | 11 | Waiting |
 | [T-141](tickets/14-operations-app.md) | Work queue and universal case | 14 — `operations-app` (ops.komtru.com, TrustOps console) | T-140, T-107 | 12 | Waiting |
@@ -184,7 +184,7 @@ T-001 → T-002 → T-003 → T-020 → T-021 → T-030 → T-031 → T-032 → 
 | [T-171](tickets/16-park-agent-app.md) | Hub dashboard and log arrival | 16 — `park-agent-app` (park.komtru.com) | T-170 | 15 | Waiting |
 | [T-172](tickets/16-park-agent-app.md) | Inspection, damage and incidents | 16 — `park-agent-app` (park.komtru.com) | T-171 | 16 | Waiting |
 | [T-173](tickets/16-park-agent-app.md) | Safe handover | 16 — `park-agent-app` (park.komtru.com) | T-171 | 16 | Waiting |
-| [T-174](tickets/16-park-agent-app.md) | Earnings, hub profile and staff | 16 — `park-agent-app` (park.komtru.com) | T-094, T-091 | 17 | Waiting |
+| [T-174](tickets/16-park-agent-app.md) | Handover log, hub profile and staff | 16 — `park-agent-app` (park.komtru.com) | T-094, T-091 | 17 | Waiting |
 | [T-180](tickets/17-release.md) | End-to-end critical paths | 17 — Integration, hardening and release | T-123, T-118, T-173, T-162, T-148 | 18 | Waiting |
 | [T-181](tickets/17-release.md) | Load and resilience | 17 — Integration, hardening and release | T-180 | 19 | Waiting |
 | [T-182](tickets/17-release.md) | Security review | 17 — Integration, hardening and release | T-180 | 19 | Waiting |

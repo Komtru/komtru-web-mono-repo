@@ -41,6 +41,7 @@ Same definition of done as Epic 13, applied to desktop and tablet reference fram
 ### T-147 — Park applications, registration and lifecycle
 - **Screens:** PH7, TO-PA1, TO-PA2, TO-PA3, TO-PA4, TO-PA6, TO-PA6B, TO-PA10 (both variants), TO-PA11
 - **Depends on:** T-141, T-091
+- **Notes:** deviations from the reference per design C23: TO-PA6B, TO-PA10 and TO-PA11 drop bank and account-number fields, TO-PA2 drops the payout row from the evidence matrix, TO-PA3 drops the payout checklist item, and TO-PA4 drops "available fees".
 
 ### T-148 — Park network and custody
 - **Screens:** TO-PA7, TO-PA8, P0-04, P0-05, P0-07, TO-PA5

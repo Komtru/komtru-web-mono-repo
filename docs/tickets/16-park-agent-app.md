@@ -5,7 +5,7 @@ Mobile-web, used at motor-park counters on unreliable connections. Same definiti
 - Every mutation goes through `api-client`'s durable retry queue with a stable `Idempotency-Key`, and the UI shows queued, sent and confirmed states honestly.
 - Hub identity ("Jibowu Park Hub · H-JIB-004") stays visible in the top shell on every screen.
 - Camera capture stamps time and hub server-side; the client never asserts a timestamp.
-- Order on the dashboard: Arriving, Awaiting pickup, Exceptions, then earnings (gap-audit guidance in the reference).
+- Order on the dashboard: Arriving, Awaiting pickup, Exceptions, then the handover log (gap-audit guidance in the reference). No money is shown anywhere in this app (design C23).
 
 ---
 
@@ -25,9 +25,9 @@ Mobile-web, used at motor-park counters on unreliable connections. Same definiti
 ### T-173 — Safe handover
 - **Screens:** U4, U5
 - **Depends on:** T-171
-- **Acceptance criteria:** remaining-attempts copy matches the reference ("Two more attempts before this gets flagged for TrustOps review"); locked state after the cap; "Flag this pickup attempt" opens an incident.
+- **Acceptance criteria:** after a PIN match, a reminder to collect the handling fee from the buyer in cash, recording nothing; remaining-attempts copy matches the reference ("Two more attempts before this gets flagged for TrustOps review"); locked state after the cap; "Flag this pickup attempt" opens an incident.
 
-### T-174 — Earnings, hub profile and staff
+### T-174 — Handover log, hub profile and staff
 - **Screens:** PE1, PA9
 - **Depends on:** T-094, T-091
-- **Acceptance criteria:** withdraw only for `can_manage_payouts`; staff invite only for `can_add_staff`, labelled "Requires TrustOps approval before release rights".
+- **Acceptance criteria:** PE1 shows handover counts and recent releases with no earnings, balance or withdraw (listed deviation, design C23); PA9 drops the payout-account row; staff invite only for `can_add_staff`, labelled "Requires TrustOps approval before release rights".

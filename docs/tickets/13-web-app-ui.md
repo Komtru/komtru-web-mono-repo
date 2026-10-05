@@ -1,6 +1,6 @@
 # Epic 13 — `web-app-ui` (app.komtru.com, passport.komtru.com)
 
-Buyer and Merchant lenses on one account, plus the Park Hub *application* flow (design §7.6). Screen IDs refer to `docs/design-reference/SCREEN_INDEX.md`; customer tabs 1–10 are C1–C10 and seller tabs 1–10 are S1–S10, as the reference's own prose names them.
+One app for every consumer with no buyer or seller views (design C22, §6.3), plus the Park Hub *application* flow (design §7.6). Screen IDs refer to `docs/design-reference/SCREEN_INDEX.md`; customer tabs 1–10 are C1–C10 and seller tabs 1–10 are S1–S10, as the reference's own prose names them.
 
 ## Definition of done for every UI ticket in this epic
 
@@ -15,9 +15,9 @@ Buyer and Merchant lenses on one account, plus the Park Hub *application* flow (
 ---
 
 ### T-110 — App scaffold and shells
-- **Screens:** Y2, OF1, D9
+- **Screens:** OF1, D9, Y2 (not built: replaced by the single trades list, design C22)
 - **Depends on:** T-017
-- **Acceptance criteria:** tablet shell behaviour (sidebar collapses to top nav) shared by every later tablet screen; app on port 3001 with mobile tab bar (Trades, Explore, Alerts, Messages, Account) and desktop sidebar; role switcher per design §6.3: Buyer and Park Agent lenses for most accounts, Merchant and Park Agent for certified merchants, with the deviation from Y2 noted in the visual check (Park lens links to the application flow or to `park.komtru.com` once active); offline state via service worker; `passport.komtru.com` host rewrite to public profile routes; `/hub/*` operating URLs redirect to `park.komtru.com` (design C12).
+- **Acceptance criteria:** tablet shell behaviour (sidebar collapses to top nav) shared by every later tablet screen; app on port 3001 with mobile tab bar (Trades, Explore, Alerts, Messages, Account) and desktop sidebar; no role switcher and no separate seller tab bar; certified merchants see Shop in place of Explore; Account holds Payouts for anyone who has sold and a Park Agent item that opens the hub application or, once active, `park.komtru.com`; offline state via service worker; `passport.komtru.com` host rewrite to public profile routes; `/hub/*` operating URLs redirect to `park.komtru.com` (design C12).
 
 ### T-111 — Entry and authentication
 - **Screens:** E1, E2, E3, E3b, E4, D4, T3, AC2, AC3, TOS1, TOS2, TF1, TF2, social callback
@@ -43,6 +43,7 @@ Buyer and Merchant lenses on one account, plus the Park Hub *application* flow (
 ### T-116 — Buyer trade core and canonical trade detail
 - **Screens:** C1, C2, C3, P0-03, D1, T2, C5, AR1
 - **Depends on:** T-115, T-065, T-110
+- **Notes:** C1 is one list of every trade the person is party to, as buyer or seller; each row and the trade detail show which side they are on. Seller-side actions open from the same trade detail.
 
 ### T-117 — Escrow funding
 - **Screens:** V1, V2, V3, AB3, AB4
@@ -52,6 +53,7 @@ Buyer and Merchant lenses on one account, plus the Park Hub *application* flow (
 ### T-118 — Delivery, pickup PIN and inspection
 - **Screens:** AB1, AB2, C4, Z4, Z5, BEI1, BEI2, DE1, DE2, DE3, DE4, MI4
 - **Depends on:** T-065, T-093, T-116, T-110
+- **Notes:** once Park is chosen, AB1 and AB2 show the cash handling-fee notice ("Bring ₦300–₦500 cash for the park agent at pickup. This is paid to the agent, not through Komtru"), with the range read from the API.
 
 ### T-119 — Cancellation and refunds
 - **Screens:** CT1, CT2, CR1, CR2, CR3, SC1, SC2
@@ -69,15 +71,18 @@ Buyer and Merchant lenses on one account, plus the Park Hub *application* flow (
 ### T-122 — Shop and listings
 - **Screens:** S1, S4, S5, EL1, EL2, D2, D3, T1
 - **Depends on:** T-056, T-121, T-110
+- **Notes:** Shop is a merchant-only area reached from the tab bar, not a separate view.
 
 ### T-123 — Seller trade handling and shipping
 - **Screens:** S2, W1, W2, W3, BR1, SD1, S3, X1, X2, MI3, AC8
 - **Depends on:** T-115, T-064, T-087, T-093, T-110
 - **Notes:** X2 lists Park first, then every enabled courier company, then "Arrange my own shipping" (m2 §10).
+- **Notes on Park:** choosing Park Hub Transit on X2 shows the same cash handling-fee notice so the seller can tell the buyer. Seller-side screens S2, W1–W3, BR1, SD1, S3, X1, X2, MI3 and AC8 are states of the shared trade detail and list, not a seller area.
 
 ### T-124 — Seller payouts
 - **Screens:** S6, AB5, AB6, WF1, PR1
 - **Depends on:** T-073, T-110
+- **Notes:** Payouts live under Account and are available to anyone who has sold, not only merchants.
 
 ### T-125 — Seller insights
 - **Screens:** AN1, AN2
@@ -99,9 +104,9 @@ Buyer and Merchant lenses on one account, plus the Park Hub *application* flow (
 - **Screens:** L1, plus ticket create, list and detail (no reference screens beyond L1; built in the same design language, visual check is design-system conformance)
 - **Depends on:** T-100, T-110
 
-### T-130 — Park Hub application (consumer lens)
+### T-130 — Park Hub application
 - **Screens:** PH1, PH2, PH3, PH4, PH5, PH6, PA7, PA8
-- **Notes:** also fills in the Park Agent lens states on Y2 ("Not yet set up", application in review, active) that T-110 scaffolds.
+- **Notes:** the Account item shows the states "Not yet set up", application in review, and active. PH4 deviates from the reference: no payout setup, only an acknowledgement that agents collect the ₦300–₦500 handling fee from buyers in cash (design C23).
 - **Depends on:** T-091, T-110
 
 ### T-131 — Wallet top-up

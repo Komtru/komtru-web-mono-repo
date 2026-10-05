@@ -4,7 +4,7 @@
 
 ### T-180 — End-to-end critical paths
 - **Depends on:** T-123, T-118, T-173, T-162, T-148
-- **Acceptance criteria:** Playwright suites across apps against a real backend: (1) sign up → propose → seller accepts with proof → fund → ship via Park → drop-off PIN → arrival → inspection → pickup PIN → buyer confirms → settled → hub earns ₦300 → hub withdraws; (2) the same through a courier company including one rejection and re-selection; (3) self-arranged shipping with a dispute resolved by mediation; (4) PIN mismatch three times → custody case → TrustOps clears → release. All green twice in a row.
+- **Acceptance criteria:** Playwright suites across apps against a real backend: (1) sign up → propose → seller accepts with proof → fund → ship via Park → drop-off PIN → arrival → inspection → pickup PIN → buyer confirms → settled, with the buyer shown the cash handling-fee notice and no Park ledger postings; (2) the same through a courier company including one rejection and re-selection; (3) self-arranged shipping with a dispute resolved by mediation; (4) PIN mismatch three times → custody case → TrustOps clears → release. All green twice in a row.
 
 ### T-181 — Load and resilience
 - **Depends on:** T-180

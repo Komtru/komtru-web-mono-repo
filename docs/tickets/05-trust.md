@@ -21,7 +21,7 @@ Spec: `docs/specs/module-06-trust-and-verification.md`. Provider credentials do 
 - **Touches:** `trust/services/{business,bankMatch,address,socialProof}.service.ts`
 - **Depends on:** T-050
 - **Acceptance criteria:**
-  - CAC verification (SO3, M2), bank account name-match used by payout accounts (T-073) and Park hub payouts (T-094), address proof, Instagram/X social-proof challenge.
+  - CAC verification (SO3, M2), bank account name-match used by payout accounts (T-073), address proof, Instagram/X social-proof challenge.
   - Level 3 requires level 2 plus CAC plus business bank match.
   - Rejection reasons structured for BVR1 and VF1.
 

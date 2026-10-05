@@ -102,7 +102,7 @@ Auth in browsers: the access token lives in memory; the refresh token sits in an
 komtru/
   apps/
     backend-api/          api.komtru.com        Express API + BullMQ worker (two processes, one build)
-    web-app-ui/           app.komtru.com        buyer + merchant lenses; Park hub *application* flow;
+    web-app-ui/           app.komtru.com        one consumer app, no role views; Park hub *application* flow;
                           passport.komtru.com   public Trust Passport / seller profile pages (host rewrite)
     operations-app/       ops.komtru.com        TrustOps console
     logistics-ops/        logistics.komtru.com  courier-company POC portal
@@ -198,7 +198,7 @@ Flows that look synchronous are made asynchronous rather than breaking the BullM
 | C8 | HTML V2 shows a per-trade virtual bank account; m8 §9 forbids Dedicated Virtual Accounts | Use Paystack checkout's pay-with-transfer channel, which issues a temporary per-transaction account. The screen's promise still holds. Q6 | m8 plan |
 | C9 | HTML AB7 "Komtru Wallet" top-up; no spec has stored value, and it raises licensing questions | Blocked on Q3; default is the screen behind a disabled flag with no money movement | Owner decision |
 | C10 | HTML V1 Buyer Protection Fee 1.5% paid by the buyer; M8's worked example deducts 5% from the seller | Buyer-side fee from the HTML, set in the fee file (§6.5) as `buyer_protection_fee.rate_bps: 150`. Q4 covers refund treatment | HTML |
-| C11 | m2 §11 "logistics companies are never payees" vs. HTML PE1/PH4 Park hubs earn ₦300 per handover and withdraw it | Park hubs are payees for the fixed handling fee only. Courier companies remain non-payees. No rate card, quote or negotiation anywhere | Master prompt §3 plus HTML |
+| C11 | Master prompt models a fixed ₦300 platform rate, and HTML PE1/PH4 show hubs earning and withdrawing it through Komtru | Superseded by C23: the handling fee never enters Komtru's books. Neither Park hubs nor courier companies are payees | Owner |
 | C12 | HTML puts Park Agent screens at `app.komtru.com/hub/*` inside the consumer app; master prompt requires a separate `park-agent-app` | Split by auth state (§7.6): application and status screens stay in `web-app-ui` under consumer scope; operating screens move to `park-agent-app`. Old `/hub/*` operating URLs redirect to `park.komtru.com` | Master prompt |
 | C13 | HTML Y1 adds a 48-hour auto-mediation window and "replacement" or "refund with return" outcomes; M3 has only an evidence window and four money outcomes | New first dispute state `MEDIATION` (48h, config). Parties can agree one of M3's four money outcomes; return and replacement are recorded as agreed notes with self-arranged return shipping. Q10 | HTML plus M3 |
 | C14 | HTML "AI-suggested — not a decision" advisory boxes; no spec defines the AI | `cases.advisory` interface with a deterministic rule-based v1. An LLM-backed provider can plug in later. Q9 | HTML |
@@ -206,8 +206,10 @@ Flows that look synchronous are made asynchronous rather than breaking the BullM
 | C16 | M6 recommends Dojah plus Smile ID; no KYC or IMEI credentials exist in the `.env` | Adapter interface plus a deterministic fake adapter for dev and test; real adapters are wired but disabled until credentials arrive. Q7 | M6 |
 | C17 | M1 recommends Google plus Apple only; the old build and the `.env` include Facebook | All three. The M1 enum already includes `FACEBOOK` and credentials exist | Old build, M1 enum |
 | C18 | M5 leaves stock timing open (reserve at order vs. decrement at delivery) | Reserve at funding, release on cancellation or refund, never below zero (DB check) | Engineering default |
-| C19 | M1/M7 gate selling behind an opt-in `SELLER` capability, and the HTML's role switcher gives every account a Buyer lens next to Merchant | Owner ruling 2026-10-05: every account can buy or sell, and the initiator picks the side per trade. Certified merchants can only sell. The `SELLER` capability gate is removed, and merchant accounts get no Buyer lens. See §6.4 | Owner |
+| C19 | M1/M7 gate selling behind an opt-in `SELLER` capability, and the HTML's role switcher gives every account a Buyer lens next to Merchant | Owner ruling 2026-10-05: every account can buy or sell, and the initiator picks the side per trade. Certified merchants can only sell. The `SELLER` capability gate is removed. See §6.3 | Owner |
 | C20 | The HTML makes business verification optional at SO3 and shows only automated KYB review (AC10) | Owner ruling 2026-10-05: merchant certification is an application with mandatory CAC documents, approved by a human in operations-app. Automated CAC checks are evidence for the reviewer, not the decision | Owner |
+| C22 | HTML Y2 role switcher and separate seller tab bar vs. owner's "no switch" | Owner ruling 2026-10-05: one trades list across both sides, no role views (§6.3) | Owner |
+| C23 | Master prompt's ₦300 platform rate and HTML PE1/PH4 hub earnings and withdrawals | Owner ruling 2026-10-05: agents collect ₦300–₦500 in cash directly from the buyer. Komtru only tells the buyer to expect it. No ledger entries, hub payout accounts, earnings or withdrawals | Owner |
 | C21 | M17 D1 puts tunable defaults in a database settings table editable at runtime; the owner wants every fee and cut in an easily configurable file | Owner ruling 2026-10-05: one version-controlled fee file is the only source of fee and cut values (§6.5). M17's table keeps non-money tunables such as windows and retry caps | Owner |
 
 ---
@@ -260,7 +262,7 @@ DISPUTED ──M3 resolved──▶ RESOLVED_REFUNDED | RESOLVED_RELEASED   (amo
 - **No `SELLER` capability gate.** M7 §5's "seller holds an `ACTIVE` `SELLER` capability" check is removed. The money-safety gates stay: the buyer must be contact-verified (level 1) to fund, and the seller must be identity-verified (level 2) before a trade can be funded, so payouts only go to verified people. Q12 asks whether that level-2 rule should be relaxed for casual sellers.
 - **Merchant application.** Any account can apply. The form collects business name and type, registered address, categories sold, CAC registration number, CAC certificate, status report or memorandum, the proprietor or director's government ID, and a payout bank account. CAC documents are mandatory and the form cannot be submitted without them. The application is reviewed as a `MERCHANT_APPLICATION` case in operations-app. The reviewer sees the documents, the automated CAC lookup and the bank name-match as evidence, with an AI-suggested advisory, and decides one of approve, request changes or reject. A reason is always required.
 - **On approval**, one transaction does all of the following. It grants the `MERCHANT` capability, sets `merchant_profiles.certified_at`, attaches the Verified Merchant badge, and publishes `merchant.certified`. Merchant-only features unlock: storefront, listings and insights (Q11). Business verification level 3 follows from M6 once the provider-attested CAC check and the business bank match pass.
-- **Role switcher (Y2).** A certified merchant sees Merchant and Park Agent lenses only. Everyone else sees Buyer and Park Agent, and selling happens from the Buyer lens by choosing "I'm selling" when creating a trade. This deviates from Y2, which shows all three lenses to every account.
+- **No role views (C22).** There is no buyer view, seller view or role switcher. One Trades list shows every trade the person is party to, whether as buyer or seller, and each row and the trade detail state which side they are on. Seller-side steps such as accepting, shipping and submitting evidence appear inside that trade's detail, not in a separate area. Payouts and payout accounts are in Account for anyone who has sold. Certified merchants additionally get a Shop area for storefront, listings and insights, which takes the Explore tab's place because merchants cannot buy. The Park Agent entry point is an Account item that opens the hub application or, once active, `park.komtru.com`. HTML Y2 and the separate seller tab bar are not built.
 
 ### 6.4 Money flow
 
@@ -293,11 +295,11 @@ merchant_commission:           # platform cut from a certified merchant's procee
   min_minor: 0
   max_minor: null
 
-park_handling_fee:             # earned by the hub per released parcel (HTML PH4, PE1)
-  amount_minor: 30000          # ₦300
-  borne_by: PLATFORM           # PLATFORM | SELLER  (Q2)
+park_cash_handling_fee:        # INFORMATIONAL ONLY (C23): shown to buyers, never charged,
+  min_minor: 30000             # collected, posted or paid out by Komtru. The buyer pays the
+  max_minor: 50000             # park agent this amount in cash at pickup.
 
-payout_fee:                    # charged on each seller or hub withdrawal
+payout_fee:                    # charged on each seller withdrawal
   amount_minor: 0
 ```
 
@@ -305,7 +307,7 @@ payout_fee:                    # charged on each seller or hub withdrawal
 - **Changing a fee** means editing the file, bumping `version`, and deploying. Git history is the audit trail. A CI check compares against `main` and fails if any value changed without a version bump.
 - **Snapshots protect past trades.** When a trade's terms are accepted, the fee schedule version and the computed amounts are stored on the trade, so the buyer sees the exact total before funding and later file changes never alter it. A Park parcel snapshots the handling fee when it is created. Every ledger posting uses the snapshot, never the live file.
 - **One calculator.** `computeTradeFees(itemMinor, sellerKind, schedule)` in `packages/shared-types` is pure, integer-only, and rounds half up to the kobo. The backend uses it for postings, and frontends display results from the API rather than computing totals themselves.
-- **Reading fees.** `GET /config/fees` serves the current schedule for display: V1's fee breakdown, PH4's handling fee, and the read-only fee panel in operations-app.
+- **Reading fees.** `GET /config/fees` serves the current schedule for display: V1's fee breakdown, the Park cash-fee notices, and the read-only fee panel in operations-app.
 - **Enforcement.** A test fails if ledger, trades, park or merchant code contains a numeric literal equal to any value in the fee file, or imports fees from anywhere except the fee module.
 ---
 
@@ -325,11 +327,11 @@ payout_fee:                    # charged on each seller or hub withdrawal
 |---|---|---|
 | `park_hubs` | Terminal: code (`H-JIB-004`), name, operator business (`God is Good Motors`), branch, address, state/city, `status` (`PENDING`, `ACTIVE`, `SUSPENDED`), `operating_state` (`OPEN`, `CLOSED`, `FULL`, `UNABLE_TO_RECEIVE`), operating hours, authorization `verified_at` / `review_due_at` | Unique code. Partial unique on normalised (operator, branch, address) for live hubs, which stops duplicate claims of one terminal (gap audit item 1) |
 | `park_hub_applications` | Onboarding case: applicant user, origin (`SELF_SERVE` from PH1–PH5, `TRUSTOPS_REGISTERED` from TO-PA6/TO-PA10), step data, evidence file refs (identity, authorization, mandatory photo gate), payout account ref, `status` (`DRAFT`, `SUBMITTED`, `IN_REVIEW`, `CHANGES_REQUESTED`, `APPROVED`, `REJECTED`), assigned reviewer, SLA | Submit blocked without authorization evidence |
-| `park_hub_agents` | Hub ↔ member assignment: `can_receive`, `can_inspect`, `can_release`, `can_add_staff`, `can_manage_payouts`, `role_label` (`PRIMARY_AGENT`, `STAFF`), `status` (`INVITED`, `ACTIVE`, `SUSPENDED`, `REMOVED`), granted/revoked by and at | Rows are never deleted. Partial unique: one live row per (hub, member); one live `PRIMARY_AGENT` per hub. `can_release` requires a TrustOps approver id (check constraint) |
+| `park_hub_agents` | Hub ↔ member assignment: `can_receive`, `can_inspect`, `can_release`, `can_add_staff`, `role_label` (`PRIMARY_AGENT`, `STAFF`), `status` (`INVITED`, `ACTIVE`, `SUSPENDED`, `REMOVED`), granted/revoked by and at | Rows are never deleted. Partial unique: one live row per (hub, member); one live `PRIMARY_AGENT` per hub. `can_release` requires a TrustOps approver id (check constraint) |
 | `park_parcels` | One per trade: soft `trade_id` (unique), origin and destination hub FKs, waybill, transit carrier, driver phone, plate, `status` (`AWAITING_SOURCE_DROPOFF`, `AT_SOURCE_HUB`, `IN_TRANSIT`, `AT_DESTINATION_HUB`, `RELEASED`, `EXCEPTION`), `status_before_exception` | Unique `trade_id`. `canTransition` plus 409. Origin may equal destination, which skips `IN_TRANSIT` |
 | `park_custody_events` | Append-only: parcel, hub, actor member, `kind` (`DROPOFF_RECEIVED`, `ARRIVAL_LOGGED`, `INSPECTED`, `PIN_ATTEMPT`, `RELEASED`, `EXCEPTION_RAISED`, `EXCEPTION_CLEARED`, `DISPATCHED`), seal state (`INTACT`, `DAMAGED`, `TAMPERED`), photo `file_id` (M20 `TRADE_ASSET` pool, `PRIVATE_CASE`), `occurred_at` from the server | Update and delete blocked by trigger |
 | `park_handover_pins` | One per parcel and leg (`DROPOFF`, `PICKUP`): `pin_hash` (domain-separated HMAC), `pin_enc` (AES-GCM, revealed only to the leg's rightful party), `attempts_count`, `max_attempts` (3), `locked_at`, `verified_at` | Never plaintext. Partial unique: one live PIN per (parcel, leg) |
-| Fee file entry `park_handling_fee.amount_minor: 30000` (§6.5) | ₦300 fixed fee. The prompt asked for a config row rather than a literal; the owner's later instruction moves every fee into one file, which keeps the same intent | Snapshotted onto the parcel at creation; no other price fields anywhere |
+| Fee file entry `park_cash_handling_fee` (§6.5) | ₦300–₦500 range shown to buyers as a cash-at-pickup notice (C23) | Display only. No price, fee or payout column exists in the `park` schema |
 
 ### 7.3 Auth and authorization
 
@@ -340,12 +342,12 @@ payout_fee:                    # charged on each seller or hub withdrawal
 
 ### 7.4 Flows
 
-1. **Onboarding.** An application is created either by a consumer (PH1–PH5) or by TrustOps (TO-PA6, TO-PA6B, TO-PA10). It registers as a case (`PARK_HUB_APPLICATION`) and moves through review (TO-PA1, TO-PA2) with an AI-suggested advisory, then approve, request changes (PA8 loop) or reject. **Activation (TO-PA3) is one transaction:** hub `ACTIVE`, Park company membership created (`INVITED` until first logistics login, then `ACTIVE`), `park_hub_agents` rows with the exact flags, payout account linked, events `park.hub.created` and `park.hub.activated`. Activation is refused while identity, authority or payout checks are unresolved.
+1. **Onboarding.** An application is created either by a consumer (PH1–PH5) or by TrustOps (TO-PA6, TO-PA6B, TO-PA10). It registers as a case (`PARK_HUB_APPLICATION`) and moves through review (TO-PA1, TO-PA2) with an AI-suggested advisory, then approve, request changes (PA8 loop) or reject. **Activation (TO-PA3) is one transaction:** hub `ACTIVE`, Park company membership created (`INVITED` until first logistics login, then `ACTIVE`), `park_hub_agents` rows with the exact flags, events `park.hub.created` and `park.hub.activated`. Activation is refused while identity or authority checks are unresolved. No bank or payout details are collected, because hubs are never paid through Komtru (C23).
 2. **Ship step.** The seller picks Park (pinned first), a destination hub, and optionally an origin hub. That creates `park_parcels` in `AWAITING_SOURCE_DROPOFF` and issues the `DROPOFF` PIN to the seller and the `PICKUP` PIN to the buyer (AB2).
 3. **Drop-off.** The source hub agent with `can_receive` logs the parcel by trade code or waybill scan, validates the seller's drop-off PIN, and records seal state and photo. Parcel moves to `AT_SOURCE_HUB`; trade moves to `SHIPPED`; `park.parcel.received` fires with `leg: SOURCE`.
 4. **Transit.** Dispatch details (carrier, driver, plate, waybill) are recorded, then `IN_TRANSIT`.
 5. **Arrival.** The destination agent logs arrival (U2) and inspects (U3). `park.parcel.received` fires with `leg: DESTINATION`, then `park.parcel.inspected`.
-6. **Release.** The agent with `can_release` validates the buyer's pickup PIN (U4). On match: `RELEASED`, `park.parcel.released`, ledger credits ₦300 to the hub. On mismatch: attempt counted (U5); at three attempts the PIN locks, release freezes, and a custody case opens (TO-PA5).
+6. **Release.** The agent with `can_release` validates the buyer's pickup PIN (U4). On match: `RELEASED` and `park.parcel.released`. The agent collects the handling fee from the buyer in cash, and Komtru records nothing about it. On mismatch: attempt counted (U5); at three attempts the PIN locks, release freezes, and a custody case opens (TO-PA5).
 7. **Exceptions.** A `DAMAGED` or `TAMPERED` seal, or an incident report (PA10), moves the parcel to `EXCEPTION`, places a `PARK_EXCEPTION` hold on the trade (U6), and opens a custody case. TrustOps can clear (parcel returns to its prior state, hold lifted), keep held, or escalate to a dispute.
 8. **Ageing.** A scheduled rule opens a custody case when a parcel is held past the configured threshold (P0-04, default 48h; buckets <6h, 6–24h, 24–48h, >48h).
 
@@ -372,15 +374,22 @@ The trade-side consumer (delivery → inspection → buyer confirms or auto-comp
 
 | Screens | App | Scope |
 |---|---|---|
-| Y2 role switcher "Park Agent" lens, PH1–PH6, PA7, PA8 | `web-app-ui` (`/hub/register`, `/hub/application`) | `CONSUMER` |
+| PH1–PH6, PA7, PA8, reached from an Account item | `web-app-ui` (`/hub/register`, `/hub/application`) | `CONSUMER` |
 | U1–U6, PE1, PA9, PA10 | `park-agent-app` | `LOGISTICS` + Park membership |
 | PH7, TO-PA1–TO-PA11, NAV, P0-04, P0-05, P0-07 | `operations-app` | `STAFF` + `park.*` permissions |
 | AB1, AB2 (buyer pickup PIN), X2 (seller chooses Park Hub Transit) | `web-app-ui` | `CONSUMER` |
 
-### 7.7 Money
+### 7.7 Money (C23)
 
-- On `park.parcel.released`: debit `PARK_HANDLING_EXPENSE`, credit `HUB_PAYABLE(hub)` by the fee snapshotted on the parcel from the fee file. The default is platform-funded so the buyer's total and the seller's payout stay as agreed. Q2 can change who bears it.
-- Hub withdrawals reuse the m8 `executePayout` core. `payout_accounts` gains an owner type (`USER` or `PARK_HUB`). A hub payout account must pass M6 bank name-match against the primary agent. Only members with `can_manage_payouts` may withdraw.
+- Park never touches Komtru's money. The handling fee is paid in cash by the buyer to the agent at pickup. No journal entry, payable, payout account, earnings balance or withdrawal exists for hubs, and a test asserts that `park.parcel.released` produces no ledger postings.
+- Komtru's only job is to make the buyer aware. The `park_cash_handling_fee` range from the fee file appears:
+  - when the seller picks Park Hub Transit (X2), so the seller can tell the buyer;
+  - on the buyer's trade detail and live logistics view once Park is chosen (AB1);
+  - on the pickup PIN screen (AB2);
+  - in the "parcel arrived at the hub" notification.
+- The agent's handover screen (U4) reminds the agent to collect the fee in cash. It records nothing.
+- PE1 becomes a handover log (counts and recent releases) with no money shown. PH4 becomes an acknowledgement of the cash-fee rule with no payout setup. TO-PA6B and TO-PA10 drop the bank fields, and TO-PA4 drops "available fees". Each is a listed deviation in its UI ticket.
+- The master prompt's `canManagePayouts` permission flag is dropped, since there is nothing to manage.
 
 ---
 
@@ -459,7 +468,7 @@ Each has a default that tickets ship with if no answer arrives. Only Q1 blocks a
 | # | Question | Default if unanswered | Blocks |
 |---|---|---|---|
 | Q1 | Where does each app deploy, and which GitHub remote is the new repo? Old apps run under PM2 with no deploy automation. | Deploy jobs written against an SSH + PM2 target, plus a Dockerfile per app; dispatch runs as dry-runs | Deploy jobs, T-004 dispatch validation |
-| Q2 | Who bears the ₦300 Park handling fee? | Platform-funded expense; buyer total and seller payout unchanged | Nothing |
+| Q2 | Who bears the ₦300 Park handling fee? | **Answered 2026-10-05:** the buyer pays the agent ₦300–₦500 in cash; Komtru only displays it (C23) | — |
 | Q3 | Ship the Komtru Wallet (AB7)? Stored value likely needs CBN licensing. | Screen built behind a disabled flag; no wallet ledger | T-077 |
 | Q4 | Is the 1.5% Buyer Protection Fee refunded on cancellation and full refund? | Refunded on every full refund; retained on partial dispute outcomes | Nothing |
 | Q5 | Confirm dropping V1's "Logistics fee" line (m2 §11) | Dropped | Nothing |

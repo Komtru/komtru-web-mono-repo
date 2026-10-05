@@ -14,17 +14,17 @@ Design §7. Park is a row in `logistics_companies` (`is_default`); Park Agents a
   - `can_release` requires an approving staff id (check constraint).
   - `park_custody_events` append-only by trigger and grants.
   - Parcel state machine as a pure `canTransition` with every valid and invalid transition tested, including origin = destination skipping `IN_TRANSIT` and `EXCEPTION` resuming the stored prior state.
-  - No price-like column exists except `park_parcels.handling_fee_minor`, the snapshot taken from the fee file when the parcel is created (schema test).
+  - No price, fee or payout column exists anywhere in the `park` schema (schema test, design C23). Permission flags are `can_receive`, `can_inspect`, `can_release`, `can_add_staff`.
 
 ### T-091 — Hub onboarding, activation and lifecycle
 
 - **Touches:** `park/services/{application,activation,lifecycle,staff}.service.ts`, `park/http/{applicant,admin}.controller.ts`
-- **Depends on:** T-090, T-086, T-050, T-073, T-107
+- **Depends on:** T-090, T-086, T-050, T-107
 - **Acceptance criteria:**
   - Consumer-scope applicant API for PH1–PH5, PA7 status and PA8 changes-requested resubmission; submit blocked without authorization evidence (mandatory photo gate) and identity evidence.
   - Staff API for TrustOps-led registration (TO-PA6, TO-PA6B, TO-PA10): hub draft and agent record created separately; NIN/BVN go through trust verification and are never stored raw.
-  - Applications register as `PARK_HUB_APPLICATION` cases with an evidence matrix (identity, authority, hub details, payout name-match) and advisory (TO-PA1, TO-PA2, PH7).
-  - Activation (TO-PA3) is one transaction: hub `ACTIVE`, Park membership (`OPERATOR`, `INVITED` until first logistics login), assignment rows with the exact permission flags, hub payout account linked. It is refused while any check is unresolved. Publishes `park.hub.created` and `park.hub.activated`.
+  - Applications register as `PARK_HUB_APPLICATION` cases with an evidence matrix (identity, authority, hub details) and advisory (TO-PA1, TO-PA2, PH7).
+  - Activation (TO-PA3) is one transaction: hub `ACTIVE`, Park membership (`OPERATOR`, `INVITED` until first logistics login), assignment rows with the exact permission flags. No bank or payout details are collected. It is refused while any check is unresolved. Publishes `park.hub.created` and `park.hub.activated`.
   - Lifecycle (TO-PA4): suspend custody rights, request re-verification (authorization review date), change primary agent, temporarily close hub; every action needs a reason and keeps history. `park.hub.suspended` on suspension.
   - Hub staff invites by agents with `can_add_staff`; release rights for staff need TrustOps approval.
   - Every endpoint idempotent where retryable and paginated where it lists.
@@ -46,23 +46,23 @@ Design §7. Park is a row in `logistics_companies` (`is_default`); Park Agents a
 ### T-093 — Park and trade integration
 
 - **Touches:** `trades/services/fulfilment.service.ts` (Park branch), `park/services/parcel.service.ts`, `park/jobs/ageing.job.ts`
-- **Depends on:** T-092, T-064, T-065, T-047
+- **Depends on:** T-092, T-064, T-065
 - **Acceptance criteria:**
-  - Ship step "Park Hub Transit" (X2): choose destination hub (active and accepting) and optional origin hub; creates the parcel in `AWAITING_SOURCE_DROPOFF` with the handling fee snapshotted from the fee file, issues `DROPOFF` and `PICKUP` PINs, records waybill, carrier, driver phone and plate.
+  - Ship step "Park Hub Transit" (X2): choose destination hub (active and accepting) and optional origin hub; creates the parcel in `AWAITING_SOURCE_DROPOFF`, issues `DROPOFF` and `PICKUP` PINs, records waybill, carrier, driver phone and plate.
   - Seller sees the drop-off PIN; buyer sees the pickup PIN and hub address (AB1, AB2) through endpoints that reveal `pin_enc` only to that party.
   - Parcel `AT_SOURCE_HUB` moves the trade to `SHIPPED`; `park.parcel.released` feeds the shared delivery-signal consumer with source `PARK_CUSTODY` (trusted), moving the trade to `INSPECTION`.
   - `park.parcel.exception` places a `PARK_EXCEPTION` hold on the trade; clearing lifts it.
   - Ageing job opens a `CUSTODY` case past `park.custody_ageing_hours` and records ageing buckets.
 
-### T-094 — Hub earnings and withdrawals
+### T-094 — Park cash-fee notices and handover log
 
-- **Touches:** `ledger` subscriber for `park.parcel.released`, `park/http/earnings.controller.ts`
-- **Depends on:** T-093, T-073
+- **Touches:** `park/http/{fees,handovers}.controller.ts`, notify templates
+- **Depends on:** T-093, T-047
 - **Acceptance criteria:**
-  - On release: debit `PARK_HANDLING_EXPENSE`, credit `HUB_PAYABLE(hub)` by the fee snapshotted on the parcel (T-047); exactly once per parcel even on event replay (test).
-  - Earnings API for PE1: available balance, period count, per-parcel fee, recent handovers, paginated.
-  - Withdrawal via `executePayout` to the hub's verified payout account, allowed only for members with `can_manage_payouts`.
-  - If the owner answers Q2 differently, only the debit account changes; the test suite covers the posting as a unit so the switch is one line.
+  - The `park_cash_handling_fee` range from the fee file is exposed on the trade and parcel read models once Park is chosen, with copy stating it is paid in cash to the agent at pickup and not through Komtru (design §7.7).
+  - The "parcel arrived at the hub" notification to the buyer includes the cash-fee notice and the hub address.
+  - Handover log API for PE1: counts per period and recent releases, paginated, with no money values.
+  - A test asserts `park.parcel.released` produces zero ledger postings and that no Park code reads the fee for anything but display.
 
 ### T-095 — Park TrustOps read models
 

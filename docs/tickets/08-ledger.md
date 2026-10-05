@@ -9,7 +9,7 @@ Decisions C4, C5, C8, C10, C11 (design §5). The ledger is authoritative; Paysta
 - **Touches:** `src/modules/ledger/domain/journal.ts`, `ledger/infrastructure/postgres/**`, migration `ledger_core`
 - **Depends on:** T-021, T-024
 - **Acceptance criteria:**
-  - Accounts per M8 §4 plus `HUB_PAYABLE` (per Park hub), `PARK_HANDLING_EXPENSE`, `BUYER_PROTECTION_FEE_REVENUE`.
+  - Accounts per M8 §4 plus `BUYER_PROTECTION_FEE_REVENUE`. No Park accounts exist; the Park handling fee is cash between buyer and agent (design C23).
   - `postJournal(tx, entries)` rejects unbalanced entries; a deferred constraint trigger enforces balance at commit as well (both tested).
   - `ledger_entries` and journals append-only by trigger and grants; corrections are reversing journals.
   - Money is `bigint` kobo end to end; property tests on random balanced and unbalanced sets.
@@ -42,7 +42,7 @@ Decisions C4, C5, C8, C10, C11 (design §5). The ledger is authoritative; Paysta
 - **Touches:** `ledger/services/{payoutAccount,payoutPreference,payout}.service.ts`, `ledger/jobs/**`
 - **Depends on:** T-072, T-051
 - **Acceptance criteria:**
-  - `payout_accounts` with owner type `USER` or `PARK_HUB`, encrypted account number, masked display, provider recipient id, name-match reference from T-051, one default per owner.
+  - `payout_accounts` owned by users only, encrypted account number, masked display, provider recipient id, name-match reference from T-051, one default per owner.
   - `payout_preferences` modes `MANUAL`, `AUTO_IMMEDIATE`, `AUTO_DAILY`, `AUTO_WEEKLY` (Monday), `AUTO_MONTHLY` (1st), rejecting non-manual modes without a verified account.
   - `executePayout` is the only caller of `initiateTransfer`; it deducts `payout_fee` from the fee file (zero by default) as a separate journal line; manual withdraw (AB5), auto-immediate listener, and the daily sweep job (the scheduler exists from T-023, so the m8 plan's deferred sweep ships now).
   - Ledger: payable to settlement clearing on initiation, clearing to escrow pool on success, reversal on failure or reversal webhook; failed withdrawals surface for WF1; receipts for PR1.
