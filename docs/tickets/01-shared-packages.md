@@ -39,6 +39,19 @@
 
 ### T-012 — `ui-kit` core primitives and Storybook
 
+- **Status:** Done (2026-10-05). Plan: `docs/superpowers/plans/2026-10-05-t-012-ui-primitives.md`. Nineteen primitives live in `packages/ui-kit/src/primitives/**`, each emitting only the token utilities `@komtru/config`'s Tailwind preset publishes. `packages/ui-kit/test/primitives-parity.test.tsx` renders every primitive, compiles its classes through the real preset and diffs the declarations against the rule the reference HTML declares for it — 53 parity checks — so a property a primitive does not reproduce has to be named in `DEVIATIONS` with a reason, and a `DEVIATIONS` entry that no longer deviates fails too. `src/primitives/DEVIATIONS.md` is that list in prose, with the screen and line number T-016 should shoot each primitive against. Storybook 10.6.1 (`@storybook/react-vite`, Vite 8) has one story file per primitive with a story per documented state. 210 tests in `@komtru/ui-kit`.
+- **Deferred:**
+  - **No primitive has had a screenshot taken.** T-016 did not exist in this worktree, so the visual check is owed for all nineteen; `src/primitives/DEVIATIONS.md` names the reference instance for each.
+  - The reference declares no toast rule and says so out loud ("A real moment, not just a toast", line 3978). `<Toast>` borrows `.offline-banner`'s geometry, is scoped to small confirmations, and has no reference instance to shoot.
+  - `.scope-note` is the design document's own page chrome, not a product component — its five copies disagree on `max-width` (700/760/780px). The product's info note is `.proof-compare-note`, which is `<Banner tone="info">`. The risk tone is an extrapolation: the reference has no banner in it.
+  - `@keyframes shimmer` and `@keyframes nodePulse` are **not** shipped by `ui-kit`, which has no stylesheet beyond `tokens.css`. `.storybook/preview.css` declares them so the stories animate; **T-017 must declare them in the app CSS** or `<Skeleton>` and `<NodeLoader>` will sit still.
+  - `.ko-stepper` is restated three times in the reference as three different designs (`komtru-refinement-v2` numbered inline rail, `komtru-nav-v2` centred-dot rail, `.p0-stepper`). `<Stepper>` reproduces the first; the parity row names the `<style>` id so the choice is explicit.
+  - The reference's global `:focus-visible` also sets `border-radius:4px`. It is not reproduced: that rule is declared before every component rule, so in the reference any element with its own radius keeps it, and baking 4px into a utility would invert the cascade.
+  - `<Toggle>`'s knob is a real `<span>`, not `.m-switch::after`, and `<FileDropzone>`'s upload target is a `<label>` wrapping a visually hidden file input rather than the reference's non-functional `<div>`: a kit that ships no stylesheet cannot reach a pseudo-element, and a dropzone has to actually take a file.
+  - `<Sheet>`'s scrim is `fixed`, not `absolute`, and drops its `border-radius`: the reference pins it inside the 340px phone frame it is drawn in, and a real screen has no frame.
+  - Added beyond the HTML, consistently and deliberately: `motion-reduce:animate-none` on every animation, `aria-disabled` plus `opacity-55` on a disabled button (the reference never draws one), and an `aria-invalid` + risk-border error treatment on `TextField`/`Select` (the reference styles only the message).
+  - `build-storybook` is a package script, not a turbo task: it is a 1s Vite build that nothing else depends on, and wiring it into `turbo run build` would put it on every ticket's critical path. Run `pnpm --filter @komtru/ui-kit build-storybook` to check it.
+  - `packages/ui-kit/tsconfig.json` now includes `.storybook/*.ts` explicitly — TypeScript's `include` globs skip dot-directories, and typescript-eslint's project service refuses to parse a file the program does not contain.
 - **Touches:** `packages/ui-kit/src/primitives/**`, `packages/ui-kit/.storybook/**`
 - **Depends on:** T-011
 - **Acceptance criteria:**

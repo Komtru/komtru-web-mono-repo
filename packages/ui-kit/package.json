@@ -19,10 +19,12 @@
   },
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
-    "tokens": "node --experimental-strip-types scripts/extract-tokens.ts",
+    "build-storybook": "storybook build",
     "lint": "eslint .",
-    "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "vitest run"
+    "storybook": "storybook dev -p 6006 --no-open",
+    "test": "vitest run",
+    "tokens": "node --experimental-strip-types scripts/extract-tokens.ts",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "peerDependencies": {
     "next": "^15.0.0",
@@ -36,6 +38,9 @@
   },
   "devDependencies": {
     "@komtru/config": "workspace:*",
+    "@storybook/addon-docs": "10.6.1",
+    "@storybook/react-vite": "10.6.1",
+    "@tailwindcss/vite": "4.3.3",
     "@testing-library/react": "16.3.3",
     "@types/node": "22.20.5",
     "@types/react": "19.3.0",
@@ -45,8 +50,10 @@
     "next": "15.5.27",
     "react": "19.3.0",
     "react-dom": "19.3.0",
+    "storybook": "10.6.1",
     "tailwindcss": "4.3.3",
     "typescript": "6.0.3",
+    "vite": "8.3.2",
     "vitest": "5.0.3"
   }
 }
