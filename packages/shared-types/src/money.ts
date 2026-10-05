@@ -22,6 +22,22 @@ export const koboSchema = z.codec(KOBO_WIRE, z.bigint().min(KOBO_MIN).max(KOBO_M
   encode: (kobo) => kobo.toString(),
 });
 
+/**
+ * A non-negative JSON amount, validated but NOT decoded: for money that stays a string all the way
+ * into JSONB or a response body. `koboSchema` is a codec, so using it on a response schema would
+ * hand `res.json` a bigint; this is the same vocabulary without the decode step. The range bound
+ * matters as much as the digit count — `9999999999999999999` is 19 digits and overflows BIGINT.
+ */
+export const koboJsonSchema = z
+  .string()
+  .regex(/^\d{1,19}$/, 'Amount must be a whole number of kobo, as a string of digits')
+  // zod runs every check, including after the regex failed, so this must tolerate a non-numeric
+  // string rather than letting BigInt() throw a SyntaxError out of a safeParse.
+  .refine(
+    (value) => !/^\d{1,19}$/.test(value) || BigInt(value) <= KOBO_MAX,
+    'Amount is larger than a BIGINT column can hold',
+  );
+
 /** A price or payment: strictly greater than zero. */
 export const positiveKoboSchema = koboSchema.refine((kobo) => kobo > 0n, 'Amount must be greater than zero');
 

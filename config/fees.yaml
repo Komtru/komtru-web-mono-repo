@@ -1,0 +1,34 @@
+# config/fees.yaml — the only place fees and cuts are set (design §6.5). No fee amount or rate
+# appears anywhere else: not in code, not in database seeds, not in frontend bundles.
+#
+# To change a fee safely:
+#   1. Edit the value here, and only here.
+#   2. Bump `version` (date.counter, e.g. 2026-10-05.2). CI fails on a changed value without it.
+#   3. Open a PR. Git history is the audit trail.
+#   4. Deploy. Trades and Park parcels already created keep the fees they were snapshotted under.
+# Full runbook: docs/runbooks/fees.md
+version: 2026-10-05.1
+currency: NGN
+
+buyer_protection_fee: # paid by the buyer on top of the item price (HTML V1)
+  rate_bps: 150 # 1.5%
+  min_minor: 0
+  max_minor: null # null = no cap
+  refundable_on_full_refund: true # Q4
+
+seller_commission: # platform cut from a casual seller's proceeds at release
+  rate_bps: 0 # Q14
+  min_minor: 0
+  max_minor: null
+
+merchant_commission: # platform cut from a certified merchant's proceeds at release
+  rate_bps: 0 # Q14
+  min_minor: 0
+  max_minor: null
+
+park_cash_handling_fee: # INFORMATIONAL ONLY (C23): shown to buyers, never charged,
+  min_minor: 30000 # collected, posted or paid out by Komtru. The buyer pays the
+  max_minor: 50000 # park agent this amount in cash at pickup.
+
+payout_fee: # charged on each seller withdrawal
+  amount_minor: 0
