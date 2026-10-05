@@ -1,0 +1,39 @@
+name: repo
+
+# The five app workflows are path-filtered to an app and the packages it depends on, which leaves
+# real gaps: a shared package no app imports yet (ui-kit, api-client), the repo-level suite in
+# scripts/test, and formatting. Those are exactly the places where "no workflow ran" looks the same
+# as "everything passed", so this one runs on everything and filters nothing.
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: repo-${{ github.ref }}
+  # Superseding a feature branch's run is fine; cancelling main's would kill a deploy half-way.
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/setup
+        with:
+          cache-key: repo
+      - name: Formatting
+        run: pnpm format:check
+      - name: Repository tests
+        # Not the app suites — those belong to the app workflows, which can skip when nothing they
+        # own changed. This is the suite that checks the repository itself: env templates, commit
+        # rules, secret hygiene, the workflows in this directory and the screen index.
+        run: pnpm test:repo
+      - name: Every workspace package
+        # Unfiltered, so a package no app imports yet is still linted, typechecked, tested and
+        # built. Turbo's cache makes this cheap once the app workflows have run.
+        run: pnpm exec turbo run lint typecheck test build

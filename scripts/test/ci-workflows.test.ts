@@ -52,8 +52,16 @@ describe('composite setup action', () => {
     expect(stepUsing('actions/setup-node@')?.with?.cache).toBe('pnpm');
     const turboCache = stepUsing('actions/cache@');
     expect(turboCache?.with?.path).toContain('.turbo');
-    expect(turboCache?.with?.key).toContain("hashFiles('pnpm-lock.yaml')");
-    expect(turboCache?.with?.['restore-keys']).toBeTruthy();
+    const key = turboCache?.with?.key ?? '';
+    expect(key).toContain("hashFiles('pnpm-lock.yaml')");
+    // A restore key that is not a prefix of the primary key never matches, which would look like a
+    // working cache and behave like none at all.
+    const restoreKeys = (turboCache?.with?.['restore-keys'] ?? '').split('\n').filter(Boolean);
+    expect(restoreKeys.length).toBeGreaterThan(0);
+    for (const restoreKey of restoreKeys) {
+      expect(key.startsWith(restoreKey), `${restoreKey} is not a prefix of ${key}`).toBe(true);
+      expect(restoreKey.length).toBeLessThan(key.length);
+    }
   });
 
   it('installs with a frozen lockfile', () => {
@@ -70,6 +78,7 @@ type Job = {
   'runs-on': string;
   needs?: string | string[];
   if?: string;
+  'runs-on'?: string;
   env?: Record<string, string>;
   services?: Record<
     string,
@@ -85,7 +94,7 @@ type Workflow = {
     workflow_dispatch?: unknown;
   };
   permissions?: Record<string, string>;
-  concurrency?: { group: string; 'cancel-in-progress': boolean };
+  concurrency?: { group: string; 'cancel-in-progress': boolean | string };
   jobs: Record<string, Job>;
 };
 
@@ -136,6 +145,10 @@ const asArray = (value: string | string[] | undefined) =>
 describe.each(APPS)('%s workflow', (app) => {
   const workflow = workflows.get(app)!;
   const jobs = workflow.jobs;
+
+  it('has a manifest named after its directory, which the filter derivation relies on', () => {
+    expect(manifests.has(`@komtru/${app}`)).toBe(true);
+  });
 
   it('is path-filtered to the app, its workspace dependencies and the shared root files', () => {
     const expected = new Set([
@@ -200,8 +213,68 @@ describe.each(APPS)('%s workflow', (app) => {
     expect(jobs.deploy?.steps[0]?.run).toContain('T-005');
   });
 
+  it('never cancels a run on main, where a deploy may be in flight', () => {
+    expect(workflow.concurrency?.group).toContain('github.ref');
+    // A second merge must not kill the first merge's deploy half-way through (T-005 gives deploy a
+    // body); superseding a feature branch's run is still fine.
+    expect(String(workflow.concurrency?.['cancel-in-progress'])).toContain("github.ref != 'refs/heads/main'");
+  });
+
+  it('asks for no more than read access to the repository', () => {
+    expect(workflow.permissions).toEqual({ contents: 'read' });
+  });
+
+  it('gives every job a runner', () => {
+    for (const [name, job] of Object.entries(jobs)) {
+      expect(job['runs-on'], name).toBeTruthy();
+    }
+  });
+});
+
+/**
+ * The composite action is where every third-party action actually lives, so the pin and credential
+ * scans have to cover it too — scanning only the five workflows left the one file that matters out.
+ */
+const scannedFiles = [
+  ...APPS.map((app) => [`.github/workflows/${app}.yml`, workflowText.get(app)!] as const),
+  ['.github/actions/setup/action.yml', read('.github/actions/setup/action.yml')] as const,
+  ['.github/workflows/repo.yml', read('.github/workflows/repo.yml')] as const,
+];
+
+/**
+ * An app workflow only runs when its own filter matches, so anything outside every filter — a
+ * package no app imports yet, the repo-level suite, formatting — would otherwise have no CI at all.
+ */
+describe('repo-wide workflow', () => {
+  const workflow = readYaml<Workflow>('.github/workflows/repo.yml');
+  const runs = Object.values(workflow.jobs)
+    .flatMap((job) => job.steps.map((step) => step.run ?? ''))
+    .join('\n');
+
+  it('filters nothing, so no path can fall between the app workflows', () => {
+    expect(workflow.on.push?.paths).toBeUndefined();
+    expect(workflow.on.pull_request?.paths).toBeUndefined();
+    expect(workflow.on).toHaveProperty('workflow_dispatch');
+  });
+
+  it('runs the repository suite, the formatter and every workspace package unfiltered', () => {
+    expect(runs).toContain('pnpm test:repo');
+    expect(runs).toContain('pnpm format:check');
+    expect(runs).toMatch(/turbo run (?!.*--filter)/);
+  });
+
+  it('covers the packages no app depends on yet', () => {
+    const appFiltered = new Set(
+      APPS.flatMap((app) => readYaml<Workflow>(`.github/workflows/${app}.yml`).on.push?.paths ?? []),
+    );
+    const uncovered = PACKAGES.filter((pkg) => !appFiltered.has(`packages/${pkg}/**`));
+    // Whatever is uncovered today, this workflow is what runs it.
+    expect(uncovered.length === 0 || runs.includes('turbo run')).toBe(true);
+  });
+});
+
+describe.each(scannedFiles)('%s', (_path, text) => {
   it('carries no literal credential beyond the throwaway container ones', () => {
-    const text = workflowText.get(app)!;
     expect(text).not.toMatch(/sk_(live|test)_|-----BEGIN |ghp_[A-Za-z0-9]{20,}|AKIA[0-9A-Z]{16}/);
     const credentials = [...text.matchAll(/:\/\/([^/\s:]+):([^@\s]+)@/g)].map(
       (match) => `${match[1]}:${match[2]}`,
@@ -215,19 +288,65 @@ describe.each(APPS)('%s workflow', (app) => {
   });
 
   it('pins every third-party action to a major version tag', () => {
-    const uses = [...workflowText.get(app)!.matchAll(/uses:\s*(\S+)/g)].map((match) => match[1]!);
+    const uses = [...text.matchAll(/uses:\s*(\S+)/g)].map((match) => match[1]!);
     for (const reference of uses.filter((value) => !value.startsWith('./'))) {
       expect(reference).toMatch(/@v\d+$/);
     }
   });
+});
 
-  it('cancels a superseded run of the same ref', () => {
-    expect(workflow.concurrency?.group).toContain('github.ref');
-    expect(workflow.concurrency?.['cancel-in-progress']).toBe(true);
+describe('job environment', () => {
+  /** Only these may appear as a literal; anything else has to come from secrets or vars. */
+  const allowedLiterals = new Set([
+    '1',
+    'true',
+    `postgresql://${LOCAL_DATABASE.user}:${LOCAL_DATABASE.password}@localhost:${LOCAL_PORTS.postgres}`,
+    `postgresql://${LOCAL_APP_ROLE.user}:${LOCAL_APP_ROLE.password}@localhost:${LOCAL_PORTS.pgbouncer}`,
+  ]);
+
+  it.each(APPS)('%s sets only throwaway literals or secrets expressions', (app) => {
+    const workflow = readYaml<Workflow>(`.github/workflows/${app}.yml`);
+    for (const [name, job] of Object.entries(workflow.jobs)) {
+      for (const [key, value] of Object.entries(job.env ?? {})) {
+        const literal = String(value);
+        const fromSecrets = /\$\{\{\s*(secrets|vars)\./.test(literal);
+        expect(
+          fromSecrets || allowedLiterals.has(literal),
+          `${app}/${name} env ${key} is a literal that is neither throwaway nor a secrets expression`,
+        ).toBe(true);
+      }
+    }
   });
 
-  it('asks for no more than read access to the repository', () => {
-    expect(workflow.permissions).toEqual({ contents: 'read' });
+  /**
+   * Turborepo runs tasks in strict env mode: a variable a task does not declare is simply absent
+   * inside it. A job that sets one and a turbo.json that does not declare it is the silent failure
+   * this test exists to catch — the backend's integration suites would skip and the job stay green.
+   */
+  it('declares every variable a job sets in turbo.json, so the task actually receives it', () => {
+    const turbo = JSON.parse(read('turbo.json')) as {
+      globalEnv?: string[];
+      globalPassThroughEnv?: string[];
+      tasks: Record<string, { env?: string[]; passThroughEnv?: string[] }>;
+    };
+    for (const app of APPS) {
+      const workflow = readYaml<Workflow>(`.github/workflows/${app}.yml`);
+      for (const [name, job] of Object.entries(workflow.jobs)) {
+        const task = /turbo run (\w+)/.exec(job.steps.map((step) => step.run ?? '').join('\n'))?.[1];
+        if (!task) continue;
+        const declared = new Set([
+          ...(turbo.globalEnv ?? []),
+          ...(turbo.globalPassThroughEnv ?? []),
+          ...(turbo.tasks[task]?.env ?? []),
+          ...(turbo.tasks[task]?.passThroughEnv ?? []),
+        ]);
+        for (const key of Object.keys(job.env ?? {})) {
+          expect(declared, `${app}/${name} sets ${key}, which turbo.json's "${task}" task drops`).toContain(
+            key,
+          );
+        }
+      }
+    }
   });
 });
 

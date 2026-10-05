@@ -4,8 +4,7 @@ description: Installs pnpm and Node from the root package.json, installs the wor
 inputs:
   cache-key:
     description: Extra segment for the Turbo cache key, so jobs that build different things do not fight over one entry.
-    required: false
-    default: shared
+    required: true
 
 runs:
   using: composite
@@ -31,7 +30,10 @@ runs:
       uses: actions/cache@v6
       with:
         path: .turbo/cache
-        key: turbo-${{ runner.os }}-${{ inputs.cache-key }}-${{ hashFiles('pnpm-lock.yaml') }}-${{ github.sha }}
+        # github.job is in the key because a workflow's four jobs run concurrently and would
+        # otherwise all try to reserve the same entry, failing three of them with a warning.
+        key: turbo-${{ runner.os }}-${{ inputs.cache-key }}-${{ hashFiles('pnpm-lock.yaml') }}-${{ github.job }}-${{ github.sha }}
         restore-keys: |
+          turbo-${{ runner.os }}-${{ inputs.cache-key }}-${{ hashFiles('pnpm-lock.yaml') }}-${{ github.job }}-
           turbo-${{ runner.os }}-${{ inputs.cache-key }}-${{ hashFiles('pnpm-lock.yaml') }}-
           turbo-${{ runner.os }}-${{ inputs.cache-key }}-
