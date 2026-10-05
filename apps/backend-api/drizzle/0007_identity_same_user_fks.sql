@@ -7,6 +7,8 @@
 -- registration writes the pointer in the same transaction as the row it points at.
 --
 -- drizzle expresses neither clause, so these two constraints live here rather than in users.ts.
+--
+-- migration-safety: allow constraint-scan (users is created in the migration before this one and has never held a row in any environment; the platform is pre-launch, so there is no row to validate and no writer to block)
 ALTER TABLE "identity"."users"
   ADD CONSTRAINT "users_primary_email_fk"
     FOREIGN KEY ("primary_email_id", "id") REFERENCES "identity"."user_emails"("id", "user_id")
