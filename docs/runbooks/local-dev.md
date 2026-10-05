@@ -17,16 +17,16 @@ pnpm infra:down    # stop them, keeping data
 pnpm infra:reset   # stop them and delete the database and Redis volumes
 ```
 
-| Service     | Address                                           | Notes                                              |
-| ----------- | ------------------------------------------------- | -------------------------------------------------- |
-| PgBouncer   | `localhost:56432`                                 | Transaction pooling. The app always connects here. |
-| Postgres 16 | `localhost:55432`                                 | Direct connection, for migrations only.            |
-| Redis 7     | `localhost:56379`                                 | BullMQ, rate limits, sessions, sockets.            |
-| Mailpit     | SMTP `localhost:51025`, UI http://localhost:58025 | Catches local email.                               |
+| Service     | Address                                           | Notes                                                                                                                            |
+| ----------- | ------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| PgBouncer   | `localhost:56432`                                 | Transaction pooling. The app always connects here.                                                                               |
+| Postgres 16 | `localhost:55432`                                 | Direct connection, for migrations only.                                                                                          |
+| Redis 7     | `localhost:56379`                                 | BullMQ, rate limits, sessions, sockets.                                                                                          |
+| Mailpit     | SMTP `localhost:51025`, UI http://localhost:58025 | SMTP catcher for any tool that sends mail over SMTP. The backend sends through Mailjet's API, so its email does not appear here. |
 
 The local database is `komtru_v2_dev`, user `komtru`, password `komtru`. These credentials exist only in the throwaway containers.
 
-Ports are deliberately non-standard so they never clash with an existing local Postgres or Redis. To change one, set `KOMTRU_PG_PORT`, `KOMTRU_PGBOUNCER_PORT`, `KOMTRU_REDIS_PORT`, `KOMTRU_MAILPIT_SMTP_PORT` or `KOMTRU_MAILPIT_UI_PORT` before `pnpm infra:up` and before running the env script; both read the same variables.
+Ports are deliberately non-standard so they never clash with an existing local Postgres or Redis. To change one, export `KOMTRU_PG_PORT`, `KOMTRU_PGBOUNCER_PORT`, `KOMTRU_REDIS_PORT`, `KOMTRU_MAILPIT_SMTP_PORT` or `KOMTRU_MAILPIT_UI_PORT` in your shell before `pnpm infra:up` and before running the env script; both read the same variables. Don't put them in a root `.env` file: Docker Compose reads that file but the env script does not, so the two would disagree.
 
 ## Give the backend its credentials
 
@@ -39,7 +39,9 @@ pnpm env:backend --force          # overwrite an existing apps/backend-api/.env
 The script copies every value from `docs/specs/backend-apis.env` exactly, with these changes:
 
 - **Local target:** Postgres and Redis point at the Docker stack, and `MAILJET_SANDBOX=true` so no real email is sent from a local run.
-- **RDS target:** the host and credentials stay, but the database changes from `komtru_dev` to `komtru_v2_dev`.
+- **RDS target:** the host and credentials stay, but the database always changes to `komtru_v2_dev`, whatever the source named.
+
+> **Live provider keys stay live.** The Termii SMS key, Cloudinary accounts and other provider credentials are copied unchanged, so a local run can send real SMS to real phone numbers and spend real credit. Until the notification module ships its SMS dry-run switch (T-045), only use phone numbers you own when testing OTP or alerts. Paystack is in test mode, so no real money moves.
 
 > **Never point the new build at `komtru_dev`.** That database belongs to the old backend, which has already migrated its own schema into it. The new schema would collide with it. `komtru_v2_dev` must be created on the RDS instance before the RDS target works (design §12 Q8).
 
