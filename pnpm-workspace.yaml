@@ -1,3 +1,5 @@
 packages:
   - apps/*
   - packages/*
+  # Only directories with a package.json match; tools/tickets is Python and stays out.
+  - tools/*
