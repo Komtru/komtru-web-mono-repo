@@ -38,3 +38,6 @@ docs/ui-review/**/artifacts/
 # Agent worktrees (one per ticket)
 .claude/worktrees/
 .worktrees/
+
+# Ticket index tooling scratch output
+tools/tickets/.tickets.json

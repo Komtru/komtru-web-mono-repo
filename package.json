@@ -18,6 +18,7 @@
     "infra:up": "docker compose up -d --wait",
     "infra:down": "docker compose down",
     "infra:reset": "docker compose down --volumes",
+    "tickets:index": "python3 tools/tickets/tickets_index.py tools/tickets/.tickets.json && python3 tools/tickets/regen_tickets_md.py tools/tickets/.tickets.json && prettier --write docs/TICKETS.md",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "prepare": "husky"
