@@ -6,7 +6,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { Browser } from '@playwright/test';
 
 import { carveScreen } from '../src/reference.ts';
-import { chromium, shootBuilt, shootReference } from '../src/render.ts';
+import { chromium, shootBuilt, shootReference, withBrowser } from '../src/render.ts';
 import { findScreen, loadScreens, REFERENCE_HTML_PATH } from '../src/screen-index.ts';
 
 const enabled = process.env.KOMTRU_BROWSER_TESTS === '1';
@@ -68,4 +68,22 @@ describe.runIf(enabled)('screenshots', () => {
       shootBuilt(browser, 'http://127.0.0.1:1/nothing', { width: 10, height: 10 }),
     ).rejects.toThrow(/127\.0\.0\.1:1/);
   }, 60_000);
+});
+
+/**
+ * The expensive proof: every screen in the index, carved and shot. Unit tests cover the carve and
+ * the registry separately, but only this says that all 210 actually render — at the width the
+ * reference declares, with a screen inside the frame rather than an empty box.
+ */
+describe.runIf(enabled)('every screen in the reference', () => {
+  it('renders at its declared width', async () => {
+    await withBrowser(async (browser) => {
+      for (const row of rows) {
+        const screen = carveScreen(html, row);
+        const shot = await shootReference(browser, screen);
+        expect(shot.width, row.id).toBe(screen.width);
+        expect(shot.height, row.id).toBeGreaterThan(100);
+      }
+    });
+  }, 300_000);
 });

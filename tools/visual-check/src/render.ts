@@ -31,7 +31,32 @@ export async function withBrowser<T>(run: (browser: Browser) => Promise<T>): Pro
 async function settle(page: Page, injectFonts: boolean): Promise<void> {
   if (injectFonts) await page.addStyleTag({ content: fontStylesheet() });
   await page.evaluate(async () => {
+    // `fonts.ready` alone settles once the faces the first layout asked for are in. Loading every
+    // declared face first means a weight that only a later paint reaches for cannot be captured
+    // mid-swap.
+    await Promise.all([...document.fonts].map((face) => face.load()));
     await document.fonts.ready;
+  });
+}
+
+/** The box the screen occupies inside its frame, excluding the mock browser bezel. */
+async function clipOf(page: Page): Promise<{ x: number; y: number; width: number; height: number } | null> {
+  return page.evaluate(() => {
+    const frame = document.querySelector('[data-komtru-vc="frame"]');
+    if (frame === null) return null;
+    const screens = [...frame.children].filter(
+      (child) => !child.classList.contains('mweb-chrome') && !child.classList.contains('dweb-chrome'),
+    );
+    if (screens.length === 0) return null;
+    const boxes = screens.map((child) => child.getBoundingClientRect());
+    const x = Math.min(...boxes.map((box) => box.left));
+    const y = Math.min(...boxes.map((box) => box.top));
+    return {
+      x,
+      y,
+      width: Math.round(Math.max(...boxes.map((box) => box.right)) - x),
+      height: Math.round(Math.max(...boxes.map((box) => box.bottom)) - y),
+    };
   });
 }
 
@@ -59,35 +84,22 @@ export async function shootReference(
     await page.setContent(carved.document, { waitUntil: 'load' });
     await settle(page, options.injectFonts ?? true);
 
-    const clip = await page.evaluate(() => {
-      const frame = document.querySelector('[data-komtru-vc="frame"]');
-      if (frame === null) return null;
-      const screens = [...frame.children].filter(
-        (child) => !child.classList.contains('mweb-chrome') && !child.classList.contains('dweb-chrome'),
-      );
-      if (screens.length === 0) return null;
-      const boxes = screens.map((child) => child.getBoundingClientRect());
-      const x = Math.min(...boxes.map((box) => box.left));
-      const y = Math.min(...boxes.map((box) => box.top));
-      return {
-        x,
-        y,
-        width: Math.round(Math.max(...boxes.map((box) => box.right)) - x),
-        height: Math.round(Math.max(...boxes.map((box) => box.bottom)) - y),
-      };
-    });
-
-    if (clip === null || clip.width === 0 || clip.height === 0) {
+    const measured = await clipOf(page);
+    if (measured === null || measured.width === 0 || measured.height === 0) {
       throw new Error(
         `${carved.row.id} renders no screen inside its ${carved.frame.classes.join('.')} frame`,
       );
     }
-    // The page is as tall as it needs to be, but the viewport is not; without this the clip can
-    // reach below the fold and Playwright returns a short image.
+
+    // A clip reaching below the fold comes back short, so the viewport has to grow to fit it — and
+    // the box is then measured again, because a resize is a reflow and the first measurement was
+    // taken at a different height.
     await page.setViewportSize({
       width: REFERENCE_VIEWPORT.width,
-      height: Math.max(REFERENCE_VIEWPORT.height, Math.ceil(clip.y + clip.height) + 1),
+      height: Math.max(REFERENCE_VIEWPORT.height, Math.ceil(measured.y + measured.height) + 1),
     });
+    const clip = await clipOf(page);
+    if (clip === null) throw new Error(`${carved.row.id} lost its frame when the viewport grew`);
 
     return { png: await page.screenshot({ clip }), width: clip.width, height: clip.height };
   } finally {
@@ -109,10 +121,16 @@ export async function shootBuilt(
   });
   try {
     try {
-      await page.goto(url, { waitUntil: 'networkidle' });
+      await page.goto(url, { waitUntil: 'load' });
     } catch (cause) {
-      throw new Error(`Could not open ${url} — is the app running?`, { cause });
+      throw new Error(
+        `Could not open ${url} — is the app running? (${cause instanceof Error ? cause.message.split('\n')[0] : String(cause)})`,
+        { cause },
+      );
     }
+    // Best effort only. An app holding a socket open — which every Komtru frontend does — never
+    // reaches network idle, and waiting for it would report a working app as unreachable.
+    await page.waitForLoadState('networkidle', { timeout: 5_000 }).catch(() => undefined);
     await settle(page, options.injectFonts ?? true);
     return { png: await page.screenshot(), ...size };
   } finally {

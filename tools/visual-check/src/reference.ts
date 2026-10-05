@@ -59,8 +59,10 @@ interface CloseToken {
 
 type Token = ({ kind: 'open'; selfClosed: boolean } & OpenElement) | CloseToken;
 
-const attribute = (open: string, name: string): string | null =>
-  new RegExp(`\\s${name}\\s*=\\s*"([^"]*)"`, 'i').exec(open)?.[1] ?? null;
+// Hoisted: `tokenise` runs this on every tag of an 838KB document, and a fresh RegExp per lookup
+// is the whole cost of the scan.
+const CLASS_ATTRIBUTE = /\sclass\s*=\s*"([^"]*)"/i;
+const ID_ATTRIBUTE = /\sid\s*=\s*"([^"]*)"/i;
 
 /**
  * Tokenises the reference the way a browser would, which is all this needs to do: one generated
@@ -127,8 +129,8 @@ function* tokenise(html: string): Generator<Token> {
       start: lt,
       end,
       selfClosed,
-      classes: (attribute(open, 'class') ?? '').split(/\s+/).filter(Boolean),
-      id: attribute(open, 'id'),
+      classes: (CLASS_ATTRIBUTE.exec(open)?.[1] ?? '').split(/\s+/).filter(Boolean),
+      id: ID_ATTRIBUTE.exec(open)?.[1] ?? null,
     };
 
     i = end;

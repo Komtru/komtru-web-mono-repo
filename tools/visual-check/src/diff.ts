@@ -39,6 +39,10 @@ export function diffPngs(reference: Buffer, built: Buffer, options: DiffOptions 
     // Antialiasing differs between a 340px-wide box inside a 1280px page and the same box as the
     // whole page; those pixels are a rendering artefact, not a design deviation.
     includeAA: false,
+    // …and so they must not be painted either. pixelmatch's default marks them yellow, which on a
+    // text-heavy screen is more highlighted area than the red it counts — a reviewer would spend
+    // the review chasing pixels the score deliberately ignores.
+    aaColor: FADED,
   });
 
   const total = width * height;
@@ -57,9 +61,12 @@ export interface ComposeOptions {
   gap?: number;
 }
 
+/** The grey pixelmatch fades the unchanged reference to, so an ignored pixel stays unhighlighted. */
+const FADED: [number, number, number] = [255, 255, 255];
+
 // The reference's own `--trust-indigo`, so the separator reads as part of the design system rather
 // than as something in the screenshot.
-const RULE: readonly [number, number, number] = [0x45, 0x52, 0xd6];
+const RULE = new Uint8Array([0x45, 0x52, 0xd6, 255]);
 
 /** The panels left to right on one canvas, top-aligned, separated by an indigo rule. */
 export function composeSideBySide(panels: readonly Buffer[], options: ComposeOptions = {}): Buffer {
@@ -71,7 +78,7 @@ export function composeSideBySide(panels: readonly Buffer[], options: ComposeOpt
   const height = Math.max(...images.map((image) => image.height));
 
   const strip = new PNG({ width, height });
-  for (let i = 0; i < strip.data.length; i += 4) strip.data.set([...RULE, 255], i);
+  for (let i = 0; i < strip.data.length; i += 4) strip.data.set(RULE, i);
 
   let x = 0;
   for (const image of images) {

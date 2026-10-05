@@ -21,7 +21,18 @@ export interface ScreenRow {
   /** The line in the HTML where the screen's `screen-num` header starts. */
   line: number;
   app: string;
+  /** The cell verbatim: one row annotates the ticket ("T-110 (intentionally not built …)"). */
   ticket: string;
+}
+
+/**
+ * The ticket id alone, which is what names the output directory. One row's cell carries prose and
+ * a `§`, and that must not become a directory name.
+ */
+export function ticketId(row: ScreenRow): string {
+  const id = /^T-\d{3}/.exec(row.ticket)?.[0];
+  if (id === undefined) throw new Error(`${row.id} names no ticket: ${row.ticket}`);
+  return id;
 }
 
 export function parseScreenIndex(markdown: string): ScreenRow[] {

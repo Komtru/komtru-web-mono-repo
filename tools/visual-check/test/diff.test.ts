@@ -49,6 +49,18 @@ describe('diffPngs', () => {
     expect(pixelAt(heat, 3, 4)).not.toEqual(pixelAt(heat, 0, 0));
   });
 
+  it('highlights only the pixels it counted', () => {
+    // pixelmatch paints anti-aliased pixels too, in a colour of its own, even though `includeAA`
+    // keeps them out of the score. A reviewer told "red is a deviation" must not find anything else.
+    const before = solid(20, 10, WHITE);
+    const heat = PNG.sync.read(diffPngs(before, withPixel(before, 3, 4, RISK)).heatMap);
+    const highlighted = [];
+    for (let y = 0; y < heat.height; y += 1)
+      for (let x = 0; x < heat.width; x += 1)
+        if (pixelAt(heat, x, y).join() !== WHITE.join()) highlighted.push([x, y]);
+    expect(highlighted).toEqual([[3, 4]]);
+  });
+
   it('names both sizes when they disagree', () => {
     expect(() => diffPngs(solid(20, 10, WHITE), solid(21, 10, WHITE))).toThrow(/20×10[\s\S]*21×10/);
   });

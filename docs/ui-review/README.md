@@ -34,12 +34,21 @@ A flagged pixel is a real deviation. Two things are done to keep that true.
 only exists inside a Next build; `tokens.css` names the three families and ships no `@font-face`.
 Left alone the reference would render in the system fallback and the built app in the real faces,
 and every diff would be a wall of typography noise with the actual deviations buried in it. So the
-harness carries the three families as exact-pinned Fontsource dependencies — the same Google files
-`next/font` self-hosts in the apps — and inlines them as `@font-face` into _both_ pages before
+harness carries the three families as exact-pinned Fontsource dependencies, `latin` subset, in the
+same weights ui-kit asks next/font for, and inlines them as `@font-face` into _both_ pages before
 anything is captured. Both sides have all three faces available and only the markup decides which
 one applies, so a screen that reaches for the wrong family still shows as a deviation. Masking text
 was rejected (in a design-system build most deviations _are_ text) and so was linking Google Fonts
 at screenshot time (a network round-trip makes the diff irreproducible offline).
+
+Two honest limits on that. next/font renders the built app under a generated family name of its own,
+so the injected faces do not apply there — the app keeps its own copies, and the two sides run
+**independently produced builds of the same three typefaces** (Fontsource's and the Google Fonts
+API's). A sub-pixel metric skew between two releases is possible, and nothing measures it yet; the
+airtight version is for `@komtru/ui-kit` to own the files both sides load, which waits for a real
+screen to measure against. And the Google `latin` subset covers no naira sign: `₦` (U+20A6) comes
+from a system fallback on both sides, by slightly different routes, so treat naira glyphs as a known
+deviation rather than a finding until a real screen says otherwise.
 
 **Motion.** Animations and transitions are disabled and the caret is made transparent on both pages.
 A transition caught mid-frame is a difference between two runs, not between two designs.
@@ -84,7 +93,9 @@ states the geometry itself, in a comment on `#p3-proportion-fix-v8`: "desktop 10
 1. Build the screen, then start the app it lives in.
 2. Run `pnpm visual-check --screen <id> --url <url>` for each screen the ticket owns —
    `SCREEN_INDEX.md` says which ticket owns which.
-3. Open `<screen>.png`. The heat map is what to read: red is a deviation.
+3. Open `<screen>.png`. The heat map is what to read: a highlighted pixel is a deviation.
+   Anti-aliased pixels are both excluded from the score and left unhighlighted, so there is nothing
+   on it to discount.
 4. Write every deviation under `## Deviations` in `<screen>.md`, one per line, saying whether it is
    intended and why. "The reference draws a capless brand mark here; `<KomtruMark>` is round-capped
    by design (T-011)" is a complete entry. An empty list means the screen matched.
@@ -96,5 +107,6 @@ states the geometry itself, in a comment on `#p3-proportion-fix-v8`: "desktop 10
   design-system conformance rather than screenshot-versus-reference.
 - `TO-PA10` appears twice in `SCREEN_INDEX.md` — the reference draws that screen as two variants.
   Pass `--line` to choose one; the harness refuses to guess.
+- CI runs the browser-gated suites in the `repo` workflow, after `pnpm browsers:install`.
 - The screenshots are deterministic on one machine, not across machines: Chromium's text rasterising
   differs between platforms. Compare a run against the reference, not against someone else's PNG.

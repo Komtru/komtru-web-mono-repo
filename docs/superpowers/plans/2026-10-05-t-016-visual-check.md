@@ -479,3 +479,37 @@ it('works for a desktop and a tablet frame', async () => {
 - [ ] **Step 6: Commit** `docs(ui-review): document the visual-check harness` and `docs(tickets): mark T-016 done`.
 
 - [ ] **Step 7:** Request a fresh code review of the whole branch against `main`, triage, fix what is real, then re-run Steps 3 and 4.
+
+---
+
+### Review outcome (2026-10-05)
+
+A fresh reviewer probed the carve against an in-place render of the whole reference for all 210
+screens, cross-checked `topLevelRules` against Chromium's CSSOM (1,638 rules, 1,681 selectors, exact
+match), and found the scanner, the ancestor chain, the width registry, the sizing invariants and the
+path handling sound. Eight defects were real and are fixed on this branch:
+
+1. `mergeStub` dropped a reviewer's whole deviation list when the `## Deviations` heading was renamed
+   or deleted, mis-anchored on `### Deviations by area`, and `run.ts` swallowed every read error into
+   "first run". It now anchors on `/^## Deviations$/m`, carries an orphaned body over verbatim, and
+   only ENOENT counts as a first run.
+2. `KOMTRU_BROWSER_TESTS=1` was set nowhere in CI, so the twelve tests proving the harness still
+   screenshots correctly never ran. `repo.yml` gained a browser-gated step.
+3. `Y2`'s index cell is `T-110 (intentionally not built, design §6.3)` and was used verbatim as a
+   directory name. `ticketId()` now extracts `T-\d{3}` and throws otherwise.
+4. The CLI had no error boundary: "the app is not running" printed a Node stack and a Playwright call
+   log. It now prints one line, with `KOMTRU_VISUAL_CHECK_TRACE=1` for the rest.
+5. pixelmatch paints anti-aliased pixels yellow even when `includeAA` keeps them out of the score —
+   on a text-heavy screen, 45% of the highlighted area was noise the harness had decided to ignore.
+   `aaColor` now leaves them unhighlighted.
+6. `shootBuilt` waited for `networkidle`, which an app holding a socket open never reaches; a working
+   app would be reported as unreachable after 30s. It waits for `load` and settles best-effort.
+7. `shootReference` measured the clip, grew the viewport, and shot without re-measuring. It
+   re-measures.
+8. Space Grotesk was inlined as a variable face while ui-kit asks next/font for four static weights;
+   the static cuts are now used and a test holds the two lists together.
+
+Pushed back on, and corrected in the three places it was written down rather than papered over: the
+claim that the Fontsource files are "the same Google files next/font self-hosts". They are
+independently produced builds of the same typefaces, and next/font's generated family name means the
+injected faces never apply to the built page at all. See the README's "Two honest limits".

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { findScreen, loadScreens } from '../src/screen-index.ts';
+import { findScreen, loadScreens, ticketId } from '../src/screen-index.ts';
 
 const rows = loadScreens();
 
@@ -30,5 +30,21 @@ describe('the screen index', () => {
 
   it('takes the line when an id is ambiguous', () => {
     expect(findScreen(rows, 'TO-PA10', 8336)).toMatchObject({ line: 8336 });
+  });
+});
+
+describe('ticketId', () => {
+  it('is the ticket the output directory is named after', () => {
+    expect(ticketId(findScreen(rows, 'E1'))).toBe('T-111');
+  });
+
+  it('drops the prose from the one row that annotates its ticket', () => {
+    const annotated = rows.find((row) => /\(/.test(row.ticket));
+    expect(annotated?.ticket).toMatch(/\(/);
+    expect(ticketId(annotated!)).toMatch(/^T-\d{3}$/);
+  });
+
+  it('refuses a row that names no ticket', () => {
+    expect(() => ticketId({ ...rows[0]!, ticket: 'none' })).toThrow(/E1/);
   });
 });

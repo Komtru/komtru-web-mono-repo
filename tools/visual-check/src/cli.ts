@@ -42,12 +42,20 @@ const number = (name: string, raw: string | undefined): number | undefined => {
   return parsed;
 };
 
+// Every failure here is an operator problem — the app is not running, the screen id is wrong — so
+// it gets a line, not a Node stack trace with a Playwright call log attached.
 const result = await visualCheck({
   screen: values.screen,
   url: values.url,
   outDir: values.out ?? UI_REVIEW_DIR,
   ...(values.line === undefined ? {} : { line: number('line', values.line) }),
   ...(values.threshold === undefined ? {} : { threshold: number('threshold', values.threshold) }),
+}).catch((error: unknown) => {
+  const message = error instanceof Error ? error.message : String(error);
+  process.stderr.write(`visual-check: ${message}\n`);
+  if (process.env.KOMTRU_VISUAL_CHECK_TRACE === '1') process.stderr.write(`${String(error)}\n`);
+  else process.stderr.write('Set KOMTRU_VISUAL_CHECK_TRACE=1 for the full trace.\n');
+  process.exit(1);
 });
 
 process.stdout.write(

@@ -7,11 +7,18 @@
 //
 // Masking text was rejected: in a design-system build most deviations *are* text. Linking Google
 // Fonts at screenshot time was rejected: a network round-trip makes the diff irreproducible offline
-// and lets the upstream file change without the repository changing. Instead the three families are
-// exact-pinned dependencies — the same Google-generated `latin` WOFF2 files `next/font/google`
-// self-hosts in the apps — inlined into *both* pages. Both sides then have all three faces
-// available and only the markup decides which one applies, so a screen that reaches for the wrong
-// family still shows up as a deviation.
+// and lets the upstream file change without the repository changing. Instead the three families
+// arrive as exact-pinned Fontsource dependencies, `latin` subset, in the same weights ui-kit asks
+// next/font for, and are inlined into *both* pages. Both sides then have all three faces available
+// and only the markup decides which one applies, so a screen that reaches for the wrong family
+// still shows up as a deviation.
+//
+// What this is not: next/font renders the built app under a generated family name of its own, so
+// these faces do not apply there — the app keeps its own copies. The two sides therefore run
+// independently produced builds of the same three typefaces, Fontsource's and Google Fonts' API
+// output, and a sub-pixel metric skew between two releases is possible. `docs/ui-review/README.md`
+// records that, and the airtight version (ui-kit owning the files both sides load) waits for the
+// first real screen to measure against.
 import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 
@@ -27,11 +34,13 @@ const file = createRequire(import.meta.url).resolve;
 
 /** Matches `packages/ui-kit/src/fonts.ts`: latin subset, and the weights each loader asks for. */
 export const FONT_FACES: readonly FontFace[] = [
-  {
+  // Static, not the variable face: ui-kit asks next/font for four discrete Space Grotesk weights,
+  // and a variable instance at 600 is not guaranteed to be the static 600.
+  ...(['400', '500', '600', '700'] as const).map((weight) => ({
     family: 'Space Grotesk',
-    file: file('@fontsource-variable/space-grotesk/files/space-grotesk-latin-wght-normal.woff2'),
-    weight: '300 700',
-  },
+    file: file(`@fontsource/space-grotesk/files/space-grotesk-latin-${weight}-normal.woff2`),
+    weight,
+  })),
   {
     family: 'Inter',
     file: file('@fontsource-variable/inter/files/inter-latin-wght-normal.woff2'),

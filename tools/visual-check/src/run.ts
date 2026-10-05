@@ -7,7 +7,7 @@ import { composeSideBySide, diffPngs } from './diff.ts';
 import { carveScreen } from './reference.ts';
 import { mergeStub, renderStub } from './report.ts';
 import { shootBuilt, shootReference, withBrowser } from './render.ts';
-import { findScreen, loadScreens, REFERENCE_HTML_PATH } from './screen-index.ts';
+import { findScreen, loadScreens, REFERENCE_HTML_PATH, ticketId } from './screen-index.ts';
 
 /** Where the ticket says the artefacts live. */
 export const UI_REVIEW_DIR = fileURLToPath(new URL('../../../docs/ui-review/', import.meta.url));
@@ -48,7 +48,8 @@ export async function visualCheck(options: VisualCheckOptions): Promise<VisualCh
 
   const diff = diffPngs(reference.png, built.png, { threshold: options.threshold ?? 0.1 });
 
-  const directory = join(options.outDir ?? UI_REVIEW_DIR, row.ticket);
+  const ticket = ticketId(row);
+  const directory = join(options.outDir ?? UI_REVIEW_DIR, ticket);
   mkdirSync(directory, { recursive: true });
 
   const files = { sideBySide: `${row.id}.png`, heatMap: `${row.id}.diff.png` };
@@ -66,20 +67,21 @@ export async function visualCheck(options: VisualCheckOptions): Promise<VisualCh
     frameWidth: carved.width,
     compared: { width: diff.width, height: diff.height },
     diff,
-    capturedAt: new Date(),
     files,
   });
   let existing = '';
   try {
     existing = readFileSync(markdown, 'utf8');
-  } catch {
-    // First run for this screen: there is no review to keep.
+  } catch (error) {
+    // Only "there is no review yet" is a first run. An unreadable-but-present review must not
+    // degrade into one, because the next line would overwrite it.
+    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
   }
   writeFileSync(markdown, mergeStub(existing, fresh));
 
   return {
     screen: row.id,
-    ticket: row.ticket,
+    ticket,
     ratio: diff.ratio,
     changed: diff.changed,
     total: diff.total,

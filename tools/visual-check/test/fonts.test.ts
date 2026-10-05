@@ -19,9 +19,18 @@ describe('the injected font stylesheet', () => {
   });
 
   it('covers the weights ui-kit loads through next/font', () => {
-    const mono = FONT_FACES.filter((face) => face.family === 'IBM Plex Mono').map((face) => face.weight);
-    expect(mono).toEqual(['400', '500', '600']);
-    expect(FONT_FACES.find((face) => face.family === 'Inter')?.weight).toBe('100 900');
+    const weights = (family: string) =>
+      FONT_FACES.filter((face) => face.family === family).map((face) => face.weight);
+    const source = readFileSync(new URL('../../../packages/ui-kit/src/fonts.ts', import.meta.url), 'utf8');
+
+    // Discrete weights on both sides, so a variable instance never stands in for a static cut.
+    expect(weights('Space Grotesk')).toEqual(['400', '500', '600', '700']);
+    expect(source).toContain(`weight: ['400', '500', '600', '700']`);
+    expect(weights('IBM Plex Mono')).toEqual(['400', '500', '600']);
+    expect(source).toContain(`weight: ['400', '500', '600']`);
+    // Inter is the one family ui-kit loads without a weight list, so next/font serves the variable
+    // font and so does this.
+    expect(weights('Inter')).toEqual(['100 900']);
   });
 
   it('inlines the files so nothing is fetched at screenshot time', () => {
