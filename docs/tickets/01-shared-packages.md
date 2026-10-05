@@ -68,6 +68,8 @@
 
 ### T-015 — `api-client`
 
+- **Status:** Done (2026-10-05). Plan: `docs/superpowers/plans/2026-10-05-t-015-api-client.md`.
+- **Deferred:** no endpoint definitions ship (no backend routes exist yet) — each module ticket declares its own with `defineEndpoint`, which mirrors the backend's `defineRoute`; the `/api/auth/*` route handlers are T-017's; the socket gateway is T-027's, so `RealtimeProvider` is proved against an injected `connect` and the socket guide, never a running server; login and refresh payloads beyond `{ accessToken, scope, expiresAt? }` are T-031/T-034's; no helper for numbered pagination (`Paged<T>`) until the operations-app tables need one; wiring the retry queue's `flush()` to `online`/`visibilitychange` belongs to `park-agent-app` (T-16x), which owns the queued UI, as does deciding what an agent sees when an entry is dropped — dropping the head and continuing keeps the queue alive but does not hold back the entries behind it.
 - **Touches:** `packages/api-client/src/**`
 - **Depends on:** T-010
 - **Acceptance criteria:**
