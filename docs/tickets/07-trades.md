@@ -6,6 +6,17 @@ State machine: design §6 (decision C1). Trades never touch money; they request 
 
 ### T-060 — Trade schema, state machine and audit
 
+- **Status:** Done (2026-10-05). Plan: `docs/superpowers/plans/2026-10-05-t-060-trades.md`
+- **Deferred:**
+  - `canActAsBuyer` lives in `trades/domain/eligibility.ts` against a `TradePrincipal` because identity has no service layer yet. Design §6.3 makes it one identity function: T-031 must lift it into identity's barrel and trades must delegate rather than keep a second copy.
+  - The fee snapshot's values come from the fee module's `snapshotFees(...)` (T-047). `TradeFeeSnapshot` in `trades/domain/feeSnapshot.ts` is the shape expected; T-047 must match it. No fee rate or amount appears in this module.
+  - Delivery-signal trust weighting — which source moves a trade to `INSPECTION` rather than `UNCONFIRMED_DELIVERY`, and M7 §6's partner-history exception — is T-064. T-060 owns the table and the two reachable targets.
+  - Design §6.2 draws no `SHIPPED → CANCELLED_REFUNDED` edge, so DE3's overdue-delivery refund after dispatch has to go through `DISPUTED`. T-064/T-066 should confirm that with the owner, or the edge needs adding to §6.2.
+  - `fulfilment_substate` (`AWAITING_SHIPMENT`, m2 §7a's dormant value) is not modelled; T-064 adds it with the ship step.
+  - `TRADE_STATUSES` and `TRADE_ACTIONS` stay in the backend domain; T-061 should lift them into `@komtru/shared-types` when the HTTP contract needs them on the client.
+  - Trade codes repeat about six times in ten thousand draws (seven digits): the insert in T-061 must retry on `trades_trade_code_unique`.
+  - Q12 (relaxing the seller's level-2 gate for casual sellers) is still open; the gate is implemented as design §6.3 states it.
+
 - **Touches:** `src/modules/trades/{domain,infrastructure}/**`, migration `trade_*`
 - **Depends on:** T-024, T-025, T-030
 - **Acceptance criteria:**
