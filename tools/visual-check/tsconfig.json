@@ -5,6 +5,9 @@
     "module": "ESNext",
     "moduleResolution": "bundler",
     "noEmit": true,
+    // The CLI runs from source under `node --experimental-strip-types`, which resolves the file
+    // on disk and does not rewrite `.js` back to `.ts` the way a bundler would.
+    "allowImportingTsExtensions": true,
     "rootDir": ".",
     "types": ["node"]
   },

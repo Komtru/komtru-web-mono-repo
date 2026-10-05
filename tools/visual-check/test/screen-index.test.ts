@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { findScreen, loadScreens } from '../src/screen-index.js';
+import { findScreen, loadScreens } from '../src/screen-index.ts';
 
 const rows = loadScreens();
 

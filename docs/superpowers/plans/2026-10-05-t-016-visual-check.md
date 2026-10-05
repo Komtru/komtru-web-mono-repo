@@ -49,6 +49,8 @@ The reference states its own geometry, in CSS and in a comment on `#p3-proportio
 
 Those are the six frames the 210 screens use — all of them. The widths are **re-parsed from the reference CSS** with T-011's `parseCssDeclarations`, never typed into the harness, and a test fails if the reference changes one.
 
+The carved page is rendered at the gallery's own 1280px, not at the frame's width, and the frame is pinned to its declared width in CSS. The reference carries `@media(max-width:900px)` and `@media(max-width:640px)` rules from the design system it was assembled from; at a 560px viewport those fire and redraw a tablet screen as something the reference never shows. The built page, of course, gets a viewport of exactly the compared width — its media queries are the thing under test.
+
 The frame's device chrome — the fake browser bezel, the border, the radius, the shadow — is a drawing of a browser, not part of the screen, so the harness removes the border, radius and shadow and clips to the frame's children _other than_ `.mweb-chrome`/`.dweb-chrome`. Removing the 1px border is what makes the clip exactly 340 (or 560, or 1040) wide rather than 338, so the built app is given exactly the width the reference declares. The built page's viewport is set to that clip's size, so the two PNGs are the same shape by construction and pixelmatch never has to be told what to do about a size mismatch.
 
 ## Global Constraints
@@ -56,7 +58,7 @@ The frame's device chrome — the fake browser bezel, the border, the radius, th
 - Do not touch `apps/backend-api`, Docker, or `KOMTRU_INFRA_TESTS`. Nine agents share this checkout's services.
 - Anything that launches a browser is gated on `KOMTRU_BROWSER_TESTS=1`, exactly as `scripts/test/playwright-browser.test.ts` is, so a fresh checkout without browsers stays green.
 - New dependencies are pinned to exact versions, no `^`.
-- ESM, `.js` extensions on relative imports, TypeScript 6 strict with `noUncheckedIndexedAccess`.
+- ESM and TypeScript 6 strict with `noUncheckedIndexedAccess`. Relative imports carry `.ts`, not the repo's usual `.js`: this package is never compiled, it runs from source under `node --experimental-strip-types`, and Node resolves the file on disk rather than rewriting the extension. `allowImportingTsExtensions` with `noEmit` is the matching tsconfig.
 - Comments explain _why_. Match the voice of `scripts/test/screen-index.test.ts` and `packages/ui-kit/scripts/extract-tokens.ts`.
 - The PNGs are **not** committed. They are per-run review artefacts of a page that changes every commit, and three PNGs per screen across 210 screens is a permanent cost for a transient read. `.gitignore` gets `docs/ui-review/**/*.png`; the `<screen>.md` deviation stubs _are_ committed, because the deviation list is the durable half of the review and diffs as text.
 
