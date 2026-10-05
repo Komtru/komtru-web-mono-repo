@@ -5,7 +5,7 @@ import { drizzle } from 'drizzle-orm/node-postgres';
 import { migrate } from 'drizzle-orm/node-postgres/migrator';
 import pg from 'pg';
 import type { Logger } from '../platform/logger.js';
-import { MIGRATIONS_SCHEMA, grantRuntimeAccess, setRuntimePassword } from './roles.js';
+import { MIGRATIONS_SCHEMA, grantRuntimeAccess, setRuntimePassword, verifyLockdown } from './roles.js';
 
 /** apps/backend-api/drizzle, from both src/db (tsx) and dist/db (built). */
 export const MIGRATIONS_FOLDER = fileURLToPath(new URL('../../drizzle', import.meta.url));
@@ -34,6 +34,7 @@ export async function runMigrations({
       migrationsSchema: MIGRATIONS_SCHEMA,
     });
     await grantRuntimeAccess(client);
+    await verifyLockdown(client);
     if (appPassword) await setRuntimePassword(client, appPassword);
     logger?.info({ runtimePasswordSet: Boolean(appPassword) }, 'migrations applied');
   } finally {

@@ -3,7 +3,7 @@
 import { afterAll, beforeAll, beforeEach } from 'vitest';
 import pg from 'pg';
 import { createDb, type Db } from '../../src/db/index.js';
-import { MIGRATIONS_SCHEMA } from '../../src/db/roles.js';
+import { MIGRATIONS_SCHEMA, grantRuntimeAccess } from '../../src/db/roles.js';
 import { TEMPLATE_DATABASE, directUrl, pooledUrl } from './db-urls.js';
 
 export const workerDatabase = () => `komtru_test_${process.env.VITEST_POOL_ID ?? '1'}`;
@@ -51,6 +51,13 @@ export function useTestDatabase(): TestDatabase {
     }
     app = new pg.Pool({ connectionString: pooledUrl(name), max: 4 });
     owner = new pg.Pool({ connectionString: directUrl(name), max: 2 });
+    // A clone does not inherit the template's database-level ACLs; re-apply them as migrate does.
+    const client = await owner.connect();
+    try {
+      await grantRuntimeAccess(client);
+    } finally {
+      client.release();
+    }
   });
 
   beforeEach(async () => truncateAll(need(owner)));

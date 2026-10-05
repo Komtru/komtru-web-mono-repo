@@ -58,7 +58,9 @@ pnpm --filter @komtru/backend-api db:migrate
 
 This runs as the owner over `POSTGRES_DIRECT_URL`. It applies the migrations, creates `komtru_app` if needed, sets its password from `POSTGRES_APP_PASSWORD`, and grants it access to every module schema. Run it after every pull that adds a migration. The API and worker refuse to start if `POSTGRES_URL` names a superuser or the schema owner.
 
-If your PgBouncer container predates T-021, run `pnpm infra:up` once to recreate it.
+**Upgrading from before T-021:** regenerate your env with `pnpm env:backend --force` (it adds `POSTGRES_APP_PASSWORD` and points `POSTGRES_URL` at `komtru_app`), run `pnpm infra:up` once to recreate PgBouncer, then migrate. Without `POSTGRES_APP_PASSWORD`, `db:migrate` leaves `komtru_app` unable to log in.
+
+**On RDS** the migrating user (the old backend's credentials) must own `komtru_v2_dev` and its `public` schema and have `CREATEROLE`, on Postgres 15 or later. The migrator checks the resulting privileges and fails with a list of what did not take, instead of carrying on with a weaker runtime role.
 
 ## Secret protection on commit
 
