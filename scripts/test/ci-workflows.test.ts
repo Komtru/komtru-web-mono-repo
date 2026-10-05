@@ -143,6 +143,7 @@ describe.each(APPS)('%s workflow', (app) => {
       ...[...packageDependenciesOf(`@komtru/${app}`)].map((dir) => `packages/${dir}/**`),
       'package.json',
       'pnpm-lock.yaml',
+      '.npmrc',
       'pnpm-workspace.yaml',
       'turbo.json',
       `.github/workflows/${app}.yml`,
