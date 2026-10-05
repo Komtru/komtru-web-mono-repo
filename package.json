@@ -15,6 +15,7 @@
     "test:repo": "vitest run --config scripts/vitest.config.ts",
     "test:infra": "KOMTRU_INFRA_TESTS=1 vitest run --config scripts/vitest.config.ts test/local-infra.test.ts",
     "browsers:install": "playwright install chromium",
+    "visual-check": "node --experimental-strip-types tools/visual-check/src/cli.ts",
     "test:browser": "KOMTRU_BROWSER_TESTS=1 vitest run --config scripts/vitest.config.ts test/playwright-browser.test.ts",
     "env:backend": "node scripts/env/populate-backend-env.mjs",
     "infra:up": "docker compose up -d --wait",
