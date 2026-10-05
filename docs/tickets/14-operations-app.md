@@ -21,9 +21,14 @@ Same definition of done as Epic 13, applied to desktop and tablet reference fram
 - **Screens:** Z6, dispute queue, appeal decision (no separate reference beyond Z6; same case layout)
 - **Depends on:** T-141, T-081
 
-### T-144 — Identity and KYB review
-- **Screens:** AC10, KYC queue, duplicate-identity flags
+### T-144 — Identity review
+- **Screens:** none in the reference; KYC queue, duplicate-identity flags
 - **Depends on:** T-141, T-052
+
+### T-154 — Merchant certification review
+- **Screens:** AC10, plus the merchant application queue (no separate reference; reuses the Fraud Signals data-table pattern)
+- **Depends on:** T-141, T-055
+- **Acceptance criteria:** sidebar item "Merchant Applications" with a count of items awaiting review; queue sorted by SLA risk, filterable by status and category; detail on the AC10 case layout with the documents viewable inline, the CAC lookup and bank name-match results, the applicant's verification level and trade history, and a `DecisionPanel` offering approve, request changes (pick the documents or fields) and reject, each needing a reason; decisions refresh the queue in real time; visible only with `merchant.application.view`, and actions only with `merchant.application.decide`.
 
 ### T-145 — Fraud signals and restrictions
 - **Screens:** AC9, AC9b
@@ -58,5 +63,5 @@ Same definition of done as Epic 13, applied to desktop and tablet reference fram
 - **Depends on:** T-140, T-104
 
 ### T-153 — Overview, configuration, notifications and analytics
-- **Screens:** TO1; the rest have no reference screen: settings and feature flags (including the Park fee row and Trade Standards), notification templates and dead-letter queue, analytics dashboards and report runs
+- **Screens:** TO1; the rest have no reference screen: settings and feature flags, a read-only fees panel showing the live fee file version and values with a note that fees change by editing `config/fees.yaml`, Trade Standards, notification templates and dead-letter queue, analytics dashboards and report runs
 - **Depends on:** T-140, T-048, T-049, T-045, T-105

@@ -17,7 +17,7 @@ Buyer and Merchant lenses on one account, plus the Park Hub *application* flow (
 ### T-110 — App scaffold and shells
 - **Screens:** Y2, OF1, D9
 - **Depends on:** T-017
-- **Acceptance criteria:** tablet shell behaviour (sidebar collapses to top nav) shared by every later tablet screen; app on port 3001 with mobile tab bar (Trades, Explore, Alerts, Messages, Account) and desktop sidebar; role switcher with Buyer, Merchant and Park Agent lenses (Park lens links to the application flow or to `park.komtru.com` once active); offline state via service worker; `passport.komtru.com` host rewrite to public profile routes; `/hub/*` operating URLs redirect to `park.komtru.com` (design C12).
+- **Acceptance criteria:** tablet shell behaviour (sidebar collapses to top nav) shared by every later tablet screen; app on port 3001 with mobile tab bar (Trades, Explore, Alerts, Messages, Account) and desktop sidebar; role switcher per design §6.3: Buyer and Park Agent lenses for most accounts, Merchant and Park Agent for certified merchants, with the deviation from Y2 noted in the visual check (Park lens links to the application flow or to `park.komtru.com` once active); offline state via service worker; `passport.komtru.com` host rewrite to public profile routes; `/hub/*` operating URLs redirect to `park.komtru.com` (design C12).
 
 ### T-111 — Entry and authentication
 - **Screens:** E1, E2, E3, E3b, E4, D4, T3, AC2, AC3, TOS1, TOS2, TF1, TF2, social callback
@@ -38,6 +38,7 @@ Buyer and Merchant lenses on one account, plus the Park Hub *application* flow (
 ### T-115 — Create and propose a trade
 - **Screens:** G1, G2, Z2, Z3, CTS1, I3, MI1, MI2, P2-D6, D6, P3-D1, P3-D2, P3-D3, P3-D4, P3-D5, P3-T1, P3-T2, G3, Q1, R1, AC4, IF1
 - **Depends on:** T-061, T-062, T-063, T-067, T-049, T-110
+- **Notes:** G1 and Z2 open with an "I'm buying / I'm selling" choice; certified merchants skip it and are always selling. Counterparty lookup warns before send when the chosen buyer is a certified merchant.
 
 ### T-116 — Buyer trade core and canonical trade detail
 - **Screens:** C1, C2, C3, P0-03, D1, T2, C5, AR1
@@ -46,7 +47,7 @@ Buyer and Merchant lenses on one account, plus the Park Hub *application* flow (
 ### T-117 — Escrow funding
 - **Screens:** V1, V2, V3, AB3, AB4
 - **Depends on:** T-072, T-116, T-110
-- **Known deviations (pre-approved by design §5):** V1 omits the "Logistics fee" line (C7, Q5); V2 uses Paystack pay-with-transfer (C8, Q6).
+- **Known deviations (pre-approved by design §5):** V1 omits the "Logistics fee" line (C7, Q5); V2 uses Paystack pay-with-transfer (C8, Q6). Fee lines and totals come from the trade's fee snapshot via the API; the app never computes them.
 
 ### T-118 — Delivery, pickup PIN and inspection
 - **Screens:** AB1, AB2, C4, Z4, Z5, BEI1, BEI2, DE1, DE2, DE3, DE4, MI4
@@ -60,9 +61,10 @@ Buyer and Merchant lenses on one account, plus the Park Hub *application* flow (
 - **Screens:** C7, C8, H1, H2, Y1, AC6, D7, S7, S8
 - **Depends on:** T-081, T-110
 
-### T-121 — Become a seller
+### T-121 — Apply for merchant certification
 - **Screens:** SO1, SO2, SO3, SO4, SO5, BVR1, M2
 - **Depends on:** T-055, T-051, T-073, T-110
+- **Notes:** SO3 changes from optional to mandatory CAC upload, and Submit stays disabled until the CAC documents are attached. SO5 "Your shop is live" appears only after operations approval; until then the applicant sees a submitted, in-review state, and a changes-requested state that reopens the named fields. Both deviate from the reference and are listed in the visual check.
 
 ### T-122 — Shop and listings
 - **Screens:** S1, S4, S5, EL1, EL2, D2, D3, T1

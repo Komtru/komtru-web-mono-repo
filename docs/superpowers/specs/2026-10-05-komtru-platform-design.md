@@ -89,7 +89,7 @@ Auth in browsers: the access token lives in memory; the refresh token sits in an
 - `apps/backend-api/.env` is populated from it. The new config keeps the old variable names wherever the meaning is unchanged (`POSTGRES_URL`, `REDIS_URL`, `ENCRYPTION_KEY`, `IDENTITY_*`, `CLOUDINARY_*`, `PAYSTACK_*`, `MAILJET_*`, `TERMII_*`, `FCM_*`, OAuth keys), so the old file drops in without renaming.
 - **One deliberate deviation:** `POSTGRES_URL` points at the shared RDS dev database `komtru_dev`, which the old backend has already migrated. Running a fresh schema there would collide with the old `identity`, `trades` and `ledger` schemas. The new build keeps the same host and credentials but uses a new database name, `komtru_v2_dev`, and local development uses Docker Postgres. This is the "specific reason to rotate" the prompt allows.
 - `REDIS_URL` is `localhost`, so local Docker Redis satisfies it. All new BullMQ queues and socket channels use the key prefix `komtru:` to avoid colliding with any old worker that shares an instance.
-- New variables the old file does not have: `POSTGRES_DIRECT_URL`, `SENTRY_DSN`, and the frontends' `NEXT_PUBLIC_KOMTRU_*` variables. Tunables such as the Park fee are config rows (M17), not env vars.
+- New variables the old file does not have: `POSTGRES_DIRECT_URL`, `SENTRY_DSN`, and the frontends' `NEXT_PUBLIC_KOMTRU_*` variables. Fees and cuts live in the fee file (§6.5); other tunables are M17 config rows. Neither is an env var.
 - Paystack keys are test-mode. The Paystack dashboard's webhook URL still points at the old backend and must be repointed at cutover.
 
 ---
@@ -197,7 +197,7 @@ Flows that look synchronous are made asynchronous rather than breaking the BullM
 | C7 | HTML V1 shows a "Logistics fee ₦3,500" line in the buyer's total; m2 §11 says no shipping price ever touches the platform | Line omitted; deviation noted on the funding UI ticket. Open decision Q5 | m2 §11 |
 | C8 | HTML V2 shows a per-trade virtual bank account; m8 §9 forbids Dedicated Virtual Accounts | Use Paystack checkout's pay-with-transfer channel, which issues a temporary per-transaction account. The screen's promise still holds. Q6 | m8 plan |
 | C9 | HTML AB7 "Komtru Wallet" top-up; no spec has stored value, and it raises licensing questions | Blocked on Q3; default is the screen behind a disabled flag with no money movement | Owner decision |
-| C10 | HTML V1 Buyer Protection Fee 1.5% paid by the buyer; M8's worked example deducts 5% from the seller | Buyer-side fee from the HTML, stored as a config row (`ledger.buyer_protection_fee_bps = 150`). Q4 covers refund treatment | HTML |
+| C10 | HTML V1 Buyer Protection Fee 1.5% paid by the buyer; M8's worked example deducts 5% from the seller | Buyer-side fee from the HTML, set in the fee file (§6.5) as `buyer_protection_fee.rate_bps: 150`. Q4 covers refund treatment | HTML |
 | C11 | m2 §11 "logistics companies are never payees" vs. HTML PE1/PH4 Park hubs earn ₦300 per handover and withdraw it | Park hubs are payees for the fixed handling fee only. Courier companies remain non-payees. No rate card, quote or negotiation anywhere | Master prompt §3 plus HTML |
 | C12 | HTML puts Park Agent screens at `app.komtru.com/hub/*` inside the consumer app; master prompt requires a separate `park-agent-app` | Split by auth state (§7.6): application and status screens stay in `web-app-ui` under consumer scope; operating screens move to `park-agent-app`. Old `/hub/*` operating URLs redirect to `park.komtru.com` | Master prompt |
 | C13 | HTML Y1 adds a 48-hour auto-mediation window and "replacement" or "refund with return" outcomes; M3 has only an evidence window and four money outcomes | New first dispute state `MEDIATION` (48h, config). Parties can agree one of M3's four money outcomes; return and replacement are recorded as agreed notes with self-arranged return shipping. Q10 | HTML plus M3 |
@@ -206,6 +206,9 @@ Flows that look synchronous are made asynchronous rather than breaking the BullM
 | C16 | M6 recommends Dojah plus Smile ID; no KYC or IMEI credentials exist in the `.env` | Adapter interface plus a deterministic fake adapter for dev and test; real adapters are wired but disabled until credentials arrive. Q7 | M6 |
 | C17 | M1 recommends Google plus Apple only; the old build and the `.env` include Facebook | All three. The M1 enum already includes `FACEBOOK` and credentials exist | Old build, M1 enum |
 | C18 | M5 leaves stock timing open (reserve at order vs. decrement at delivery) | Reserve at funding, release on cancellation or refund, never below zero (DB check) | Engineering default |
+| C19 | M1/M7 gate selling behind an opt-in `SELLER` capability, and the HTML's role switcher gives every account a Buyer lens next to Merchant | Owner ruling 2026-10-05: every account can buy or sell, and the initiator picks the side per trade. Certified merchants can only sell. The `SELLER` capability gate is removed, and merchant accounts get no Buyer lens. See §6.4 | Owner |
+| C20 | The HTML makes business verification optional at SO3 and shows only automated KYB review (AC10) | Owner ruling 2026-10-05: merchant certification is an application with mandatory CAC documents, approved by a human in operations-app. Automated CAC checks are evidence for the reviewer, not the decision | Owner |
+| C21 | M17 D1 puts tunable defaults in a database settings table editable at runtime; the owner wants every fee and cut in an easily configurable file | Owner ruling 2026-10-05: one version-controlled fee file is the only source of fee and cut values (§6.5). M17's table keeps non-money tunables such as windows and retry caps | Owner |
 
 ---
 
@@ -246,10 +249,64 @@ DISPUTED ──M3 resolved──▶ RESOLVED_REFUNDED | RESOLVED_RELEASED   (amo
 - Every transition is its own endpoint and goes through `canTransition(action, from)`. An invalid jump returns `409 INVALID_TRANSITION`. Every transition writes `trade_state_changes`, which is append-only and enforced by trigger.
 - Deadlines are scheduled jobs: counterparty expiry, payment deadline, delivery deadline, unconfirmed-delivery grace, inspection window, mediation window. Each job is idempotent and re-checks state and holds before acting.
 
-### 6.3 Money flow
+### 6.3 Trade roles and merchant certification (C19, C20)
 
-Trades never touch money. They write `escrow_action_requests` and publish events through the outbox. The ledger posts journal entries and answers with `payment.escrow_funded`, `payment.escrow_released` or `payment.escrow_refunded`. Funding total = item price + buyer protection fee. On release the seller is credited the item price and the fee is recognised as revenue.
+**Owner ruling, 2026-10-05.** The person who starts a trade chooses whether they are the buyer or the seller on it. Every account has that choice by default. An account that applies for merchant certification and is approved becomes **sell-only**: it can never again take the buyer side of a trade while certification is active.
 
+- **Role choice.** `POST /trades` takes `initiatorRole: 'BUYER' | 'SELLER'`. The counterparty takes the other side. For a certified merchant the field is forced to `SELLER`, and the API rejects `BUYER`.
+- **Buy block.** One identity function, `canActAsBuyer(user)`, is false while the user holds an `ACTIVE` `MERCHANT` capability. It is checked server-side wherever someone would become a buyer: creating a trade as buyer, being named as the buyer on someone else's proposal, accepting as buyer, claiming a buyer invitation, cart checkout and buying from a listing. Failure returns `403 MERCHANT_CANNOT_BUY`. `PartyCard` carries `canBuy` so the proposer sees the problem before sending.
+- **Trades already in flight** when certification is approved finish normally on both sides. The block applies only to new buyer roles.
+- **Losing certification.** If certification is revoked or suspended, the account can buy again.
+- **No `SELLER` capability gate.** M7 §5's "seller holds an `ACTIVE` `SELLER` capability" check is removed. The money-safety gates stay: the buyer must be contact-verified (level 1) to fund, and the seller must be identity-verified (level 2) before a trade can be funded, so payouts only go to verified people. Q12 asks whether that level-2 rule should be relaxed for casual sellers.
+- **Merchant application.** Any account can apply. The form collects business name and type, registered address, categories sold, CAC registration number, CAC certificate, status report or memorandum, the proprietor or director's government ID, and a payout bank account. CAC documents are mandatory and the form cannot be submitted without them. The application is reviewed as a `MERCHANT_APPLICATION` case in operations-app. The reviewer sees the documents, the automated CAC lookup and the bank name-match as evidence, with an AI-suggested advisory, and decides one of approve, request changes or reject. A reason is always required.
+- **On approval**, one transaction does all of the following. It grants the `MERCHANT` capability, sets `merchant_profiles.certified_at`, attaches the Verified Merchant badge, and publishes `merchant.certified`. Merchant-only features unlock: storefront, listings and insights (Q11). Business verification level 3 follows from M6 once the provider-attested CAC check and the business bank match pass.
+- **Role switcher (Y2).** A certified merchant sees Merchant and Park Agent lenses only. Everyone else sees Buyer and Park Agent, and selling happens from the Buyer lens by choosing "I'm selling" when creating a trade. This deviates from Y2, which shows all three lenses to every account.
+
+### 6.4 Money flow
+
+Trades never touch money. They write `escrow_action_requests` and publish events through the outbox. The ledger posts journal entries and answers with `payment.escrow_funded`, `payment.escrow_released` or `payment.escrow_refunded`. The funding total is the item price plus the buyer protection fee. On release the seller is credited the item price minus any seller or merchant commission, and the fee and commission are recognised as revenue. Every amount comes from the trade's fee snapshot (§6.5).
+
+
+### 6.5 Fees and cuts: one config file (C21)
+
+**Owner ruling, 2026-10-05.** Every fee and every platform cut lives in one file, `config/fees.yaml` at the repo root. No fee amount or rate appears anywhere else: not in code, not in database seeds, not in frontend bundles.
+
+```yaml
+# config/fees.yaml — the only place fees and cuts are set.
+# Bump `version` whenever a value changes; CI fails otherwise.
+version: 2026-10-05.1
+currency: NGN
+
+buyer_protection_fee:          # paid by the buyer on top of the item price (HTML V1)
+  rate_bps: 150                # 1.5%
+  min_minor: 0
+  max_minor: null              # null = no cap
+  refundable_on_full_refund: true   # Q4
+
+seller_commission:             # platform cut from a casual seller's proceeds at release
+  rate_bps: 0                  # Q14
+  min_minor: 0
+  max_minor: null
+
+merchant_commission:           # platform cut from a certified merchant's proceeds at release
+  rate_bps: 0                  # Q14
+  min_minor: 0
+  max_minor: null
+
+park_handling_fee:             # earned by the hub per released parcel (HTML PH4, PE1)
+  amount_minor: 30000          # ₦300
+  borne_by: PLATFORM           # PLATFORM | SELLER  (Q2)
+
+payout_fee:                    # charged on each seller or hub withdrawal
+  amount_minor: 0
+```
+
+- **Validation.** A zod schema in `packages/shared-types` checks the file at backend boot and in CI: rates are whole basis points from 0 to 10,000, amounts are whole kobo, and a minimum never exceeds its maximum. The backend refuses to start on an invalid file.
+- **Changing a fee** means editing the file, bumping `version`, and deploying. Git history is the audit trail. A CI check compares against `main` and fails if any value changed without a version bump.
+- **Snapshots protect past trades.** When a trade's terms are accepted, the fee schedule version and the computed amounts are stored on the trade, so the buyer sees the exact total before funding and later file changes never alter it. A Park parcel snapshots the handling fee when it is created. Every ledger posting uses the snapshot, never the live file.
+- **One calculator.** `computeTradeFees(itemMinor, sellerKind, schedule)` in `packages/shared-types` is pure, integer-only, and rounds half up to the kobo. The backend uses it for postings, and frontends display results from the API rather than computing totals themselves.
+- **Reading fees.** `GET /config/fees` serves the current schedule for display: V1's fee breakdown, PH4's handling fee, and the read-only fee panel in operations-app.
+- **Enforcement.** A test fails if ledger, trades, park or merchant code contains a numeric literal equal to any value in the fee file, or imports fees from anywhere except the fee module.
 ---
 
 ## 7. Park design
@@ -272,7 +329,7 @@ Trades never touch money. They write `escrow_action_requests` and publish events
 | `park_parcels` | One per trade: soft `trade_id` (unique), origin and destination hub FKs, waybill, transit carrier, driver phone, plate, `status` (`AWAITING_SOURCE_DROPOFF`, `AT_SOURCE_HUB`, `IN_TRANSIT`, `AT_DESTINATION_HUB`, `RELEASED`, `EXCEPTION`), `status_before_exception` | Unique `trade_id`. `canTransition` plus 409. Origin may equal destination, which skips `IN_TRANSIT` |
 | `park_custody_events` | Append-only: parcel, hub, actor member, `kind` (`DROPOFF_RECEIVED`, `ARRIVAL_LOGGED`, `INSPECTED`, `PIN_ATTEMPT`, `RELEASED`, `EXCEPTION_RAISED`, `EXCEPTION_CLEARED`, `DISPATCHED`), seal state (`INTACT`, `DAMAGED`, `TAMPERED`), photo `file_id` (M20 `TRADE_ASSET` pool, `PRIVATE_CASE`), `occurred_at` from the server | Update and delete blocked by trigger |
 | `park_handover_pins` | One per parcel and leg (`DROPOFF`, `PICKUP`): `pin_hash` (domain-separated HMAC), `pin_enc` (AES-GCM, revealed only to the leg's rightful party), `attempts_count`, `max_attempts` (3), `locked_at`, `verified_at` | Never plaintext. Partial unique: one live PIN per (parcel, leg) |
-| `config.platform_settings` row `park.handling_fee_minor = 30000` | ₦300 fixed fee, the single config row the prompt requires | Read through the typed settings accessor; no other price fields anywhere |
+| Fee file entry `park_handling_fee.amount_minor: 30000` (§6.5) | ₦300 fixed fee. The prompt asked for a config row rather than a literal; the owner's later instruction moves every fee into one file, which keeps the same intent | Snapshotted onto the parcel at creation; no other price fields anywhere |
 
 ### 7.3 Auth and authorization
 
@@ -322,7 +379,7 @@ The trade-side consumer (delivery → inspection → buyer confirms or auto-comp
 
 ### 7.7 Money
 
-- On `park.parcel.released`: debit `PARK_HANDLING_EXPENSE`, credit `HUB_PAYABLE(hub)` by the configured fee. The default is platform-funded so the buyer's total and the seller's payout stay as agreed. Q2 can change who bears it.
+- On `park.parcel.released`: debit `PARK_HANDLING_EXPENSE`, credit `HUB_PAYABLE(hub)` by the fee snapshotted on the parcel from the fee file. The default is platform-funded so the buyer's total and the seller's payout stay as agreed. Q2 can change who bears it.
 - Hub withdrawals reuse the m8 `executePayout` core. `payout_accounts` gains an owner type (`USER` or `PARK_HUB`). A hub payout account must pass M6 bank name-match against the primary agent. Only members with `can_manage_payouts` may withdraw.
 
 ---
@@ -411,6 +468,10 @@ Each has a default that tickets ship with if no answer arrives. Only Q1 blocks a
 | Q8 | Provision Sentry and PgBouncer (or RDS Proxy) for deployed environments; create `komtru_v2_dev` | Local Docker equivalents; Sentry no-ops without a DSN | Deployed observability |
 | Q9 | AI advisory: rule-based v1, or an LLM provider now? | Rule-based behind an interface | Nothing |
 | Q10 | Dispute mediation: are "replacement" and "refund with return" real outcomes needing return logistics? | Recorded as agreed notes; return shipping self-arranged | Nothing |
+| Q11 | Are storefront, listings and the listing-based discovery screens merchant-only, with casual sellers using trade proposals only? | Yes, merchant-only | Nothing |
+| Q12 | Must a casual, non-merchant seller still pass NIN/BVN plus liveness (level 2) before their trade can be funded? | Yes, to protect payouts | Nothing |
+| Q13 | Confirm the merchant application form fields in §6.3 | As listed in §6.3 | Nothing |
+| Q14 | What platform cut, if any, comes out of seller and merchant proceeds? The HTML shows only the buyer fee | 0% for both, set in the fee file | Nothing |
 
 ---
 

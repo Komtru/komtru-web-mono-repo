@@ -29,9 +29,9 @@ Decisions C4, C5, C8, C10, C11 (design §5). The ledger is authoritative; Paysta
 ### T-072 — Funding a trade
 
 - **Touches:** `ledger/services/{charge,webhookIngest}.service.ts`, `ledger/http/{routes,webhookRoutes}.ts`
-- **Depends on:** T-070, T-071, T-060
+- **Depends on:** T-070, T-071, T-060, T-047
 - **Acceptance criteria:**
-  - `POST /trades/:code/payment/initiate` creates a `payment_attempts` row with our reference and the total (item price + buyer protection fee from config) and returns what Paystack Inline needs; card, USSD and pay-with-transfer channels (V1, V2; decision C8).
+  - `POST /trades/:code/payment/initiate` creates a `payment_attempts` row with our reference and the total (item price plus the buyer protection fee snapshotted on the trade, T-047) and returns what Paystack Inline needs; card, USSD and pay-with-transfer channels (V1, V2; decision C8).
   - `POST /webhooks/paystack` reads the raw body, verifies the signature, inserts into `payment_provider_webhooks` (unique per provider event) before anything else, returns 200 fast, and hands off to a job.
   - The job re-verifies via the transaction verify call, then posts: debit escrow pool, credit trade escrow liability (item) and fee liability; publishes `payment.escrow_funded`. Replayed webhooks never double-post (test).
   - Verifying and not-confirmed states (AB3, AB4) are derivable from `payment_attempts`.
@@ -44,7 +44,7 @@ Decisions C4, C5, C8, C10, C11 (design §5). The ledger is authoritative; Paysta
 - **Acceptance criteria:**
   - `payout_accounts` with owner type `USER` or `PARK_HUB`, encrypted account number, masked display, provider recipient id, name-match reference from T-051, one default per owner.
   - `payout_preferences` modes `MANUAL`, `AUTO_IMMEDIATE`, `AUTO_DAILY`, `AUTO_WEEKLY` (Monday), `AUTO_MONTHLY` (1st), rejecting non-manual modes without a verified account.
-  - `executePayout` is the only caller of `initiateTransfer`; manual withdraw (AB5), auto-immediate listener, and the daily sweep job (the scheduler exists from T-023, so the m8 plan's deferred sweep ships now).
+  - `executePayout` is the only caller of `initiateTransfer`; it deducts `payout_fee` from the fee file (zero by default) as a separate journal line; manual withdraw (AB5), auto-immediate listener, and the daily sweep job (the scheduler exists from T-023, so the m8 plan's deferred sweep ships now).
   - Ledger: payable to settlement clearing on initiation, clearing to escrow pool on success, reversal on failure or reversal webhook; failed withdrawals surface for WF1; receipts for PR1.
   - Payout holds from risk (`PAYOUT_HOLD`) block execution.
 
@@ -53,7 +53,7 @@ Decisions C4, C5, C8, C10, C11 (design §5). The ledger is authoritative; Paysta
 - **Touches:** `ledger/services/release.service.ts`
 - **Depends on:** T-072
 - **Acceptance criteria:**
-  - On `trade.completed`: debit trade escrow liability, credit seller payable (item price), recognise the protection fee as revenue; publish `payment.escrow_released`.
+  - On `trade.completed`: debit trade escrow liability, credit seller payable (item price minus the snapshotted seller or merchant commission), recognise the protection fee and any commission as revenue; publish `payment.escrow_released`. All amounts come from the trade's fee snapshot, never the live file.
   - On dispute resolution with amounts (T-080): split release and refund in one journal; amounts must sum to the escrowed item amount (second check after M3's trigger).
   - Holds on the trade block release (test).
 
@@ -64,7 +64,7 @@ Decisions C4, C5, C8, C10, C11 (design §5). The ledger is authoritative; Paysta
 - **Acceptance criteria:**
   - Refund API against the original charge reference, never client-supplied; full or partial; cumulative refunds per charge never exceed the charge (DB-backed guard, tested under concurrency).
   - Ledger posts the decision immediately; provider execution and `refund.*` webhooks resolve status; `refund.failed` returns the money to the platform's balance in the ledger.
-  - Protection fee refund policy per design §12 Q4 default, driven by config.
+  - Protection fee refund policy from the fee file's `refundable_on_full_refund`, read from the trade's snapshot.
 
 ### T-076 — Chargebacks, reconciliation and settlement operations
 

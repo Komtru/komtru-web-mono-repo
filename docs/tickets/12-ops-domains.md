@@ -70,7 +70,7 @@
 - **Touches:** `src/modules/cases/**`, migration `cases_*`
 - **Depends on:** T-037, T-024
 - **Acceptance criteria:**
-  - `cases` index (types `DISPUTE`, `KYB`, `IDENTITY`, `FRAUD`, `CUSTODY`, `PAYMENT_EXCEPTION`, `TRADE_PROPOSAL`, `PARK_HUB_APPLICATION`): subject reference, owner, priority, SLA clock, state, evidence requests, reassignment with reason, decisions. Owning modules keep their own records and register into this index (M15's "index, not copy").
+  - `cases` index (types `DISPUTE`, `KYB`, `MERCHANT_APPLICATION`, `IDENTITY`, `FRAUD`, `CUSTODY`, `PAYMENT_EXCEPTION`, `TRADE_PROPOSAL`, `PARK_HUB_APPLICATION`): subject reference, owner, priority, SLA clock, state, evidence requests, reassignment with reason, decisions. Owning modules keep their own records and register into this index (M15's "index, not copy").
   - Work queue endpoints for P0-01 (my work, unassigned, escalated, SLA at risk) and the universal case read model for P0-02, paginated and filterable.
   - `advisory` interface returning a suggestion plus rationale, labelled "AI-suggested — not a decision"; v1 is rule-based per case type (Q9 default). A decision can never be recorded by the advisory path (test).
   - Every decision writes the trust trail, the admin action log and a policy citation.

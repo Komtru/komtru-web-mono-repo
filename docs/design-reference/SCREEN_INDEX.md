@@ -167,7 +167,7 @@ Generated from `Komtru — UI Screens Living Master File.html` during planning (
 | TO1 | Overview | TrustOps Console — Desktop | 7529 | operations-app | T-153 |
 | AC9 | Fraud Signals | TrustOps Console — Desktop | 7627 | operations-app | T-145 |
 | AC9b | Fraud Signal — Case Action | TrustOps Console — Desktop | 7670 | operations-app | T-145 |
-| AC10 | KYB Review — Case Detail | TrustOps Console — Desktop | 7721 | operations-app | T-144 |
+| AC10 | KYB Review — Case Detail | TrustOps Console — Desktop | 7721 | operations-app | T-154 |
 | D1 | Customer — Trades (split view) | Desktop & Tablet — genuine layout changes, not stretched mobile | 7792 | web-app-ui | T-116 |
 | D2 | Seller — My Shop | Desktop & Tablet — genuine layout changes, not stretched mobile | 7829 | web-app-ui | T-122 |
 | D3 | Seller — Create Listing (live preview) | Desktop & Tablet — genuine layout changes, not stretched mobile | 7866 | web-app-ui | T-122 |

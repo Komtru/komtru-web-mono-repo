@@ -14,7 +14,7 @@ Design §7. Park is a row in `logistics_companies` (`is_default`); Park Agents a
   - `can_release` requires an approving staff id (check constraint).
   - `park_custody_events` append-only by trigger and grants.
   - Parcel state machine as a pure `canTransition` with every valid and invalid transition tested, including origin = destination skipping `IN_TRANSIT` and `EXCEPTION` resuming the stored prior state.
-  - The only price-like value anywhere is the config row `park.handling_fee_minor` (schema test).
+  - No price-like column exists except `park_parcels.handling_fee_minor`, the snapshot taken from the fee file when the parcel is created (schema test).
 
 ### T-091 — Hub onboarding, activation and lifecycle
 
@@ -46,9 +46,9 @@ Design §7. Park is a row in `logistics_companies` (`is_default`); Park Agents a
 ### T-093 — Park and trade integration
 
 - **Touches:** `trades/services/fulfilment.service.ts` (Park branch), `park/services/parcel.service.ts`, `park/jobs/ageing.job.ts`
-- **Depends on:** T-092, T-064, T-065
+- **Depends on:** T-092, T-064, T-065, T-047
 - **Acceptance criteria:**
-  - Ship step "Park Hub Transit" (X2): choose destination hub (active and accepting) and optional origin hub; creates the parcel in `AWAITING_SOURCE_DROPOFF`, issues `DROPOFF` and `PICKUP` PINs, records waybill, carrier, driver phone and plate.
+  - Ship step "Park Hub Transit" (X2): choose destination hub (active and accepting) and optional origin hub; creates the parcel in `AWAITING_SOURCE_DROPOFF` with the handling fee snapshotted from the fee file, issues `DROPOFF` and `PICKUP` PINs, records waybill, carrier, driver phone and plate.
   - Seller sees the drop-off PIN; buyer sees the pickup PIN and hub address (AB1, AB2) through endpoints that reveal `pin_enc` only to that party.
   - Parcel `AT_SOURCE_HUB` moves the trade to `SHIPPED`; `park.parcel.released` feeds the shared delivery-signal consumer with source `PARK_CUSTODY` (trusted), moving the trade to `INSPECTION`.
   - `park.parcel.exception` places a `PARK_EXCEPTION` hold on the trade; clearing lifts it.
@@ -59,7 +59,7 @@ Design §7. Park is a row in `logistics_companies` (`is_default`); Park Agents a
 - **Touches:** `ledger` subscriber for `park.parcel.released`, `park/http/earnings.controller.ts`
 - **Depends on:** T-093, T-073
 - **Acceptance criteria:**
-  - On release: debit `PARK_HANDLING_EXPENSE`, credit `HUB_PAYABLE(hub)` by the fee read from config at that moment; exactly once per parcel even on event replay (test).
+  - On release: debit `PARK_HANDLING_EXPENSE`, credit `HUB_PAYABLE(hub)` by the fee snapshotted on the parcel (T-047); exactly once per parcel even on event replay (test).
   - Earnings API for PE1: available balance, period count, per-parcel fee, recent handovers, paginated.
   - Withdrawal via `executePayout` to the hub's verified payout account, allowed only for members with `can_manage_payouts`.
   - If the owner answers Q2 differently, only the debit account changes; the test suite covers the posting as a unit so the switch is one line.

@@ -12,18 +12,20 @@ State machine: design §6 (decision C1). Trades never touch money; they request 
   - Tables: `trades`, `trade_terms_versions` (each proposal or counter-proposal is a new immutable version; the accepted version is pinned), `trade_state_changes` (append-only), `trade_activity` (append-only lifecycle log, resolves m2 §13.1), `delivery_signals` (source enum `BUYER_CONFIRMATION`, `SELLER_SELF_REPORT`, `PARTNER_PORTAL`, `PARK_CUSTODY`, `COURIER_API`), `escrow_action_requests`, `trade_holds`, `trade_deadlines`.
   - Trade codes in the HTML format (`KMT-88213`), unique, non-sequential.
   - Pure `canTransition(action, from)` covering every transition in design §6.2; unit tests for every valid transition and at least one invalid jump per state; services return `409 INVALID_TRANSITION`.
-  - Eligibility gates per M7 §5 adapted to the new states (seller capability at send, buyer level 1 at funding, seller level 2 before acceptance can lead to funding), each failing with a specific error and publishing `trade.eligibility_blocked`.
+  - `trades.initiator_role` (`BUYER` or `SELLER`) recorded on every trade.
+  - Eligibility gates per design §6.3: no `SELLER` capability gate; `canActAsBuyer` wherever a user would become the buyer (`403 MERCHANT_CANNOT_BUY`); buyer level 1 at funding; seller level 2 before funding. Each fails with a specific error and publishes `trade.eligibility_blocked`. Tests cover a merchant trying each buyer path and a merchant's in-flight buyer trade completing after certification.
   - `inspection_window_hours` and `delivery_grace_hours` are integers snapshotted from Trade Standards (resolves m2 §13.3).
 
 ### T-061 — Proposal flow
 
 - **Touches:** `trades/services/{proposal,trade}.service.ts`, `trades/http/**`
-- **Depends on:** T-060, T-035, T-049, T-040
+- **Depends on:** T-060, T-035, T-049, T-040, T-047
 - **Acceptance criteria:**
-  - Create as buyer or seller (G1, Z2) with item spec validated against the category's Trade Standards; live contract preview data (Z3).
+  - The initiator chooses `initiatorRole` on every trade; a certified merchant is forced to `SELLER`. Item spec validated against the category's Trade Standards (G1, Z2); live contract preview data (Z3).
+  - Naming a certified merchant as the buyer is rejected before send, and the counterparty's `canBuy` is checked again at acceptance and invitation claim.
   - Send: counterparty by `@username`, email or phone via party lookup; non-users get a party invitation and the trade sits in `PENDING_COUNTERPARTY` until claimed or expired after 14 days.
   - Seller proof media is mandatory before a trade can reach `PENDING_PAYMENT`: attached at send time for a seller-initiated proposal, or at acceptance when the seller accepts a buyer's proposal (W1, where Accept stays disabled until media is attached); counter-proposal creates a new terms version and flips the turn (W2, BR1); decline with reason (SD1); cancel before funding (CT1).
-  - "Do not ship yet" state after acceptance (W3) is `PENDING_PAYMENT`.
+  - "Do not ship yet" state after acceptance (W3) is `PENDING_PAYMENT`. Acceptance snapshots the fee schedule version and computed fees onto the trade (T-047), so the buyer sees the exact total before funding.
   - Every action is idempotent, writes state changes and activity, and publishes events.
 
 ### T-062 — Proposal risk hold and TrustOps review
@@ -40,7 +42,7 @@ State machine: design §6 (decision C1). Trades never touch money; they request 
 - **Depends on:** T-061, T-056
 - **Acceptance criteria:**
   - One order per trade; `order_items` with immutable listing snapshot and unit price; derived order status (view), never stored independently.
-  - Cart review (MI1) bundles several listings from one seller into one trade; agreement shows repeated item cards (MI2); start trade from a listing (I3).
+  - Cart checkout and buying from a listing are blocked for certified merchants (`canActAsBuyer`). Cart review (MI1) bundles several listings from one seller into one trade; agreement shows repeated item cards (MI2); start trade from a listing (I3).
   - Per-item ship confirmation (MI3) and per-item inspection results (MI4) recorded on items; partial acceptance feeds the dispute flow.
 
 ### T-064 — Fulfilment: ship step, delivery signals, deadlines

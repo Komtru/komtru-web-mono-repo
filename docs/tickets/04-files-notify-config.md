@@ -32,15 +32,28 @@
   - Adapters: Mailjet (email), Termii (SMS), FCM (push); IN_APP feed (`GET /notifications`, mark-read) also pushed over the socket.
   - Identity templates (OTP, new-device, password changed, session reuse) seeded; every later module ticket adds its own templates and mappings.
 
+### T-047 — Fee schedule file
+
+- **Touches:** `config/fees.yaml`, `packages/shared-types/src/fees/{schema,calculator}.ts`, `apps/backend-api/src/modules/config/fees.ts`, `tools/fee-version-check/**`, backend workflow step
+- **Depends on:** T-010, T-020
+- **Acceptance criteria:**
+  - `config/fees.yaml` exactly as design §6.5, the single source for every fee and cut.
+  - zod schema validates the file at boot and in CI; the backend refuses to start on an invalid file, naming the bad key.
+  - `computeTradeFees` is pure and integer-only, rounds half up to the kobo, and has property tests: totals always equal the parts, no float ever appears, caps and minimums hold.
+  - Backend fee module exposes `getFeeSchedule()` and `snapshotFees(...)`; `GET /config/fees` serves the current schedule for display.
+  - CI fails when a value changes without a `version` bump.
+  - A guard test fails on fee literals or on fee reads that bypass the fee module in ledger, trades, park or merchant code.
+  - A short runbook in the file's header and in `docs/runbooks/fees.md` explains how to change a fee safely.
+
 ### T-048 — Configuration (M17)
 
 - **Touches:** `src/modules/config/**`, migration `config_*`
 - **Depends on:** T-024, T-037
 - **Acceptance criteria:**
   - `platform_settings` (namespace, key), `feature_flags`, append-only `config_change_log`; typed accessor with Redis cache invalidated by `config.setting_changed`.
-  - Seeds: every M17 §4 default, plus `park.handling_fee_minor = 30000`, `ledger.buyer_protection_fee_bps = 150`, `disputes.mediation_window_hours = 48`, `park.custody_ageing_hours = 48`, `park.pin_max_attempts = 3`, `trades.payment_deadline_hours`, `trades.delivery_deadline_days`.
+  - Seeds: every M17 §4 default, plus `disputes.mediation_window_hours = 48`, `park.custody_ageing_hours = 48`, `park.pin_max_attempts = 3`, `trades.payment_deadline_hours`, `trades.delivery_deadline_days`.
   - Admin endpoints per M17 §6 behind permissions; every change requires a reason and writes the change log and admin action log.
-  - Test: changing the Park fee affects the next release posting only, never past ones.
+  - No fee or cut is stored here; those live only in the fee file (T-047, design §6.5). A test asserts no `platform_settings` key looks like a fee.
 
 ### T-049 — Trade Standards by category
 

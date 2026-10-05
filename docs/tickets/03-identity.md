@@ -9,7 +9,7 @@ Spec: `docs/specs/module-01-identity-and-user-management.md`. Decision C2 (desig
 - **Touches:** `src/modules/identity/infrastructure/postgres/schema/**`, migration `identity_*`
 - **Depends on:** T-021, T-026
 - **Acceptance criteria:**
-  - Every M1 §5 table, enum, index and constraint, including: composite same-user FKs for primary email and phone (`ON DELETE SET NULL (column)`), verified-uniqueness partial indexes on normalised email and E.164 phone, the username format and pair `CHECK`s with the `::text` cast, `admin_role_assignments` four-eyes `CHECK`s and the dual-approval trigger, `session_scope` enum with `CONSUMER`, `STAFF`, `LOGISTICS`.
+  - Every M1 §5 table, enum, index and constraint, with `capability_type` holding `MERCHANT`, `MERCHANT_MEMBER` and `STAFF` (the opt-in `SELLER` capability is dropped, design §6.3), including: composite same-user FKs for primary email and phone (`ON DELETE SET NULL (column)`), verified-uniqueness partial indexes on normalised email and E.164 phone, the username format and pair `CHECK`s with the `::text` cast, `admin_role_assignments` four-eyes `CHECK`s and the dual-approval trigger, `session_scope` enum with `CONSUMER`, `STAFF`, `LOGISTICS`.
   - `identity_audit_log` is append-only: the trigger raises on update or delete and `komtru_app` lacks the privilege (both tested).
   - Integration tests prove: uppercase usernames rejected by the DB; one verified owner per email or phone under concurrent inserts; one primary per user; dual-approval roles cannot be inserted without an approver.
 
@@ -63,7 +63,7 @@ Spec: `docs/specs/module-01-identity-and-user-management.md`. Decision C2 (desig
 - **Touches:** `identity/services/party.service.ts`, `identity/http/party.controller.ts`
 - **Depends on:** T-033, T-032
 - **Acceptance criteria:**
-  - `PartyCard` is the only shape returned; lookup by username, email or phone; typeahead (≥3 chars, prefix, max 8).
+  - `PartyCard` is the only shape returned, and it includes `canBuy` (false for certified merchants, design §6.3); lookup by username, email or phone; typeahead (≥3 chars, prefix, max 8).
   - Anti-enumeration: identical shape and timing for a miss and for `discoverable_by_* = false`; per-user, per-device and per-IP limits.
   - Party invitations bind on verification (claim-on-verify) and publish `identity.party_invitation.claimed` and `.expired` for trades.
 
@@ -80,9 +80,10 @@ Spec: `docs/specs/module-01-identity-and-user-management.md`. Decision C2 (desig
 - **Touches:** `identity/domain/rbac/{catalog,sod}.ts`, `identity/services/{rbac,approval,user}.service.ts`, `identity/http/admin.controller.ts`, `test/rbac/matrix.test.ts`
 - **Depends on:** T-036
 - **Acceptance criteria:**
-  - One permission catalog for the whole platform: M1's 22 identity permissions plus every module's slice (trade, payment, payout, reconciliation, dispute, verification, duplicate flag, ticket, risk, logistics, park, cases, config, audit, analytics, growth, messaging moderation). Roles per M1 §12.1 plus `DISPUTE_LEAD` (M3) and `PARK_OPERATIONS` (owner can rename).
+  - One permission catalog for the whole platform: M1's 22 identity permissions plus every module's slice (trade, payment, payout, reconciliation, dispute, verification, duplicate flag, ticket, risk, logistics, park, cases, config, audit, analytics, growth, messaging moderation). Roles per M1 §12.1 plus `DISPUTE_LEAD` (M3) and `PARK_OPERATIONS` (owner can rename). Includes `merchant.application.view` and `merchant.application.decide`, granted to `SUPER_ADMIN`, `OPERATIONS_ADMIN` and `KYC_ANALYST`; the matrix counts are updated for them.
   - Exhaustive matrix test over every permission × every role from a single table; adding a permission without placing it fails CI, and the counts are asserted.
   - `POST /auth/staff/login` (password + MFA only), separate from consumer login.
+  - Capability service with `canActAsBuyer(userId)`, false while an `ACTIVE` `MERCHANT` capability exists, exported from the identity barrel and unit-tested, including the rule that trades already in flight finish normally.
   - Self-dealing block at the permission layer (M1 C5), time-boxed role grants, dual approval for `FINANCE_ADMIN`, `SUPER_ADMIN`, `COMPLIANCE_OFFICER`, two-step actions through `admin_action_approvals` (MFA reset, forced username change, verification override, large refunds).
   - Admin endpoints per M1 §10.6, all paginated, each requiring a reason (400 without one) and writing an audit row.
 
