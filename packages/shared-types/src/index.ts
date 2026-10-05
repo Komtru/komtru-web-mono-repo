@@ -2,6 +2,7 @@
 export * from './enums.js';
 export * from './errors.js';
 export * from './events.js';
+export * from './fees/calculator.js';
 export * from './fees/schema.js';
 export * from './ids.js';
 export * from './money.js';
