@@ -8,7 +8,7 @@
 - **Depends on:** T-002, T-003, T-010
 - **Acceptance criteria:**
   - Express 5 app with helmet, CORS from config, compression, request id, pino HTTP logging (JSON in production), RFC 9457 error handler.
-  - Config is parsed by a zod schema at boot; the process exits with a list of missing variable *names* (never values).
+  - Config is parsed by a zod schema at boot; the process exits with a list of missing variable _names_ (never values).
   - Two entry points from one build: `index.ts` (API) and `worker.ts` (BullMQ worker). Both init Sentry; Sentry is a no-op without `SENTRY_DSN`.
   - `/health/live` and `/health/ready` (checks Postgres through PgBouncer and Redis).
   - Graceful shutdown drains HTTP, closes pools and awaits workers.

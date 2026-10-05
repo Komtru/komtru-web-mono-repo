@@ -16,36 +16,36 @@
 
 ## Status legend
 
-| Status | Meaning |
-|---|---|
-| Done | Merged into local `main` and verified |
-| Ready | Every dependency is done; can start now |
-| Waiting | At least one dependency is not done |
+| Status       | Meaning                                                                                                        |
+| ------------ | -------------------------------------------------------------------------------------------------------------- |
+| Done         | Merged into local `main` and verified                                                                          |
+| Ready        | Every dependency is done; can start now                                                                        |
+| Waiting      | At least one dependency is not done                                                                            |
 | Blocked (Qn) | Needs the owner's answer to open decision Qn in design §12; ships with the stated default if the owner prefers |
 
 ## Open decisions for the owner
 
 Full wording and defaults are in design §12. Owner rulings of 2026-10-05 on trade roles, merchant certification and the fee file are recorded as decisions C19–C24 in design §5, with detail in §6.3 and §6.5. Only Q1 blocks work outright, and only the deploy steps.
 
-| # | Decision | Default | Blocks |
-|---|---|---|---|
-| Q1 | Hosting target per app and the GitHub remote | SSH + PM2 deploy step, Dockerfile per app | T-005, remote CI dispatch, T-183 push |
-| Q2 | Who bears the ₦300 Park handling fee | **Answered:** buyer pays the agent ₦300–₦500 in cash; Komtru only displays it | — |
-| Q3 | Ship the Komtru Wallet (AB7)? | Screen behind a disabled flag, no wallet ledger | T-077, T-131 |
-| Q4 | Refund the 1.5% Buyer Protection Fee on full refunds? | Yes on full refunds, retained on partial outcomes | — |
-| Q5 | Drop V1's "Logistics fee" line (m2 §11) | Dropped | — |
-| Q6 | Paystack pay-with-transfer instead of a virtual account for V2 | Pay-with-transfer | — |
-| Q7 | KYC (Dojah/Smile ID) and IMEI provider accounts | Fake adapters until credentials exist | Real verification only |
-| Q8 | Sentry, PgBouncer/RDS Proxy and a `komtru_v2_dev` database for deployed envs | Local Docker equivalents | Deployed observability |
-| Q9 | AI advisory: rule-based v1 or an LLM now | Rule-based behind an interface | — |
-| Q10 | Are "replacement" and "refund with return" real dispute outcomes? | Recorded as agreed notes; return shipping self-arranged | — |
-| Q11 | Are storefront and listings merchant-only, with casual sellers using trade proposals? | Yes, merchant-only | — |
-| Q12 | Must a casual seller pass NIN/BVN plus liveness before their trade is funded? | Yes | — |
-| Q13 | Confirm the merchant application form fields (design §6.3) | As listed | — |
-| Q15 | Must the ships-from city also have a hub? | Yes, both cities | — |
-| Q16 | Which cities seed the location catalog? | State capitals plus major commercial cities, owner reviews the list | T-046 merge |
-| Q17 | Do address dropdowns list every catalog city or only Park-covered ones? | Every active catalog city; coverage only gates Park | — |
-| Q14 | Platform cut from seller and merchant proceeds | 0% for both, set in `config/fees.yaml` | — |
+| #   | Decision                                                                              | Default                                                                       | Blocks                                |
+| --- | ------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------- | ------------------------------------- |
+| Q1  | Hosting target per app and the GitHub remote                                          | SSH + PM2 deploy step, Dockerfile per app                                     | T-005, remote CI dispatch, T-183 push |
+| Q2  | Who bears the ₦300 Park handling fee                                                  | **Answered:** buyer pays the agent ₦300–₦500 in cash; Komtru only displays it | —                                     |
+| Q3  | Ship the Komtru Wallet (AB7)?                                                         | Screen behind a disabled flag, no wallet ledger                               | T-077, T-131                          |
+| Q4  | Refund the 1.5% Buyer Protection Fee on full refunds?                                 | Yes on full refunds, retained on partial outcomes                             | —                                     |
+| Q5  | Drop V1's "Logistics fee" line (m2 §11)                                               | Dropped                                                                       | —                                     |
+| Q6  | Paystack pay-with-transfer instead of a virtual account for V2                        | Pay-with-transfer                                                             | —                                     |
+| Q7  | KYC (Dojah/Smile ID) and IMEI provider accounts                                       | Fake adapters until credentials exist                                         | Real verification only                |
+| Q8  | Sentry, PgBouncer/RDS Proxy and a `komtru_v2_dev` database for deployed envs          | Local Docker equivalents                                                      | Deployed observability                |
+| Q9  | AI advisory: rule-based v1 or an LLM now                                              | Rule-based behind an interface                                                | —                                     |
+| Q10 | Are "replacement" and "refund with return" real dispute outcomes?                     | Recorded as agreed notes; return shipping self-arranged                       | —                                     |
+| Q11 | Are storefront and listings merchant-only, with casual sellers using trade proposals? | Yes, merchant-only                                                            | —                                     |
+| Q12 | Must a casual seller pass NIN/BVN plus liveness before their trade is funded?         | Yes                                                                           | —                                     |
+| Q13 | Confirm the merchant application form fields (design §6.3)                            | As listed                                                                     | —                                     |
+| Q15 | Must the ships-from city also have a hub?                                             | Yes, both cities                                                              | —                                     |
+| Q16 | Which cities seed the location catalog?                                               | State capitals plus major commercial cities, owner reviews the list           | T-046 merge                           |
+| Q17 | Do address dropdowns list every catalog city or only Park-covered ones?               | Every active catalog city; coverage only gates Park                           | —                                     |
+| Q14 | Platform cut from seller and merchant proceeds                                        | 0% for both, set in `config/fees.yaml`                                        | —                                     |
 
 The design also asks the owner to acknowledge one exception to "all external I/O through BullMQ": the OAuth code exchange during social login (design §4.4, T-028).
 
@@ -59,141 +59,141 @@ T-001 → T-002 → T-003 → T-020 → T-021 → T-030 → T-031 → T-032 → 
 
 `Wave` is the earliest point a ticket can start given its dependencies (wave 0 has none). Tickets in the same wave are independent of each other and can run in parallel worktrees.
 
-| ID | Title | Epic | Depends on | Wave | Status |
-|---|---|---|---|---|---|
-| [T-001](tickets/00-foundations.md) | Cannibalization audit | 00 — Foundations | — | 0 | Done |
-| [T-002](tickets/00-foundations.md) | Monorepo scaffold and shared config | 00 — Foundations | T-001 | 1 | Ready |
-| [T-003](tickets/00-foundations.md) | Local infrastructure and environment wiring | 00 — Foundations | T-002 | 2 | Waiting |
-| [T-004](tickets/00-foundations.md) | CI workflows per app | 00 — Foundations | T-002 | 2 | Waiting |
-| [T-005](tickets/00-foundations.md) | Hosting confirmation and real deploy jobs | 00 — Foundations | T-004 + owner answer | 3 | Blocked (Q1) |
-| [T-006](tickets/00-foundations.md) | Build-agent tooling prerequisites | 00 — Foundations | T-002 | 2 | Waiting |
-| [T-010](tickets/01-shared-packages.md) | `shared-types` foundations | 01 — Shared packages | T-002 | 2 | Waiting |
-| [T-011](tickets/01-shared-packages.md) | `ui-kit` tokens, fonts and brand mark | 01 — Shared packages | T-002 | 2 | Waiting |
-| [T-012](tickets/01-shared-packages.md) | `ui-kit` core primitives and Storybook | 01 — Shared packages | T-011 | 3 | Waiting |
-| [T-013](tickets/01-shared-packages.md) | `ui-kit` layout shells | 01 — Shared packages | T-012 | 4 | Waiting |
-| [T-014](tickets/01-shared-packages.md) | `ui-kit` TrustOps patterns | 01 — Shared packages | T-012 | 4 | Waiting |
-| [T-015](tickets/01-shared-packages.md) | `api-client` | 01 — Shared packages | T-010 | 3 | Waiting |
-| [T-016](tickets/01-shared-packages.md) | Visual-check harness | 01 — Shared packages | T-011 | 3 | Waiting |
-| [T-017](tickets/01-shared-packages.md) | Next.js app foundation | 01 — Shared packages | T-013, T-015 | 5 | Waiting |
-| [T-020](tickets/02-backend-platform.md) | Backend skeleton | 02 — Backend platform (`apps/backend-api`) | T-002, T-003, T-010 | 3 | Waiting |
-| [T-021](tickets/02-backend-platform.md) | Database foundation | 02 — Backend platform (`apps/backend-api`) | T-020 | 4 | Waiting |
-| [T-022](tickets/02-backend-platform.md) | Migration-safety check | 02 — Backend platform (`apps/backend-api`) | T-021, T-004 | 5 | Waiting |
-| [T-023](tickets/02-backend-platform.md) | Redis, BullMQ and scheduler | 02 — Backend platform (`apps/backend-api`) | T-020 | 4 | Waiting |
-| [T-024](tickets/02-backend-platform.md) | Domain events: outbox and typed bus | 02 — Backend platform (`apps/backend-api`) | T-021, T-023 | 5 | Waiting |
-| [T-025](tickets/02-backend-platform.md) | HTTP cross-cutting: pagination, idempotency, rate limits, validation | 02 — Backend platform (`apps/backend-api`) | T-021, T-023 | 5 | Waiting |
-| [T-026](tickets/02-backend-platform.md) | Platform crypto and identifiers | 02 — Backend platform (`apps/backend-api`) | T-020 | 4 | Waiting |
-| [T-027](tickets/02-backend-platform.md) | Socket gateway | 02 — Backend platform (`apps/backend-api`) | T-023, T-031 | 7 | Waiting |
-| [T-028](tickets/02-backend-platform.md) | Outbound provider calls | 02 — Backend platform (`apps/backend-api`) | T-023 | 5 | Waiting |
-| [T-030](tickets/03-identity.md) | Identity schema | 03 — Identity & access (M1) | T-021, T-026 | 5 | Waiting |
-| [T-031](tickets/03-identity.md) | Sessions, tokens and principal resolution | 03 — Identity & access (M1) | T-030, T-023 | 6 | Waiting |
-| [T-032](tickets/03-identity.md) | Registration, OTP and password login | 03 — Identity & access (M1) | T-031, T-045 | 7 | Waiting |
-| [T-033](tickets/03-identity.md) | Username system | 03 — Identity & access (M1) | T-030 | 6 | Waiting |
-| [T-034](tickets/03-identity.md) | Social login | 03 — Identity & access (M1) | T-032 | 8 | Waiting |
-| [T-035](tickets/03-identity.md) | Party lookup and invitations | 03 — Identity & access (M1) | T-033, T-032 | 8 | Waiting |
-| [T-036](tickets/03-identity.md) | Devices, MFA and passkeys | 03 — Identity & access (M1) | T-032 | 8 | Waiting |
-| [T-037](tickets/03-identity.md) | RBAC catalog, staff login and admin endpoints | 03 — Identity & access (M1) | T-036 | 9 | Waiting |
-| [T-038](tickets/03-identity.md) | Staff invitations | 03 — Identity & access (M1) | T-037 | 10 | Waiting |
-| [T-039](tickets/03-identity.md) | Account lifecycle, recovery and NDPA hooks | 03 — Identity & access (M1) | T-037 | 10 | Waiting |
-| [T-042](tickets/03-identity.md) | Saved delivery addresses | 03 — Identity & access (M1) | T-030, T-046 | 11 | Waiting |
-| [T-040](tickets/04-files-notify-config.md) | Files and evidence (M20) | 04 — Files, notifications, configuration | T-031, T-028, T-026 | 7 | Waiting |
-| [T-041](tickets/04-files-notify-config.md) | Avatars | 04 — Files, notifications, configuration | T-040, T-030 | 8 | Waiting |
-| [T-045](tickets/04-files-notify-config.md) | Notifications delivery pipeline (M11) | 04 — Files, notifications, configuration | T-024, T-028 | 6 | Waiting |
-| [T-046](tickets/04-files-notify-config.md) | Location catalog: states, cities and city requests | 04 — Files, notifications, configuration | T-021, T-025, T-037 | 10 | Waiting |
-| [T-047](tickets/04-files-notify-config.md) | Fee schedule file | 04 — Files, notifications, configuration | T-010, T-020 | 4 | Waiting |
-| [T-048](tickets/04-files-notify-config.md) | Configuration (M17) | 04 — Files, notifications, configuration | T-024, T-037 | 10 | Waiting |
-| [T-049](tickets/04-files-notify-config.md) | Trade Standards by category | 04 — Files, notifications, configuration | T-048 | 11 | Waiting |
-| [T-050](tickets/05-trust.md) | Verification core: NIN/BVN, liveness, levels | 05 — Trust & verification (M6) | T-040, T-045, T-031 | 8 | Waiting |
-| [T-051](tickets/05-trust.md) | Business verification, bank name-match, address, social proof | 05 — Trust & verification (M6) | T-050 | 9 | Waiting |
-| [T-052](tickets/05-trust.md) | Duplicate identity detection and KYC review queue | 05 — Trust & verification (M6) | T-050, T-037, T-107 | 11 | Waiting |
-| [T-055](tickets/06-merchant-search.md) | Merchant applications and certification | 06 — Merchant management and discovery (M5, M19) | T-050, T-051, T-049, T-040, T-073, T-107 | 12 | Waiting |
-| [T-056](tickets/06-merchant-search.md) | Listings lifecycle, images and stock | 06 — Merchant management and discovery (M5, M19) | T-055 | 13 | Waiting |
-| [T-057](tickets/06-merchant-search.md) | Search and discovery (M19) | 06 — Merchant management and discovery (M5, M19) | T-056 | 14 | Waiting |
-| [T-060](tickets/07-trades.md) | Trade schema, state machine and audit | 07 — Trades and orders (M7, M9) | T-024, T-025, T-030 | 6 | Waiting |
-| [T-061](tickets/07-trades.md) | Proposal flow | 07 — Trades and orders (M7, M9) | T-060, T-035, T-049, T-040, T-047, T-046, T-042 | 12 | Waiting |
-| [T-062](tickets/07-trades.md) | Proposal risk hold and TrustOps review | 07 — Trades and orders (M7, M9) | T-061, T-101, T-107 | 13 | Waiting |
-| [T-063](tickets/07-trades.md) | Orders and multi-item trades (M9) | 07 — Trades and orders (M7, M9) | T-061, T-056 | 14 | Waiting |
-| [T-064](tickets/07-trades.md) | Fulfilment: ship step, delivery signals, deadlines | 07 — Trades and orders (M7, M9) | T-061, T-072 | 13 | Waiting |
-| [T-065](tickets/07-trades.md) | Inspection and completion | 07 — Trades and orders (M7, M9) | T-064 | 14 | Waiting |
-| [T-066](tickets/07-trades.md) | Post-funding cancellation and can't-fulfil refunds | 07 — Trades and orders (M7, M9) | T-064, T-075 | 14 | Waiting |
-| [T-067](tickets/07-trades.md) | IMEI verification | 07 — Trades and orders (M7, M9) | T-061, T-028 | 13 | Waiting |
-| [T-068](tickets/07-trades.md) | Trade realtime, notifications and deep links | 07 — Trades and orders (M7, M9) | T-065, T-045, T-027 | 15 | Waiting |
-| [T-070](tickets/08-ledger.md) | Double-entry ledger core | 08 — Payments, escrow and ledger (M8 + m8 plan) | T-021, T-024 | 6 | Waiting |
-| [T-071](tickets/08-ledger.md) | Provider adapter and Paystack | 08 — Payments, escrow and ledger (M8 + m8 plan) | T-028 | 6 | Waiting |
-| [T-072](tickets/08-ledger.md) | Funding a trade | 08 — Payments, escrow and ledger (M8 + m8 plan) | T-070, T-071, T-060, T-047 | 7 | Waiting |
-| [T-073](tickets/08-ledger.md) | Payout accounts, preferences and payouts | 08 — Payments, escrow and ledger (M8 + m8 plan) | T-072, T-051 | 10 | Waiting |
-| [T-074](tickets/08-ledger.md) | Release and settlement | 08 — Payments, escrow and ledger (M8 + m8 plan) | T-072 | 8 | Waiting |
-| [T-075](tickets/08-ledger.md) | Refunds | 08 — Payments, escrow and ledger (M8 + m8 plan) | T-072 | 8 | Waiting |
-| [T-076](tickets/08-ledger.md) | Chargebacks, reconciliation and settlement operations | 08 — Payments, escrow and ledger (M8 + m8 plan) | T-074, T-075, T-107 | 11 | Waiting |
-| [T-077](tickets/08-ledger.md) | Komtru Wallet top-up | 08 — Payments, escrow and ledger (M8 + m8 plan) | T-070 | 7 | Blocked (Q3) |
-| [T-080](tickets/09-disputes.md) | Disputes core | 09 — Disputes (M3) | T-065, T-040, T-074, T-075, T-107 | 15 | Waiting |
-| [T-081](tickets/09-disputes.md) | Evidence comparison and dispute read models | 09 — Disputes (M3) | T-080 | 16 | Waiting |
-| [T-085](tickets/10-logistics.md) | Logistics schema and Park seed | 10 — Logistics companies (m2 build spec) | T-021 | 5 | Waiting |
-| [T-086](tickets/10-logistics.md) | Logistics auth, companies and members | 10 — Logistics companies (m2 build spec) | T-085, T-031, T-037, T-038 | 11 | Waiting |
-| [T-087](tickets/10-logistics.md) | Package pipeline and ship-to-company | 10 — Logistics companies (m2 build spec) | T-086, T-064 | 14 | Waiting |
-| [T-090](tickets/11-park.md) | Park schema | 11 — Park custody | T-085, T-046 | 11 | Waiting |
-| [T-091](tickets/11-park.md) | Hub onboarding, activation and lifecycle | 11 — Park custody | T-090, T-086, T-050, T-107 | 12 | Waiting |
-| [T-092](tickets/11-park.md) | Custody operations API | 11 — Park custody | T-091, T-040 | 13 | Waiting |
-| [T-093](tickets/11-park.md) | Park and trade integration | 11 — Park custody | T-092, T-064, T-065 | 15 | Waiting |
-| [T-094](tickets/11-park.md) | Park cash-fee notices and handover log | 11 — Park custody | T-093, T-047 | 16 | Waiting |
-| [T-095](tickets/11-park.md) | Park TrustOps read models | 11 — Park custody | T-093, T-107 | 16 | Waiting |
-| [T-100](tickets/12-ops-domains.md) | Support tickets (M10) | 12 — Support, risk, reputation, administration, compliance, analytics, growth, cases, messaging | T-045, T-040, T-037 | 10 | Waiting |
-| [T-101](tickets/12-ops-domains.md) | Risk and fraud (M13) | 12 — Support, risk, reputation, administration, compliance, analytics, growth, cases, messaging | T-024, T-037, T-048 | 11 | Waiting |
-| [T-102](tickets/12-ops-domains.md) | Reputation and ratings (M12) | 12 — Support, risk, reputation, administration, compliance, analytics, growth, cases, messaging | T-065, T-080 | 16 | Waiting |
-| [T-103](tickets/12-ops-domains.md) | Administration: impersonation and admin action log (M14, adapted) | 12 — Support, risk, reputation, administration, compliance, analytics, growth, cases, messaging | T-037 | 10 | Waiting |
-| [T-104](tickets/12-ops-domains.md) | Audit and compliance (M15) | 12 — Support, risk, reputation, administration, compliance, analytics, growth, cases, messaging | T-024, T-103, T-040 | 11 | Waiting |
-| [T-105](tickets/12-ops-domains.md) | Reporting, analytics and seller insights (M16) | 12 — Support, risk, reputation, administration, compliance, analytics, growth, cases, messaging | T-074, T-102 | 17 | Waiting |
-| [T-106](tickets/12-ops-domains.md) | Referral and growth (M18) | 12 — Support, risk, reputation, administration, compliance, analytics, growth, cases, messaging | T-074, T-101 | 12 | Waiting |
-| [T-107](tickets/12-ops-domains.md) | Universal case model, work queue and advisory | 12 — Support, risk, reputation, administration, compliance, analytics, growth, cases, messaging | T-037, T-024 | 10 | Waiting |
-| [T-108](tickets/12-ops-domains.md) | Trade messaging | 12 — Support, risk, reputation, administration, compliance, analytics, growth, cases, messaging | T-061, T-027, T-040 | 13 | Waiting |
-| [T-110](tickets/13-web-app-ui.md) | App scaffold and shells | 13 — `web-app-ui` (app.komtru.com, passport.komtru.com) | T-017 | 6 | Waiting |
-| [T-111](tickets/13-web-app-ui.md) | Entry and authentication | 13 — `web-app-ui` (app.komtru.com, passport.komtru.com) | T-110, T-032, T-034, T-036 | 9 | Waiting |
-| [T-112](tickets/13-web-app-ui.md) | First-time onboarding | 13 — `web-app-ui` (app.komtru.com, passport.komtru.com) | T-111, T-045 | 10 | Waiting |
-| [T-113](tickets/13-web-app-ui.md) | Home and discovery | 13 — `web-app-ui` (app.komtru.com, passport.komtru.com) | T-110, T-057, T-060 | 15 | Waiting |
-| [T-114](tickets/13-web-app-ui.md) | Seller profile and Trust Passport | 13 — `web-app-ui` (app.komtru.com, passport.komtru.com) | T-113, T-102 | 17 | Waiting |
-| [T-115](tickets/13-web-app-ui.md) | Create and propose a trade | 13 — `web-app-ui` (app.komtru.com, passport.komtru.com) | T-061, T-062, T-063, T-067, T-049, T-110, T-046 | 15 | Waiting |
-| [T-116](tickets/13-web-app-ui.md) | Buyer trade core and canonical trade detail | 13 — `web-app-ui` (app.komtru.com, passport.komtru.com) | T-115, T-065, T-110 | 16 | Waiting |
-| [T-117](tickets/13-web-app-ui.md) | Escrow funding | 13 — `web-app-ui` (app.komtru.com, passport.komtru.com) | T-072, T-116, T-110 | 17 | Waiting |
-| [T-118](tickets/13-web-app-ui.md) | Delivery, pickup PIN and inspection | 13 — `web-app-ui` (app.komtru.com, passport.komtru.com) | T-065, T-093, T-116, T-110 | 17 | Waiting |
-| [T-119](tickets/13-web-app-ui.md) | Cancellation and refunds | 13 — `web-app-ui` (app.komtru.com, passport.komtru.com) | T-066, T-110 | 15 | Waiting |
-| [T-120](tickets/13-web-app-ui.md) | Disputes (buyer and seller) | 13 — `web-app-ui` (app.komtru.com, passport.komtru.com) | T-081, T-110 | 17 | Waiting |
-| [T-121](tickets/13-web-app-ui.md) | Apply for merchant certification | 13 — `web-app-ui` (app.komtru.com, passport.komtru.com) | T-055, T-051, T-073, T-110 | 13 | Waiting |
-| [T-122](tickets/13-web-app-ui.md) | Shop and listings | 13 — `web-app-ui` (app.komtru.com, passport.komtru.com) | T-056, T-121, T-110 | 14 | Waiting |
-| [T-123](tickets/13-web-app-ui.md) | Seller trade handling and shipping | 13 — `web-app-ui` (app.komtru.com, passport.komtru.com) | T-115, T-064, T-087, T-093, T-110 | 16 | Waiting |
-| [T-124](tickets/13-web-app-ui.md) | Seller payouts | 13 — `web-app-ui` (app.komtru.com, passport.komtru.com) | T-073, T-110 | 11 | Waiting |
-| [T-125](tickets/13-web-app-ui.md) | Seller insights | 13 — `web-app-ui` (app.komtru.com, passport.komtru.com) | T-105, T-110 | 18 | Waiting |
-| [T-126](tickets/13-web-app-ui.md) | Trust, account and settings | 13 — `web-app-ui` (app.komtru.com, passport.komtru.com) | T-050, T-039, T-045, T-102, T-110, T-042 | 17 | Waiting |
-| [T-127](tickets/13-web-app-ui.md) | Reviews | 13 — `web-app-ui` (app.komtru.com, passport.komtru.com) | T-102, T-110 | 17 | Waiting |
-| [T-128](tickets/13-web-app-ui.md) | Messaging | 13 — `web-app-ui` (app.komtru.com, passport.komtru.com) | T-108, T-110 | 14 | Waiting |
-| [T-129](tickets/13-web-app-ui.md) | Help and support | 13 — `web-app-ui` (app.komtru.com, passport.komtru.com) | T-100, T-110 | 11 | Waiting |
-| [T-130](tickets/13-web-app-ui.md) | Park Hub application | 13 — `web-app-ui` (app.komtru.com, passport.komtru.com) | T-091, T-110, T-046 | 13 | Waiting |
-| [T-131](tickets/13-web-app-ui.md) | Wallet top-up | 13 — `web-app-ui` (app.komtru.com, passport.komtru.com) | T-077, T-110, T-117 | 18 | Blocked (Q3) |
-| [T-140](tickets/14-operations-app.md) | Console scaffold, shell and staff auth | 14 — `operations-app` (ops.komtru.com, TrustOps console) | T-017, T-037, T-038 | 11 | Waiting |
-| [T-141](tickets/14-operations-app.md) | Work queue and universal case | 14 — `operations-app` (ops.komtru.com, TrustOps console) | T-140, T-107 | 12 | Waiting |
-| [T-142](tickets/14-operations-app.md) | Trade proposals | 14 — `operations-app` (ops.komtru.com, TrustOps console) | T-141, T-062 | 14 | Waiting |
-| [T-143](tickets/14-operations-app.md) | Disputes | 14 — `operations-app` (ops.komtru.com, TrustOps console) | T-141, T-081 | 17 | Waiting |
-| [T-144](tickets/14-operations-app.md) | Identity review | 14 — `operations-app` (ops.komtru.com, TrustOps console) | T-141, T-052 | 13 | Waiting |
-| [T-154](tickets/14-operations-app.md) | Merchant certification review | 14 — `operations-app` (ops.komtru.com, TrustOps console) | T-141, T-055 | 13 | Waiting |
-| [T-145](tickets/14-operations-app.md) | Fraud signals and restrictions | 14 — `operations-app` (ops.komtru.com, TrustOps console) | T-141, T-101 | 13 | Waiting |
-| [T-146](tickets/14-operations-app.md) | Settlement operations | 14 — `operations-app` (ops.komtru.com, TrustOps console) | T-141, T-076 | 13 | Waiting |
-| [T-147](tickets/14-operations-app.md) | Park applications, registration and lifecycle | 14 — `operations-app` (ops.komtru.com, TrustOps console) | T-141, T-091 | 13 | Waiting |
-| [T-148](tickets/14-operations-app.md) | Park network and custody | 14 — `operations-app` (ops.komtru.com, TrustOps console) | T-147, T-095 | 17 | Waiting |
-| [T-149](tickets/14-operations-app.md) | Logistics companies and packages | 14 — `operations-app` (ops.komtru.com, TrustOps console) | T-140, T-087 | 15 | Waiting |
-| [T-150](tickets/14-operations-app.md) | Directory, roles and approvals | 14 — `operations-app` (ops.komtru.com, TrustOps console) | T-140, T-103 | 12 | Waiting |
-| [T-151](tickets/14-operations-app.md) | Support tickets console | 14 — `operations-app` (ops.komtru.com, TrustOps console) | T-140, T-100 | 12 | Waiting |
-| [T-152](tickets/14-operations-app.md) | Audit and compliance | 14 — `operations-app` (ops.komtru.com, TrustOps console) | T-140, T-104 | 12 | Waiting |
-| [T-153](tickets/14-operations-app.md) | Overview, configuration, notifications and analytics | 14 — `operations-app` (ops.komtru.com, TrustOps console) | T-140, T-048, T-049, T-045, T-105 | 18 | Waiting |
-| [T-155](tickets/14-operations-app.md) | Location catalog management | 14 — `operations-app` (ops.komtru.com, TrustOps console) | T-140, T-046 | 12 | Waiting |
-| [T-160](tickets/15-logistics-ops.md) | Portal scaffold and login | 15 — `logistics-ops` (logistics.komtru.com, courier POC portal) | T-017, T-086 | 12 | Waiting |
-| [T-161](tickets/15-logistics-ops.md) | Team management | 15 — `logistics-ops` (logistics.komtru.com, courier POC portal) | T-160 | 13 | Waiting |
-| [T-162](tickets/15-logistics-ops.md) | Packages | 15 — `logistics-ops` (logistics.komtru.com, courier POC portal) | T-160, T-087 | 15 | Waiting |
-| [T-170](tickets/16-park-agent-app.md) | App scaffold, login and hub context | 16 — `park-agent-app` (park.komtru.com) | T-017, T-092 | 14 | Waiting |
-| [T-171](tickets/16-park-agent-app.md) | Hub dashboard and log arrival | 16 — `park-agent-app` (park.komtru.com) | T-170 | 15 | Waiting |
-| [T-172](tickets/16-park-agent-app.md) | Inspection, damage and incidents | 16 — `park-agent-app` (park.komtru.com) | T-171 | 16 | Waiting |
-| [T-173](tickets/16-park-agent-app.md) | Safe handover | 16 — `park-agent-app` (park.komtru.com) | T-171 | 16 | Waiting |
-| [T-174](tickets/16-park-agent-app.md) | Handover log, hub profile and staff | 16 — `park-agent-app` (park.komtru.com) | T-094, T-091 | 17 | Waiting |
-| [T-180](tickets/17-release.md) | End-to-end critical paths | 17 — Integration, hardening and release | T-123, T-118, T-173, T-162, T-148 | 18 | Waiting |
-| [T-181](tickets/17-release.md) | Load and resilience | 17 — Integration, hardening and release | T-180 | 19 | Waiting |
-| [T-182](tickets/17-release.md) | Security review | 17 — Integration, hardening and release | T-180 | 19 | Waiting |
-| [T-183](tickets/17-release.md) | Definition-of-done audit and first push | 17 — Integration, hardening and release | every other ticket | 20 | Waiting |
+| ID                                         | Title                                                                | Epic                                                                                            | Depends on                                      | Wave | Status       |
+| ------------------------------------------ | -------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- | ----------------------------------------------- | ---- | ------------ |
+| [T-001](tickets/00-foundations.md)         | Cannibalization audit                                                | 00 — Foundations                                                                                | —                                               | 0    | Done         |
+| [T-002](tickets/00-foundations.md)         | Monorepo scaffold and shared config                                  | 00 — Foundations                                                                                | T-001                                           | 1    | Done         |
+| [T-003](tickets/00-foundations.md)         | Local infrastructure and environment wiring                          | 00 — Foundations                                                                                | T-002                                           | 2    | Ready        |
+| [T-004](tickets/00-foundations.md)         | CI workflows per app                                                 | 00 — Foundations                                                                                | T-002                                           | 2    | Ready        |
+| [T-005](tickets/00-foundations.md)         | Hosting confirmation and real deploy jobs                            | 00 — Foundations                                                                                | T-004 + owner answer                            | 3    | Blocked (Q1) |
+| [T-006](tickets/00-foundations.md)         | Build-agent tooling prerequisites                                    | 00 — Foundations                                                                                | T-002                                           | 2    | Ready        |
+| [T-010](tickets/01-shared-packages.md)     | `shared-types` foundations                                           | 01 — Shared packages                                                                            | T-002                                           | 2    | Ready        |
+| [T-011](tickets/01-shared-packages.md)     | `ui-kit` tokens, fonts and brand mark                                | 01 — Shared packages                                                                            | T-002                                           | 2    | Ready        |
+| [T-012](tickets/01-shared-packages.md)     | `ui-kit` core primitives and Storybook                               | 01 — Shared packages                                                                            | T-011                                           | 3    | Waiting      |
+| [T-013](tickets/01-shared-packages.md)     | `ui-kit` layout shells                                               | 01 — Shared packages                                                                            | T-012                                           | 4    | Waiting      |
+| [T-014](tickets/01-shared-packages.md)     | `ui-kit` TrustOps patterns                                           | 01 — Shared packages                                                                            | T-012                                           | 4    | Waiting      |
+| [T-015](tickets/01-shared-packages.md)     | `api-client`                                                         | 01 — Shared packages                                                                            | T-010                                           | 3    | Waiting      |
+| [T-016](tickets/01-shared-packages.md)     | Visual-check harness                                                 | 01 — Shared packages                                                                            | T-011                                           | 3    | Waiting      |
+| [T-017](tickets/01-shared-packages.md)     | Next.js app foundation                                               | 01 — Shared packages                                                                            | T-013, T-015                                    | 5    | Waiting      |
+| [T-020](tickets/02-backend-platform.md)    | Backend skeleton                                                     | 02 — Backend platform (`apps/backend-api`)                                                      | T-002, T-003, T-010                             | 3    | Waiting      |
+| [T-021](tickets/02-backend-platform.md)    | Database foundation                                                  | 02 — Backend platform (`apps/backend-api`)                                                      | T-020                                           | 4    | Waiting      |
+| [T-022](tickets/02-backend-platform.md)    | Migration-safety check                                               | 02 — Backend platform (`apps/backend-api`)                                                      | T-021, T-004                                    | 5    | Waiting      |
+| [T-023](tickets/02-backend-platform.md)    | Redis, BullMQ and scheduler                                          | 02 — Backend platform (`apps/backend-api`)                                                      | T-020                                           | 4    | Waiting      |
+| [T-024](tickets/02-backend-platform.md)    | Domain events: outbox and typed bus                                  | 02 — Backend platform (`apps/backend-api`)                                                      | T-021, T-023                                    | 5    | Waiting      |
+| [T-025](tickets/02-backend-platform.md)    | HTTP cross-cutting: pagination, idempotency, rate limits, validation | 02 — Backend platform (`apps/backend-api`)                                                      | T-021, T-023                                    | 5    | Waiting      |
+| [T-026](tickets/02-backend-platform.md)    | Platform crypto and identifiers                                      | 02 — Backend platform (`apps/backend-api`)                                                      | T-020                                           | 4    | Waiting      |
+| [T-027](tickets/02-backend-platform.md)    | Socket gateway                                                       | 02 — Backend platform (`apps/backend-api`)                                                      | T-023, T-031                                    | 7    | Waiting      |
+| [T-028](tickets/02-backend-platform.md)    | Outbound provider calls                                              | 02 — Backend platform (`apps/backend-api`)                                                      | T-023                                           | 5    | Waiting      |
+| [T-030](tickets/03-identity.md)            | Identity schema                                                      | 03 — Identity & access (M1)                                                                     | T-021, T-026                                    | 5    | Waiting      |
+| [T-031](tickets/03-identity.md)            | Sessions, tokens and principal resolution                            | 03 — Identity & access (M1)                                                                     | T-030, T-023                                    | 6    | Waiting      |
+| [T-032](tickets/03-identity.md)            | Registration, OTP and password login                                 | 03 — Identity & access (M1)                                                                     | T-031, T-045                                    | 7    | Waiting      |
+| [T-033](tickets/03-identity.md)            | Username system                                                      | 03 — Identity & access (M1)                                                                     | T-030                                           | 6    | Waiting      |
+| [T-034](tickets/03-identity.md)            | Social login                                                         | 03 — Identity & access (M1)                                                                     | T-032                                           | 8    | Waiting      |
+| [T-035](tickets/03-identity.md)            | Party lookup and invitations                                         | 03 — Identity & access (M1)                                                                     | T-033, T-032                                    | 8    | Waiting      |
+| [T-036](tickets/03-identity.md)            | Devices, MFA and passkeys                                            | 03 — Identity & access (M1)                                                                     | T-032                                           | 8    | Waiting      |
+| [T-037](tickets/03-identity.md)            | RBAC catalog, staff login and admin endpoints                        | 03 — Identity & access (M1)                                                                     | T-036                                           | 9    | Waiting      |
+| [T-038](tickets/03-identity.md)            | Staff invitations                                                    | 03 — Identity & access (M1)                                                                     | T-037                                           | 10   | Waiting      |
+| [T-039](tickets/03-identity.md)            | Account lifecycle, recovery and NDPA hooks                           | 03 — Identity & access (M1)                                                                     | T-037                                           | 10   | Waiting      |
+| [T-042](tickets/03-identity.md)            | Saved delivery addresses                                             | 03 — Identity & access (M1)                                                                     | T-030, T-046                                    | 11   | Waiting      |
+| [T-040](tickets/04-files-notify-config.md) | Files and evidence (M20)                                             | 04 — Files, notifications, configuration                                                        | T-031, T-028, T-026                             | 7    | Waiting      |
+| [T-041](tickets/04-files-notify-config.md) | Avatars                                                              | 04 — Files, notifications, configuration                                                        | T-040, T-030                                    | 8    | Waiting      |
+| [T-045](tickets/04-files-notify-config.md) | Notifications delivery pipeline (M11)                                | 04 — Files, notifications, configuration                                                        | T-024, T-028                                    | 6    | Waiting      |
+| [T-046](tickets/04-files-notify-config.md) | Location catalog: states, cities and city requests                   | 04 — Files, notifications, configuration                                                        | T-021, T-025, T-037                             | 10   | Waiting      |
+| [T-047](tickets/04-files-notify-config.md) | Fee schedule file                                                    | 04 — Files, notifications, configuration                                                        | T-010, T-020                                    | 4    | Waiting      |
+| [T-048](tickets/04-files-notify-config.md) | Configuration (M17)                                                  | 04 — Files, notifications, configuration                                                        | T-024, T-037                                    | 10   | Waiting      |
+| [T-049](tickets/04-files-notify-config.md) | Trade Standards by category                                          | 04 — Files, notifications, configuration                                                        | T-048                                           | 11   | Waiting      |
+| [T-050](tickets/05-trust.md)               | Verification core: NIN/BVN, liveness, levels                         | 05 — Trust & verification (M6)                                                                  | T-040, T-045, T-031                             | 8    | Waiting      |
+| [T-051](tickets/05-trust.md)               | Business verification, bank name-match, address, social proof        | 05 — Trust & verification (M6)                                                                  | T-050                                           | 9    | Waiting      |
+| [T-052](tickets/05-trust.md)               | Duplicate identity detection and KYC review queue                    | 05 — Trust & verification (M6)                                                                  | T-050, T-037, T-107                             | 11   | Waiting      |
+| [T-055](tickets/06-merchant-search.md)     | Merchant applications and certification                              | 06 — Merchant management and discovery (M5, M19)                                                | T-050, T-051, T-049, T-040, T-073, T-107        | 12   | Waiting      |
+| [T-056](tickets/06-merchant-search.md)     | Listings lifecycle, images and stock                                 | 06 — Merchant management and discovery (M5, M19)                                                | T-055                                           | 13   | Waiting      |
+| [T-057](tickets/06-merchant-search.md)     | Search and discovery (M19)                                           | 06 — Merchant management and discovery (M5, M19)                                                | T-056                                           | 14   | Waiting      |
+| [T-060](tickets/07-trades.md)              | Trade schema, state machine and audit                                | 07 — Trades and orders (M7, M9)                                                                 | T-024, T-025, T-030                             | 6    | Waiting      |
+| [T-061](tickets/07-trades.md)              | Proposal flow                                                        | 07 — Trades and orders (M7, M9)                                                                 | T-060, T-035, T-049, T-040, T-047, T-046, T-042 | 12   | Waiting      |
+| [T-062](tickets/07-trades.md)              | Proposal risk hold and TrustOps review                               | 07 — Trades and orders (M7, M9)                                                                 | T-061, T-101, T-107                             | 13   | Waiting      |
+| [T-063](tickets/07-trades.md)              | Orders and multi-item trades (M9)                                    | 07 — Trades and orders (M7, M9)                                                                 | T-061, T-056                                    | 14   | Waiting      |
+| [T-064](tickets/07-trades.md)              | Fulfilment: ship step, delivery signals, deadlines                   | 07 — Trades and orders (M7, M9)                                                                 | T-061, T-072                                    | 13   | Waiting      |
+| [T-065](tickets/07-trades.md)              | Inspection and completion                                            | 07 — Trades and orders (M7, M9)                                                                 | T-064                                           | 14   | Waiting      |
+| [T-066](tickets/07-trades.md)              | Post-funding cancellation and can't-fulfil refunds                   | 07 — Trades and orders (M7, M9)                                                                 | T-064, T-075                                    | 14   | Waiting      |
+| [T-067](tickets/07-trades.md)              | IMEI verification                                                    | 07 — Trades and orders (M7, M9)                                                                 | T-061, T-028                                    | 13   | Waiting      |
+| [T-068](tickets/07-trades.md)              | Trade realtime, notifications and deep links                         | 07 — Trades and orders (M7, M9)                                                                 | T-065, T-045, T-027                             | 15   | Waiting      |
+| [T-070](tickets/08-ledger.md)              | Double-entry ledger core                                             | 08 — Payments, escrow and ledger (M8 + m8 plan)                                                 | T-021, T-024                                    | 6    | Waiting      |
+| [T-071](tickets/08-ledger.md)              | Provider adapter and Paystack                                        | 08 — Payments, escrow and ledger (M8 + m8 plan)                                                 | T-028                                           | 6    | Waiting      |
+| [T-072](tickets/08-ledger.md)              | Funding a trade                                                      | 08 — Payments, escrow and ledger (M8 + m8 plan)                                                 | T-070, T-071, T-060, T-047                      | 7    | Waiting      |
+| [T-073](tickets/08-ledger.md)              | Payout accounts, preferences and payouts                             | 08 — Payments, escrow and ledger (M8 + m8 plan)                                                 | T-072, T-051                                    | 10   | Waiting      |
+| [T-074](tickets/08-ledger.md)              | Release and settlement                                               | 08 — Payments, escrow and ledger (M8 + m8 plan)                                                 | T-072                                           | 8    | Waiting      |
+| [T-075](tickets/08-ledger.md)              | Refunds                                                              | 08 — Payments, escrow and ledger (M8 + m8 plan)                                                 | T-072                                           | 8    | Waiting      |
+| [T-076](tickets/08-ledger.md)              | Chargebacks, reconciliation and settlement operations                | 08 — Payments, escrow and ledger (M8 + m8 plan)                                                 | T-074, T-075, T-107                             | 11   | Waiting      |
+| [T-077](tickets/08-ledger.md)              | Komtru Wallet top-up                                                 | 08 — Payments, escrow and ledger (M8 + m8 plan)                                                 | T-070                                           | 7    | Blocked (Q3) |
+| [T-080](tickets/09-disputes.md)            | Disputes core                                                        | 09 — Disputes (M3)                                                                              | T-065, T-040, T-074, T-075, T-107               | 15   | Waiting      |
+| [T-081](tickets/09-disputes.md)            | Evidence comparison and dispute read models                          | 09 — Disputes (M3)                                                                              | T-080                                           | 16   | Waiting      |
+| [T-085](tickets/10-logistics.md)           | Logistics schema and Park seed                                       | 10 — Logistics companies (m2 build spec)                                                        | T-021                                           | 5    | Waiting      |
+| [T-086](tickets/10-logistics.md)           | Logistics auth, companies and members                                | 10 — Logistics companies (m2 build spec)                                                        | T-085, T-031, T-037, T-038                      | 11   | Waiting      |
+| [T-087](tickets/10-logistics.md)           | Package pipeline and ship-to-company                                 | 10 — Logistics companies (m2 build spec)                                                        | T-086, T-064                                    | 14   | Waiting      |
+| [T-090](tickets/11-park.md)                | Park schema                                                          | 11 — Park custody                                                                               | T-085, T-046                                    | 11   | Waiting      |
+| [T-091](tickets/11-park.md)                | Hub onboarding, activation and lifecycle                             | 11 — Park custody                                                                               | T-090, T-086, T-050, T-107                      | 12   | Waiting      |
+| [T-092](tickets/11-park.md)                | Custody operations API                                               | 11 — Park custody                                                                               | T-091, T-040                                    | 13   | Waiting      |
+| [T-093](tickets/11-park.md)                | Park and trade integration                                           | 11 — Park custody                                                                               | T-092, T-064, T-065                             | 15   | Waiting      |
+| [T-094](tickets/11-park.md)                | Park cash-fee notices and handover log                               | 11 — Park custody                                                                               | T-093, T-047                                    | 16   | Waiting      |
+| [T-095](tickets/11-park.md)                | Park TrustOps read models                                            | 11 — Park custody                                                                               | T-093, T-107                                    | 16   | Waiting      |
+| [T-100](tickets/12-ops-domains.md)         | Support tickets (M10)                                                | 12 — Support, risk, reputation, administration, compliance, analytics, growth, cases, messaging | T-045, T-040, T-037                             | 10   | Waiting      |
+| [T-101](tickets/12-ops-domains.md)         | Risk and fraud (M13)                                                 | 12 — Support, risk, reputation, administration, compliance, analytics, growth, cases, messaging | T-024, T-037, T-048                             | 11   | Waiting      |
+| [T-102](tickets/12-ops-domains.md)         | Reputation and ratings (M12)                                         | 12 — Support, risk, reputation, administration, compliance, analytics, growth, cases, messaging | T-065, T-080                                    | 16   | Waiting      |
+| [T-103](tickets/12-ops-domains.md)         | Administration: impersonation and admin action log (M14, adapted)    | 12 — Support, risk, reputation, administration, compliance, analytics, growth, cases, messaging | T-037                                           | 10   | Waiting      |
+| [T-104](tickets/12-ops-domains.md)         | Audit and compliance (M15)                                           | 12 — Support, risk, reputation, administration, compliance, analytics, growth, cases, messaging | T-024, T-103, T-040                             | 11   | Waiting      |
+| [T-105](tickets/12-ops-domains.md)         | Reporting, analytics and seller insights (M16)                       | 12 — Support, risk, reputation, administration, compliance, analytics, growth, cases, messaging | T-074, T-102                                    | 17   | Waiting      |
+| [T-106](tickets/12-ops-domains.md)         | Referral and growth (M18)                                            | 12 — Support, risk, reputation, administration, compliance, analytics, growth, cases, messaging | T-074, T-101                                    | 12   | Waiting      |
+| [T-107](tickets/12-ops-domains.md)         | Universal case model, work queue and advisory                        | 12 — Support, risk, reputation, administration, compliance, analytics, growth, cases, messaging | T-037, T-024                                    | 10   | Waiting      |
+| [T-108](tickets/12-ops-domains.md)         | Trade messaging                                                      | 12 — Support, risk, reputation, administration, compliance, analytics, growth, cases, messaging | T-061, T-027, T-040                             | 13   | Waiting      |
+| [T-110](tickets/13-web-app-ui.md)          | App scaffold and shells                                              | 13 — `web-app-ui` (app.komtru.com, passport.komtru.com)                                         | T-017                                           | 6    | Waiting      |
+| [T-111](tickets/13-web-app-ui.md)          | Entry and authentication                                             | 13 — `web-app-ui` (app.komtru.com, passport.komtru.com)                                         | T-110, T-032, T-034, T-036                      | 9    | Waiting      |
+| [T-112](tickets/13-web-app-ui.md)          | First-time onboarding                                                | 13 — `web-app-ui` (app.komtru.com, passport.komtru.com)                                         | T-111, T-045                                    | 10   | Waiting      |
+| [T-113](tickets/13-web-app-ui.md)          | Home and discovery                                                   | 13 — `web-app-ui` (app.komtru.com, passport.komtru.com)                                         | T-110, T-057, T-060                             | 15   | Waiting      |
+| [T-114](tickets/13-web-app-ui.md)          | Seller profile and Trust Passport                                    | 13 — `web-app-ui` (app.komtru.com, passport.komtru.com)                                         | T-113, T-102                                    | 17   | Waiting      |
+| [T-115](tickets/13-web-app-ui.md)          | Create and propose a trade                                           | 13 — `web-app-ui` (app.komtru.com, passport.komtru.com)                                         | T-061, T-062, T-063, T-067, T-049, T-110, T-046 | 15   | Waiting      |
+| [T-116](tickets/13-web-app-ui.md)          | Buyer trade core and canonical trade detail                          | 13 — `web-app-ui` (app.komtru.com, passport.komtru.com)                                         | T-115, T-065, T-110                             | 16   | Waiting      |
+| [T-117](tickets/13-web-app-ui.md)          | Escrow funding                                                       | 13 — `web-app-ui` (app.komtru.com, passport.komtru.com)                                         | T-072, T-116, T-110                             | 17   | Waiting      |
+| [T-118](tickets/13-web-app-ui.md)          | Delivery, pickup PIN and inspection                                  | 13 — `web-app-ui` (app.komtru.com, passport.komtru.com)                                         | T-065, T-093, T-116, T-110                      | 17   | Waiting      |
+| [T-119](tickets/13-web-app-ui.md)          | Cancellation and refunds                                             | 13 — `web-app-ui` (app.komtru.com, passport.komtru.com)                                         | T-066, T-110                                    | 15   | Waiting      |
+| [T-120](tickets/13-web-app-ui.md)          | Disputes (buyer and seller)                                          | 13 — `web-app-ui` (app.komtru.com, passport.komtru.com)                                         | T-081, T-110                                    | 17   | Waiting      |
+| [T-121](tickets/13-web-app-ui.md)          | Apply for merchant certification                                     | 13 — `web-app-ui` (app.komtru.com, passport.komtru.com)                                         | T-055, T-051, T-073, T-110                      | 13   | Waiting      |
+| [T-122](tickets/13-web-app-ui.md)          | Shop and listings                                                    | 13 — `web-app-ui` (app.komtru.com, passport.komtru.com)                                         | T-056, T-121, T-110                             | 14   | Waiting      |
+| [T-123](tickets/13-web-app-ui.md)          | Seller trade handling and shipping                                   | 13 — `web-app-ui` (app.komtru.com, passport.komtru.com)                                         | T-115, T-064, T-087, T-093, T-110               | 16   | Waiting      |
+| [T-124](tickets/13-web-app-ui.md)          | Seller payouts                                                       | 13 — `web-app-ui` (app.komtru.com, passport.komtru.com)                                         | T-073, T-110                                    | 11   | Waiting      |
+| [T-125](tickets/13-web-app-ui.md)          | Seller insights                                                      | 13 — `web-app-ui` (app.komtru.com, passport.komtru.com)                                         | T-105, T-110                                    | 18   | Waiting      |
+| [T-126](tickets/13-web-app-ui.md)          | Trust, account and settings                                          | 13 — `web-app-ui` (app.komtru.com, passport.komtru.com)                                         | T-050, T-039, T-045, T-102, T-110, T-042        | 17   | Waiting      |
+| [T-127](tickets/13-web-app-ui.md)          | Reviews                                                              | 13 — `web-app-ui` (app.komtru.com, passport.komtru.com)                                         | T-102, T-110                                    | 17   | Waiting      |
+| [T-128](tickets/13-web-app-ui.md)          | Messaging                                                            | 13 — `web-app-ui` (app.komtru.com, passport.komtru.com)                                         | T-108, T-110                                    | 14   | Waiting      |
+| [T-129](tickets/13-web-app-ui.md)          | Help and support                                                     | 13 — `web-app-ui` (app.komtru.com, passport.komtru.com)                                         | T-100, T-110                                    | 11   | Waiting      |
+| [T-130](tickets/13-web-app-ui.md)          | Park Hub application                                                 | 13 — `web-app-ui` (app.komtru.com, passport.komtru.com)                                         | T-091, T-110, T-046                             | 13   | Waiting      |
+| [T-131](tickets/13-web-app-ui.md)          | Wallet top-up                                                        | 13 — `web-app-ui` (app.komtru.com, passport.komtru.com)                                         | T-077, T-110, T-117                             | 18   | Blocked (Q3) |
+| [T-140](tickets/14-operations-app.md)      | Console scaffold, shell and staff auth                               | 14 — `operations-app` (ops.komtru.com, TrustOps console)                                        | T-017, T-037, T-038                             | 11   | Waiting      |
+| [T-141](tickets/14-operations-app.md)      | Work queue and universal case                                        | 14 — `operations-app` (ops.komtru.com, TrustOps console)                                        | T-140, T-107                                    | 12   | Waiting      |
+| [T-142](tickets/14-operations-app.md)      | Trade proposals                                                      | 14 — `operations-app` (ops.komtru.com, TrustOps console)                                        | T-141, T-062                                    | 14   | Waiting      |
+| [T-143](tickets/14-operations-app.md)      | Disputes                                                             | 14 — `operations-app` (ops.komtru.com, TrustOps console)                                        | T-141, T-081                                    | 17   | Waiting      |
+| [T-144](tickets/14-operations-app.md)      | Identity review                                                      | 14 — `operations-app` (ops.komtru.com, TrustOps console)                                        | T-141, T-052                                    | 13   | Waiting      |
+| [T-154](tickets/14-operations-app.md)      | Merchant certification review                                        | 14 — `operations-app` (ops.komtru.com, TrustOps console)                                        | T-141, T-055                                    | 13   | Waiting      |
+| [T-145](tickets/14-operations-app.md)      | Fraud signals and restrictions                                       | 14 — `operations-app` (ops.komtru.com, TrustOps console)                                        | T-141, T-101                                    | 13   | Waiting      |
+| [T-146](tickets/14-operations-app.md)      | Settlement operations                                                | 14 — `operations-app` (ops.komtru.com, TrustOps console)                                        | T-141, T-076                                    | 13   | Waiting      |
+| [T-147](tickets/14-operations-app.md)      | Park applications, registration and lifecycle                        | 14 — `operations-app` (ops.komtru.com, TrustOps console)                                        | T-141, T-091                                    | 13   | Waiting      |
+| [T-148](tickets/14-operations-app.md)      | Park network and custody                                             | 14 — `operations-app` (ops.komtru.com, TrustOps console)                                        | T-147, T-095                                    | 17   | Waiting      |
+| [T-149](tickets/14-operations-app.md)      | Logistics companies and packages                                     | 14 — `operations-app` (ops.komtru.com, TrustOps console)                                        | T-140, T-087                                    | 15   | Waiting      |
+| [T-150](tickets/14-operations-app.md)      | Directory, roles and approvals                                       | 14 — `operations-app` (ops.komtru.com, TrustOps console)                                        | T-140, T-103                                    | 12   | Waiting      |
+| [T-151](tickets/14-operations-app.md)      | Support tickets console                                              | 14 — `operations-app` (ops.komtru.com, TrustOps console)                                        | T-140, T-100                                    | 12   | Waiting      |
+| [T-152](tickets/14-operations-app.md)      | Audit and compliance                                                 | 14 — `operations-app` (ops.komtru.com, TrustOps console)                                        | T-140, T-104                                    | 12   | Waiting      |
+| [T-153](tickets/14-operations-app.md)      | Overview, configuration, notifications and analytics                 | 14 — `operations-app` (ops.komtru.com, TrustOps console)                                        | T-140, T-048, T-049, T-045, T-105               | 18   | Waiting      |
+| [T-155](tickets/14-operations-app.md)      | Location catalog management                                          | 14 — `operations-app` (ops.komtru.com, TrustOps console)                                        | T-140, T-046                                    | 12   | Waiting      |
+| [T-160](tickets/15-logistics-ops.md)       | Portal scaffold and login                                            | 15 — `logistics-ops` (logistics.komtru.com, courier POC portal)                                 | T-017, T-086                                    | 12   | Waiting      |
+| [T-161](tickets/15-logistics-ops.md)       | Team management                                                      | 15 — `logistics-ops` (logistics.komtru.com, courier POC portal)                                 | T-160                                           | 13   | Waiting      |
+| [T-162](tickets/15-logistics-ops.md)       | Packages                                                             | 15 — `logistics-ops` (logistics.komtru.com, courier POC portal)                                 | T-160, T-087                                    | 15   | Waiting      |
+| [T-170](tickets/16-park-agent-app.md)      | App scaffold, login and hub context                                  | 16 — `park-agent-app` (park.komtru.com)                                                         | T-017, T-092                                    | 14   | Waiting      |
+| [T-171](tickets/16-park-agent-app.md)      | Hub dashboard and log arrival                                        | 16 — `park-agent-app` (park.komtru.com)                                                         | T-170                                           | 15   | Waiting      |
+| [T-172](tickets/16-park-agent-app.md)      | Inspection, damage and incidents                                     | 16 — `park-agent-app` (park.komtru.com)                                                         | T-171                                           | 16   | Waiting      |
+| [T-173](tickets/16-park-agent-app.md)      | Safe handover                                                        | 16 — `park-agent-app` (park.komtru.com)                                                         | T-171                                           | 16   | Waiting      |
+| [T-174](tickets/16-park-agent-app.md)      | Handover log, hub profile and staff                                  | 16 — `park-agent-app` (park.komtru.com)                                                         | T-094, T-091                                    | 17   | Waiting      |
+| [T-180](tickets/17-release.md)             | End-to-end critical paths                                            | 17 — Integration, hardening and release                                                         | T-123, T-118, T-173, T-162, T-148               | 18   | Waiting      |
+| [T-181](tickets/17-release.md)             | Load and resilience                                                  | 17 — Integration, hardening and release                                                         | T-180                                           | 19   | Waiting      |
+| [T-182](tickets/17-release.md)             | Security review                                                      | 17 — Integration, hardening and release                                                         | T-180                                           | 19   | Waiting      |
+| [T-183](tickets/17-release.md)             | Definition-of-done audit and first push                              | 17 — Integration, hardening and release                                                         | every other ticket                              | 20   | Waiting      |
 
-**Totals:** 134 tickets — Blocked 3, Done 1, Ready 1, Waiting 129.
+**Totals:** 134 tickets — Blocked 3, Done 2, Ready 5, Waiting 124.

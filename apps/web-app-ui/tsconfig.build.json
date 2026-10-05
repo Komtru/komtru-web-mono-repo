@@ -1,0 +1,9 @@
+{
+  "extends": "@komtru/config/tsconfig/library.json",
+  "compilerOptions": {
+    "declaration": true,
+    "types": ["node"]
+  },
+  "include": ["src"],
+  "exclude": ["src/**/*.test.ts"]
+}

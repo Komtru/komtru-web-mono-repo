@@ -83,3 +83,4 @@
 - **Acceptance criteria:**
   - Shared pieces every app composes: auth route handlers (`/api/auth/*`) that set the refresh token as an `httpOnly`, `Secure`, `SameSite=Lax` cookie scoped to the app's host; middleware that redirects unauthenticated users and checks the session scope the app requires; Sentry init; error boundary and not-found pages in the design language; Query and realtime providers.
   - A consumer token is rejected by the ops, logistics and park apps' middleware (test per scope).
+  - `komtruEslint({ react: true })` gains the Next.js 15 and React rules (`eslint-config-next`, `react-hooks`), so every Next app lints with them; apps extend `@komtru/config/tsconfig/next.json` (created in T-002).

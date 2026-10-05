@@ -115,4 +115,3 @@ Spec: `docs/specs/module-01-identity-and-user-management.md`. Decision C2 (desig
   - `GET /me/addresses` (paginated), `POST`, `PATCH`, archive, and make-default. The city must belong to the chosen state and be active (422 otherwise).
   - Addresses are archived, never deleted, because trades snapshot them.
   - `hasUsableAddress(userId)` exported for the trade gates in T-061.
-

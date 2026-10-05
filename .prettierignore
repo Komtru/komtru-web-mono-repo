@@ -1,0 +1,11 @@
+# Reference material is copied verbatim and never reformatted.
+docs/specs/
+docs/design-reference/
+docs/MASTER_BUILD_PROMPT.md
+pnpm-lock.yaml
+dist/
+.next/
+coverage/
+.turbo/
+.superpowers/
+.claude/
