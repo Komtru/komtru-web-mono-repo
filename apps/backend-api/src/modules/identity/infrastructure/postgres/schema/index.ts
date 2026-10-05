@@ -4,3 +4,5 @@ export * from './columns.js';
 export * from './enums.js';
 export * from './users.js';
 export * from './contacts.js';
+export * from './credentials.js';
+export * from './rbac.js';
