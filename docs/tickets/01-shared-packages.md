@@ -82,6 +82,19 @@
 
 ### T-016 — Visual-check harness
 
+- **Status:** Done (2026-10-05). Plan: `docs/superpowers/plans/2026-10-05-t-016-visual-check.md`. `tools/visual-check` is a workspace package (`@komtru/visual-check`) run from source by the root `pnpm visual-check` script; `docs/ui-review/README.md` is the account every UI ticket needs.
+- **Deferred:**
+  - The three brand webfonts ship as exact-pinned Fontsource dependencies (`@fontsource-variable/space-grotesk`, `@fontsource-variable/inter`, `@fontsource/ibm-plex-mono`, all 5.3.0 — the same Google files `next/font` self-hosts) and are inlined into **both** pages. Masking text was rejected because in a design-system build most deviations are text; linking Google Fonts at screenshot time was rejected because it makes the diff irreproducible offline. T-011's note that the harness would need to solve this is now closed.
+  - The PNGs are not committed (`.gitignore` carries `docs/ui-review/**/*.png`); the `.md` deviation lists are. Re-running a check refreshes the metadata and keeps whatever was written under `## Deviations`.
+  - The carved reference page renders at the gallery's own 1280px with the frame pinned to its declared width, not at the frame's width. The reference carries `@media(max-width:900px)` rules from the design system it was assembled from, and at a 560px viewport those fire and redraw a tablet screen as something the reference never shows. The built page still gets a viewport of exactly the compared size.
+  - The shot is clipped to the frame's content, excluding the mock browser bezel and its border, radius, shadow and padding — which is also what makes it exactly 340/560/1040 wide rather than two pixels short. P1 is the one screen drawn in the design system's phone bezel (`.device.phone`, 230px) rather than a browser frame; its `.device-screen` keeps its own 14px radius, so its corners are a known small deviation.
+  - Widths come from six reference rules, re-parsed on every run with T-011's `parseCssDeclarations`: 340 (`.mweb-frame`), 230 (`.device.phone`), 560 (tablet) and 1040 (desktop), the last two exactly as the reference's own `#p3-proportion-fix-v8` comment states them.
+  - `packages/ui-kit` gained one export, `"./extract-tokens": "./scripts/extract-tokens.ts"`, so the harness reuses T-011's parsers instead of growing a second set. It points at source because `tsconfig.build.json` only emits `src`, which is the same thing `"./tokens.css"` already does.
+  - `pnpm-workspace.yaml` gained `tools/*` so turbo lints, typechecks and tests the harness and the `repo` workflow's unfiltered job covers it. Only directories with a `package.json` match, so `tools/tickets` (Python) is unaffected.
+  - Relative imports inside `tools/visual-check` carry `.ts`, not the repo's usual `.js`: the package is never compiled, it runs under `node --experimental-strip-types`, and Node resolves the file on disk rather than rewriting the extension.
+  - The reference HTML does not close every element it opens — TO-PA9's frame runs straight into the next section — so the carve recovers the way a browser does and closes what is left open. A test carves all 210 screens and asserts each document balances.
+  - No threshold gate: the CLI reports the ratio and exits 0 unless it errors. What counts as an acceptable deviation is a judgement each screen ticket writes down, not a number the harness can hold.
+  - Screenshots are deterministic on one machine, not across machines: Chromium rasterises text differently per platform. Compare a run against the reference, never against someone else's PNG.
 - **Touches:** `tools/visual-check/**`, `docs/ui-review/README.md`
 - **Depends on:** T-011
 - **Acceptance criteria:**
