@@ -71,7 +71,8 @@ export async function startWorker(
       for (const definition of module.queues ?? []) queues.consume(definition);
       for (const job of module.schedules ?? []) registry.register(job);
     }
-    for (const module of modules) await module.start?.({ queues, events, emitter, db });
+    for (const module of modules)
+      await module.start?.({ queues, events, emitter, db, config, logger, redis: clients.redis });
     scheduler = await startScheduler({
       registry,
       redisUrl: config.redis.url,

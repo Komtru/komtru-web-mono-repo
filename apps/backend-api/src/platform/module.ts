@@ -2,7 +2,10 @@
 // The app mounts every module's routes under /v1 and runs its lifecycle hooks; modules talk to each
 // other only through their index.ts (enforced by eslint-rules/module-boundaries.mjs).
 import type { Router } from 'express';
+import type { Redis } from 'ioredis';
+import type { AppConfig } from '../config/env.js';
 import type { Db } from '../db/index.js';
+import type { Logger } from './logger.js';
 import { mountRoutes, type MountDeps } from './http/mount.js';
 import type { RouteDefinition } from './http/route.js';
 import type { EventBus } from './events/bus.js';
@@ -22,6 +25,15 @@ export interface ModuleContext {
   emitter: InProcessEmitter;
   /** The runtime pool, as komtru_app through PgBouncer. */
   db: Db;
+  /** The process's configuration; a module reads its own section, never process.env. */
+  config: AppConfig;
+  /** The process logger. A module's jobs pass it to providerRequest, which logs one line per attempt. */
+  logger: Logger;
+  /**
+   * The app's Redis client, under the `komtru:` key prefix. For a module's own caches; queues and
+   * schedules have their own connections and never go through this one.
+   */
+  redis: Redis;
 }
 
 export interface KomtruModule {
