@@ -65,6 +65,35 @@ export const outbox = platform.table(
 );
 
 /**
+ * One row per idempotency key (design §4.4): claimed before the handler runs and completed with the
+ * response, so a client that retries a mutating call over a flaky connection gets the first
+ * answer back instead of a second trade, payout or custody event.
+ */
+export const idempotencyKeys = platform.table(
+  'idempotency_keys',
+  {
+    /** The route's session scope: one client's key cannot collide with another scope's. */
+    scope: text('scope').notNull(),
+    /** The client's `Idempotency-Key` header, verbatim. */
+    key: text('key').notNull(),
+    /** `user:<uuid>` once sessions exist (T-030), `anon` until then. */
+    actor: text('actor').notNull(),
+    /** Hash of method, path and body: the same key with a different request is a client bug. */
+    requestHash: text('request_hash').notNull(),
+    method: text('method').notNull(),
+    path: text('path').notNull(),
+    status: integer('status'),
+    response: jsonb('response'),
+    completedAt: timestamp('completed_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.scope, table.key, table.actor] }),
+    index('idempotency_keys_created_at_idx').on(table.createdAt),
+  ],
+);
+
+/**
  * What each subscriber has already handled. Written inside the handler's own transaction, so a
  * handler that throws rolls its marker back and the redelivery runs it again.
  */
