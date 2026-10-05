@@ -4,9 +4,9 @@ import { afterAll, beforeAll, beforeEach } from 'vitest';
 import pg from 'pg';
 import { createDb, type Db } from '../../src/db/index.js';
 import { MIGRATIONS_SCHEMA, grantRuntimeAccess } from '../../src/db/roles.js';
-import { TEMPLATE_DATABASE, directUrl, pooledUrl } from './db-urls.js';
+import { TEMPLATE_DATABASE, TEST_DB_PREFIX, directUrl, pooledUrl } from './db-urls.js';
 
-export const workerDatabase = () => `komtru_test_${process.env.VITEST_POOL_ID ?? '1'}`;
+export const workerDatabase = () => `${TEST_DB_PREFIX}_${process.env.VITEST_POOL_ID ?? '1'}`;
 
 /** Empties every table outside system schemas and the migration journal. */
 export async function truncateAll(owner: pg.Pool): Promise<void> {

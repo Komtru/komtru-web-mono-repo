@@ -6,12 +6,13 @@ import { createLogger } from '../../src/platform/logger.js';
 import { defineRoute } from '../../src/platform/http/route.js';
 import { defineModule, moduleHealthChecks, mountModules } from '../../src/platform/module.js';
 import { z } from 'zod';
+import { testRedisUrl } from '../support/db-urls.js';
 
 const config = loadConfig({
   NODE_ENV: 'test',
   LOG_LEVEL: 'silent',
   POSTGRES_URL: 'postgresql://komtru:komtru@localhost:56432/komtru_v2_dev',
-  REDIS_URL: 'redis://localhost:56379',
+  REDIS_URL: testRedisUrl(),
 });
 const logger = createLogger(config);
 

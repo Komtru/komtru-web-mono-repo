@@ -1,9 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { ConfigError, loadConfig } from '../../src/config/env.js';
+import { testRedisUrl } from '../support/db-urls.js';
 
 const minimal = {
   POSTGRES_URL: 'postgresql://komtru:komtru@localhost:56432/komtru_v2_dev',
-  REDIS_URL: 'redis://localhost:56379',
+  REDIS_URL: testRedisUrl(),
 };
 
 const failure = (env: Record<string, string>): ConfigError => {

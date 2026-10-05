@@ -7,10 +7,10 @@ import { createLogger } from '../../src/platform/logger.js';
 import { createQueueFactory, type QueueFactory } from '../../src/platform/queue/factory.js';
 import { deadLetterCounter } from '../../src/platform/queue/metrics.js';
 import { BULL_PREFIX, createRedis } from '../../src/platform/redis/connections.js';
-import { infraEnabled } from '../support/db-urls.js';
+import { infraEnabled, testRedisUrl } from '../support/db-urls.js';
 import { eventually } from '../support/eventually.js';
 
-const redisUrl = 'redis://localhost:56379';
+const redisUrl = testRedisUrl();
 const logger = createLogger(
   loadConfig({ LOG_LEVEL: 'silent', POSTGRES_URL: 'postgresql://x@localhost/x', REDIS_URL: redisUrl }),
 );

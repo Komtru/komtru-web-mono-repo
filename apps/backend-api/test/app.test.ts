@@ -4,12 +4,13 @@ import { createApp } from '../src/app.js';
 import { loadConfig } from '../src/config/env.js';
 import { createLogger } from '../src/platform/logger.js';
 import { ApiError } from '../src/platform/errors.js';
+import { testRedisUrl } from './support/db-urls.js';
 
 const config = loadConfig({
   NODE_ENV: 'test',
   LOG_LEVEL: 'silent',
   POSTGRES_URL: 'postgresql://komtru:komtru@localhost:56432/komtru_v2_dev',
-  REDIS_URL: 'redis://localhost:56379',
+  REDIS_URL: testRedisUrl(),
   ALLOWED_ORIGINS: 'http://localhost:3001',
 });
 const logger = createLogger(config);

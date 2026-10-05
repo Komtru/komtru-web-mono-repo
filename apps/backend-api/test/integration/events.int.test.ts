@@ -11,7 +11,7 @@ import { defineRoute } from '../../src/platform/http/route.js';
 import { defineModule, type ModuleContext } from '../../src/platform/module.js';
 import { startApi } from '../../src/server.js';
 import { startWorker } from '../../src/worker-process.js';
-import { infraEnabled, pooledUrl } from '../support/db-urls.js';
+import { infraEnabled, pooledUrl, testRedisUrl } from '../support/db-urls.js';
 import { useTestDatabase, workerDatabase } from '../support/db.js';
 import { eventually } from '../support/eventually.js';
 
@@ -19,7 +19,7 @@ const env = () => ({
   NODE_ENV: 'test',
   LOG_LEVEL: 'silent',
   PORT: '0',
-  REDIS_URL: 'redis://localhost:56379',
+  REDIS_URL: testRedisUrl(),
   POSTGRES_URL: pooledUrl(workerDatabase()),
 });
 

@@ -10,9 +10,9 @@ import { createRateLimitGate } from '../../../src/platform/http/rateLimit.js';
 import { defineRoute, type RateLimitSpec } from '../../../src/platform/http/route.js';
 import { createLogger } from '../../../src/platform/logger.js';
 import { createRedis } from '../../../src/platform/redis/connections.js';
-import { infraEnabled } from '../../support/db-urls.js';
+import { infraEnabled, testRedisUrl } from '../../support/db-urls.js';
 
-const REDIS_URL = 'redis://localhost:56379';
+const REDIS_URL = testRedisUrl();
 const config = loadConfig({
   LOG_LEVEL: 'silent',
   POSTGRES_URL: 'postgresql://x@localhost/x',

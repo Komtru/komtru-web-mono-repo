@@ -7,10 +7,10 @@ import { createLogger } from '../../src/platform/logger.js';
 import { BULL_PREFIX, createBullConnection } from '../../src/platform/redis/connections.js';
 import { createScheduleRegistry, type ScheduledJob } from '../../src/platform/scheduler/registry.js';
 import { startScheduler, type RunningScheduler } from '../../src/platform/scheduler/scheduler.js';
-import { infraEnabled } from '../support/db-urls.js';
+import { infraEnabled, testRedisUrl } from '../support/db-urls.js';
 import { eventually } from '../support/eventually.js';
 
-const redisUrl = 'redis://localhost:56379';
+const redisUrl = testRedisUrl();
 const logger = createLogger(
   loadConfig({ LOG_LEVEL: 'silent', POSTGRES_URL: 'postgresql://x@localhost/x', REDIS_URL: redisUrl }),
 );

@@ -9,10 +9,10 @@ import { defineRoute } from '../../src/platform/http/route.js';
 import { defineModule } from '../../src/platform/module.js';
 import { startApi } from '../../src/server.js';
 import { startWorker } from '../../src/worker-process.js';
-import { directUrl, infraEnabled, pooledUrl } from '../support/db-urls.js';
+import { directUrl, infraEnabled, pooledUrl, testRedisUrl } from '../support/db-urls.js';
 import { useTestDatabase, workerDatabase } from '../support/db.js';
 
-const base = { NODE_ENV: 'test', LOG_LEVEL: 'silent', PORT: '0', REDIS_URL: 'redis://localhost:56379' };
+const base = { NODE_ENV: 'test', LOG_LEVEL: 'silent', PORT: '0', REDIS_URL: testRedisUrl() };
 
 describe.runIf(infraEnabled)('process wiring', () => {
   useTestDatabase();

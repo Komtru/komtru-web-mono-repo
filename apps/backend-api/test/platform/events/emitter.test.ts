@@ -4,12 +4,13 @@ import { z } from 'zod';
 import { loadConfig } from '../../../src/config/env.js';
 import { createInProcessEmitter } from '../../../src/platform/events/emitter.js';
 import { createLogger } from '../../../src/platform/logger.js';
+import { testRedisUrl } from '../../support/db-urls.js';
 
 const logger = createLogger(
   loadConfig({
     LOG_LEVEL: 'silent',
     POSTGRES_URL: 'postgresql://x@localhost/x',
-    REDIS_URL: 'redis://localhost:56379',
+    REDIS_URL: testRedisUrl(),
   }),
 );
 

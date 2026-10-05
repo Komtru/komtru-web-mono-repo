@@ -55,3 +55,22 @@ appears twice as two variants of one screen.
 
 `logistics-ops` has no screens in the reference at all. That is expected — Epic 15 says so, and its
 visual check is design-system conformance rather than screenshot-vs-reference.
+
+## 4. Running two agents against one stack
+
+The Docker stack is a single Postgres and a single Redis, but the backend's test harness no longer
+assumes it owns them. Two worktrees can run `KOMTRU_INFRA_TESTS=1` at the same time as long as each
+names its own database prefix and its own Redis logical database:
+
+```bash
+KOMTRU_INFRA_TESTS=1 \
+KOMTRU_TEST_DB_PREFIX=komtru_t031 \
+KOMTRU_TEST_REDIS_URL=redis://localhost:56379/2 \
+  pnpm exec vitest run
+```
+
+Without them the harness uses `komtru_test_*` and Redis database 0, and two concurrent runs fight
+over the same template database — one drops it while the other is cloning from it. The prefix also
+makes leftovers obvious: `DROP DATABASE` anything matching your prefix when you are done.
+
+Redis database 0 belongs to the local dev app. Give each parallel run a number from 1 to 15.

@@ -1,10 +1,18 @@
-// Where integration tests find Postgres. Defaults match docker-compose.yml; CI overrides them.
+// Where integration tests find Postgres and Redis. Defaults match docker-compose.yml; CI overrides
+// them, and so does a second agent working in another worktree against the same containers: set
+// KOMTRU_TEST_DB_PREFIX and KOMTRU_TEST_REDIS_URL (a distinct Redis logical database) and two runs
+// cannot see each other's template, worker databases or queue keys.
 export const infraEnabled = process.env.KOMTRU_INFRA_TESTS === '1';
 
 const directBase = process.env.KOMTRU_TEST_DIRECT_URL ?? 'postgresql://komtru:komtru@localhost:55432';
 const pooledBase = process.env.KOMTRU_TEST_POOLED_URL ?? 'postgresql://komtru_app:komtru_app@localhost:56432';
 
-export const TEMPLATE_DATABASE = 'komtru_test_template';
+/** Every database this harness creates starts with this, so one run can be told from another. */
+export const TEST_DB_PREFIX = process.env.KOMTRU_TEST_DB_PREFIX ?? 'komtru_test';
+export const TEMPLATE_DATABASE = `${TEST_DB_PREFIX}_template`;
+
+/** Redis for the tests that need a real one. A logical database keeps concurrent runs apart. */
+export const testRedisUrl = (): string => process.env.KOMTRU_TEST_REDIS_URL ?? 'redis://localhost:56379';
 /** Local throwaway password the harness gives komtru_app (it matches KOMTRU_TEST_POOLED_URL). */
 export const TEST_APP_PASSWORD = decodeURIComponent(new URL(pooledBase).password);
 

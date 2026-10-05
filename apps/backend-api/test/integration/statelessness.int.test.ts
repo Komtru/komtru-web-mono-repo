@@ -8,7 +8,7 @@ import { defineRoute } from '../../src/platform/http/route.js';
 import { defineModule, type ModuleContext } from '../../src/platform/module.js';
 import { startApi } from '../../src/server.js';
 import { startWorker } from '../../src/worker-process.js';
-import { infraEnabled, pooledUrl } from '../support/db-urls.js';
+import { infraEnabled, pooledUrl, testRedisUrl } from '../support/db-urls.js';
 import { useTestDatabase, workerDatabase } from '../support/db.js';
 import { eventually } from '../support/eventually.js';
 
@@ -57,7 +57,7 @@ describe.runIf(infraEnabled)('stateless processes', () => {
       NODE_ENV: 'test',
       LOG_LEVEL: 'silent',
       PORT: '0',
-      REDIS_URL: 'redis://localhost:56379',
+      REDIS_URL: testRedisUrl(),
       POSTGRES_URL: pooledUrl(workerDatabase()),
     };
 
@@ -112,7 +112,7 @@ describe.runIf(infraEnabled)('stateless processes', () => {
       NODE_ENV: 'test',
       LOG_LEVEL: 'silent',
       PORT: '0',
-      REDIS_URL: 'redis://localhost:56379',
+      REDIS_URL: testRedisUrl(),
       POSTGRES_URL: pooledUrl(workerDatabase()),
     };
     const apiA = await startApi(env, [makeModule('api-a')]);
@@ -157,7 +157,7 @@ describe.runIf(infraEnabled)('stateless processes', () => {
     const env = {
       NODE_ENV: 'test',
       LOG_LEVEL: 'silent',
-      REDIS_URL: 'redis://localhost:56379',
+      REDIS_URL: testRedisUrl(),
       POSTGRES_URL: pooledUrl(workerDatabase()),
     };
     const api = await startApi({ ...env, PORT: '0' }, [

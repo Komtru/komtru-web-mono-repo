@@ -14,14 +14,14 @@ import {
 import { createLogger } from '../../../src/platform/logger.js';
 import type { QueueDefinition, QueueFactory } from '../../../src/platform/queue/factory.js';
 import { eventually } from '../../support/eventually.js';
-import { infraEnabled } from '../../support/db-urls.js';
+import { infraEnabled, testRedisUrl } from '../../support/db-urls.js';
 import { useTestDatabase } from '../../support/db.js';
 
 const logger = createLogger(
   loadConfig({
     LOG_LEVEL: 'silent',
     POSTGRES_URL: 'postgresql://x@localhost/x',
-    REDIS_URL: 'redis://localhost:56379',
+    REDIS_URL: testRedisUrl(),
   }),
 );
 

@@ -9,6 +9,7 @@ import {
   isEncrypted,
   parseEncryptionKey,
 } from '../../../src/platform/crypto/encryption.js';
+import { testRedisUrl } from '../../support/db-urls.js';
 
 const key = randomBytes(32);
 const otherKey = randomBytes(32);
@@ -97,7 +98,7 @@ describe('createEncryption', () => {
   const config = (encryptionKey?: string) =>
     loadConfig({
       POSTGRES_URL: 'postgresql://x@localhost/x',
-      REDIS_URL: 'redis://localhost:56379',
+      REDIS_URL: testRedisUrl(),
       ...(encryptionKey ? { ENCRYPTION_KEY: encryptionKey } : {}),
     });
 
