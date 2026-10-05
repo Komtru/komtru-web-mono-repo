@@ -4,8 +4,43 @@ import { describe, expect, it } from 'vitest';
 import * as uiKit from '../src/index.js';
 
 describe('@komtru/ui-kit', () => {
-  it('exposes the tokens and the brand components', () => {
-    expect(Object.keys(uiKit).sort()).toEqual(['KOMTRU_TOKENS', 'KomtruLogo', 'KomtruMark', 'cssVar']);
+  // Exhaustive on purpose: the entry point is the package's contract, and an export that arrives by
+  // accident is one T-013 and the apps will build on before anyone decides it should exist.
+  it('exposes the tokens, the brand components and the primitives — and nothing else', () => {
+    expect(Object.keys(uiKit).sort()).toEqual([
+      'Avatar',
+      'Banner',
+      'Button',
+      'CONTROL_CLASS',
+      'CONTROL_INVALID_CLASS',
+      'Card',
+      'Chip',
+      'EmptyState',
+      'FOCUS_RING',
+      'FOCUS_RING_UTILITIES',
+      'Field',
+      'FileDropzone',
+      'KOMTRU_TOKENS',
+      'KomtruLogo',
+      'KomtruMark',
+      'MediaGate',
+      'NodeLoader',
+      'OtpInput',
+      'Select',
+      'Sheet',
+      'Skeleton',
+      'Stepper',
+      'StickyFooter',
+      'TRADE_STAGES',
+      'TextField',
+      'Toast',
+      'Toggle',
+      'TradeProgress',
+      'TradeRow',
+      'cssVar',
+      'cx',
+      'isMediaGateSatisfied',
+    ]);
   });
 });
 
