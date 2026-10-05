@@ -127,6 +127,13 @@
       "when": 1791237948383,
       "tag": "0017_ledger_balance_invariant",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1791238160819,
+      "tag": "0018_ledger_append_only",
+      "breakpoints": true
     }
   ]
 }
