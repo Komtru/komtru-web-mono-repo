@@ -1,5 +1,5 @@
 // appendOnly() against a real table. Skipped unless KOMTRU_INFRA_TESTS=1.
-import pg from 'pg';
+import type pg from 'pg';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { appendOnly } from '../../src/db/helpers/appendOnly.js';
 import { grantRuntimeAccess } from '../../src/db/roles.js';
