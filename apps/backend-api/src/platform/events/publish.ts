@@ -36,7 +36,7 @@ export async function publish<S extends z.ZodType>(
 ): Promise<EventEnvelope<z.output<S>>> {
   // Parsed here, at the publisher, so a bad payload fails the caller's transaction rather than
   // every subscriber's job five minutes later.
-  const payload = definition.payload.parse(input.payload) as z.output<S>;
+  const payload = definition.payload.parse(input.payload);
   const envelope: EventEnvelope<z.output<S>> = {
     eventId: input.eventId ?? uuidv7(),
     eventType: definition.eventType,
