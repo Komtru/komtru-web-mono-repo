@@ -17,6 +17,16 @@
 
 ### T-011 — `ui-kit` tokens, fonts and brand mark
 
+- **Status:** Done (2026-10-05). Plan: `docs/superpowers/plans/2026-10-05-t-011-ui-kit-tokens.md`. The HTML declares the ticket's 52 properties, repeated identically across five `:root` blocks; `packages/ui-kit/scripts/extract-tokens.ts` generates `src/tokens.css`, `src/tokens.ts` and `packages/config/tailwind/preset.css` from them, and `packages/ui-kit/test/tokens.test.ts` re-parses the HTML to prove all three still agree.
+- **Deferred:**
+  - The radius utilities are `rounded-sm/md/lg/full`, not the ticket's `rounded-r-md`: `r` is Tailwind's own side modifier, so `rounded-r-md` sets the two right corners. Proved by a compiler test in `packages/config/test/tailwind-preset.test.ts`.
+  - Tailwind v4 has no duration namespace, so the four `--dur-*` tokens stay plain custom properties, used as `var(--dur-standard)`.
+  - Tailwind's default _colour_ palette is retired (`--color-*: initial`) so every colour utility names a reference token; its spacing, radius, font-size and shadow defaults remain, because the reference itself uses off-scale values (11px, 13.5px, 2.5px rings).
+  - The shared lint rule is `komtru-design/no-raw-hex`, not `komtru/…`: `apps/backend-api` already defines a `komtru` ESLint plugin and ESLint rejects a duplicate plugin name. Unifying the two namespaces is left to T-017. The rule only sees JS/TS; app CSS (arriving in T-017) needs a stylelint or `@eslint/css` pass.
+  - `packages/ui-kit` overrides the shared library tsconfig with `moduleResolution: bundler` and `jsx: react-jsx`, because `next` ships no `exports` map and NodeNext cannot resolve `next/font/google`. A test in `test/index.test.ts` keeps the `.js` import extension convention that NodeNext used to enforce.
+  - `src/tokens.css` and `packages/config/tailwind/preset.css` are in `.prettierignore`: Prettier lowercases hex, rewrites `.4` to `0.4` and respaces `rgba(...)`, which would break literal parity with the HTML.
+  - `<KomtruMark>` draws the emerald, round-capped variant the ticket specifies. The reference also contains capless marks, a `currentColor` one and a 40px `stroke-width:1.6` splash mark; T-016's diff should expect those as known deviations.
+  - Nothing outside a Next build loads the actual webfaces — `tokens.css` names the families but ships no `@font-face` — so T-012's Storybook and T-016's harness need to inject the font stylesheet themselves or expect a typography delta.
 - **Touches:** `packages/ui-kit/src/tokens.css`, `src/tokens.ts`, `src/brand/{KomtruMark,KomtruLogo}.tsx`, `src/fonts.ts`, `packages/config/tailwind/preset.css`, `scripts/extract-tokens.ts`
 - **Depends on:** T-002
 - **Acceptance criteria:**
