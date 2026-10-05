@@ -2,3 +2,5 @@
 // (drizzle.config.ts); other modules reach them through src/modules/identity/index.ts.
 export * from './columns.js';
 export * from './enums.js';
+export * from './users.js';
+export * from './contacts.js';

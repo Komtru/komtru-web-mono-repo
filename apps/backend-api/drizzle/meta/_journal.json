@@ -43,6 +43,13 @@
       "when": 1791225384193,
       "tag": "0005_identity_enums",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1791225508160,
+      "tag": "0006_identity_core",
+      "breakpoints": true
     }
   ]
 }
