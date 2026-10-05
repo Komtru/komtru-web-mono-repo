@@ -46,3 +46,21 @@ describe('cursorPage', () => {
     expect(cursorPage([], 20, () => ({}))).toEqual({ items: [], nextCursor: null });
   });
 });
+
+describe('decodeCursor validation', () => {
+  it.each([
+    ['a nested object', { id: { gt: 1 } }],
+    ['an array value', { ids: [1, 2] }],
+    ['a boolean', { active: true }],
+  ])('refuses %s, which would reach a query builder as an operand', (_label, key) => {
+    expect(() => decodeCursor(encodeCursor(key as never))).toThrow(ApiError);
+  });
+
+  it('accepts the shapes a sort key is actually made of', () => {
+    expect(decodeCursor(encodeCursor({ id: 7, createdAt: '2026-10-05', deletedAt: null }))).toEqual({
+      id: 7,
+      createdAt: '2026-10-05',
+      deletedAt: null,
+    });
+  });
+});

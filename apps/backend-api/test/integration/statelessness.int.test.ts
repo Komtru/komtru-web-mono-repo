@@ -45,8 +45,7 @@ describe.runIf(infraEnabled)('stateless processes', () => {
               params: z.object({ id: z.string().regex(/^\d+$/) }),
               response: z.object({ queued: z.boolean() }),
             },
-            handler: async ({ params }) => {
-              const { id } = params as { id: string };
+            handler: async ({ params: { id } }) => {
               await ctx?.queues.producer(queueName).add('echo', { id: Number(id) });
               return { queued: true };
             },
@@ -101,8 +100,7 @@ describe.runIf(infraEnabled)('stateless processes', () => {
               body: z.object({ note: z.string() }),
               response: z.object({ by: z.string(), id: z.string() }),
             },
-            handler: ({ body }) => {
-              const { note } = body as { note: string };
+            handler: ({ body: { note } }) => {
               handled.push(`${role}:${note}`);
               return Promise.resolve({ by: role, id: randomUUID() });
             },

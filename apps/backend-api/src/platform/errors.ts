@@ -62,7 +62,15 @@ export const notFound: RequestHandler = () => {
 };
 
 export function errorHandler(logger: Logger, onUnexpected: (error: unknown) => void): ErrorRequestHandler {
-  return (error: unknown, req, res, _next) => {
+  return (error: unknown, req, res, next) => {
+    // A handler may already have written (a stream, a redirect). Writing again throws
+    // ERR_HTTP_HEADERS_SENT; express's default handler closes the socket instead.
+    if (res.headersSent) {
+      logger.error({ err: error, requestId: req.requestId }, 'error after the response started');
+      onUnexpected(error);
+      next(error);
+      return;
+    }
     if (error instanceof ApiError) {
       sendProblem(res, toProblem(error));
       return;

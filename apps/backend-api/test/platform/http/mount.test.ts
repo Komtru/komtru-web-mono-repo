@@ -161,7 +161,7 @@ describe('mountRoutes', () => {
           path: '/trades/:id',
           scope: 'CONSUMER',
           summary: 'One',
-          schema: { response: item },
+          schema: { params: z.object({ id: z.uuid() }), response: item },
           handler: () => Promise.resolve({ id: 'not-a-uuid' }),
         }),
       ],

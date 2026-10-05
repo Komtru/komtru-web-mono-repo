@@ -21,23 +21,37 @@ export interface RateLimitOptions {
   keyPrefix?: string;
 }
 
+/** `identifier` needs the parsed body, so it is charged after validation; the rest go before it. */
+const PHASE: Record<'ip' | 'user' | 'identifier', 'before-parse' | 'after-parse'> = {
+  ip: 'before-parse',
+  user: 'before-parse',
+  identifier: 'after-parse',
+};
+
 const subjectFor = (
   kind: 'ip' | 'user' | 'identifier',
   spec: RateLimitSpec,
   req: Request,
   actor: string,
-  parsed: { body: unknown; query: unknown; params: unknown },
+  parsed?: { body: unknown; query: unknown; params: unknown },
 ): string | undefined => {
   if (kind === 'ip') return req.ip;
   if (kind === 'user') return actor === 'anon' ? undefined : actor;
-  return spec.identifierFrom?.(parsed)?.toLowerCase();
+  return parsed ? spec.identifierFrom?.(parsed)?.toLowerCase() : undefined;
 };
 
 const retryAfterSeconds = (msBeforeNext: number): number => Math.max(1, Math.ceil(msBeforeNext / 1000));
 
+/**
+ * With more than one key, the headers must describe the *binding* one — the one with the least left
+ * — not whichever was charged last.
+ */
 const setHeaders = (res: Response, spec: RateLimitSpec, result: RateLimiterRes): void => {
+  const remaining = Math.max(0, result.remainingPoints);
+  const previous = res.getHeader('RateLimit-Remaining');
+  if (previous !== undefined && Number(previous) <= remaining) return;
   res.setHeader('RateLimit-Limit', spec.points);
-  res.setHeader('RateLimit-Remaining', Math.max(0, result.remainingPoints));
+  res.setHeader('RateLimit-Remaining', remaining);
   res.setHeader('RateLimit-Reset', retryAfterSeconds(result.msBeforeNext));
 };
 
@@ -64,11 +78,12 @@ export function createRateLimitGate({
     return limiter;
   };
 
-  return async ({ route, req, res, actor, parsed }) => {
+  return async ({ route, req, res, actor, parsed, phase }) => {
     const spec = route.rateLimit;
     if (!spec) return;
 
     for (const kind of spec.by) {
+      if (PHASE[kind] !== phase) continue;
       const subject = subjectFor(kind, spec, req, actor, parsed);
       // Nothing to key on (an anonymous caller on a per-user limit, a body with no identifier):
       // skip this key rather than collapsing every such caller into one shared bucket.
@@ -92,6 +107,8 @@ export function createRateLimitGate({
         // Redis is unreachable or erroring. Refusing is the safe answer on the routes that declare
         // a limit: they are the ones worth brute-forcing.
         logger.error({ err: error, route: routeLabel(route), kind }, 'http: rate limiter unavailable');
+        // Something to back off on, so a retrying client or provider webhook is not left guessing.
+        res.setHeader('Retry-After', 1);
         throw new ApiError(503, 'INTERNAL', 'Service temporarily unavailable', 'Try again shortly');
       }
     }

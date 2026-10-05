@@ -3,6 +3,7 @@ CREATE TABLE "platform"."idempotency_keys" (
 	"key" text NOT NULL,
 	"actor" text NOT NULL,
 	"request_hash" text NOT NULL,
+	"owner_id" uuid NOT NULL,
 	"method" text NOT NULL,
 	"path" text NOT NULL,
 	"status" integer,

@@ -1,5 +1,5 @@
 {
-  "id": "5dd52e62-b0c7-49a4-8149-679f9da075e2",
+  "id": "7d8a2c5b-4d62-46cd-931d-30db18d66c19",
   "prevId": "91d39172-5bc2-4e55-bb5c-1941fbf009b2",
   "version": "7",
   "dialect": "postgresql",
@@ -29,6 +29,12 @@
         "request_hash": {
           "name": "request_hash",
           "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "owner_id": {
+          "name": "owner_id",
+          "type": "uuid",
           "primaryKey": false,
           "notNull": true
         },

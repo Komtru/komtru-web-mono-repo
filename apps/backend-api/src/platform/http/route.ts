@@ -8,6 +8,7 @@
 import type { SessionScope } from '@komtru/shared-types';
 import type { Request, Response } from 'express';
 import { z } from 'zod';
+import type { CursorKey } from './paginate.js';
 
 export const HTTP_METHODS = ['get', 'post', 'put', 'patch', 'delete'] as const;
 export type HttpMethod = (typeof HTTP_METHODS)[number];
@@ -37,10 +38,34 @@ export interface RouteContext {
   params: unknown;
   query: unknown;
   body: unknown;
+  /** The decoded cursor on a cursor-paginated route; the platform already rejected a bad one. */
+  cursor?: CursorKey;
   /** `user:<uuid>` or `anon` until sessions land (T-030). */
   actor: string;
   req: Request;
   res: Response;
+}
+
+/** What a handler sees once its own schemas are taken into account. */
+export interface TypedRouteContext<P extends z.ZodType, Q extends z.ZodType, B extends z.ZodType> {
+  params: z.output<P>;
+  query: z.output<Q> & { limit?: number; page?: number; cursor?: string };
+  body: z.output<B>;
+  cursor?: CursorKey;
+  actor: string;
+  req: Request;
+  res: Response;
+}
+
+/** A route as its author writes it: schemas and handler types line up, with no casts at the call site. */
+export interface TypedRoute<
+  P extends z.ZodType = z.ZodUnknown,
+  Q extends z.ZodType = z.ZodUnknown,
+  B extends z.ZodType = z.ZodUnknown,
+  R extends z.ZodType = z.ZodType,
+> extends Omit<RouteDefinition, 'schema' | 'handler'> {
+  schema: { params?: P; query?: Q; body?: B; response: R };
+  handler: (ctx: TypedRouteContext<P, Q, B>) => Promise<z.input<R>>;
 }
 
 export interface RouteDefinition {
@@ -60,28 +85,60 @@ export interface RouteDefinition {
   /** Required on any route returning a collection. */
   paginated?: 'cursor' | 'page';
   rateLimit?: RateLimitSpec;
-  /** Defaults to 200, or 201 on a POST that declares one. */
+  /** Defaults to 200; a route that creates something declares 201 itself. */
   status?: number;
   schema: RouteSchemas;
   handler: (ctx: RouteContext) => Promise<unknown>;
 }
 
-export const defineRoute = (route: RouteDefinition): RouteDefinition => route;
+/**
+ * Infers the handler's parameter types from the route's own schemas, then erases them: the registry
+ * stores one uniform `RouteDefinition`, while the author gets `ctx.params.id` typed from the schema
+ * instead of a cast that quietly rots when the schema changes.
+ */
+export const defineRoute = <
+  P extends z.ZodType,
+  Q extends z.ZodType,
+  B extends z.ZodType,
+  R extends z.ZodType,
+>(
+  route: TypedRoute<P, Q, B, R>,
+): RouteDefinition => route as unknown as RouteDefinition;
 
 export const routeLabel = (route: RouteDefinition): string => `${route.method.toUpperCase()} ${route.path}`;
 
 /**
+ * Unwraps the wrappers a schema can be dressed in — `.transform()`, `.optional()`, `.readonly()`,
+ * `z.lazy()` and friends — so a collection stays recognisable however it is spelled. Without this,
+ * `paginatedSchema(x).transform(...)` would slip past the pagination invariant.
+ */
+const unwrap = (schema: z.ZodType, depth = 0): z.ZodType[] => {
+  if (depth > 10) return [schema];
+  const def = schema.def as {
+    innerType?: z.ZodType;
+    in?: z.ZodType;
+    getter?: () => z.ZodType;
+    options?: z.ZodType[];
+  };
+  if (def.options) return def.options.flatMap((option) => unwrap(option, depth + 1));
+  const inner = def.innerType ?? def.in ?? (typeof def.getter === 'function' ? def.getter() : undefined);
+  return inner ? unwrap(inner, depth + 1) : [schema];
+};
+
+/**
  * A response is a collection if it is an array, or an object with an `items` array — which is what
  * `paginatedSchema` and `pagedSchema` produce, so a route that uses them is recognised without
- * having to announce itself.
+ * having to announce itself. A union counts if any branch does.
  */
 export function isCollectionSchema(schema: z.ZodType): boolean {
-  if (schema instanceof z.ZodArray) return true;
-  if (schema instanceof z.ZodObject) {
-    const items: unknown = (schema.shape as Record<string, unknown>).items;
-    return items instanceof z.ZodArray;
-  }
-  return false;
+  return unwrap(schema).some((candidate) => {
+    if (candidate instanceof z.ZodArray) return true;
+    if (candidate instanceof z.ZodObject) {
+      const items: unknown = (candidate.shape as Record<string, unknown>).items;
+      return items !== undefined && unwrap(items as z.ZodType).some((i) => i instanceof z.ZodArray);
+    }
+    return false;
+  });
 }
 
 /** Throws one error naming every route that breaks a rule, so a boot failure is fixed in one pass. */
@@ -108,6 +165,9 @@ export function assertRouteInvariants(routes: RouteDefinition[]): void {
       problems.push(
         `${label}: mutating routes must decide retryable: true (idempotency key) or false (a repeat is harmless)`,
       );
+    }
+    if (route.path.includes(':') && !route.schema.params) {
+      problems.push(`${label}: the path has parameters, so it needs a params schema`);
     }
     if (route.rateLimit?.by.includes('identifier') && !route.rateLimit.identifierFrom) {
       problems.push(`${label}: rate limits by identifier but provides no identifierFrom`);

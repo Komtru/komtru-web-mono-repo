@@ -54,8 +54,7 @@ describe.runIf(infraEnabled)('domain events end to end', () => {
               params: z.object({ id: z.uuid() }),
               response: z.object({ published: z.boolean() }),
             },
-            handler: async ({ params }) => {
-              const { id } = params as { id: string };
+            handler: async ({ params: { id } }) => {
               await context?.db.transaction((tx) =>
                 publish(tx, probeCreated, {
                   payload: { probeId: id },

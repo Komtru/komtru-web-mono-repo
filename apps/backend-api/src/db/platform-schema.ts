@@ -78,8 +78,14 @@ export const idempotencyKeys = platform.table(
     key: text('key').notNull(),
     /** `user:<uuid>` once sessions exist (T-030), `anon` until then. */
     actor: text('actor').notNull(),
-    /** Hash of method, path and body: the same key with a different request is a client bug. */
+    /** Hash of method, path, query and body: the same key with a different request is a client bug. */
     requestHash: text('request_hash').notNull(),
+    /**
+     * Who is currently running this request. A takeover installs a new id, and the owner's writes
+     * are fenced on it, so an attempt that was superseded can neither store its response over the
+     * new owner's nor delete the new owner's claim.
+     */
+    ownerId: uuid('owner_id').notNull(),
     method: text('method').notNull(),
     path: text('path').notNull(),
     status: integer('status'),

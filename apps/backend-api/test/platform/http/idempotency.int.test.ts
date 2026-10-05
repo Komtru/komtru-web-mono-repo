@@ -8,6 +8,7 @@ import { loadConfig } from '../../../src/config/env.js';
 import {
   createIdempotencyGate,
   IDEMPOTENCY_HEADER,
+  pruneIdempotencyKeys,
   REPLAYED_HEADER,
 } from '../../../src/platform/http/idempotency.js';
 import { mountRoutes } from '../../../src/platform/http/mount.js';
@@ -139,29 +140,71 @@ describe.runIf(infraEnabled)('idempotency', () => {
     await first;
   }, 30_000);
 
-  it('takes over a key abandoned by a process that died mid-request', async () => {
-    const handler = vi.fn(() => Promise.resolve({ id: randomUUID() }));
-    const app = buildApp(handler, { staleInFlightMs: 50 });
+  it('takes over a key whose owner died, once its lease has lapsed', async () => {
+    // The dead owner's attempt never returns; the one that takes over does.
+    let release!: () => void;
+    let calls = 0;
+    const handler = vi.fn(async () => {
+      calls += 1;
+      if (calls === 1) await new Promise<void>((resolve) => (release = resolve));
+      return { id: randomUUID() };
+    });
+    const app = buildApp(handler, { staleInFlightMs: 10, leaseTtlMs: 60_000, lockWaitMs: 100 });
     const key = randomUUID();
-    // A row claimed by a process that never came back: no status, no completion.
-    await t.app().query(
-      `INSERT INTO platform.idempotency_keys (scope, key, actor, request_hash, method, path, created_at)
-       VALUES ('CONSUMER', $1, 'anon', 'whatever-it-was', 'POST', '/trades', now() - interval '1 hour')`,
-      [key],
-    );
+    const send = () =>
+      request(app).post('/v1/trades').set(IDEMPOTENCY_HEADER, key).send({ amountKobo: 1000 });
 
-    const response = await request(app)
-      .post('/v1/trades')
-      .set(IDEMPOTENCY_HEADER, key)
-      .send({ amountKobo: 1000 })
-      .expect(201);
+    const first = send().then((r) => r);
+    await vi.waitFor(() => expect(handler).toHaveBeenCalledTimes(1));
 
-    expect(handler).toHaveBeenCalledTimes(1);
-    expect(response.headers[REPLAYED_HEADER.toLowerCase()]).toBeUndefined();
+    // The owner's process is gone: its lease expires and its claim ages out. (Here: drop the lease
+    // and age the row, which is what Redis and the clock would do on their own.)
+    await redis.del(`idem:CONSUMER:anon:${key}`);
+    await t
+      .app()
+      .query(`UPDATE platform.idempotency_keys SET created_at = now() - interval '1 hour' WHERE key = $1`, [
+        key,
+      ]);
+
+    const taken = await send().expect(201);
+    expect(handler).toHaveBeenCalledTimes(2);
+    expect(taken.headers[REPLAYED_HEADER.toLowerCase()]).toBeUndefined();
+
     const { rows: stored } = await rows();
     expect(stored).toHaveLength(1);
     expect(stored[0]?.status).toBe(201);
-  });
+
+    release();
+    await first;
+  }, 30_000);
+
+  it('refuses a different request under a key that is still in flight', async () => {
+    let release!: () => void;
+    const handler = vi.fn(async () => {
+      await new Promise<void>((resolve) => (release = resolve));
+      return { id: randomUUID() };
+    });
+    const app = buildApp(handler, { lockWaitMs: 100 });
+    const key = randomUUID();
+
+    const first = request(app)
+      .post('/v1/trades')
+      .set(IDEMPOTENCY_HEADER, key)
+      .send({ amountKobo: 1000 })
+      .then((r) => r);
+    await vi.waitFor(() => expect(handler).toHaveBeenCalled());
+
+    const other = await request(app)
+      .post('/v1/trades')
+      .set(IDEMPOTENCY_HEADER, key)
+      .send({ amountKobo: 2000 })
+      .expect(422);
+    expect(other.body).toMatchObject({ code: 'IDEMPOTENCY_KEY_REUSED' });
+    expect(handler).toHaveBeenCalledTimes(1);
+
+    release();
+    await first;
+  }, 30_000);
 
   it('keeps a failed request retryable rather than storing the failure', async () => {
     const handler = vi
@@ -180,6 +223,125 @@ describe.runIf(infraEnabled)('idempotency', () => {
 
     expect(handler).toHaveBeenCalledTimes(2);
     expect(retry.headers[REPLAYED_HEADER.toLowerCase()]).toBeUndefined();
+  });
+
+  it('does not take over a handler that is merely slow, however long it runs', async () => {
+    // The lease, renewed while the handler works, is what tells a slow owner from a dead one.
+    let release!: () => void;
+    const handler = vi.fn(async () => {
+      await new Promise<void>((resolve) => (release = resolve));
+      return { id: randomUUID() };
+    });
+    // Stale window far below the handler's runtime: only the live lease prevents a takeover.
+    const app = buildApp(handler, { staleInFlightMs: 10, leaseTtlMs: 2_000, lockWaitMs: 100 });
+    const key = randomUUID();
+    const send = () =>
+      request(app).post('/v1/trades').set(IDEMPOTENCY_HEADER, key).send({ amountKobo: 1000 });
+
+    const first = send().then((r) => r);
+    await vi.waitFor(() => expect(handler).toHaveBeenCalled());
+    await new Promise((resolve) => setTimeout(resolve, 150));
+
+    const second = await send().expect(409);
+    expect(second.body).toMatchObject({ code: 'CONFLICT' });
+    expect(handler).toHaveBeenCalledTimes(1);
+
+    release();
+    await first;
+  }, 30_000);
+
+  it('does not let a superseded attempt overwrite the owner response', async () => {
+    const handler = vi.fn(() => Promise.resolve({ id: 'superseded' }));
+    const app = buildApp(handler);
+    const key = randomUUID();
+    // A row owned by someone else entirely: this attempt must not be able to complete it.
+    await t.app().query(
+      `INSERT INTO platform.idempotency_keys (scope, key, actor, request_hash, owner_id, method, path, status, response, completed_at)
+       VALUES ('CONSUMER', $1, 'anon', 'some-other-hash', gen_random_uuid(), 'POST', '/trades', 201, '{"id":"the-owner"}'::jsonb, now())`,
+      [key],
+    );
+
+    // Same key, different body: the stored record stands and the client is told so.
+    await request(app).post('/v1/trades').set(IDEMPOTENCY_HEADER, key).send({ amountKobo: 9999 }).expect(422);
+
+    const { rows } = await t
+      .app()
+      .query<{ response: { id: string } }>('SELECT response FROM platform.idempotency_keys');
+    expect(rows[0]?.response).toEqual({ id: 'the-owner' });
+    expect(handler).not.toHaveBeenCalled();
+  });
+
+  it('runs again once a stored record is past its lifetime', async () => {
+    const handler = vi.fn(() => Promise.resolve({ id: randomUUID() }));
+    const app = buildApp(handler, { ttlHours: 0 });
+    const key = randomUUID();
+
+    const first = await request(app)
+      .post('/v1/trades')
+      .set(IDEMPOTENCY_HEADER, key)
+      .send({ amountKobo: 1000 })
+      .expect(201);
+    const second = await request(app)
+      .post('/v1/trades')
+      .set(IDEMPOTENCY_HEADER, key)
+      .send({ amountKobo: 1000 })
+      .expect(201);
+
+    expect(handler).toHaveBeenCalledTimes(2);
+    expect(second.body).not.toEqual(first.body);
+    expect(second.headers[REPLAYED_HEADER.toLowerCase()]).toBeUndefined();
+  });
+
+  it('counts a different query string as a different request', async () => {
+    const handler = vi.fn(() => Promise.resolve({ id: randomUUID() }));
+    const app = buildApp(handler);
+    const key = randomUUID();
+
+    await request(app)
+      .post('/v1/trades?dryRun=true')
+      .set(IDEMPOTENCY_HEADER, key)
+      .send({ amountKobo: 1000 })
+      .expect(201);
+    await request(app)
+      .post('/v1/trades?dryRun=false')
+      .set(IDEMPOTENCY_HEADER, key)
+      .send({ amountKobo: 1000 })
+      .expect(422);
+  });
+
+  it.each(['short', 'has a space in it', 'x'.repeat(256)])('refuses the unusable key %j', async (key) => {
+    const handler = vi.fn(() => Promise.resolve({ id: randomUUID() }));
+    const app = buildApp(handler);
+    const response = await request(app)
+      .post('/v1/trades')
+      .set(IDEMPOTENCY_HEADER, key)
+      .send({ amountKobo: 1000 })
+      .expect(400);
+    expect(response.body).toMatchObject({ code: 'VALIDATION_FAILED' });
+    expect(handler).not.toHaveBeenCalled();
+  });
+
+  it('prunes records past their lifetime so the table stays bounded', async () => {
+    const handler = vi.fn(() => Promise.resolve({ id: randomUUID() }));
+    const app = buildApp(handler);
+    await request(app)
+      .post('/v1/trades')
+      .set(IDEMPOTENCY_HEADER, randomUUID())
+      .send({ amountKobo: 1000 })
+      .expect(201);
+    await request(app)
+      .post('/v1/trades')
+      .set(IDEMPOTENCY_HEADER, randomUUID())
+      .send({ amountKobo: 1000 })
+      .expect(201);
+    await t
+      .app()
+      .query(
+        `UPDATE platform.idempotency_keys SET created_at = now() - interval '2 days' WHERE key = (SELECT min(key) FROM platform.idempotency_keys)`,
+      );
+
+    expect(await pruneIdempotencyKeys(t.db(), 24)).toBe(1);
+    expect((await rows()).rows).toHaveLength(1);
   });
 
   it('does nothing when the client sends no key', async () => {

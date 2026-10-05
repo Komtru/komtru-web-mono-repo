@@ -18,8 +18,8 @@ describe.runIf(infraEnabled)('platform.idempotency_keys', () => {
 
   const claim = (actor = 'anon', key = 'key-1', hash = 'hash-1') =>
     t.app().query(
-      `INSERT INTO platform.idempotency_keys (scope, key, actor, request_hash, method, path)
-       VALUES ('CONSUMER', $1, $2, $3, 'POST', '/v1/trades')`,
+      `INSERT INTO platform.idempotency_keys (scope, key, actor, request_hash, owner_id, method, path)
+       VALUES ('CONSUMER', $1, $2, $3, gen_random_uuid(), 'POST', '/v1/trades')`,
       [key, actor, hash],
     );
 

@@ -33,9 +33,21 @@ describe('isCollectionSchema', () => {
     ['a cursor page', paginatedSchema(item)],
     ['a numbered page', pagedSchema(item)],
     ['a bare array', z.array(item)],
-  ])('is true for %s', (_label, schema) => expect(isCollectionSchema(schema)).toBe(true));
+    // A collection must stay recognisable however it is dressed, or the pagination invariant is
+    // one `.transform()` away from being optional.
+    ['a transformed page', paginatedSchema(item).transform((page) => page)],
+    ['a readonly page', paginatedSchema(item).readonly()],
+    ['a lazy page', z.lazy(() => paginatedSchema(item))],
+    ['a union with a page in it', z.union([item, paginatedSchema(item)])],
+    ['a transformed array', z.array(item).transform((rows) => rows)],
+    ['a page whose items are lazy', z.object({ items: z.lazy(() => z.array(item)), nextCursor: z.null() })],
+  ])('is true for %s', (_label, schema) => expect(isCollectionSchema(schema as z.ZodType)).toBe(true));
 
-  it('is false for a single resource', () => expect(isCollectionSchema(item)).toBe(false));
+  it.each([
+    ['a single resource', item],
+    ['a transformed single resource', item.transform((one) => one)],
+    ['an object with a non-array items field', z.object({ items: z.string() })],
+  ])('is false for %s', (_label, schema) => expect(isCollectionSchema(schema as z.ZodType)).toBe(false));
 });
 
 describe('assertRouteInvariants', () => {
@@ -64,6 +76,12 @@ describe('assertRouteInvariants', () => {
     expect(() =>
       assertRouteInvariants([postRoute({ retryable: true }), getCollection({ paginated: 'cursor' })]),
     ).not.toThrow();
+  });
+
+  it('rejects a path with parameters and no params schema', () => {
+    expect(() => assertRouteInvariants([postRoute({ retryable: true, path: '/trades/:id/offers' })])).toThrow(
+      /needs a params schema/,
+    );
   });
 
   it('rejects a path that does not start with a slash', () => {
