@@ -113,6 +113,13 @@
       "when": 1791229390662,
       "tag": "0015_identity_desc_indexes",
       "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1791237814008,
+      "tag": "0016_ledger_core",
+      "breakpoints": true
     }
   ]
 }
