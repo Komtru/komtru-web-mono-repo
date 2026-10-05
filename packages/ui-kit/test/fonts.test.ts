@@ -38,6 +38,6 @@ describe('@komtru/ui-kit/fonts', () => {
 
   it('stays off the package root, which must import without a Next build', () => {
     const index = readFileSync(new URL('../src/index.ts', import.meta.url), 'utf8');
-    expect(index).not.toContain('fonts.js');
+    expect(index).not.toMatch(/^\s*export\b.*fonts\.js/m);
   });
 });

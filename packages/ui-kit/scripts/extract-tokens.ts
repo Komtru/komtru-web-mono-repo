@@ -5,7 +5,8 @@ import { fileURLToPath } from 'node:url';
 // repo from them. Nothing downstream may type a colour, a spacing step or a shadow by hand: the
 // HTML is the design system, and `test/tokens.test.ts` re-parses it to prove these files still agree.
 
-const REFERENCE_FILE = 'Komtru — UI Screens Living Master File.html';
+/** The reference's file name, so tests can resolve it from their own location. */
+export const REFERENCE_FILE = 'Komtru — UI Screens Living Master File.html';
 
 /** The reference HTML, resolved from this package rather than the caller's working directory. */
 export const REFERENCE_HTML = new URL(`../../../docs/design-reference/${REFERENCE_FILE}`, import.meta.url);
