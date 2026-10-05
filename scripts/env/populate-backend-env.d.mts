@@ -1,0 +1,7 @@
+export declare const NEW_DATABASE: string;
+export declare function parseEnv(text: string): Record<string, string>;
+export declare function buildBackendEnv(
+  sourceText: string,
+  options: { target: 'local' | 'rds' },
+): { text: string; names: string[] };
+export declare function defaultSecretsSource(cwd?: string): string;
