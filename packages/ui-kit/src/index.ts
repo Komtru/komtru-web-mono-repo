@@ -3,3 +3,4 @@
 export * from './brand/index.js';
 export * from './primitives/index.js';
 export * from './tokens.js';
+export * from './trustops/index.js';
