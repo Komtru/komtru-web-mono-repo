@@ -383,7 +383,17 @@ function hasVariant(className: string): boolean {
 }
 
 /** `.text-\[13\.5px\]` and `text-[13.5px]` name the same utility. */
-const unescape = (selector: string): string => selector.replace(/\\/g, '');
+export const unescape = (selector: string): string => selector.replace(/\\/g, '');
+
+/**
+ * The stylesheet the real preset emits for a list of candidates, variants included. Separate from
+ * `compiledDeclarations` because `responsive-css.ts` needs the at-rules the declaration-level
+ * reader throws away — a `lg:` utility means nothing without the `@media` it was wrapped in.
+ */
+export async function compileUtilities(classNames: readonly string[]): Promise<string> {
+  const build = await compiler();
+  return build([...classNames]);
+}
 
 /**
  * What a list of Tailwind classes actually computes to. Variant classes (`focus-visible:…`,
@@ -392,8 +402,7 @@ const unescape = (selector: string): string => selector.replace(/\\/g, '');
  */
 export async function compiledDeclarations(classNames: string[]): Promise<Map<string, string>> {
   const utilities = classNames.filter((name) => !hasVariant(name));
-  const build = await compiler();
-  const css = build(utilities);
+  const css = await compileUtilities(utilities);
   const byUtility = new Map<string, Map<string, string>>();
   const themeVars = new Map<string, string>();
   for (const rule of parseRules(css, ['layer', 'supports'])) {
