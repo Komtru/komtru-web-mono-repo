@@ -28,6 +28,13 @@ export const PROBLEM_CODES = [
   'ADDRESS_REQUIRED',
   'PARK_NOT_AVAILABLE_IN_CITY',
   'PAYMENT_PROVIDER_UNAVAILABLE',
+  // T-040. A file M20 D4 tombstoned answers 410 and must stay distinguishable from "not yours",
+  // which answers 404 on purpose so the endpoint is not an existence oracle. A client holding a
+  // soft file_ref_id branches on this to show "removed" rather than "sign in again".
+  'FILE_TOMBSTONED',
+  // Every storage account in a pool is at its quota, so the upload fails closed (M20 D6). Capacity,
+  // not a bug: the same reason PAYMENT_PROVIDER_UNAVAILABLE is not INTERNAL.
+  'FILE_STORAGE_UNAVAILABLE',
 ] as const;
 
 export const problemCodeSchema = z.enum(PROBLEM_CODES);
