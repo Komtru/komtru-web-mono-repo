@@ -9,6 +9,8 @@ import { createLogger } from '../../../../src/platform/logger.js';
 import { mountRoutes } from '../../../../src/platform/http/mount.js';
 import { notifyRoutes } from '../../../../src/modules/notify/http/routes.js';
 import { infraEnabled, testRedisUrl } from '../../../support/db-urls.js';
+import { ANONYMOUS_ACTOR, testActor } from '../../../support/actors.js';
+import type { Actor } from '../../../../src/platform/http/principal.js';
 import { useTestDatabase } from '../../../support/db.js';
 import { insertNotification, insertUser } from '../support.js';
 
@@ -43,7 +45,7 @@ const logger = createLogger(config);
 describe.runIf(infraEnabled)('notify routes', () => {
   const t = useTestDatabase();
   let userId: string;
-  let caller: string;
+  let caller: Actor;
 
   /** `caller` is read at request time, so one app serves the anonymous and the signed-in cases. */
   const app = (): Express =>
@@ -52,7 +54,7 @@ describe.runIf(infraEnabled)('notify routes', () => {
       logger,
       mountV1: mountRoutes(
         notifyRoutes(() => t.db()),
-        { logger, resolveActor: () => caller },
+        { logger, resolveActor: () => Promise.resolve(caller) },
       ),
     });
 
@@ -74,12 +76,12 @@ describe.runIf(infraEnabled)('notify routes', () => {
 
   beforeEach(async () => {
     userId = await insertUser(t.app());
-    caller = `user:${userId}`;
+    caller = testActor(userId);
   });
 
   describe('without a session', () => {
     beforeEach(() => {
-      caller = 'anon';
+      caller = ANONYMOUS_ACTOR;
     });
 
     it.each([

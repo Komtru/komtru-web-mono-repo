@@ -11,6 +11,7 @@ import { createLogger } from '../../../../src/platform/logger.js';
 import { loadConfig } from '../../../../src/config/env.js';
 import { mountRoutes } from '../../../../src/platform/http/mount.js';
 import { infraEnabled, testRedisUrl } from '../../../support/db-urls.js';
+import { testActor } from '../../../support/actors.js';
 import { useTestDatabase } from '../../../support/db.js';
 import { insertUser } from '../infrastructure/postgres/support.js';
 
@@ -30,7 +31,7 @@ describe.runIf(infraEnabled)('GET /me/username/history', () => {
     const app = express();
     const router = express.Router();
     const history = usernameRoutes({ db: t.db() }).filter((r) => r.path === '/me/username/history');
-    mountRoutes(history, { logger, resolveActor: () => `user:${userId}` })(router);
+    mountRoutes(history, { logger, resolveActor: () => Promise.resolve(testActor(userId)) })(router);
     app.use('/v1', router);
     return app;
   };

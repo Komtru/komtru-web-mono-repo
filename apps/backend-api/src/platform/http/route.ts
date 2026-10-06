@@ -9,6 +9,7 @@ import type { SessionScope } from '@komtru/shared-types';
 import type { Request, Response } from 'express';
 import { z } from 'zod';
 import type { CursorKey } from './paginate.js';
+import type { Actor } from './principal.js';
 
 export const HTTP_METHODS = ['get', 'post', 'put', 'patch', 'delete'] as const;
 export type HttpMethod = (typeof HTTP_METHODS)[number];
@@ -40,8 +41,11 @@ export interface RouteContext {
   body: unknown;
   /** The decoded cursor on a cursor-paginated route; the platform already rejected a bad one. */
   cursor?: CursorKey;
-  /** `user:<uuid>` or `anon` until sessions land (T-030). */
-  actor: string;
+  /**
+   * The caller, re-resolved from the database this request (T-031). `actor.principal` is null on a
+   * PUBLIC route with no credential; on any scoped route mount.ts has already proved it is not.
+   */
+  actor: Actor;
   req: Request;
   res: Response;
 }
@@ -52,7 +56,7 @@ export interface TypedRouteContext<P extends z.ZodType, Q extends z.ZodType, B e
   query: z.output<Q> & { limit?: number; page?: number; cursor?: string };
   body: z.output<B>;
   cursor?: CursorKey;
-  actor: string;
+  actor: Actor;
   req: Request;
   res: Response;
 }
@@ -75,7 +79,7 @@ export interface RouteDefinition {
   scope: RouteScope;
   /** One line, for the route table and the generated docs. */
   summary: string;
-  /** RBAC permission from the catalogue (T-033); checked once sessions exist. */
+  /** RBAC permission from the catalogue (T-037). mountRoutes refuses the request without it. */
   permission?: string;
   /**
    * Required on every mutating route: `true` adds the idempotency middleware, `false` is a
@@ -171,6 +175,13 @@ export function assertRouteInvariants(routes: RouteDefinition[]): void {
     }
     if (route.rateLimit?.by.includes('identifier') && !route.rateLimit.identifierFrom) {
       problems.push(`${label}: rate limits by identifier but provides no identifierFrom`);
+    }
+    // A permission on a route anyone may call reads as protection and is never checked, which is
+    // the worst of both: the same reasoning as the idempotency and rate-limit gates above.
+    if (route.scope === 'PUBLIC' && route.permission) {
+      problems.push(
+        `${label}: declares permission "${route.permission}" on a PUBLIC route, where it can never be checked`,
+      );
     }
   }
 

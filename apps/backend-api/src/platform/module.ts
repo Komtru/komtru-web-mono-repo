@@ -1,12 +1,13 @@
 // A domain module is a folder under src/modules/<name>/ whose index.ts exports one KomtruModule.
 // The app mounts every module's routes under /v1 and runs its lifecycle hooks; modules talk to each
 // other only through their index.ts (enforced by eslint-rules/module-boundaries.mjs).
-import type { Router } from 'express';
+import type { Request, Router } from 'express';
 import type { Redis } from 'ioredis';
 import type { AppConfig } from '../config/env.js';
 import type { Db } from '../db/index.js';
 import type { Logger } from './logger.js';
 import { mountRoutes, type MountDeps } from './http/mount.js';
+import type { Actor } from './http/principal.js';
 import type { RouteDefinition } from './http/route.js';
 import type { EventBus } from './events/bus.js';
 import type { InProcessEmitter } from './events/emitter.js';
@@ -59,6 +60,12 @@ export interface KomtruModule {
    * re-runs them alone. Must be idempotent: it runs on every deploy.
    */
   seed?: (db: Db) => Promise<void>;
+  /**
+   * Who is calling. At most one module may answer this — identity does (T-031) — and `mountModules`
+   * wires it into every route's scope and permission check. A registry with no such module leaves
+   * every caller anonymous, which is what a process serving only PUBLIC routes wants.
+   */
+  resolveActor?: (req: Request) => Promise<Actor>;
   /** Runs at process start, in registry order (e.g. subscribing to events). */
   start?: (ctx: ModuleContext) => Promise<void>;
   /** Runs at shutdown, in reverse registry order. */
@@ -78,9 +85,18 @@ const assertUniqueNames = (modules: KomtruModule[]): void => {
 /** Returns the function createApp uses to mount every module's routes on /v1. */
 export function mountModules(modules: KomtruModule[], deps: MountDeps): (router: Router) => void {
   assertUniqueNames(modules);
+  const resolvers = modules.filter((module) => module.resolveActor !== undefined);
+  if (resolvers.length > 1) {
+    // Two answers to "who is calling" is not a merge conflict to resolve at runtime.
+    throw new Error(`more than one module resolves the actor: ${resolvers.map((m) => m.name).join(', ')}`);
+  }
+  const resolveActor = deps.resolveActor ?? resolvers[0]?.resolveActor;
   return mountRoutes(
     modules.flatMap((module) => module.routes ?? []),
-    deps,
+    {
+      ...deps,
+      ...(resolveActor ? { resolveActor } : {}),
+    },
   );
 }
 
@@ -101,7 +117,14 @@ export const moduleClosers = (modules: KomtruModule[]): Closer[] =>
  * A failure names the module. Without that the stack is a drizzle insert and a constraint name, and
  * the operator has to guess which module's catalogue drifted.
  */
-export async function runModuleSeeds(modules: KomtruModule[], db: Db): Promise<void> {
+/**
+ * A module reduced to its reference data. Seeding runs at migrate time, over the direct URL, with no
+ * Redis and no signing key — so it must not require a module built from a running process's
+ * connections.
+ */
+export type SeedableModule = Pick<KomtruModule, 'name' | 'seed'>;
+
+export async function runModuleSeeds(modules: SeedableModule[], db: Db): Promise<void> {
   for (const module of modules) {
     if (!module.seed) continue;
     try {

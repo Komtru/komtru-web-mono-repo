@@ -6,7 +6,7 @@
 // answer 401 to everyone. Declaring them now is what lets T-031 wire one thing rather than four.
 import { pagedSchema } from '@komtru/shared-types';
 import { z } from 'zod';
-import { ApiError } from '../../../platform/errors.js';
+import { requireUserId } from '../../../platform/http/principal.js';
 import { defineRoute, type RouteDefinition } from '../../../platform/http/route.js';
 import { USERNAME_MAX_LENGTH } from '../domain/username/policy.js';
 import {
@@ -45,11 +45,7 @@ const historyResponse = pagedSchema(
   }),
 );
 
-const requireUserId = (actor: string): string => {
-  const id = actor.startsWith('user:') ? actor.slice('user:'.length) : undefined;
-  if (!id) throw new ApiError(401, 'UNAUTHENTICATED', 'Sign in to manage your handle');
-  return id;
-};
+const MANAGE_HANDLE = 'Sign in to manage your handle';
 
 export function usernameRoutes(deps: UsernameServiceDeps): RouteDefinition[] {
   return [
@@ -67,7 +63,9 @@ export function usernameRoutes(deps: UsernameServiceDeps): RouteDefinition[] {
         response: availabilityResponse,
       },
       handler: async ({ query, actor }) => {
-        const forUserId = actor.startsWith('user:') ? actor.slice('user:'.length) : undefined;
+        // Optional here, unlike the routes below: availability is a PUBLIC lookup, and a signed-in
+        // caller only gets the extra "this one is already yours" answer.
+        const forUserId = actor.principal?.userId;
         return checkUsernameAvailability(deps, query.username, {
           ...(forUserId ? { forUserId } : {}),
         });
@@ -86,7 +84,7 @@ export function usernameRoutes(deps: UsernameServiceDeps): RouteDefinition[] {
       rateLimit: { points: 5, durationSeconds: 60, by: ['ip', 'user'] },
       schema: { body: z.object({ username: usernameInput }), response: usernameResponse },
       handler: async ({ body, actor }) =>
-        claimUsername(deps, { userId: requireUserId(actor), username: body.username }),
+        claimUsername(deps, { userId: requireUserId(actor, MANAGE_HANDLE), username: body.username }),
     }),
 
     defineRoute({
@@ -102,7 +100,7 @@ export function usernameRoutes(deps: UsernameServiceDeps): RouteDefinition[] {
       },
       handler: async ({ body, actor }) =>
         changeUsername(deps, {
-          userId: requireUserId(actor),
+          userId: requireUserId(actor, MANAGE_HANDLE),
           username: body.username,
           reason: body.reason,
         }),
@@ -119,7 +117,10 @@ export function usernameRoutes(deps: UsernameServiceDeps): RouteDefinition[] {
       // and it rejects a response longer than `limit` — so they have to reach the query, not just
       // the declaration.
       handler: async ({ actor, query }) =>
-        listUsernameHistory(deps, requireUserId(actor), { page: query.page, limit: query.limit }),
+        listUsernameHistory(deps, requireUserId(actor, MANAGE_HANDLE), {
+          page: query.page,
+          limit: query.limit,
+        }),
     }),
   ];
 }

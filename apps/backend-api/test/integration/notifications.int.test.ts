@@ -20,6 +20,7 @@ import { useTestDatabase, workerDatabase } from '../support/db.js';
 import { eventually } from '../support/eventually.js';
 import { startStubServer, type StubServer } from '../support/stub-server.js';
 import { createLogger } from '../../src/platform/logger.js';
+import { Redis } from 'ioredis';
 import { loadConfig } from '../../src/config/env.js';
 import { createQueueFactory } from '../../src/platform/queue/factory.js';
 import { insertUser, insertVerifiedPhone } from '../modules/notify/support.js';
@@ -144,6 +145,27 @@ describe.runIf(infraEnabled)('notifications end to end', () => {
     }
   };
 
+  /**
+   * The SMS queue as Redis actually holds it, for a timeout diagnostic: "waiting" means no worker
+   * took the job, "completed" with no provider hit means some other process's worker did.
+   */
+  const smsQueueState = async (): Promise<string> => {
+    const redis = new Redis(testRedisUrl(), { maxRetriesPerRequest: null });
+    try {
+      const key = (part: string) => `komtru:bull:notify.send-sms:${part}`;
+      const [wait, active, delayed, failed, completed] = await Promise.all([
+        redis.llen(key('wait')),
+        redis.llen(key('active')),
+        redis.zcard(key('delayed')),
+        redis.zcard(key('failed')),
+        redis.zcard(key('completed')),
+      ]);
+      return `wait=${String(wait)} active=${String(active)} delayed=${String(delayed)} failed=${String(failed)} completed=${String(completed)}`;
+    } finally {
+      await redis.quit().catch(() => redis.disconnect());
+    }
+  };
+
   const outboxTypes = async () => {
     const { rows } = await t
       .app()
@@ -159,8 +181,8 @@ describe.runIf(infraEnabled)('notifications end to end', () => {
     const userId = await insertUser(t.app());
     await insertVerifiedPhone(t.app(), userId, '+2348012345678');
 
-    const api = await startApi(env(), [publisher(), notify()]);
-    const worker = await startWorker(env(), [publisher(), notify()]);
+    const api = await startApi(env(), () => [publisher(), notify()]);
+    const worker = await startWorker(env(), () => [publisher(), notify()]);
     try {
       const { port } = api.server.address() as AddressInfo;
       const eventId = randomUUID();
@@ -208,13 +230,20 @@ describe.runIf(infraEnabled)('notifications end to end', () => {
     await insertVerifiedPhone(t.app(), userId, '+2348012345679');
 
     const failing = env({ NOTIFY_MAX_ATTEMPTS: '2' });
-    const api = await startApi(failing, [publisher(), notify()]);
-    const worker = await startWorker(failing, [publisher(), notify()]);
+    const api = await startApi(failing, () => [publisher(), notify()]);
+    const worker = await startWorker(failing, () => [publisher(), notify()]);
     try {
       const { port } = api.server.address() as AddressInfo;
       await fetch(`http://127.0.0.1:${String(port)}/v1/notices/${userId}`, { method: 'POST' });
 
-      await eventually(async () => (await statusOf(userId)).includes('DEAD_LETTERED'), 30_000);
+      await eventually(
+        async () => (await statusOf(userId)).includes('DEAD_LETTERED'),
+        30_000,
+        async () =>
+          `statuses=${JSON.stringify(await statusOf(userId))} outbox=${JSON.stringify(
+            await outboxTypes(),
+          )} providerHits=${String(stub?.hits.length ?? 0)} queue=${await smsQueueState()}`,
+      );
       expect(await outboxTypes()).toContain('notify.notification.dead_lettered');
       expect(stub.hits.length).toBeGreaterThanOrEqual(2);
     } finally {
@@ -235,8 +264,8 @@ describe.runIf(infraEnabled)('notifications end to end', () => {
       [userId],
     );
 
-    const api = await startApi(env(), [publisher(), notify()]);
-    const worker = await startWorker(env(), [publisher(), notify()]);
+    const api = await startApi(env(), () => [publisher(), notify()]);
+    const worker = await startWorker(env(), () => [publisher(), notify()]);
     try {
       const { port } = api.server.address() as AddressInfo;
       await fetch(`http://127.0.0.1:${String(port)}/v1/notices/${userId}`, { method: 'POST' });
@@ -257,8 +286,8 @@ describe.runIf(infraEnabled)('notifications end to end', () => {
     await insertVerifiedPhone(t.app(), userId, '+2348012345671');
 
     const dry = env({ NOTIFY_SMS_DRY_RUN: 'true' });
-    const api = await startApi(dry, [publisher(), notify()]);
-    const worker = await startWorker(dry, [publisher(), notify()]);
+    const api = await startApi(dry, () => [publisher(), notify()]);
+    const worker = await startWorker(dry, () => [publisher(), notify()]);
     try {
       const { port } = api.server.address() as AddressInfo;
       await fetch(`http://127.0.0.1:${String(port)}/v1/notices/${userId}`, { method: 'POST' });
@@ -286,7 +315,7 @@ describe.runIf(infraEnabled)('notifications end to end', () => {
     const userId = await insertUser(t.app());
     await insertVerifiedPhone(t.app(), userId, '+2348012345672');
 
-    const api = await startApi(env(), [publisher(), notify()]);
+    const api = await startApi(env(), () => [publisher(), notify()]);
     try {
       const { port } = api.server.address() as AddressInfo;
       await fetch(`http://127.0.0.1:${String(port)}/v1/notices/${userId}`, { method: 'POST' });

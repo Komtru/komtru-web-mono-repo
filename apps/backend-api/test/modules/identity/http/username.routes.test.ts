@@ -6,6 +6,7 @@ import { usernameRoutes } from '../../../../src/modules/identity/http/username.c
 import type { UsernameServiceDeps } from '../../../../src/modules/identity/services/username.service.js';
 import { ApiError } from '../../../../src/platform/errors.js';
 import { assertRouteInvariants, type HttpMethod } from '../../../../src/platform/http/route.js';
+import { ANONYMOUS_ACTOR, type Actor } from '../../../../src/platform/http/principal.js';
 
 const deps = { db: {} as UsernameServiceDeps['db'] };
 const routes = usernameRoutes(deps);
@@ -16,7 +17,7 @@ const find = (method: HttpMethod, path: string) => {
   return route;
 };
 
-const ctx = (actor: string) => ({
+const ctx = (actor: Actor) => ({
   params: {},
   query: {},
   body: {},
@@ -71,7 +72,7 @@ describe('username routes', () => {
     ['patch', '/me/username'],
     ['get', '/me/username/history'],
   ] as const)('refuses %s %s with no principal', async (method, path) => {
-    await expect(find(method, path).handler(ctx('anon'))).rejects.toMatchObject({ status: 401 });
+    await expect(find(method, path).handler(ctx(ANONYMOUS_ACTOR))).rejects.toMatchObject({ status: 401 });
   });
 
   it('does not require a principal to check availability', () => {
@@ -92,6 +93,6 @@ describe('username routes', () => {
   });
 
   it('answers 401 as an ApiError, not as a thrown string', async () => {
-    await expect(find('post', '/me/username').handler(ctx('anon'))).rejects.toBeInstanceOf(ApiError);
+    await expect(find('post', '/me/username').handler(ctx(ANONYMOUS_ACTOR))).rejects.toBeInstanceOf(ApiError);
   });
 });

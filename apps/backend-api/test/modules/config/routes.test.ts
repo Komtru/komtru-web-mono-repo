@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { createApp } from '../../../src/app.js';
 import { loadConfig } from '../../../src/config/env.js';
 import { configModule } from '../../../src/modules/config/index.js';
-import { modules } from '../../../src/modules/index.js';
+import { testModules } from '../../support/modules.js';
 import { mountRoutes } from '../../../src/platform/http/mount.js';
 import { assertRouteInvariants } from '../../../src/platform/http/route.js';
 import { createLogger } from '../../../src/platform/logger.js';
@@ -46,6 +46,6 @@ describe('GET /v1/config/fees', () => {
 
 describe('the module registry', () => {
   it('holds the config module, so the fee file is validated at boot', () => {
-    expect(modules.map((module) => module.name)).toContain('config');
+    expect(testModules().map((module) => module.name)).toContain('config');
   });
 });

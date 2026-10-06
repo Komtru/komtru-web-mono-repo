@@ -69,8 +69,8 @@ describe.runIf(infraEnabled)('domain events end to end', () => {
       });
     };
 
-    const api = await startApi(env(), [module('api')]);
-    const worker = await startWorker(env(), [module('worker')]);
+    const api = await startApi(env(), () => [module('api')]);
+    const worker = await startWorker(env(), () => [module('worker')]);
     const probeId = randomUUID();
     try {
       const { port } = api.server.address() as AddressInfo;
@@ -96,7 +96,7 @@ describe.runIf(infraEnabled)('domain events end to end', () => {
 
   it('does not relay from an api process', async () => {
     const probeCreated = defineEvent('test.unrelayed.created', 1, z.object({ probeId: z.uuid() }));
-    const api = await startApi(env(), []);
+    const api = await startApi(env(), () => []);
     try {
       await createDb(t.app()).transaction((tx) =>
         publish(tx, probeCreated, { payload: { probeId: randomUUID() } }),
@@ -111,7 +111,7 @@ describe.runIf(infraEnabled)('domain events end to end', () => {
 
   it('publishes platform.queue.dead_lettered when a job exhausts its attempts', async () => {
     const queueName = `test.doomed-${randomUUID().slice(0, 8)}`;
-    const worker = await startWorker(env(), [
+    const worker = await startWorker(env(), () => [
       defineModule({
         name: 'doomed',
         queues: [

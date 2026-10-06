@@ -12,11 +12,29 @@ import {
   REPLAYED_HEADER,
 } from '../../../src/platform/http/idempotency.js';
 import { mountRoutes } from '../../../src/platform/http/mount.js';
+import type { Actor } from '../../../src/platform/http/principal.js';
 import { defineRoute } from '../../../src/platform/http/route.js';
 import { createLogger } from '../../../src/platform/logger.js';
 import { createRedis } from '../../../src/platform/redis/connections.js';
 import { infraEnabled, testRedisUrl } from '../../support/db-urls.js';
 import { useTestDatabase } from '../../support/db.js';
+
+const signedIn: Actor = {
+  key: 'user:0199a2b3-c4d5-7e6f-8a9b-0c1d2e3f4a5b',
+  principal: {
+    userId: '0199a2b3-c4d5-7e6f-8a9b-0c1d2e3f4a5b',
+    publicId: 'KMT-U-7F3K9Q',
+    sessionId: '0199a2b3-c4d5-7e6f-8a9b-0c1d2e3f4a5c',
+    familyId: '0199a2b3-c4d5-7e6f-8a9b-0c1d2e3f4a5d',
+    scope: 'CONSUMER',
+    status: 'ACTIVE',
+    sessionsEpoch: 1,
+    amr: ['pwd'],
+    roles: [],
+    permissions: new Set<string>(),
+    companyMembership: null,
+  },
+};
 
 const REDIS_URL = testRedisUrl();
 const config = loadConfig({
@@ -46,7 +64,17 @@ describe.runIf(infraEnabled)('idempotency', () => {
         handler,
       }),
     ];
-    return createApp({ config, logger, mountV1: mountRoutes(routes, { logger, idempotency: gate }) });
+    // These tests are about the key, not about auth, so the route's CONSUMER scope is satisfied by
+    // a fixed signed-in caller; the per-actor test below supplies its own.
+    return createApp({
+      config,
+      logger,
+      mountV1: mountRoutes(routes, {
+        logger,
+        idempotency: gate,
+        resolveActor: () => Promise.resolve(signedIn),
+      }),
+    });
   };
 
   const rows = () =>
@@ -159,7 +187,7 @@ describe.runIf(infraEnabled)('idempotency', () => {
 
     // The owner's process is gone: its lease expires and its claim ages out. (Here: drop the lease
     // and age the row, which is what Redis and the clock would do on their own.)
-    await redis.del(`idem:CONSUMER:anon:${key}`);
+    await redis.del(`idem:CONSUMER:${signedIn.key}:${key}`);
     await t
       .app()
       .query(`UPDATE platform.idempotency_keys SET created_at = now() - interval '1 hour' WHERE key = $1`, [
@@ -257,8 +285,8 @@ describe.runIf(infraEnabled)('idempotency', () => {
     // A row owned by someone else entirely: this attempt must not be able to complete it.
     await t.app().query(
       `INSERT INTO platform.idempotency_keys (scope, key, actor, request_hash, owner_id, method, path, status, response, completed_at)
-       VALUES ('CONSUMER', $1, 'anon', 'some-other-hash', gen_random_uuid(), 'POST', '/trades', 201, '{"id":"the-owner"}'::jsonb, now())`,
-      [key],
+       VALUES ('CONSUMER', $1, $2, 'some-other-hash', gen_random_uuid(), 'POST', '/trades', 201, '{"id":"the-owner"}'::jsonb, now())`,
+      [key, signedIn.key],
     );
 
     // Same key, different body: the stored record stands and the client is told so.
@@ -371,14 +399,19 @@ describe.runIf(infraEnabled)('idempotency', () => {
         handler,
       }),
     ];
-    // The actor seam T-030 fills in: here, whoever the header says.
+    // The actor seam identity fills in (T-031): here, whoever the header says.
     const app = createApp({
       config,
       logger,
       mountV1: mountRoutes(routes, {
         logger,
         idempotency: gate,
-        resolveActor: (req) => String(req.headers['x-test-actor'] ?? 'anon'),
+        resolveActor: (req) =>
+          // Same signed-in principal, different actor key: the key is the whole point of this test.
+          Promise.resolve({
+            ...signedIn,
+            key: String(req.headers['x-test-actor'] ?? signedIn.key),
+          }),
       }),
     });
 

@@ -3,7 +3,7 @@ import type { Server } from 'node:http';
 import { createApp } from './app.js';
 import { loadConfig } from './config/env.js';
 import { assertNotOwner, createDb } from './db/index.js';
-import { modules as registry } from './modules/index.js';
+import { createModules, type ModuleBuilder } from './modules/index.js';
 import { createClients, postgresCheck, redisCheck } from './platform/clients.js';
 import { healthRoutes } from './platform/health.js';
 import { createLogger } from './platform/logger.js';
@@ -12,7 +12,7 @@ import { createIdempotencyGate } from './platform/http/idempotency.js';
 import { createRateLimitGate } from './platform/http/rateLimit.js';
 import { createInProcessEmitter } from './platform/events/emitter.js';
 import { createQueueFactory } from './platform/queue/factory.js';
-import { moduleClosers, moduleHealthChecks, mountModules, type KomtruModule } from './platform/module.js';
+import { moduleClosers, moduleHealthChecks, mountModules } from './platform/module.js';
 import { initSentry } from './platform/sentry.js';
 import type { RunningProcess } from './platform/run.js';
 import { gracefulShutdown, type Closer } from './platform/shutdown.js';
@@ -27,7 +27,7 @@ const HTTP_DRAIN_TIMEOUT_MS = 5_000;
 
 export async function startApi(
   env: NodeJS.ProcessEnv,
-  modules: KomtruModule[] = registry,
+  buildModules: ModuleBuilder = createModules,
 ): Promise<RunningApi> {
   const config = loadConfig(env);
   const logger = createLogger(config, { process: 'api' });
@@ -45,6 +45,9 @@ export async function startApi(
   // the relay and every handler run in the worker.
   const queues = createQueueFactory({ redisUrl: config.redis.url, logger });
   const db = createDb(clients.pool);
+  // Built here, after the connections exist: identity needs them to resolve a principal, and
+  // mountModules takes its `resolveActor` straight off the module that declares one.
+  const modules = buildModules({ db, redis: clients.redis, config, logger });
   const events = createEventBus({ db, queues, logger, role: 'api' });
   const emitter = createInProcessEmitter(logger);
   for (const definition of modules.flatMap((m) => m.queues ?? [])) queues.define(definition);

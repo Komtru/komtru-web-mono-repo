@@ -9,6 +9,7 @@ import { notificationCategorySchema, notificationChannelSchema, paginatedSchema 
 import { z } from 'zod';
 import type { Db } from '../../../db/index.js';
 import { ApiError } from '../../../platform/errors.js';
+import { requireUserId } from '../../../platform/http/principal.js';
 import { cursorPage } from '../../../platform/http/paginate.js';
 import { defineRoute, type RouteDefinition } from '../../../platform/http/route.js';
 import { listFeed, markRead } from '../services/feed.service.js';
@@ -24,16 +25,7 @@ const preferenceKey = (row: PreferenceRow) => `${row.category}|${row.channel}`;
 
 // Case-insensitive: whichever shape T-031 formats an actor in, an upper-case uuid must not
 // come back as an opaque 401.
-const USER_ACTOR = /^user:([0-9a-f-]{36})$/i;
-
-/** `user:<uuid>` or nothing. Never a guess: an unauthenticated feed read is a data leak. */
-function requireUser(actor: string): string {
-  const match = USER_ACTOR.exec(actor);
-  if (!match?.[1]) {
-    throw new ApiError(401, 'UNAUTHENTICATED', 'Sign in to see your notifications');
-  }
-  return match[1];
-}
+const SEE_NOTIFICATIONS = 'Sign in to see your notifications';
 
 const feedItemSchema = z.object({
   id: z.uuid(),
@@ -61,7 +53,7 @@ export function notifyRoutes(db: () => Db): RouteDefinition[] {
       paginated: 'cursor',
       schema: { response: paginatedSchema(feedItemSchema) },
       handler: ({ actor, query, cursor }) =>
-        listFeed(db(), requireUser(actor), {
+        listFeed(db(), requireUserId(actor, SEE_NOTIFICATIONS), {
           limit: query.limit ?? 20,
           ...(cursor ? { cursor } : {}),
         }),
@@ -79,7 +71,7 @@ export function notifyRoutes(db: () => Db): RouteDefinition[] {
         response: z.object({ read: z.literal(true) }),
       },
       handler: async ({ actor, params }) => {
-        const found = await markRead(db(), requireUser(actor), params.id);
+        const found = await markRead(db(), requireUserId(actor, SEE_NOTIFICATIONS), params.id);
         // 404 whether the row belongs to somebody else or does not exist: the two must not be
         // distinguishable, or the endpoint becomes an id oracle.
         if (!found) throw new ApiError(404, 'NOT_FOUND', 'No such notification');
@@ -95,7 +87,7 @@ export function notifyRoutes(db: () => Db): RouteDefinition[] {
       paginated: 'cursor',
       schema: { response: paginatedSchema(preferenceSchema) },
       handler: async ({ actor, query, cursor }) => {
-        const all = await getPreferences(db(), requireUser(actor));
+        const all = await getPreferences(db(), requireUserId(actor, SEE_NOTIFICATIONS));
         const after = typeof cursor?.key === 'string' ? cursor.key : undefined;
         const start = after ? all.findIndex((row) => preferenceKey(row) === after) + 1 : 0;
         const limit = query.limit ?? 20;
@@ -118,7 +110,7 @@ export function notifyRoutes(db: () => Db): RouteDefinition[] {
         response: z.object({ updated: z.number().int().min(0) }),
       },
       handler: async ({ actor, body }) => {
-        const userId = requireUser(actor);
+        const userId = requireUserId(actor, SEE_NOTIFICATIONS);
         try {
           await setPreferences(db(), userId, body.preferences);
         } catch (error) {

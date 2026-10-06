@@ -1,10 +1,19 @@
-// The identity module's public surface. Other modules may import these and nothing else from here;
-// the komtru/module-boundaries rule makes this the only way in.
+// The identity module's public surface: the schema other modules read, the session service they
+// call, and the actor resolver the API process hands to `mountRoutes`. Other modules may import
+// these and nothing else from here; the komtru/module-boundaries rule makes this the only way in.
+import type { Redis } from 'ioredis';
+import type { AppConfig } from '../../config/env.js';
 import type { Db } from '../../db/index.js';
-import { defineModule } from '../../platform/module.js';
+import type { Logger } from '../../platform/logger.js';
+import { defineModule, type KomtruModule, type SeedableModule } from '../../platform/module.js';
+import type { Actor, CompanyMembership } from '../../platform/http/principal.js';
+import type { Request } from 'express';
+import { createActorResolver } from './http/middleware.js';
+import { authRoutes } from './http/routes/auth.routes.js';
 import { usernameRoutes } from './http/username.controller.js';
+import { createTokenSigner, type TokenSigner } from './infrastructure/jwt/access-token.js';
+import { createEpochCache, type EpochCache } from './infrastructure/redis/epoch-cache.js';
 import { seedIdentityCatalogue } from './infrastructure/postgres/seed.js';
-import type { UsernameServiceDeps } from './services/username.service.js';
 
 export * from './infrastructure/postgres/schema/index.js';
 export * from './domain/events.js';
@@ -16,38 +25,97 @@ export * from './domain/username/suggest.js';
 export * from './services/username.service.js';
 export { seedIdentityCatalogue } from './infrastructure/postgres/seed.js';
 
-/**
- * The runtime pool, handed over by `start()`.
- *
- * `routes` is a static property of the module — the registry reads it when it mounts — while the db
- * only exists once the process has one. So the route handlers close over this holder rather than
- * over a pool, and reading it before `start()` throws instead of quietly answering 500 from an
- * undefined connection. T-031 is introducing the principal resolver through the same `start()`
- * context and may well replace this with a shared shape; one holder is cheap to delete.
- */
-let runtimeDb: Db | undefined;
+export { SESSION_TTLS, sessionExpiry, slidingIdleExpiry } from './domain/session/ttl.js';
+export { USABLE_STATUSES, sessionUsableUnder } from './domain/session/status.js';
+export { issueRefreshToken, refreshTokenHash } from './domain/session/refresh-token.js';
+export {
+  createTokenSigner,
+  type AccessTokenClaims,
+  type TokenSigner,
+} from './infrastructure/jwt/access-token.js';
+export { createEpochCache, type EpochCache } from './infrastructure/redis/epoch-cache.js';
+export { resolvePrincipal, type PrincipalDeps } from './services/principal.service.js';
+export { bearerToken, createActorResolver } from './http/middleware.js';
+export {
+  applyKillSwitch,
+  bumpSessionsEpoch,
+  createSession,
+  refreshSession,
+  revokeAllSessions,
+  revokeSessionFamily,
+  type CreateSessionInput,
+  type IssuedSession,
+  type RefreshOutcome,
+  type SessionDeps,
+} from './services/session.service.js';
 
-const deps: UsernameServiceDeps = {
-  get db(): Db {
-    if (!runtimeDb) throw new Error('identity routes were used before the module started');
-    return runtimeDb;
-  },
+export interface IdentityAuthOptions {
+  db: Db;
+  redis: Redis;
+  config: AppConfig;
+  logger: Logger;
+  /** T-086's `logistics_company_members` lookup. Absent means nobody has a membership yet. */
+  companyMembership?: (db: Db, userId: string) => Promise<CompanyMembership | null>;
+}
+
+export interface IdentityAuth {
+  /** What `mountRoutes` takes as `resolveActor`: the platform's only way to learn who is calling. */
+  resolveActor: (req: Request) => Promise<Actor>;
+  signer: TokenSigner;
+  epochs: EpochCache;
+  routes: KomtruModule['routes'];
+}
+
+/**
+ * Builds identity's half of authentication, and every route the module serves. The API process calls
+ * this once at boot: `createTokenSigner` throws here, naming the variable, rather than at the first
+ * login if the key is missing or malformed.
+ *
+ * The username routes (T-033) are built here too, against the same pool. They used to close over a
+ * module-level holder filled in by `start()`, because `routes` is read when the registry mounts and
+ * the pool did not exist that early; a builder that is handed the pool removes the holder and the
+ * "used before start" failure mode with it.
+ */
+export function createIdentityAuth(options: IdentityAuthOptions): IdentityAuth {
+  const { db, redis, config, logger } = options;
+  const signer = createTokenSigner(config);
+  const epochs = createEpochCache(redis, config.identity.epochCacheTtlSeconds, logger);
+  const principalDeps = {
+    db,
+    signer,
+    epochs,
+    logger,
+    ...(options.companyMembership ? { companyMembership: options.companyMembership } : {}),
+  };
+
+  return {
+    signer,
+    epochs,
+    resolveActor: createActorResolver(principalDeps),
+    routes: [...authRoutes({ db, signer, epochs, logger }), ...usernameRoutes({ db })],
+  };
+}
+
+/**
+ * The RBAC catalogue and the reserved namespace: reference data, not schema, reconciled from code on
+ * every `pnpm db:migrate` rather than frozen into a migration (seed.ts).
+ *
+ * Exported separately from the module because the seed runner has only a database — building the
+ * whole module would demand a Redis connection and a signing key to insert a list of permissions.
+ * Both the module below and the seed registry use this one value, so they cannot drift.
+ */
+export const identitySeed: SeedableModule = {
+  name: 'identity',
+  seed: async (db) => void (await seedIdentityCatalogue(db)),
 };
 
-export const identityModule = defineModule({
-  name: 'identity',
-  routes: usernameRoutes(deps),
-  // The RBAC catalogue and the reserved namespace are reference data, not schema: they are
-  // reconciled from code on every `pnpm db:migrate` rather than frozen into a migration (seed.ts).
-  seed: async (db) => void (await seedIdentityCatalogue(db)),
-  start: (ctx) => {
-    runtimeDb = ctx.db;
-    return Promise.resolve();
-  },
-  // The pool is closed by the platform; holding a reference to a closed one only turns a clear
-  // "used before start" into an obscure "called end() on a closed pool".
-  stop: () => {
-    runtimeDb = undefined;
-    return Promise.resolve();
-  },
-});
+/**
+ * The registry entry. Its routes are supplied by the process that built `createIdentityAuth`, so the
+ * module object itself holds no state and no connections.
+ */
+export const identityModule = (auth: IdentityAuth): KomtruModule =>
+  defineModule({
+    ...identitySeed,
+    routes: auth.routes,
+    resolveActor: auth.resolveActor,
+  });

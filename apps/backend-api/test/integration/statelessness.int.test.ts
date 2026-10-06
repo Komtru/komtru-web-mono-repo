@@ -61,9 +61,9 @@ describe.runIf(infraEnabled)('stateless processes', () => {
       POSTGRES_URL: pooledUrl(workerDatabase()),
     };
 
-    const apiA = await startApi(env, [makeModule('api-a')]);
-    const apiB = await startApi(env, [makeModule('api-b')]);
-    const worker = await startWorker(env, [makeModule('worker')]);
+    const apiA = await startApi(env, () => [makeModule('api-a')]);
+    const apiB = await startApi(env, () => [makeModule('api-b')]);
+    const worker = await startWorker(env, () => [makeModule('worker')]);
     try {
       const ports = [apiA, apiB].map((api) => (api.server.address() as AddressInfo).port);
       await Promise.all(
@@ -115,8 +115,8 @@ describe.runIf(infraEnabled)('stateless processes', () => {
       REDIS_URL: testRedisUrl(),
       POSTGRES_URL: pooledUrl(workerDatabase()),
     };
-    const apiA = await startApi(env, [makeModule('api-a')]);
-    const apiB = await startApi(env, [makeModule('api-b')]);
+    const apiA = await startApi(env, () => [makeModule('api-a')]);
+    const apiB = await startApi(env, () => [makeModule('api-b')]);
     try {
       const url = (api: typeof apiA) =>
         `http://127.0.0.1:${(api.server.address() as AddressInfo).port}/v1${path}`;
@@ -160,7 +160,7 @@ describe.runIf(infraEnabled)('stateless processes', () => {
       REDIS_URL: testRedisUrl(),
       POSTGRES_URL: pooledUrl(workerDatabase()),
     };
-    const api = await startApi({ ...env, PORT: '0' }, [
+    const api = await startApi({ ...env, PORT: '0' }, () => [
       defineModule({
         name: 'early',
         queues: [{ name: queueName, process: () => Promise.resolve() }],
@@ -177,7 +177,7 @@ describe.runIf(infraEnabled)('stateless processes', () => {
         queues: [{ name: queueName, process: (d: unknown) => Promise.resolve(void processed.push(d)) }],
         start: () => Promise.reject(new Error('module failed to start')),
       });
-      await expect(startWorker(env, [broken])).rejects.toThrow(/module failed to start/);
+      await expect(startWorker(env, () => [broken])).rejects.toThrow(/module failed to start/);
       await new Promise((r) => setTimeout(r, 300));
       expect(processed).toEqual([]);
     } finally {

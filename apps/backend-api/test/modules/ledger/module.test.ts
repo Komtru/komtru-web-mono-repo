@@ -4,12 +4,12 @@ import { loadConfig } from '../../../src/config/env.js';
 import type { ModuleContext } from '../../../src/platform/module.js';
 import { testRedisUrl } from '../../support/db-urls.js';
 import { ledgerModule, RESOLVE_ACCOUNT_NAME_QUEUE } from '../../../src/modules/ledger/index.js';
-import { modules } from '../../../src/modules/index.js';
+import { testModules } from '../../support/modules.js';
 import { createScheduleRegistry } from '../../../src/platform/scheduler/registry.js';
 
 describe('the ledger module', () => {
   it('is in the registry', () => {
-    expect(modules.map((m) => m.name)).toContain('ledger');
+    expect(testModules().map((m) => m.name)).toContain('ledger');
   });
 
   it('declares no routes yet: the funding and payout surfaces are T-072 and T-073', () => {

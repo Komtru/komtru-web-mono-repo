@@ -2,7 +2,7 @@
 // direct URL, as the owner — the same connection style as the migrator, and never through PgBouncer.
 import { drizzle } from 'drizzle-orm/node-postgres';
 import pg from 'pg';
-import { modules } from '../modules/index.js';
+import { moduleSeeds } from '../modules/index.js';
 import { runModuleSeeds } from '../platform/module.js';
 
 export interface SeedOptions {
@@ -17,7 +17,7 @@ export async function runSeeds({ directUrl, ssl = false }: SeedOptions): Promise
   });
   await client.connect();
   try {
-    await runModuleSeeds(modules, drizzle(client));
+    await runModuleSeeds(moduleSeeds, drizzle(client));
   } finally {
     await client.end();
   }
