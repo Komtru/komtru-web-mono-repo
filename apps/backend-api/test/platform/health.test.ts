@@ -4,13 +4,14 @@ import { createApp } from '../../src/app.js';
 import { loadConfig } from '../../src/config/env.js';
 import { healthRoutes, runChecks, type HealthCheck } from '../../src/platform/health.js';
 import { createLogger } from '../../src/platform/logger.js';
-import { testRedisUrl } from '../support/db-urls.js';
+import { testRedisEnv, testRedisUrl } from '../support/db-urls.js';
 
 const config = loadConfig({
   NODE_ENV: 'test',
   LOG_LEVEL: 'silent',
   POSTGRES_URL: 'postgresql://komtru:komtru@localhost:56432/komtru_v2_dev',
   REDIS_URL: testRedisUrl(),
+  ...testRedisEnv(),
 });
 const logger = createLogger(config);
 

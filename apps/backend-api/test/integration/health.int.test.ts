@@ -6,7 +6,7 @@ import { loadConfig } from '../../src/config/env.js';
 import { createClients, postgresCheck, redisCheck } from '../../src/platform/clients.js';
 import { healthRoutes } from '../../src/platform/health.js';
 import { createLogger } from '../../src/platform/logger.js';
-import { testRedisUrl } from '../support/db-urls.js';
+import { testRedisEnv, testRedisUrl } from '../support/db-urls.js';
 
 const enabled = process.env.KOMTRU_INFRA_TESTS === '1';
 
@@ -16,6 +16,7 @@ describe.runIf(enabled)('readiness against real dependencies', () => {
     LOG_LEVEL: 'silent',
     POSTGRES_URL: 'postgresql://komtru:komtru@localhost:56432/komtru_v2_dev',
     REDIS_URL: testRedisUrl(),
+    ...testRedisEnv(),
   };
   const config = loadConfig(env);
   const logger = createLogger(config);

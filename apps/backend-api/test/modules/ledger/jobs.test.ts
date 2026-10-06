@@ -10,7 +10,7 @@ import { resolveAccountNameJob } from '../../../src/modules/ledger/jobs/resolve-
 import { ApiError } from '../../../src/platform/errors.js';
 import { createLogger } from '../../../src/platform/logger.js';
 import { startStubServer, type StubServer } from '../../support/stub-server.js';
-import { testRedisUrl } from '../../support/db-urls.js';
+import { testRedisEnv, testRedisUrl } from '../../support/db-urls.js';
 
 const logger = createLogger(
   loadConfig({
@@ -18,6 +18,7 @@ const logger = createLogger(
     LOG_LEVEL: 'silent',
     POSTGRES_URL: 'postgresql://komtru:komtru@localhost:56432/komtru_v2_dev',
     REDIS_URL: testRedisUrl(),
+    ...testRedisEnv(),
   }),
 );
 

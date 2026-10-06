@@ -51,6 +51,12 @@ export interface QueueFactoryOptions {
   redisUrl: string;
   logger: Logger;
   onDeadLetter?: (letter: DeadLetter) => void;
+  /**
+   * BullMQ's key namespace. Defaults to the production one; the integration suite passes a per-worker
+   * namespace so parallel test files cannot drain each other's queues. The dead-letter queue is
+   * built through the same `producer()`, so it inherits this automatically.
+   */
+  prefix?: string;
 }
 
 /** How long an enqueue waits for Redis before failing (a request should not hang on an outage). */
@@ -97,7 +103,12 @@ function guardEnqueue(queue: Queue, redis: Redis): void {
   }) as typeof addBulk;
 }
 
-export function createQueueFactory({ redisUrl, logger, onDeadLetter }: QueueFactoryOptions): QueueFactory {
+export function createQueueFactory({
+  redisUrl,
+  logger,
+  onDeadLetter,
+  prefix = BULL_PREFIX,
+}: QueueFactoryOptions): QueueFactory {
   const queues = new Map<string, Queue>();
   const definitions = new Map<string, QueueDefinition<never>>();
   const workers: Worker[] = [];
@@ -115,7 +126,7 @@ export function createQueueFactory({ redisUrl, logger, onDeadLetter }: QueueFact
       const producerConnection = connection('producer');
       queue = new Queue(name, {
         connection: producerConnection,
-        prefix: BULL_PREFIX,
+        prefix,
         defaultJobOptions: {
           attempts: definition?.attempts ?? DEFAULT_ATTEMPTS,
           backoff: { type: 'exponential', delay: definition?.backoffMs ?? DEFAULT_BACKOFF_MS },
@@ -167,7 +178,7 @@ export function createQueueFactory({ redisUrl, logger, onDeadLetter }: QueueFact
     const worker = new Worker<T>(definition.name, (job) => definition.process(job.data, job), {
       autorun: false,
       connection: connection('worker'),
-      prefix: BULL_PREFIX,
+      prefix,
       concurrency: definition.concurrency ?? 1,
     });
     worker.on('failed', (job, error) => {

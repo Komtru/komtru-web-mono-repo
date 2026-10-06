@@ -14,7 +14,7 @@ import {
 import { createLogger } from '../../../src/platform/logger.js';
 import type { QueueDefinition, QueueFactory } from '../../../src/platform/queue/factory.js';
 import { eventually } from '../../support/eventually.js';
-import { infraEnabled, testRedisUrl } from '../../support/db-urls.js';
+import { infraEnabled, testRedisEnv, testRedisUrl } from '../../support/db-urls.js';
 import { useTestDatabase } from '../../support/db.js';
 
 const logger = createLogger(
@@ -22,6 +22,7 @@ const logger = createLogger(
     LOG_LEVEL: 'silent',
     POSTGRES_URL: 'postgresql://x@localhost/x',
     REDIS_URL: testRedisUrl(),
+    ...testRedisEnv(),
   }),
 );
 

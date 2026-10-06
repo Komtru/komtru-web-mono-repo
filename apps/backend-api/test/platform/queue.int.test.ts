@@ -6,8 +6,8 @@ import { loadConfig } from '../../src/config/env.js';
 import { createLogger } from '../../src/platform/logger.js';
 import { createQueueFactory, type QueueFactory } from '../../src/platform/queue/factory.js';
 import { deadLetterCounter } from '../../src/platform/queue/metrics.js';
-import { BULL_PREFIX, createRedis } from '../../src/platform/redis/connections.js';
-import { infraEnabled, testRedisUrl } from '../support/db-urls.js';
+import { KEY_PREFIX, createRedis } from '../../src/platform/redis/connections.js';
+import { infraEnabled, testQueuePrefix, testRedisUrl } from '../support/db-urls.js';
 import { eventually } from '../support/eventually.js';
 
 const redisUrl = testRedisUrl();
@@ -25,11 +25,11 @@ describe.runIf(infraEnabled)('queue factory', () => {
   afterEach(async () => factory?.close());
 
   it('prefixes app keys with komtru:', async () => {
-    const redis = await ready(createRedis(redisUrl));
+    const redis = await ready(createRedis(redisUrl, { keyPrefix: KEY_PREFIX }));
     const key = `probe-${randomUUID()}`;
     try {
       await redis.set(key, '1', 'EX', 30);
-      const raw = await ready(createRedis(redisUrl, { prefix: false }));
+      const raw = await ready(createRedis(redisUrl, { keyPrefix: false }));
       try {
         expect(await raw.get(`komtru:${key}`)).toBe('1');
       } finally {
@@ -40,8 +40,54 @@ describe.runIf(infraEnabled)('queue factory', () => {
     }
   });
 
+  it('writes app keys under the namespace it is given', async () => {
+    const redis = await ready(createRedis(redisUrl, { keyPrefix: 'komtru_t9:' }));
+    const key = `probe-${randomUUID()}`;
+    try {
+      await redis.set(key, '1', 'EX', 30);
+      const raw = await ready(createRedis(redisUrl, { keyPrefix: false }));
+      try {
+        expect(await raw.get(`komtru_t9:${key}`)).toBe('1');
+        expect(await raw.get(`komtru:${key}`)).toBeNull();
+      } finally {
+        raw.disconnect();
+      }
+    } finally {
+      redis.disconnect();
+    }
+  });
+
+  // The bug this ticket exists for: two Vitest workers share one Redis database, so without
+  // separate prefixes one file's worker drains the other file's queue of the same name, and the
+  // job is executed against the wrong test database.
+  it('keeps two namespaces apart, so one consumer cannot drain the other', async () => {
+    const name = unique('isolated');
+    const a = createQueueFactory({ redisUrl, logger, prefix: 'komtru_a:bull' });
+    const b = createQueueFactory({ redisUrl, logger, prefix: 'komtru_b:bull' });
+    const seenA: number[] = [];
+    const seenB: number[] = [];
+    try {
+      a.consume<{ n: number }>({ name, process: ({ n }) => Promise.resolve(void seenA.push(n)) });
+      b.consume<{ n: number }>({ name, process: ({ n }) => Promise.resolve(void seenB.push(n)) });
+      a.run();
+      b.run();
+      await a.producer<{ n: number }>(name).add('run', { n: 1 });
+      await eventually(
+        () => seenA.length === 1,
+        5000,
+        () => `seenA=${JSON.stringify(seenA)} seenB=${JSON.stringify(seenB)}`,
+      );
+      // b has had a live worker on the same queue name throughout; give it room to steal.
+      await new Promise((r) => setTimeout(r, 300));
+      expect(seenA).toEqual([1]);
+      expect(seenB).toEqual([]);
+    } finally {
+      await Promise.all([a.close(), b.close()]);
+    }
+  });
+
   it('processes a job once, under the komtru:bull prefix', async () => {
-    factory = createQueueFactory({ redisUrl, logger });
+    factory = createQueueFactory({ redisUrl, logger, prefix: testQueuePrefix() });
     const name = unique('ok');
     const seen: number[] = [];
     factory.consume<{ n: number }>({ name, process: ({ n }) => Promise.resolve(void seen.push(n)) });
@@ -49,9 +95,9 @@ describe.runIf(infraEnabled)('queue factory', () => {
     await factory.producer<{ n: number }>(name).add('run', { n: 7 });
     await eventually(() => seen.length === 1);
     expect(seen).toEqual([7]);
-    const raw = await ready(createRedis(redisUrl, { prefix: false }));
+    const raw = await ready(createRedis(redisUrl, { keyPrefix: false }));
     try {
-      expect(await raw.keys(`${BULL_PREFIX}:${name}:*`)).not.toEqual([]);
+      expect(await raw.keys(`${testQueuePrefix()}:${name}:*`)).not.toEqual([]);
     } finally {
       raw.disconnect();
     }
@@ -59,7 +105,7 @@ describe.runIf(infraEnabled)('queue factory', () => {
 
   it('retries with backoff, then dead-letters once on the last attempt', async () => {
     const onDeadLetter = vi.fn();
-    factory = createQueueFactory({ redisUrl, logger, onDeadLetter });
+    factory = createQueueFactory({ redisUrl, logger, prefix: testQueuePrefix(), onDeadLetter });
     const name = unique('fails');
     let attempts = 0;
     factory.consume({
@@ -93,7 +139,7 @@ describe.runIf(infraEnabled)('queue factory', () => {
 
   it('does not dead-letter a job that succeeds on a retry', async () => {
     const onDeadLetter = vi.fn();
-    factory = createQueueFactory({ redisUrl, logger, onDeadLetter });
+    factory = createQueueFactory({ redisUrl, logger, prefix: testQueuePrefix(), onDeadLetter });
     const name = unique('flaky');
     let attempts = 0;
     factory.consume({
@@ -115,7 +161,7 @@ describe.runIf(infraEnabled)('queue factory', () => {
 
   it('dead-letters an UnrecoverableError on its first attempt', async () => {
     const onDeadLetter = vi.fn();
-    factory = createQueueFactory({ redisUrl, logger, onDeadLetter });
+    factory = createQueueFactory({ redisUrl, logger, prefix: testQueuePrefix(), onDeadLetter });
     const name = unique('unrecoverable');
     factory.consume({
       name,
@@ -136,7 +182,7 @@ describe.runIf(infraEnabled)('queue factory', () => {
       const onDeadLetter = vi.fn(() => {
         throw new Error('bus down');
       });
-      factory = createQueueFactory({ redisUrl, logger, onDeadLetter });
+      factory = createQueueFactory({ redisUrl, logger, prefix: testQueuePrefix(), onDeadLetter });
       const name = unique('hook-throws');
       factory.consume({ name, attempts: 1, process: () => Promise.reject(new Error('x')) });
       factory.run();
@@ -150,7 +196,7 @@ describe.runIf(infraEnabled)('queue factory', () => {
   });
 
   it('fails an enqueue fast instead of hanging while Redis is unreachable', async () => {
-    factory = createQueueFactory({ redisUrl: 'redis://127.0.0.1:1', logger });
+    factory = createQueueFactory({ redisUrl: 'redis://127.0.0.1:1', logger, prefix: testQueuePrefix() });
     const started = Date.now();
     await expect(factory.producer(unique('down')).add('run', {})).rejects.toThrow();
     expect(Date.now() - started).toBeLessThan(3000);

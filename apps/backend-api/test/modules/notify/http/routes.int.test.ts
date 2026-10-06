@@ -8,7 +8,7 @@ import { loadConfig } from '../../../../src/config/env.js';
 import { createLogger } from '../../../../src/platform/logger.js';
 import { mountRoutes } from '../../../../src/platform/http/mount.js';
 import { notifyRoutes } from '../../../../src/modules/notify/http/routes.js';
-import { infraEnabled, testRedisUrl } from '../../../support/db-urls.js';
+import { infraEnabled, testRedisEnv, testRedisUrl } from '../../../support/db-urls.js';
 import { ANONYMOUS_ACTOR, testActor } from '../../../support/actors.js';
 import type { Actor } from '../../../../src/platform/http/principal.js';
 import { useTestDatabase } from '../../../support/db.js';
@@ -39,6 +39,7 @@ const config = loadConfig({
   LOG_LEVEL: 'silent',
   POSTGRES_URL: 'postgresql://komtru:komtru@localhost:56432/komtru_v2_dev',
   REDIS_URL: testRedisUrl(),
+  ...testRedisEnv(),
 });
 const logger = createLogger(config);
 

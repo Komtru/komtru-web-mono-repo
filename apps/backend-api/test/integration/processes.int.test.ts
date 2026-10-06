@@ -10,7 +10,7 @@ import { defineRoute } from '../../src/platform/http/route.js';
 import { defineModule } from '../../src/platform/module.js';
 import { startApi } from '../../src/server.js';
 import { startWorker } from '../../src/worker-process.js';
-import { directUrl, infraEnabled, pooledUrl, testRedisUrl } from '../support/db-urls.js';
+import { directUrl, infraEnabled, pooledUrl, testRedisEnv, testRedisUrl } from '../support/db-urls.js';
 import { useTestDatabase, workerDatabase } from '../support/db.js';
 
 // The real registry includes identity, which refuses to boot without a signing key — which is the
@@ -20,6 +20,7 @@ const base = {
   LOG_LEVEL: 'silent',
   PORT: '0',
   REDIS_URL: testRedisUrl(),
+  ...testRedisEnv(),
   IDENTITY_SIGNING_KEY: randomBytes(32).toString('hex'),
   IDENTITY_SIGNING_KEY_ID: 'test-key',
 };

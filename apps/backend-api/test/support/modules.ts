@@ -11,13 +11,14 @@ import type { Db } from '../../src/db/index.js';
 import { createModules, type ProcessDeps } from '../../src/modules/index.js';
 import { createLogger } from '../../src/platform/logger.js';
 import type { KomtruModule } from '../../src/platform/module.js';
-import { testRedisUrl } from './db-urls.js';
+import { testRedisEnv, testRedisUrl } from './db-urls.js';
 
 export const registryConfig = (overrides: Record<string, string> = {}): AppConfig =>
   loadConfig({
     LOG_LEVEL: 'silent',
     POSTGRES_URL: 'postgresql://x@localhost/x',
     REDIS_URL: testRedisUrl(),
+    ...testRedisEnv(),
     IDENTITY_SIGNING_KEY: randomBytes(32).toString('hex'),
     IDENTITY_SIGNING_KEY_ID: 'test-key',
     ...overrides,

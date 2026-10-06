@@ -12,7 +12,7 @@ import {
 import { createActorResolver } from '../../../src/modules/identity/http/middleware.js';
 import { ANONYMOUS_ACTOR, type Actor } from '../../../src/platform/http/principal.js';
 import { createRedis } from '../../../src/platform/redis/connections.js';
-import { infraEnabled } from '../../support/db-urls.js';
+import { infraEnabled, testKeyPrefix } from '../../support/db-urls.js';
 import { useTestDatabase } from '../../support/db.js';
 import {
   createTestRedis,
@@ -136,7 +136,7 @@ describe.runIf(infraEnabled)('principal resolution', () => {
     const { token } = await seedSession();
     // A real client pointed at nothing: the cache has to swallow its own failures, because losing
     // the fast deny path must not take the whole API down with it.
-    const unreachable = createRedis('redis://localhost:1');
+    const unreachable = createRedis('redis://localhost:1', { keyPrefix: testKeyPrefix() });
     try {
       const broken: PrincipalDeps = {
         ...deps,

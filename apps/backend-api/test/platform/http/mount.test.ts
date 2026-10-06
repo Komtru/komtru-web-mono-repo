@@ -13,7 +13,7 @@ import {
 } from '../../../src/platform/http/principal.js';
 import { defineRoute, type RouteDefinition, type RouteScope } from '../../../src/platform/http/route.js';
 import { createLogger } from '../../../src/platform/logger.js';
-import { testRedisUrl } from '../../support/db-urls.js';
+import { testRedisEnv, testRedisUrl } from '../../support/db-urls.js';
 
 /**
  * These tests are about parsing, pagination and the gates, not about auth, so every route they
@@ -41,6 +41,7 @@ const config = loadConfig({
   LOG_LEVEL: 'silent',
   POSTGRES_URL: 'postgresql://x@localhost/x',
   REDIS_URL: testRedisUrl(),
+  ...testRedisEnv(),
 });
 const logger = createLogger(config);
 

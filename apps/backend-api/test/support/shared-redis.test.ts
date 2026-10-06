@@ -21,7 +21,44 @@ const testFiles = (dir: string): string[] =>
     return /\.(ts|mts)$/.test(entry) ? [path] : [];
   });
 
+/** The full text of each `fn(...)` call, parens balanced — a regex stops at the first nested `)`. */
+const callsTo = (source: string, fn: string): string[] => {
+  const calls: string[] = [];
+  for (let at = source.indexOf(`${fn}(`); at !== -1; at = source.indexOf(`${fn}(`, at + 1)) {
+    let depth = 0;
+    for (let i = at + fn.length; i < source.length; i += 1) {
+      if (source[i] === '(') depth += 1;
+      else if (source[i] === ')') {
+        depth -= 1;
+        if (depth === 0) {
+          calls.push(source.slice(at, i + 1));
+          break;
+        }
+      }
+    }
+  }
+  return calls;
+};
+
 describe('the shared test Redis database', () => {
+  // Every key a test writes has to land in that worker's own namespace, or the test is back to
+  // sharing one keyspace with the dozen files running beside it. Both constructors take the
+  // namespace explicitly so that forgetting it is visible here rather than as a flake somewhere else.
+  it('is only ever reached through an explicit namespace', () => {
+    const offenders: string[] = [];
+    for (const path of testFiles(TEST_ROOT)) {
+      if (path === SELF) continue;
+      const source = readFileSync(path, 'utf8');
+      for (const [fn, option] of [
+        ['createRedis', 'keyPrefix'],
+        ['createQueueFactory', 'prefix'],
+      ] as const)
+        for (const call of callsTo(source, fn))
+          if (!call.includes(`${option}:`)) offenders.push(`${path.slice(TEST_ROOT.length)}: ${fn}`);
+    }
+    expect(offenders).toEqual([]);
+  });
+
   it('is never flushed wholesale by a test', () => {
     const offenders = testFiles(TEST_ROOT)
       // This file names the call it bans, in the comment above and in the pattern below.
