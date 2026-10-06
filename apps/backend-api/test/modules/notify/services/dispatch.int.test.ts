@@ -284,6 +284,22 @@ describe.runIf(infraEnabled)('dispatchForEvent', () => {
     expect(await rows()).toEqual([]);
   });
 
+  it('sends a security-critical template even when its mapping is disabled', async () => {
+    // D5's switch is for noisy notifications. Letting an operator disable OTP delivery
+    // platform-wide, with no row and no event to show for it, is the D2 failure mode.
+    await seedTemplate({ category: 'SECURITY', is_security_critical: true });
+    await seedMapping(false);
+
+    expect(await dispatch({})).toHaveLength(1);
+    expect((await rows())[0]).toMatchObject({ status: 'QUEUED' });
+  });
+
+  it('sends a security-critical template even when its mapping row was deleted', async () => {
+    await seedTemplate({ category: 'SECURITY', is_security_critical: true });
+
+    expect(await dispatch({})).toHaveLength(1);
+  });
+
   it('does nothing when there is no mapping at all', async () => {
     await seedTemplate();
 
@@ -322,12 +338,52 @@ describe.runIf(infraEnabled)('dispatchForEvent', () => {
     expect((await rows())[0]?.rendered_body).toBe('old Ada');
   });
 
-  it('fails loudly when a binding does not supply a variable the template needs', async () => {
-    await seedTemplate();
+  it('dead-letters only the channel whose template cannot be rendered', async () => {
+    // A broken EMAIL copy must not cost the user the SMS for the same event: the handler runs in
+    // one transaction, so throwing would roll back both and the retry would reproduce it exactly.
+    await seedTemplate({ channel: 'SMS', body: 'fine {{name}}', variables: ['name'] });
+    await seedTemplate({
+      channel: 'EMAIL',
+      subject: 'Hi',
+      body: 'needs {{missing}}',
+      variables: ['missing'],
+    });
     await seedMapping();
 
-    await expect(dispatch({ variables: {} })).rejects.toThrow(/test\.alert.*name/);
-    expect(await rows()).toEqual([]);
+    const queued = await dispatch({ variables: { name: 'Ada' } });
+
+    expect(queued.map((q: QueuedSend) => q.channel)).toEqual(['SMS']);
+    expect((await rows()).map((r) => [r.channel, r.status])).toEqual([
+      ['EMAIL', 'DEAD_LETTERED'],
+      ['SMS', 'QUEUED'],
+    ]);
+    // The unrendered body is kept: it is the evidence of what the template actually said.
+    expect((await rows())[0]?.rendered_body).toBe('needs {{missing}}');
+  });
+
+  it('escalates an unrenderable security-critical template', async () => {
+    await seedTemplate({
+      category: 'SECURITY',
+      is_security_critical: true,
+      body: 'needs {{missing}}',
+      variables: ['missing'],
+    });
+    await seedMapping();
+
+    await dispatch({ variables: {} });
+
+    expect((await rows())[0]).toMatchObject({ status: 'DEAD_LETTERED' });
+    expect(await outboxTypes()).toEqual(['notify.notification.dead_lettered']);
+  });
+
+  it('does not escalate an unrenderable ordinary template', async () => {
+    await seedTemplate({ body: 'needs {{missing}}', variables: ['missing'] });
+    await seedMapping();
+
+    await dispatch({ variables: {} });
+
+    expect((await rows())[0]).toMatchObject({ status: 'DEAD_LETTERED' });
+    expect(await outboxTypes()).toEqual([]);
   });
 
   it('drops a notification addressed to a user that no longer exists', async () => {

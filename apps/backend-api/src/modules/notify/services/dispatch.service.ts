@@ -13,7 +13,7 @@ import { publish, type Tx } from '../../../platform/events/publish.js';
 import { decideDelivery, rateLimitWindowStart, type DeliveryDecision } from '../domain/decide.js';
 import { notificationDeadLettered, notificationSent } from '../domain/events.js';
 import { notificationIdFor } from '../domain/identity.js';
-import { renderTemplate, type NotificationTemplate } from '../domain/template.js';
+import { TemplateRenderError, renderTemplate, type NotificationTemplate } from '../domain/template.js';
 import type { NotificationRecipient } from '../domain/binding.js';
 import {
   notificationEventMappings,
@@ -54,22 +54,24 @@ export async function dispatchForEvent(
 ): Promise<QueuedSend[]> {
   const { envelope, templateKey, recipients } = input;
 
-  // The data half of the mapping: present and enabled, or this event sends nothing. Checked once
-  // per event rather than per recipient.
-  const mapping = await tx
-    .select({ id: notificationEventMappings.id })
-    .from(notificationEventMappings)
-    .where(
-      and(
-        eq(notificationEventMappings.eventName, envelope.eventType),
-        eq(notificationEventMappings.templateKey, templateKey),
-        eq(notificationEventMappings.enabled, true),
-      ),
-    )
-    .limit(1);
-  if (!mapping.length) {
-    deps.logger.info({ event: envelope.eventType, templateKey }, 'notify: mapping absent or disabled');
-    return [];
+  // The data half of the mapping, checked once per event rather than per recipient. Disabled or
+  // missing normally means "this event sends nothing" — that is M11 D5's point, turning a noisy
+  // notification off without a deploy.
+  //
+  // It must NOT mean that for a security-critical template. An operator disabling the wrong row,
+  // or a migration dropping it, would otherwise switch OTP delivery off platform-wide with no
+  // notification row, no event and one info log to show for it — the exact silent suppression D2
+  // forbids. So a security-critical template ignores the switch, loudly.
+  const enabled = await mappingEnabled(tx, envelope.eventType, templateKey);
+  if (!enabled) {
+    if (!(await hasSecurityCriticalTemplate(tx, templateKey))) {
+      deps.logger.info({ event: envelope.eventType, templateKey }, 'notify: mapping absent or disabled');
+      return [];
+    }
+    deps.logger.error(
+      { event: envelope.eventType, templateKey },
+      'notify: mapping absent or disabled for a security-critical template; sending anyway (M11 D2)',
+    );
   }
 
   const queued: QueuedSend[] = [];
@@ -77,6 +79,38 @@ export async function dispatchForEvent(
     queued.push(...(await dispatchToRecipient(deps, tx, envelope, templateKey, recipient)));
   }
   return queued;
+}
+
+/** Whether an enabled mapping row exists for this (event, template) pair. */
+async function mappingEnabled(tx: Tx, eventName: string, templateKey: string): Promise<boolean> {
+  const rows = await tx
+    .select({ id: notificationEventMappings.id })
+    .from(notificationEventMappings)
+    .where(
+      and(
+        eq(notificationEventMappings.eventName, eventName),
+        eq(notificationEventMappings.templateKey, templateKey),
+        eq(notificationEventMappings.enabled, true),
+      ),
+    )
+    .limit(1);
+  return rows.length > 0;
+}
+
+/** Whether any active template under this key is security-critical, in any channel or locale. */
+async function hasSecurityCriticalTemplate(tx: Tx, templateKey: string): Promise<boolean> {
+  const rows = await tx
+    .select({ id: notificationTemplates.id })
+    .from(notificationTemplates)
+    .where(
+      and(
+        eq(notificationTemplates.templateKey, templateKey),
+        eq(notificationTemplates.active, true),
+        eq(notificationTemplates.isSecurityCritical, true),
+      ),
+    )
+    .limit(1);
+  return rows.length > 0;
 }
 
 async function dispatchToRecipient(
@@ -130,7 +164,18 @@ async function dispatchOne(
     maxPerWindow: deps.config.rateLimitMaxPerWindow,
   });
 
-  const rendered = renderTemplate(template, recipient.variables);
+  // A template that asks for a variable the binding does not supply is a content bug, and it is
+  // one an operator can introduce at any time: D5 invites them to author new versions in the
+  // database, where the boot check cannot reach. Letting it throw would roll the handler's whole
+  // transaction back — including the SMS row for the SAME event, which would have rendered fine —
+  // so a broken EMAIL copy would cost the user their OTP on every channel. It costs one channel.
+  let rendered;
+  try {
+    rendered = renderTemplate(template, recipient.variables);
+  } catch (error) {
+    if (!(error instanceof TemplateRenderError)) throw error;
+    return recordUnrenderable(deps, tx, envelope, template, userId, error);
+  }
   const id = notificationIdFor({ eventId: envelope.eventId, templateKey, channel, userId });
   const inApp = channel === 'IN_APP' && decision.kind === 'SEND';
 
@@ -151,6 +196,9 @@ async function dispatchOne(
       ...(destination ? { recipientMasked: destination.masked } : {}),
       ...(inApp ? { sentAt: new Date() } : {}),
       ...(failedReasonFor(decision) ? { failedReason: failedReasonFor(decision) } : {}),
+      // The EVENT id, not the envelope's correlationId: this column's job (M11 §4.3) is to tie one
+      // event's multi-channel fan-out together, which is the join an operator needs. The envelope's
+      // own correlation id travels on the events published below instead.
       correlationId: envelope.eventId,
     })
     .onConflictDoNothing()
@@ -200,6 +248,65 @@ async function dispatchOne(
   }
 
   return { notificationId: id, channel };
+}
+
+/**
+ * Records the one channel whose copy is broken as DEAD_LETTERED, with the unrendered body so an
+ * operator can see exactly what the template said, and escalates when it was security-critical.
+ */
+async function recordUnrenderable(
+  deps: DispatchDeps,
+  tx: Tx,
+  envelope: EventEnvelope<unknown>,
+  template: NotificationTemplate,
+  userId: string,
+  error: TemplateRenderError,
+): Promise<undefined> {
+  const { channel, category, templateKey } = template;
+  const id = notificationIdFor({ eventId: envelope.eventId, templateKey, channel, userId });
+  deps.logger.error(
+    { notificationId: id, templateKey, channel, variable: error.variable },
+    'notify: template could not be rendered',
+  );
+
+  const inserted = await tx
+    .insert(notifications)
+    .values({
+      id,
+      userId,
+      eventId: envelope.eventId,
+      eventName: envelope.eventType,
+      templateKey,
+      templateVersion: template.version,
+      channel,
+      category,
+      status: 'DEAD_LETTERED',
+      // Unrendered on purpose: it is never sent, and it is the evidence of what went wrong.
+      renderedBody: template.body,
+      failedReason: `template render failed: ${error.message}`,
+      correlationId: envelope.eventId,
+    })
+    .onConflictDoNothing()
+    .returning({ id: notifications.id });
+
+  if (inserted.length && template.isSecurityCritical) {
+    await publish(tx, notificationDeadLettered, {
+      payload: {
+        notificationId: id,
+        userId,
+        channel,
+        category,
+        templateKey,
+        reason: 'template_render_failed',
+        attempts: 0,
+      },
+      aggregateType: 'notification',
+      aggregateId: id,
+      correlationId: envelope.correlationId ?? envelope.eventId,
+      causationId: envelope.eventId,
+    });
+  }
+  return undefined;
 }
 
 const statusFor = (decision: DeliveryDecision, inApp: boolean) => {
@@ -296,9 +403,17 @@ async function sendCount(
 
 /**
  * Charged only for a send that was actually admitted, and only when the notification row was newly
- * inserted, so a redelivery cannot spend a user's budget twice. Read-then-increment can over-admit
- * under concurrency; the subscriber queue runs one job at a time, so in practice it is serialised,
- * and a cap that occasionally admits one extra is a better failure than one that double-charges.
+ * inserted, so a redelivery cannot spend a user's budget twice.
+ *
+ * Read-then-increment, which can over-admit: a subscriber's `concurrency: 1` is per worker PROCESS,
+ * not fleet-wide, so N workers handling N events for the same user and channel can all read the
+ * count before any of them charges, and the cap admits up to N extra. That direction is the safe
+ * one — the alternative, charging first, would spend budget on sends that were then suppressed, and
+ * on a security-critical send would consume a cap it is exempt from anyway. A cap that occasionally
+ * lets one extra through beats one that silently eats a message.
+ *
+ * Security-critical sends are charged too, even though they bypass the check: the counter is meant
+ * to say how many messages a user actually got on a channel, and an OTP is one of them.
  */
 async function chargeRateLimit(
   tx: Tx,

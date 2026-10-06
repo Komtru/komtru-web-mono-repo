@@ -22,7 +22,9 @@ import {
 /** The preference matrix is a fixed list, so its cursor is simply the last pair returned. */
 const preferenceKey = (row: PreferenceRow) => `${row.category}|${row.channel}`;
 
-const USER_ACTOR = /^user:([0-9a-f-]{36})$/;
+// Case-insensitive: whichever shape T-031 formats an actor in, an upper-case uuid must not
+// come back as an opaque 401.
+const USER_ACTOR = /^user:([0-9a-f-]{36})$/i;
 
 /** `user:<uuid>` or nothing. Never a guess: an unauthenticated feed read is a data leak. */
 function requireUser(actor: string): string {

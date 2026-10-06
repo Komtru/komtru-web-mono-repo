@@ -11,7 +11,7 @@ import type { QueueFactory } from '../../platform/queue/factory.js';
 import { CATALOGUE, assertCatalogueIntegrity, type NotificationCatalogue } from './domain/catalogue.js';
 import { BINDINGS, type NotificationBinding } from './domain/binding.js';
 import { SEND_QUEUES, enqueueSend } from './jobs/enqueue.js';
-import { runSendJob, type SendJobData } from './jobs/send.job.js';
+import { missingCredential, runSendJob, type SendJobData } from './jobs/send.job.js';
 import { requeueStuck } from './jobs/requeue-stuck.job.js';
 import { dispatchForEvent } from './services/dispatch.service.js';
 import { notifyRoutes } from './http/routes.js';
@@ -73,6 +73,7 @@ export function createNotifyModule(options: NotifyModuleOptions = {}): KomtruMod
       const config = ctx.config.notify;
       // First, and before anything is written or subscribed.
       assertCatalogueIntegrity(catalogue, config.defaultLocale);
+      assertChannelsCanSend(catalogue, config, ctx.config.nodeEnv, ctx.logger);
       runtime = { db: ctx.db, queues: ctx.queues, config, logger: ctx.logger };
 
       const synced = await syncCatalogue(ctx.db, catalogue);
@@ -117,3 +118,28 @@ export function createNotifyModule(options: NotifyModuleOptions = {}): KomtruMod
 }
 
 export const notifyModule = createNotifyModule();
+
+/**
+ * Every channel the shipped catalogue uses must either have its provider configured or be in dry
+ * run. Checked at boot so a rotated key that never reached the deployment is a refusal to start
+ * naming the variable, rather than every OTP that night quietly dead-lettering at send time.
+ *
+ * Outside production this only warns: a developer who has no FCM credentials and no reason to care
+ * should still be able to boot, and the dry-run defaults already mean nothing is sent.
+ */
+function assertChannelsCanSend(
+  catalogue: NotificationCatalogue,
+  config: NotifyConfig,
+  nodeEnv: string,
+  logger: Logger,
+): void {
+  const channels = new Set(catalogue.templates.map((t) => t.channel));
+  const problems = [...channels]
+    .map((channel) => ({ channel, missing: missingCredential(config, channel) }))
+    .filter((entry) => entry.missing !== undefined)
+    .map((entry) => `${entry.channel}: ${String(entry.missing)}`);
+  if (!problems.length) return;
+  const message = `notify: ${String(problems.length)} channel(s) cannot send:\n  ${problems.join('\n  ')}`;
+  if (nodeEnv === 'production') throw new Error(message);
+  logger.warn({ channels: problems }, 'notify: some channels cannot send; they will dead-letter');
+}

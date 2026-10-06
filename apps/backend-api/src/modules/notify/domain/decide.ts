@@ -41,13 +41,14 @@ export function decideDelivery(input: DeliveryDecisionInput): DeliveryDecision {
   if (!hasDestination) {
     return securityCritical ? { kind: 'UNDELIVERABLE' } : { kind: 'SUPPRESS', reason: 'NO_DESTINATION' };
   }
-  if (securityCritical) return { kind: 'SEND' };
+  // The category as well as the flag, for both gates. M11 D2 draws the line at
+  // `is_security_critical`, but a SECURITY-category template that somehow lost its flag is a data
+  // error, and the cost of trusting it is a user who never learns their password was changed.
+  // Three other guards already make the combination unreachable — the boot integrity check, the
+  // 422 on a SECURITY preference write, and the seeded catalogue — so this is the fourth.
+  if (securityCritical || category === 'SECURITY') return { kind: 'SEND' };
   if (!optedIn) return { kind: 'SUPPRESS', reason: 'PREFERENCE_OPT_OUT' };
-  // The category check as well as the flag: M11 §5 exempts the SECURITY category from the cap, and
-  // a template that lost its flag must still not have an OTP swallowed by a noisy hour.
-  if (category !== 'SECURITY' && sendCountInWindow >= maxPerWindow) {
-    return { kind: 'SUPPRESS', reason: 'RATE_LIMITED' };
-  }
+  if (sendCountInWindow >= maxPerWindow) return { kind: 'SUPPRESS', reason: 'RATE_LIMITED' };
   return { kind: 'SEND' };
 }
 

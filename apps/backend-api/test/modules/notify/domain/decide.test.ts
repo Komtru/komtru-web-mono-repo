@@ -48,14 +48,11 @@ describe('decideDelivery', () => {
     });
   });
 
-  it('still honours an opt-out for a SECURITY-category template that is not security critical', () => {
-    // Belt and braces: assertCatalogueIntegrity makes this combination impossible to ship, and the
-    // preferences endpoint refuses to store a SECURITY opt-out, so this can only come from a row
-    // written before either guard existed.
-    expect(decideDelivery(input({ category: 'SECURITY', optedIn: false }))).toEqual({
-      kind: 'SUPPRESS',
-      reason: 'PREFERENCE_OPT_OUT',
-    });
+  it('ignores an opt-out for a SECURITY-category template that lost its flag', () => {
+    // assertCatalogueIntegrity makes this combination impossible to ship and the preferences
+    // endpoint refuses to store a SECURITY opt-out, so it can only come from a direct database
+    // write — but the cost of honouring it is a user who never learns their password changed.
+    expect(decideDelivery(input({ category: 'SECURITY', optedIn: false }))).toEqual({ kind: 'SEND' });
   });
 
   it('suppresses a non-critical notification with nowhere to send it', () => {

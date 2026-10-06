@@ -77,7 +77,7 @@ describe.runIf(infraEnabled)('notify schema', () => {
     ).resolves.toBe('42501');
   });
 
-  it('cascades delivery attempts when the owner removes their notification', async () => {
+  it('refuses to delete a notification that has attempt history, even for the owner', async () => {
     const notificationId = await insertNotification(t.app());
     await t.app().query(
       `INSERT INTO notify.notification_delivery_attempts (notification_id, attempt_number, succeeded)

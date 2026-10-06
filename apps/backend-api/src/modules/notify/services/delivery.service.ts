@@ -12,10 +12,11 @@
 // still looks like a failure, and `releaseStuck` will eventually hand it out again. That window is
 // `sendingAfterMs` wide and deliberate — a notification nobody ever retries is worse than one a
 // user occasionally sees twice.
-import { and, eq, inArray, lt, sql } from 'drizzle-orm';
+import { and, eq, inArray, lt, or, sql } from 'drizzle-orm';
 import type { NotificationCategory, NotificationChannel } from '@komtru/shared-types';
 import type { Db } from '../../../db/index.js';
-import { publish } from '../../../platform/events/publish.js';
+import type { Logger } from '../../../platform/logger.js';
+import { publish, type Tx } from '../../../platform/events/publish.js';
 import { notificationDeadLettered, notificationFailed, notificationSent } from '../domain/events.js';
 import { notificationDeliveryAttempts, notifications } from '../infrastructure/postgres/schema/index.js';
 
@@ -59,75 +60,136 @@ export async function claimForSend(db: Db, notificationId: string): Promise<Clai
   return rows[0];
 }
 
-/** The status update, the attempt row and the event are one transaction: they cannot disagree. */
+/**
+ * Writes an outcome back, but only if this caller still holds the claim.
+ *
+ * The guard is what makes "whoever claims, sends" true. Without it a worker that stalled past the
+ * sweep's window, lost its row to the sweep and then to a second worker, could still come back and
+ * flip a row that is already SENT to FAILED — publishing `notification.failed` for a message the
+ * user received, and leaving the sweep a row to hand out a third time. Zero rows updated means the
+ * claim was taken over while we were talking to a provider: the new holder owns the outcome, so
+ * this attempt records nothing and publishes nothing.
+ *
+ * The update, the attempt row and the event are one transaction: they cannot disagree.
+ */
+async function finish(
+  db: Db,
+  claimed: ClaimedNotification,
+  logger: Logger,
+  outcome: {
+    status: 'SENT' | 'FAILED' | 'DEAD_LETTERED';
+    succeeded: boolean;
+    reason?: string;
+    providerReference?: string;
+  },
+  publishEvent: (tx: Tx) => Promise<unknown>,
+): Promise<boolean> {
+  return db.transaction(async (tx) => {
+    const updated = await tx
+      .update(notifications)
+      .set({
+        status: outcome.status,
+        ...(outcome.status === 'SENT' ? { sentAt: new Date() } : {}),
+        ...(outcome.reason === undefined ? {} : { failedReason: outcome.reason }),
+        ...(outcome.providerReference === undefined ? {} : { providerReference: outcome.providerReference }),
+      })
+      .where(
+        and(
+          eq(notifications.id, claimed.id),
+          eq(notifications.status, 'SENDING'),
+          eq(notifications.attemptCount, claimed.attemptNumber),
+        ),
+      )
+      .returning({ id: notifications.id });
+
+    if (!updated.length) {
+      logger.warn(
+        { notificationId: claimed.id, attempt: claimed.attemptNumber, outcome: outcome.status },
+        'notify: claim was taken over, dropping this attempt outcome',
+      );
+      return false;
+    }
+
+    await tx.insert(notificationDeliveryAttempts).values({
+      notificationId: claimed.id,
+      attemptNumber: claimed.attemptNumber,
+      succeeded: outcome.succeeded,
+      ...(outcome.reason === undefined ? {} : { errorDetail: outcome.reason }),
+    });
+    await publishEvent(tx);
+    return true;
+  });
+}
+
+/**
+ * Whether the row is committed at all. The send job needs to tell "somebody else already handled
+ * this" from "the dispatching transaction has not committed yet", because only the second is worth
+ * retrying.
+ */
+export async function notificationExists(db: Db, notificationId: string): Promise<boolean> {
+  const rows = await db
+    .select({ id: notifications.id })
+    .from(notifications)
+    .where(eq(notifications.id, notificationId))
+    .limit(1);
+  return rows.length > 0;
+}
+
+/** Returns false when the claim had already been taken over, so nothing was recorded. */
 export async function markSent(
   db: Db,
   claimed: ClaimedNotification,
   providerReference: string | undefined,
-): Promise<void> {
-  await db.transaction(async (tx) => {
-    await tx
-      .update(notifications)
-      .set({
-        status: 'SENT',
-        sentAt: new Date(),
-        ...(providerReference === undefined ? {} : { providerReference }),
-      })
-      .where(eq(notifications.id, claimed.id));
-    await tx.insert(notificationDeliveryAttempts).values({
-      notificationId: claimed.id,
-      attemptNumber: claimed.attemptNumber,
-      succeeded: true,
-    });
-    await publish(tx, notificationSent, { payload: payloadOf(claimed), ...aggregate(claimed) });
-  });
+  logger: Logger,
+): Promise<boolean> {
+  return finish(
+    db,
+    claimed,
+    logger,
+    { status: 'SENT', succeeded: true, ...(providerReference === undefined ? {} : { providerReference }) },
+    (tx) => publish(tx, notificationSent, { payload: payloadOf(claimed), ...aggregate(claimed) }),
+  );
 }
 
-export async function markFailed(db: Db, claimed: ClaimedNotification, reason: string): Promise<void> {
-  await db.transaction(async (tx) => {
-    await tx
-      .update(notifications)
-      .set({ status: 'FAILED', failedReason: reason })
-      .where(eq(notifications.id, claimed.id));
-    await tx.insert(notificationDeliveryAttempts).values({
-      notificationId: claimed.id,
-      attemptNumber: claimed.attemptNumber,
-      succeeded: false,
-      errorDetail: reason,
-    });
-    await publish(tx, notificationFailed, {
+export async function markFailed(
+  db: Db,
+  claimed: ClaimedNotification,
+  reason: string,
+  logger: Logger,
+): Promise<boolean> {
+  return finish(db, claimed, logger, { status: 'FAILED', succeeded: false, reason }, (tx) =>
+    publish(tx, notificationFailed, {
       payload: { ...payloadOf(claimed), reason, attempt: claimed.attemptNumber },
       ...aggregate(claimed),
-    });
-  });
+    }),
+  );
 }
 
 /** The end of the line. Ops alerting consumes this; T-100 opens a ticket for the SECURITY ones. */
-export async function markDeadLettered(db: Db, claimed: ClaimedNotification, reason: string): Promise<void> {
-  await db.transaction(async (tx) => {
-    await tx
-      .update(notifications)
-      .set({ status: 'DEAD_LETTERED', failedReason: reason })
-      .where(eq(notifications.id, claimed.id));
-    await tx.insert(notificationDeliveryAttempts).values({
-      notificationId: claimed.id,
-      attemptNumber: claimed.attemptNumber,
-      succeeded: false,
-      errorDetail: reason,
-    });
-    await publish(tx, notificationDeadLettered, {
+export async function markDeadLettered(
+  db: Db,
+  claimed: ClaimedNotification,
+  reason: string,
+  logger: Logger,
+): Promise<boolean> {
+  return finish(db, claimed, logger, { status: 'DEAD_LETTERED', succeeded: false, reason }, (tx) =>
+    publish(tx, notificationDeadLettered, {
       payload: { ...payloadOf(claimed), reason, attempts: claimed.attemptNumber },
       ...aggregate(claimed),
-    });
-  });
+    }),
+  );
 }
 
 export interface StuckOptions {
   /** How long a QUEUED row may sit before we assume its enqueue was lost. */
   queuedAfterMs: number;
-  /** How long a SENDING row may sit before we assume the worker holding it died. */
+  /** How long a SENDING or FAILED row may sit untouched before its queue is presumed gone. */
   sendingAfterMs: number;
+  limit?: number;
 }
+
+/** One minute's worth of rescues. A backlog drains over several ticks rather than in one burst. */
+export const DEFAULT_RELEASE_LIMIT = 500;
 
 export interface ReleasedNotification {
   notificationId: string;
@@ -158,8 +220,21 @@ export async function releaseStuck(
     .select({ notificationId: notifications.id, channel: notifications.channel })
     .from(notifications)
     .where(
-      and(inArray(notifications.status, ['QUEUED', 'FAILED']), lt(notifications.queuedAt, queuedBefore)),
-    );
+      or(
+        // Never enqueued, or the enqueue was lost: nothing has ever attempted it.
+        and(eq(notifications.status, 'QUEUED'), lt(notifications.queuedAt, queuedBefore)),
+        // FAILED is the ORDINARY resting state between two of BullMQ's own retries, so it must be
+        // judged on the last attempt, never on `queued_at`. Keying it on creation time would make
+        // the sweep add a second job alongside a retry chain that is still waiting out its backoff
+        // — two live jobs for one notification, a provider call each, and the attempt budget spent
+        // in a third of the time. Only a FAILED row whose last attempt is as old as an abandoned
+        // SENDING one has genuinely lost its queue.
+        and(eq(notifications.status, 'FAILED'), lt(notifications.lastAttemptAt, sendingBefore)),
+      ),
+    )
+    .orderBy(notifications.queuedAt)
+    // Bounded: after an incident this must not try to re-enqueue the whole backlog every minute.
+    .limit(options.limit ?? DEFAULT_RELEASE_LIMIT);
 
   // A row the UPDATE above just released is already in `abandoned`: filtered here rather than in
   // SQL, because the set is small and an `<> ALL($1::uuid[])` on an empty array is a trap.

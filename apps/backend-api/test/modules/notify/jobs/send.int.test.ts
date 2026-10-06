@@ -114,8 +114,18 @@ describe.runIf(infraEnabled)('runSendJob', () => {
     expect(await row(id)).toMatchObject({ status: 'SENT', attempt_count: 1 });
   });
 
-  it('is a quiet no-op for a notification that does not exist', async () => {
-    await expect(runSendJob(deps(), { notificationId: randomUUID() })).resolves.toBeUndefined();
+  it('retries a notification whose transaction has not committed yet', async () => {
+    // The enqueue happens inside the dispatching transaction, so a job routinely arrives before
+    // the COMMIT. Throwing hands it back to BullMQ's backoff, which converges in milliseconds;
+    // returning quietly would leave the user waiting for the once-a-minute sweep.
+    await expect(runSendJob(deps(), { notificationId: randomUUID() })).rejects.toThrow(/not committed yet/);
+    expect(stub?.hits).toEqual([]);
+  });
+
+  it('is a quiet no-op for a notification somebody else already handled', async () => {
+    const id = await smsNotification({ status: 'SENT' });
+
+    await expect(runSendJob(deps(), { notificationId: id })).resolves.toBeUndefined();
     expect(stub?.hits).toEqual([]);
   });
 
@@ -128,13 +138,34 @@ describe.runIf(infraEnabled)('runSendJob', () => {
     expect(await row(id)).toMatchObject({ status: 'SENT', provider_reference: DRY_RUN_REFERENCE });
   });
 
-  it('makes no provider call when the channel has no credentials', async () => {
+  it('dead-letters rather than pretending to send when the channel has no credentials', async () => {
     const id = await smsNotification();
 
-    await runSendJob(
-      { db: t.db(), config: { ...config(), termii: undefined }, logger },
-      { notificationId: id },
-    );
+    await expect(
+      runSendJob({ db: t.db(), config: { ...config(), termii: undefined }, logger }, { notificationId: id }),
+    ).rejects.toBeInstanceOf(UnrecoverableError);
+
+    expect(stub?.hits).toEqual([]);
+    // Never SENT: a delivery record that says we sent an OTP we did not is worse than no record,
+    // and ops would see a healthy pipeline while every login failed.
+    expect(await row(id)).toMatchObject({ status: 'DEAD_LETTERED' });
+    const { rows } = await t.app().query<{ event_type: string }>(`SELECT event_type FROM platform.outbox`);
+    expect(rows.map((r) => r.event_type)).toContain('notify.notification.dead_lettered');
+  });
+
+  it.each(['WHATSAPP', 'VOICE'])('refuses to deliver %s as a plain SMS', async (channel) => {
+    const id = await smsNotification({ channel });
+
+    await expect(runSendJob(deps(), { notificationId: id })).rejects.toBeInstanceOf(UnrecoverableError);
+
+    expect(stub?.hits).toEqual([]);
+    expect(await row(id)).toMatchObject({ status: 'FAILED' });
+  });
+
+  it.each(['WHATSAPP', 'VOICE'])('still covers %s with the SMS dry-run flag', async (channel) => {
+    const id = await smsNotification({ channel });
+
+    await runSendJob(deps({ smsDryRun: true }), { notificationId: id });
 
     expect(stub?.hits).toEqual([]);
     expect(await row(id)).toMatchObject({ status: 'SENT', provider_reference: DRY_RUN_REFERENCE });

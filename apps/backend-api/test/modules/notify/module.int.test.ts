@@ -17,16 +17,17 @@ describe.runIf(infraEnabled)('notify module', () => {
   const t = useTestDatabase();
   let factory: QueueFactory | undefined;
 
-  const config = () =>
+  const config = (overrides: Record<string, string> = {}) =>
     loadConfig({
       NODE_ENV: 'test',
       LOG_LEVEL: 'silent',
       POSTGRES_URL: pooledUrl(workerDatabase()),
       REDIS_URL: testRedisUrl(),
+      ...overrides,
     });
 
-  const context = (): ModuleContext => {
-    const appConfig = config();
+  const context = (overrides: Record<string, string> = {}): ModuleContext => {
+    const appConfig = config(overrides);
     const logger = createLogger(appConfig);
     factory = createQueueFactory({ redisUrl: appConfig.redis.url, logger });
     const db = t.db();
@@ -144,5 +145,18 @@ describe.runIf(infraEnabled)('notify module', () => {
     await module.start?.(ctx);
 
     expect(ctx.events.subscribers('identity.otp.requested')).toEqual([]);
+  });
+  it('refuses to start in production when a channel the catalogue uses cannot send', async () => {
+    // A rotated key that never reached the deployment would otherwise dead-letter every OTP that
+    // night. Named at boot instead.
+    const module = createNotifyModule();
+
+    await expect(module.start?.(context({ NODE_ENV: 'production' }))).rejects.toThrow(/TERMII/);
+  });
+
+  it('starts outside production with no provider credentials at all', async () => {
+    // A developer with no FCM account still has to be able to boot; the dry-run defaults mean
+    // nothing is sent anyway.
+    await expect(createNotifyModule().start?.(context())).resolves.toBeUndefined();
   });
 });
