@@ -85,6 +85,15 @@ describe.runIf(infraEnabled)('applyTransition', () => {
       ).rows[0]?.count ?? '0',
     );
 
+  const currentRevision = async (id: string) =>
+    Number(
+      (
+        await t
+          .app()
+          .query<{ status_revision: number }>('SELECT status_revision FROM trade.trades WHERE id = $1', [id])
+      ).rows[0]?.status_revision ?? -1,
+    );
+
   const outboxCount = async () =>
     Number(
       (await t.app().query<{ count: string }>('SELECT count(*) AS count FROM platform.outbox')).rows[0]
@@ -346,6 +355,52 @@ describe.runIf(infraEnabled)('applyTransition', () => {
 
     expect(await changesSince(id, before)).toEqual(['COMPLETED']);
     expect((await outboxCount()) - eventsBefore).toBe(1);
+  });
+
+  // The counter-proposal's own race. Two people cannot both flip the turn: the status is the same
+  // before and after, so the revision is the only thing that can separate them.
+  it('lets exactly one of two concurrent counter-proposals win', async () => {
+    const { id, buyer, seller } = await aTrade('AWAITING_ACCEPTANCE');
+    const before = await countChanges(id);
+    const revision = await currentRevision(id);
+
+    let locked = (): void => undefined;
+    const lockTaken = new Promise<void>((resolve) => (locked = resolve));
+    let release = (): void => undefined;
+    const held = new Promise<void>((resolve) => (release = resolve));
+
+    const counter = (actorId: string, hold: boolean) =>
+      t.db().transaction(async (tx) => {
+        const result = await applyTransition(tx, {
+          tradeId: id,
+          action: 'COUNTER_PROPOSE',
+          to: 'AWAITING_ACCEPTANCE',
+          actor: { type: 'BUYER', id: actorId },
+          expectedRevision: revision,
+        });
+        if (hold) {
+          locked();
+          await held;
+        }
+        return result;
+      });
+
+    const first = counter(buyer, true);
+    await lockTaken;
+    const second = counter(seller, false);
+
+    let blocked = false;
+    try {
+      blocked = await waitForLockWait(() => t.owner());
+    } finally {
+      release();
+    }
+    expect(blocked).toBe(true);
+
+    await first;
+    expect(await problem(second)).toEqual({ status: 409, code: 'INVALID_TRANSITION' });
+    expect(await changesSince(id, before)).toEqual(['AWAITING_ACCEPTANCE']);
+    expect(await currentRevision(id)).toBe(revision + 1);
   });
 
   it('refuses a stale unconditional UPDATE at the database level', async () => {
