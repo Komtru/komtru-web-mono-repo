@@ -95,6 +95,17 @@ describe('ConsoleShell', () => {
     expect(screen.getByText('Komtru Ops')).toBeDefined();
   });
 
+  it('puts the screen in a main landmark, beside the rail rather than inside it', () => {
+    render(
+      <ConsoleShell nav={NAV} title="Park Agents">
+        Queue
+      </ConsoleShell>,
+    );
+    const main = screen.getByRole('main');
+    expect(main.textContent).toContain('Queue');
+    expect(main.querySelector('nav')).toBeNull();
+  });
+
   it('has no gallery frame', () => {
     const { container } = render(<ConsoleShell nav={NAV} title="Park Agents" />);
     expect(container.firstElementChild?.className).toContain('min-h-dvh');

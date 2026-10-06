@@ -131,7 +131,7 @@ export function ConsoleShell({
         )}
       </aside>
 
-      <div className="min-w-0 flex-1 bg-surface-primary p-[20px] lg:pt-[24px] lg:pr-[28px] lg:pb-[28px] lg:pl-[28px]">
+      <main className="min-w-0 flex-1 bg-surface-primary p-[20px] lg:pt-[24px] lg:pr-[28px] lg:pb-[28px] lg:pl-[28px]">
         <header className="mb-[18px] flex flex-col items-stretch justify-between gap-[20px] sm:flex-row sm:items-start">
           <div>
             {/* The shell owns the page's one top-level heading: a console screen's title is the
@@ -144,7 +144,7 @@ export function ConsoleShell({
           {actions}
         </header>
         {children}
-      </div>
+      </main>
     </div>
   );
 }
