@@ -11,3 +11,4 @@
 //   @komtru/app-kit/styles.css  the app's global stylesheet
 export * from './config.js';
 export * from './session.js';
+export * from './layout.js';
