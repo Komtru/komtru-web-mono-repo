@@ -13,6 +13,7 @@ import { argon2Hasher } from './domain/credential/hashing.js';
 import { resolveTermsVersions } from './domain/terms.js';
 import { createActorResolver } from './http/middleware.js';
 import { authRoutes } from './http/routes/auth.routes.js';
+import { passwordRoutes } from './http/routes/password.routes.js';
 import { registrationRoutes } from './http/routes/registration.routes.js';
 import type { AccountDeps } from './services/auth.service.js';
 import { usernameRoutes } from './http/username.controller.js';
@@ -133,6 +134,7 @@ export function createIdentityAuth(options: IdentityAuthOptions): IdentityAuth {
     routes: [
       ...authRoutes({ db, signer, epochs, logger }),
       ...registrationRoutes(account),
+      ...passwordRoutes(account),
       ...usernameRoutes({ db }),
     ],
   };
