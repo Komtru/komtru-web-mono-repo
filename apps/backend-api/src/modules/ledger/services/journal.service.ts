@@ -8,8 +8,15 @@
 // posting that commits is the whole posting and nothing can be added to it afterwards.
 import { koboToJson } from '@komtru/shared-types';
 import { publish, type Tx } from '../../../platform/events/publish.js';
+import { accountKey } from '../domain/accounts.js';
 import { ledgerJournalPostedEvent } from '../domain/events.js';
-import { assertBalanced, postJournalInputSchema, type PostJournalInput } from '../domain/journal.js';
+import {
+  assertBalanced,
+  IdempotencyKeyConflictError,
+  postJournalInputSchema,
+  type JournalLineInput,
+  type PostJournalInput,
+} from '../domain/journal.js';
 import {
   claimJournalEntry,
   findEntriesByJournal,
@@ -47,7 +54,9 @@ export async function postJournal(tx: Tx, input: PostJournalInput): Promise<Post
   });
 
   if (!claimed) {
-    return { journalEntry: row, lines: await findEntriesByJournal(tx, row.id), posted: false };
+    const existing = await findEntriesByJournal(tx, row.id);
+    assertSamePosting(row, existing, parsed);
+    return { journalEntry: row, lines: existing, posted: false };
   }
 
   const lines = await insertEntries(tx, row.id, parsed.lines, parsed.currency);
@@ -78,4 +87,39 @@ export async function postJournal(tx: Tx, input: PostJournalInput): Promise<Post
   });
 
   return { journalEntry: row, lines, posted: true };
+}
+
+/** One line as a comparable string, so a replay is matched on content rather than on row order. */
+const lineSignature = (accountName: string, direction: string, amountMinor: bigint): string =>
+  `${accountName}|${direction}|${amountMinor}`;
+
+/**
+ * A replay has to be a replay. The key is already taken, so the only safe outcomes are "this is the
+ * same posting, here it is" and "this is a different posting, refuse" — never "close enough".
+ * Lines are compared as a multiset: the caller may legitimately list them in another order.
+ */
+function assertSamePosting(
+  row: JournalEntryRow,
+  existing: readonly LedgerEntryRow[],
+  parsed: { idempotencyKey: string; currency: string; lines: JournalLineInput[] },
+): void {
+  const differs = (what: string, was: unknown, now: unknown) => {
+    throw new IdempotencyKeyConflictError(
+      parsed.idempotencyKey,
+      `${what} was ${String(was)}, now ${String(now)}`,
+    );
+  };
+
+  if (row.currency !== parsed.currency) differs('currency', row.currency, parsed.currency);
+  if (row.lineCount !== parsed.lines.length) differs('line count', row.lineCount, parsed.lines.length);
+
+  const before = existing
+    .map((line) => lineSignature(line.accountKey, line.direction, line.amountMinor))
+    .sort();
+  const after = parsed.lines
+    .map((line) => lineSignature(accountKey(line.account, parsed.currency), line.direction, line.amountMinor))
+    .sort();
+  for (const [index, signature] of after.entries()) {
+    if (before[index] !== signature) differs('lines', before[index] ?? 'nothing', signature);
+  }
 }

@@ -6,12 +6,14 @@
 // If this ever becomes too slow, the replacement is a rollup maintained by a trigger inside the
 // same transaction as the insert, plus a reconciliation job that recomputes it from the journal and
 // alerts on a difference — not a column a service writes.
-import type { Kobo } from '@komtru/shared-types';
+import { uuidSchema, type Kobo } from '@komtru/shared-types';
 import { and, eq, sql } from 'drizzle-orm';
 import {
   accountKey,
+  currencySchema,
   DEFAULT_CURRENCY,
   normalBalance,
+  normaliseAccountRef,
   type AccountRef,
   type LedgerAccountType,
 } from '../../domain/accounts.js';
@@ -107,7 +109,11 @@ export async function accountBalance(
   ref: AccountRef,
   currency: string = DEFAULT_CURRENCY,
 ): Promise<AccountBalance> {
-  const key = accountKey(ref, currency);
+  // Parse before reading. An unnormalised uuid or a lower-case currency would miss the row and
+  // report a confident zero, which in this module is the worst possible wrong answer.
+  const normalised = normaliseAccountRef(ref);
+  const checked = currencySchema.parse(currency);
+  const key = accountKey(normalised, checked);
   const [row] = await db
     .select(BALANCE_COLUMNS)
     .from(ledgerAccounts)
@@ -120,9 +126,9 @@ export async function accountBalance(
   return {
     accountId: null,
     accountKey: key,
-    accountType: ref.type,
-    currency,
-    ...scopeOf(ref),
+    accountType: normalised.type,
+    currency: checked,
+    ...scopeOf(normalised),
     debitsMinor: 0n,
     creditsMinor: 0n,
     balanceMinor: 0n,
@@ -142,8 +148,8 @@ export async function ownerBalances(
     .leftJoin(ledgerEntries, eq(ledgerEntries.accountId, ledgerAccounts.id))
     .where(
       and(
-        eq(ledgerAccounts.ownerUserId, ownerUserId),
-        currency ? eq(ledgerAccounts.currency, currency) : undefined,
+        eq(ledgerAccounts.ownerUserId, uuidSchema.parse(ownerUserId)),
+        currency ? eq(ledgerAccounts.currency, currencySchema.parse(currency)) : undefined,
       ),
     )
     .groupBy(ledgerAccounts.id)

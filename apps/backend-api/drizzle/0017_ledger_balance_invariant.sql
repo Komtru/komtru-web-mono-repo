@@ -20,8 +20,12 @@ DECLARE
   v_declared  smallint;
   v_currency  text;
   v_lines     integer;
-  v_debits    bigint;
-  v_credits   bigint;
+  -- numeric, not bigint: sum(bigint) returns numeric, and assigning a sum past 2^63 to a bigint
+  -- would raise 22003 instead of KT010 — a refusal outside the vocabulary an incident responder
+  -- is told to look for. Unreachable with real money; the point is that every refusal here reads
+  -- the same way.
+  v_debits    numeric;
+  v_credits   numeric;
   v_foreign   integer;
 BEGIN
   SELECT j.line_count, j.currency INTO v_declared, v_currency

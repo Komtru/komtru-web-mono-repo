@@ -154,7 +154,28 @@ describe.runIf(infraEnabled)('ledger balance invariant', () => {
     expect(await countRows(t.app(), 'ledger.ledger_journal_entries')).toBe(0);
   });
 
-  it('keeps the trial balance at zero under twenty concurrent balanced posts', async () => {
+  // Draining the trigger queue early with SET CONSTRAINTS ALL IMMEDIATE, then dropping the lines
+  // with a savepoint rollback, is the obvious way to try to smuggle an empty journal through.
+  // Postgres re-arms the trigger for events fired inside an aborted subtransaction, so it fails.
+  it('refuses a posting whose lines are dropped by a savepoint rollback', async () => {
+    const a = await accounts(t.app());
+    const client = await begin();
+    const journal = await insertJournal(client);
+    await insertLine(client, journal, a.pool, 'DEBIT', 10_000n);
+    await insertLine(client, journal, a.escrow, 'CREDIT', 10_000n);
+    await client.query('SET CONSTRAINTS ALL IMMEDIATE');
+    await client.query('SAVEPOINT drop_lines');
+    await client
+      .query('DELETE FROM ledger.ledger_entries WHERE journal_entry_id = $1', [journal])
+      .catch(() => undefined);
+    await client.query('ROLLBACK TO SAVEPOINT drop_lines');
+    await client.query('SET CONSTRAINTS ALL DEFERRED');
+    await insertLine(client, journal, a.pool, 'DEBIT', 1n);
+    expect(await sqlState(client.query('COMMIT'))).toBe('KT010');
+    expect(await countRows(t.app(), 'ledger.ledger_entries')).toBe(0);
+  });
+
+  it('keeps the trial balance at zero under twenty overlapping balanced posts', async () => {
     const a = await accounts(t.app());
     await Promise.all(
       Array.from({ length: 20 }, async (_, i) => {

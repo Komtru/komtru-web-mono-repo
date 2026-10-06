@@ -2,7 +2,7 @@
 // it. The database is the authority (migration 0017's deferred constraint triggers); this check
 // exists so a caller's bug surfaces on the caller's own stack with both sums in hand, rather than
 // as a COMMIT failure three statements later with no idea which posting caused it.
-import { eventActorSchema, KOBO_MAX, KOBO_MIN, type EventActor, type Kobo } from '@komtru/shared-types';
+import { eventActorSchema, KOBO_MAX, type EventActor, type Kobo } from '@komtru/shared-types';
 import { z } from 'zod';
 import {
   accountRefSchema,
@@ -27,6 +27,8 @@ export interface JournalLineInput {
  * attempt: `charge:<providerReference>`, `trade:<id>:release`, `payout:<id>:initiated`. A retried
  * job reuses the key its first attempt used, and the unique index does the rest.
  */
+export const MAX_JOURNAL_LINES = 100;
+
 export const journalIdempotencyKeySchema = z
   .string()
   .min(3)
@@ -36,11 +38,8 @@ export const journalIdempotencyKeySchema = z
     'An idempotency key is a lower-case namespace, a colon, then what is being posted',
   );
 
-const amountSchema = z
-  .bigint()
-  .min(1n, 'Amount must be greater than zero')
-  .max(KOBO_MAX)
-  .refine((value) => value >= KOBO_MIN, 'Amount is out of range');
+// Strictly positive, and inside the bigint column's range. The direction carries the sign.
+const amountSchema = z.bigint().min(1n, 'Amount must be greater than zero').max(KOBO_MAX);
 
 export const journalLineSchema = z.strictObject({
   account: accountRefSchema,
@@ -70,7 +69,12 @@ export const postJournalInputSchema = z
   .object({
     idempotencyKey: journalIdempotencyKeySchema,
     description: z.string().min(1).max(500),
-    lines: z.array(journalLineSchema).min(2, 'A posting has at least two lines'),
+    // `line_count` is a smallint, and no real posting has hundreds of lines; a caller that builds
+    // one has a bug, and it should read as a validation error rather than a numeric overflow.
+    lines: z
+      .array(journalLineSchema)
+      .min(2, 'A posting has at least two lines')
+      .max(MAX_JOURNAL_LINES, `A posting has at most ${MAX_JOURNAL_LINES} lines`),
     currency: currencySchema.default(DEFAULT_CURRENCY),
     tradeId: z.uuid().optional(),
     escrowActionRequestId: z.uuid().optional(),
@@ -85,6 +89,22 @@ export const postJournalInputSchema = z
     (input) => (input.provider === undefined) === (input.providerReference === undefined),
     'A provider and its reference are set together or not at all',
   );
+
+/**
+ * A replay that is not a replay. The key is taken by a posting that differs from the one being
+ * asked for, so the caller's retry is a different posting wearing the same name: returning the
+ * original as a success would leave the wrong money posted and tell the caller it had won.
+ */
+export class IdempotencyKeyConflictError extends Error {
+  readonly code = 'LEDGER_IDEMPOTENCY_CONFLICT';
+  constructor(
+    readonly idempotencyKey: string,
+    readonly difference: string,
+  ) {
+    super(`Journal entry ${idempotencyKey} already exists and differs: ${difference}`);
+    this.name = 'IdempotencyKeyConflictError';
+  }
+}
 
 export class UnbalancedJournalError extends Error {
   readonly code = 'LEDGER_UNBALANCED';

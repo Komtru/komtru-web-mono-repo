@@ -10,7 +10,10 @@ export const ledgerAccountType = ledger.enum('ledger_account_type', [
   'USER_PAYABLE', // liability, one per user: released funds not yet paid out
   'PLATFORM_FEE_REVENUE', // revenue: the platform commission
   'BUYER_PROTECTION_FEE_REVENUE', // revenue: the buyer protection fee (design §6.5)
-  'SETTLEMENT_CLEARING', // asset, one per in-flight payout: left payable, not yet landed
+  // One per in-flight payout: left USER_PAYABLE but not yet taken by the bank. Credit-normal, not
+  // the asset M8 §5's table calls it — see normalBalance() in domain/accounts.ts for why §4's own
+  // postings settle the question. T-073/T-074 must post it as an obligation, not as cash.
+  'SETTLEMENT_CLEARING',
 ]);
 
 export const ledgerEntryDirection = ledger.enum('ledger_entry_direction', ['DEBIT', 'CREDIT']);

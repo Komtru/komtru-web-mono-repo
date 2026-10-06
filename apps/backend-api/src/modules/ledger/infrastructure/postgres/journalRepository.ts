@@ -7,11 +7,12 @@ import {
   type Kobo,
   type Paginated,
 } from '@komtru/shared-types';
-import { and, desc, eq, lt, or } from 'drizzle-orm';
+import { and, desc, eq, lt, or, sql } from 'drizzle-orm';
 import { ApiError } from '../../../../platform/errors.js';
 import type { Tx } from '../../../../platform/events/publish.js';
 import { cursorPage, decodeCursor, type CursorKey } from '../../../../platform/http/paginate.js';
 import {
+  currencySchema,
   DEFAULT_CURRENCY,
   type AccountRef,
   type EntryDirection,
@@ -46,6 +47,8 @@ export interface LedgerEntryRow {
   direction: EntryDirection;
   amountMinor: Kobo;
   createdAt: Date;
+  /** `created_at` as Postgres renders it, to the microsecond. Only the cursor needs this. */
+  createdAtExact: string;
 }
 
 export interface JournalEntryClaim {
@@ -83,6 +86,12 @@ const ENTRY_COLUMNS = {
   direction: ledgerEntries.direction,
   amountMinor: ledgerEntries.amountMinor,
   createdAt: ledgerEntries.createdAt,
+  /**
+   * The timestamp at the precision Postgres stores it. `createdAt` arrives as a JavaScript Date,
+   * which keeps milliseconds, and a cursor built from that rounds down past any entry written in
+   * the same millisecond — a paginated money history that silently drops a line.
+   */
+  createdAtExact: sql<string>`${ledgerEntries.createdAt}::text`,
 } as const;
 
 /**
@@ -123,7 +132,12 @@ export async function claimJournalEntry(
   return { row: existing, claimed: false };
 }
 
-/** Writes a posting's lines, resolving each line's account on the way. */
+/**
+ * Writes a posting's lines, resolving each line's account on the way, and returns them in the order
+ * the caller gave them. Every line of one posting shares `now()`, so reading them back by timestamp
+ * would order them by random uuid instead — and the event payload would announce a posting whose
+ * lines are shuffled relative to the call that made it.
+ */
 export async function insertEntries(
   tx: Tx,
   journalEntryId: string,
@@ -143,7 +157,13 @@ export async function insertEntries(
   if (inserted.length !== lines.length) {
     throw new Error(`ledger: expected ${lines.length} lines, wrote ${inserted.length}`);
   }
-  return findEntriesByJournal(tx, journalEntryId);
+  const written = await findEntriesByJournal(tx, journalEntryId);
+  const byId = new Map(written.map((row) => [row.id, row]));
+  return inserted.map(({ id }) => {
+    const row = byId.get(id);
+    if (!row) throw new Error(`ledger: line ${id} was written but could not be read back`);
+    return row;
+  });
 }
 
 /** A posting's lines, oldest first, with each line's account named. */
@@ -167,7 +187,7 @@ export async function findJournalByKey(tx: Reader, idempotencyKey: string): Prom
 }
 
 const toCursor = (row: LedgerEntryRow): CursorKey => ({
-  createdAt: row.createdAt.toISOString(),
+  createdAt: row.createdAtExact,
   id: row.id,
 });
 
@@ -182,10 +202,11 @@ export async function listAccountEntries(
   currency: string = DEFAULT_CURRENCY,
 ): Promise<Paginated<LedgerEntryRow>> {
   const { limit, cursor } = cursorPageRequestSchema.parse(page);
-  const accountId = await findAccountId(db, ref, currency);
+  const accountId = await findAccountId(db, ref, currencySchema.parse(currency));
   if (!accountId) return { items: [], nextCursor: null };
 
   const after = cursor ? decodeEntryCursor(cursor) : undefined;
+  const afterAt = after ? sql`${after.createdAt}::timestamptz` : undefined;
   const rows = await db
     .select(ENTRY_COLUMNS)
     .from(ledgerEntries)
@@ -193,10 +214,10 @@ export async function listAccountEntries(
     .where(
       and(
         eq(ledgerEntries.accountId, accountId),
-        after
+        after && afterAt
           ? or(
-              lt(ledgerEntries.createdAt, after.createdAt),
-              and(eq(ledgerEntries.createdAt, after.createdAt), lt(ledgerEntries.id, after.id)),
+              sql`${ledgerEntries.createdAt} < ${afterAt}`,
+              and(sql`${ledgerEntries.createdAt} = ${afterAt}`, lt(ledgerEntries.id, after.id)),
             )
           : undefined,
       ),
@@ -211,11 +232,11 @@ export async function listAccountEntries(
  * The cursor this module issued, read back. `decodeCursor` already proved it is a flat key; a key
  * of the right shape but the wrong fields is still the client's mistake, so it is a 422.
  */
-function decodeEntryCursor(cursor: string): { createdAt: Date; id: string } {
+function decodeEntryCursor(cursor: string): { createdAt: string; id: string } {
   const key = decodeCursor(cursor);
-  const createdAt = typeof key.createdAt === 'string' ? new Date(key.createdAt) : new Date(Number.NaN);
+  const createdAt = typeof key.createdAt === 'string' ? key.createdAt : '';
   const id = typeof key.id === 'string' ? key.id : '';
-  if (Number.isNaN(createdAt.getTime()) || !id) {
+  if (!createdAt || Number.isNaN(new Date(createdAt).getTime()) || !id) {
     throw new ApiError(
       422,
       'VALIDATION_FAILED',

@@ -4,7 +4,13 @@
 import { eq } from 'drizzle-orm';
 import type { Db } from '../../../../db/index.js';
 import type { Tx } from '../../../../platform/events/publish.js';
-import { accountKey, DEFAULT_CURRENCY, type AccountRef } from '../../domain/accounts.js';
+import {
+  accountKey,
+  currencySchema,
+  DEFAULT_CURRENCY,
+  normaliseAccountRef,
+  type AccountRef,
+} from '../../domain/accounts.js';
 import { ledgerAccounts } from './schema/accounts.js';
 
 /** A read can run on the pool or inside a caller's transaction; a write only inside one. */
@@ -34,10 +40,14 @@ export async function resolveAccountId(
   ref: AccountRef,
   currency: string = DEFAULT_CURRENCY,
 ): Promise<string> {
-  const key = accountKey(ref, currency);
+  // Normalise once, then build the key and the row from the same normalised ref, so the column the
+  // database generates and the key we look up by can never disagree.
+  const normalised = normaliseAccountRef(ref);
+  const checked = currencySchema.parse(currency);
+  const key = accountKey(normalised, checked);
   const inserted = await tx
     .insert(ledgerAccounts)
-    .values({ accountType: ref.type, currency, ...scopeColumns(ref) })
+    .values({ accountType: normalised.type, currency: checked, ...scopeColumns(normalised) })
     .onConflictDoNothing({ target: ledgerAccounts.accountKey })
     .returning({ id: ledgerAccounts.id });
   const created = inserted[0]?.id;

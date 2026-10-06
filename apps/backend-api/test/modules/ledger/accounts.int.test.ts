@@ -5,6 +5,7 @@ import { randomUUID } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 import {
   accountKey,
+  accountBalance,
   claimJournalEntry,
   findEntriesByJournal,
   insertEntries,
@@ -30,7 +31,7 @@ describe.runIf(infraEnabled)('ledger account resolution', () => {
     expect(await countRows(t.app(), 'ledger.ledger_accounts')).toBe(1);
   });
 
-  it('returns one id when twenty transactions resolve the same account at once', async () => {
+  it('returns one id when twenty overlapping transactions resolve the same account', async () => {
     const ref: AccountRef = { type: 'USER_ESCROW_LIABILITY', tradeId: randomUUID() };
     const ids = await Promise.all(Array.from({ length: 20 }, () => resolve(ref)));
     expect(new Set(ids).size).toBe(1);
@@ -179,5 +180,113 @@ describe.runIf(infraEnabled)('ledger journal claims and history', () => {
     expect(page.items[0]?.amountMinor).toBe(9_007_199_254_740_993n);
     expect(page.items[0]?.accountKey).toBe(accountKey({ type: 'USER_PAYABLE', ownerUserId: owner }));
     expect(page.items[0]?.accountType).toBe('USER_PAYABLE');
+  });
+});
+
+// Review findings: the read path must be total over the inputs a caller can actually hand it.
+describe.runIf(infraEnabled)('ledger account identity is total over its inputs', () => {
+  const t = useTestDatabase();
+
+  it('resolves the same account whatever case the uuid arrives in', async () => {
+    const lower = randomUUID();
+    const upper = lower.toUpperCase();
+    const first = await t
+      .db()
+      .transaction((tx) => resolveAccountId(tx, { type: 'USER_PAYABLE', ownerUserId: lower }));
+    const second = await t
+      .db()
+      .transaction((tx) => resolveAccountId(tx, { type: 'USER_PAYABLE', ownerUserId: upper }));
+    expect(second).toBe(first);
+    expect(await countRows(t.app(), 'ledger.ledger_accounts')).toBe(1);
+  });
+
+  it('names an account the same way whatever case the uuid arrives in', () => {
+    const lower = randomUUID();
+    expect(accountKey({ type: 'USER_PAYABLE', ownerUserId: lower.toUpperCase() })).toBe(
+      accountKey({ type: 'USER_PAYABLE', ownerUserId: lower }),
+    );
+  });
+
+  it('reports a balance for an upper-case uuid rather than a confident zero', async () => {
+    const owner = randomUUID();
+    const payable = await insertAccount(t.app(), 'USER_PAYABLE', { owner_user_id: owner });
+    const pool = await insertAccount(t.app(), 'PLATFORM_ESCROW_POOL');
+    await postRaw(t.app(), [
+      { accountId: pool, direction: 'DEBIT', amountMinor: 4_000n },
+      { accountId: payable, direction: 'CREDIT', amountMinor: 4_000n },
+    ]);
+    const balance = await accountBalance(t.db(), { type: 'USER_PAYABLE', ownerUserId: owner.toUpperCase() });
+    expect(balance.balanceMinor).toBe(4_000n);
+  });
+
+  it('lists history for an upper-case uuid', async () => {
+    const owner = randomUUID();
+    const payable = await insertAccount(t.app(), 'USER_PAYABLE', { owner_user_id: owner });
+    const pool = await insertAccount(t.app(), 'PLATFORM_ESCROW_POOL');
+    await postRaw(t.app(), [
+      { accountId: pool, direction: 'DEBIT', amountMinor: 4_000n },
+      { accountId: payable, direction: 'CREDIT', amountMinor: 4_000n },
+    ]);
+    const page = await listAccountEntries(
+      t.db(),
+      { type: 'USER_PAYABLE', ownerUserId: owner.toUpperCase() },
+      { limit: 20 },
+    );
+    expect(page.items).toHaveLength(1);
+  });
+
+  it('refuses a currency that is not a three-letter code rather than reporting zero', async () => {
+    await expect(accountBalance(t.db(), { type: 'PLATFORM_ESCROW_POOL' }, 'ngn')).rejects.toThrow();
+  });
+
+  // Postgres keeps microseconds; a JavaScript Date keeps milliseconds. Three entries inside one
+  // millisecond, at .123100, .123500 and .123900, are the case a cursor built from a Date steps
+  // over: it rounds the newest down to .123000, and the two older ones are no longer "before" it.
+  it('pages every entry when several land inside the same millisecond', async () => {
+    const owner = randomUUID();
+    const payable = await insertAccount(t.app(), 'USER_PAYABLE', { owner_user_id: owner });
+    const pool = await insertAccount(t.app(), 'PLATFORM_ESCROW_POOL');
+
+    // One balanced posting of four lines, written as the owner so created_at can be pinned: three
+    // of them land on the same account inside a single millisecond.
+    const client = await t.owner().connect();
+    try {
+      await client.query('BEGIN');
+      const { rows } = await client.query<{ id: string }>(
+        `INSERT INTO ledger.ledger_journal_entries (idempotency_key, description, line_count)
+         VALUES ($1, 'same millisecond', 4) RETURNING id`,
+        [`test:${randomUUID()}`],
+      );
+      const journal = rows[0]?.id;
+      await client.query(
+        `INSERT INTO ledger.ledger_entries (journal_entry_id, account_id, direction, amount_minor)
+         VALUES ($1, $2, 'DEBIT', 3)`,
+        [journal, pool],
+      );
+      for (const micros of ['100', '500', '900']) {
+        await client.query(
+          `INSERT INTO ledger.ledger_entries (journal_entry_id, account_id, direction, amount_minor, created_at)
+           VALUES ($1, $2, 'CREDIT', 1, $3::timestamptz)`,
+          [journal, payable, `2026-10-05T12:00:00.123${micros}+00`],
+        );
+      }
+      await client.query('COMMIT');
+    } finally {
+      client.release();
+    }
+
+    const seen: string[] = [];
+    let cursor: string | undefined;
+    for (let page = 0; page < 12; page += 1) {
+      const result = await listAccountEntries(
+        t.db(),
+        { type: 'USER_PAYABLE', ownerUserId: owner },
+        { limit: 1, cursor },
+      );
+      seen.push(...result.items.map((item) => item.id));
+      cursor = result.nextCursor ?? undefined;
+      if (!cursor) break;
+    }
+    expect(new Set(seen).size).toBe(3);
   });
 });

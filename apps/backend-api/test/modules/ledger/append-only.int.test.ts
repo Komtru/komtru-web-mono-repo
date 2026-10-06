@@ -90,6 +90,40 @@ describe.runIf(infraEnabled)('ledger append-only', () => {
     expect(await sqlState(t.app().query(`UPDATE ledger.ledger_entries SET amount_minor = 1`))).toBe('42501');
   });
 
+  // An upsert does not fire an AFTER INSERT trigger, so the balance invariant's line_count guard
+  // would be bypassed by a DO UPDATE that widens it. Nothing stops that but the append-only grant
+  // and trigger: this test pins the coupling between migration 0018 and the invariant in 0017.
+  it('refuses an upsert that would widen a committed posting’s line count', async () => {
+    const { journal } = await posting();
+    expect(
+      await sqlState(
+        t.app().query(
+          `INSERT INTO ledger.ledger_journal_entries (id, idempotency_key, description, line_count)
+           VALUES ($1, 'test:widen', 'widen', 4)
+           ON CONFLICT (id) DO UPDATE SET line_count = 4`,
+          [journal],
+        ),
+      ),
+    ).toBe('42501');
+    expect(
+      await sqlState(
+        t.owner().query(
+          `INSERT INTO ledger.ledger_journal_entries (id, idempotency_key, description, line_count)
+           VALUES ($1, 'test:widen2', 'widen', 4)
+           ON CONFLICT (id) DO UPDATE SET line_count = 4`,
+          [journal],
+        ),
+      ),
+    ).toBe('KT001');
+  });
+
+  // A row trigger never fires on TRUNCATE, so only the REVOKE keeps komtru_app from emptying the
+  // ledger in one statement.
+  it.each(TABLES)('denies komtru_app TRUNCATE on %s', async (table) => {
+    await posting();
+    expect(await sqlState(t.app().query(`TRUNCATE ledger.${table} CASCADE`))).toBe('42501');
+  });
+
   it('lets komtru_app insert and read every ledger table', async () => {
     const { journal } = await posting();
     const { rows } = await t

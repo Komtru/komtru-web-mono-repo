@@ -5,6 +5,7 @@ import { randomUUID } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 import {
   accountBalance,
+  IdempotencyKeyConflictError,
   postJournal,
   trialBalance,
   UnbalancedJournalError,
@@ -129,13 +130,88 @@ describe.runIf(infraEnabled)('postJournal', () => {
     expect(await outboxTypes()).toEqual(['ledger.journal.posted']);
   });
 
-  it('posts once when ten retries run at the same time', async () => {
+  it('posts once when ten overlapping retries race for the key', async () => {
     const input = fundTrade(5_000_000n, `charge:${randomUUID()}`);
     const results = await Promise.all(Array.from({ length: 10 }, () => post(input)));
     expect(results.filter((result) => result.posted)).toHaveLength(1);
     expect(new Set(results.map((result) => result.journalEntry.id)).size).toBe(1);
     expect(await countRows(t.app(), 'ledger.ledger_entries')).toBe(2);
     expect(await countRows(t.app(), 'platform.outbox')).toBe(1);
+  });
+
+  // A replay must be a replay. Returning the first posting for a second, different one would let a
+  // caller fix a bug, retry, get a silent success, and leave the wrong money posted.
+  it('refuses a replay whose lines differ from the original posting', async () => {
+    const key = `charge:${randomUUID()}`;
+    await post(fundTrade(5_000_000n, key));
+    await expect(
+      post({
+        ...fundTrade(4_000_000n, key),
+      }),
+    ).rejects.toBeInstanceOf(IdempotencyKeyConflictError);
+    expect(await countRows(t.app(), 'ledger.ledger_entries')).toBe(2);
+  });
+
+  it('refuses a replay with a different line count', async () => {
+    const key = `trade:${trade}:release`;
+    await post({
+      idempotencyKey: key,
+      description: 'escrow released',
+      lines: [debit(ESCROW, 5_000_000n), credit(PAYABLE, 5_000_000n)],
+    });
+    await expect(
+      post({
+        idempotencyKey: key,
+        description: 'escrow released',
+        lines: [debit(ESCROW, 5_000_000n), credit(PAYABLE, 4_750_000n), credit(FEE, 250_000n)],
+      }),
+    ).rejects.toBeInstanceOf(IdempotencyKeyConflictError);
+  });
+
+  it('refuses a replay against a different account', async () => {
+    const key = `payout:${payout}:initiated`;
+    await post({
+      idempotencyKey: key,
+      description: 'payout initiated',
+      lines: [debit(PAYABLE, 1_000n), credit(CLEARING, 1_000n)],
+    });
+    await expect(
+      post({
+        idempotencyKey: key,
+        description: 'payout initiated',
+        lines: [debit(ESCROW, 1_000n), credit(CLEARING, 1_000n)],
+      }),
+    ).rejects.toBeInstanceOf(IdempotencyKeyConflictError);
+  });
+
+  it('accepts a replay that matches, whatever order the lines arrive in', async () => {
+    const key = `charge:${randomUUID()}`;
+    const first = await post({
+      idempotencyKey: key,
+      description: 'escrow funded',
+      lines: [debit(POOL, 5_000_000n), credit(ESCROW, 5_000_000n)],
+    });
+    const second = await post({
+      idempotencyKey: key,
+      description: 'escrow funded',
+      lines: [credit(ESCROW, 5_000_000n), debit(POOL, 5_000_000n)],
+    });
+    expect(second.posted).toBe(false);
+    expect(second.journalEntry.id).toBe(first.journalEntry.id);
+  });
+
+  it('returns the lines in the order they were posted', async () => {
+    const posted = await post({
+      idempotencyKey: `trade:${trade}:split`,
+      description: 'released with a fee',
+      lines: [debit(ESCROW, 5_000_000n), credit(PAYABLE, 4_750_000n), credit(FEE, 250_000n)],
+    });
+    expect(posted.lines.map((line) => line.accountType)).toEqual([
+      'USER_ESCROW_LIABILITY',
+      'USER_PAYABLE',
+      'PLATFORM_FEE_REVENUE',
+    ]);
+    expect(posted.lines.map((line) => line.amountMinor)).toEqual([5_000_000n, 4_750_000n, 250_000n]);
   });
 
   it('keeps two different postings apart', async () => {

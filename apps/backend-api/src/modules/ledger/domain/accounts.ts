@@ -51,6 +51,14 @@ export const accountRefSchema = z.discriminatedUnion('type', [
   z.strictObject({ type: z.literal('SETTLEMENT_CLEARING'), payoutId: uuidSchema }),
 ]) satisfies z.ZodType<AccountRef, unknown>;
 
+/**
+ * The ref with its uuid normalised the way `uuidSchema` and Postgres both normalise it. Identity
+ * has to be total over what a caller can actually hand us: a uuid that arrives upper-case out of a
+ * path parameter or a provider payload names the same account as its lower-case form, and a key
+ * built from the raw string would miss the row and report a confident zero balance.
+ */
+export const normaliseAccountRef = (ref: AccountRef): AccountRef => accountRefSchema.parse(ref);
+
 /** The scope a ref carries, or `-` for a platform account; the database spells it the same way. */
 export const accountScopeId = (ref: AccountRef): string => {
   switch (ref.type) {
@@ -65,9 +73,14 @@ export const accountScopeId = (ref: AccountRef): string => {
   }
 };
 
-/** `NGN:USER_PAYABLE:<uuid>`. Identical to the generated `ledger_accounts.account_key`. */
-export const accountKey = (ref: AccountRef, currency: string = DEFAULT_CURRENCY): string =>
-  `${currency}:${ref.type}:${accountScopeId(ref)}`;
+/**
+ * `NGN:USER_PAYABLE:<uuid>`. Identical to the generated `ledger_accounts.account_key`, for every
+ * account type and every currency — the integration tests pin that agreement against a real row.
+ */
+export function accountKey(ref: AccountRef, currency: string = DEFAULT_CURRENCY): string {
+  const normalised = normaliseAccountRef(ref);
+  return `${currencySchema.parse(currency)}:${normalised.type}:${accountScopeId(normalised)}`;
+}
 
 /**
  * SETTLEMENT_CLEARING is credit-normal, which M8 §5's table calls "Asset (transitional)". §5's label

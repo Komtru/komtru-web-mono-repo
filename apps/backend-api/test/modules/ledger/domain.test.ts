@@ -9,6 +9,7 @@ import {
   journalIdempotencyKeySchema,
   LEDGER_ACCOUNT_TYPES,
   ledgerJournalPostedEvent,
+  MAX_JOURNAL_LINES,
   normalBalance,
   postJournalInputSchema,
   signedMinor,
@@ -59,6 +60,18 @@ describe('ledger account identity', () => {
 
   it('refuses a scope that is not a uuid', () => {
     expect(accountRefSchema.safeParse({ type: 'USER_PAYABLE', ownerUserId: 'bob' }).success).toBe(false);
+    expect(() => accountKey({ type: 'USER_PAYABLE', ownerUserId: 'bob' })).toThrow();
+  });
+
+  it('normalises a uuid the way Postgres stores it', () => {
+    expect(accountKey({ type: 'USER_PAYABLE', ownerUserId: OWNER.toUpperCase() })).toBe(
+      `NGN:USER_PAYABLE:${OWNER}`,
+    );
+    expect(accountKey({ type: 'USER_PAYABLE', ownerUserId: ` ${OWNER} ` })).toBe(`NGN:USER_PAYABLE:${OWNER}`);
+  });
+
+  it('refuses a currency that is not a three-letter code', () => {
+    expect(() => accountKey({ type: 'PLATFORM_ESCROW_POOL' }, 'ngn')).toThrow();
   });
 
   it('lists the six account types M8 §4 and T-070 define', () => {
@@ -190,6 +203,11 @@ describe('postJournalInputSchema', () => {
 
   it('rejects fewer than two lines', () => {
     expect(postJournalInputSchema.safeParse({ ...base, lines: [line()] }).success).toBe(false);
+  });
+
+  it('rejects a posting with more lines than a posting has', () => {
+    const many = Array.from({ length: MAX_JOURNAL_LINES + 1 }, () => line());
+    expect(postJournalInputSchema.safeParse({ ...base, lines: many }).success).toBe(false);
   });
 
   it('rejects an idempotency key with no namespace prefix', () => {

@@ -100,8 +100,9 @@ describe.runIf(infraEnabled)('ledger balances', () => {
 
   it.each(LEDGER_ACCOUNT_TYPES)('signs %s in its own normal direction', async (type) => {
     const ref = refFor(type);
-    const other: AccountRef = { type: 'PLATFORM_ESCROW_POOL' };
-    if (type === 'PLATFORM_ESCROW_POOL') return;
+    // The counterparty must not be the account under test, or the two lines would cancel out.
+    const other: AccountRef =
+      type === 'PLATFORM_ESCROW_POOL' ? { type: 'PLATFORM_FEE_REVENUE' } : { type: 'PLATFORM_ESCROW_POOL' };
     await post({
       idempotencyKey: `prop:${type.toLowerCase()}:grow`,
       description: `grow ${type}`,
