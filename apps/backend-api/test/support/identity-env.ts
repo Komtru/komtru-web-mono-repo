@@ -12,6 +12,9 @@ export const identityProcessEnv = (): Record<string, string> => ({
   IDENTITY_SIGNING_KEY_ID: 'test-key',
   /** T-032: an HMAC under an empty key is not an HMAC, and no OTP could be issued. */
   IDENTITY_HMAC_PEPPER: 'p'.repeat(32),
-  /** T-035: a party invitation's destination must be stored recoverably to be sent (§S9). */
+  /** T-035 and T-036: an invitation destination, TOTP seeds and the recovery-code sheet are all
+   * stored encrypted (§S9). */
   ENCRYPTION_KEY: randomBytes(32).toString('hex'),
+  /** T-036: `createRelyingParty` refuses an empty origin list by design — it is not a wildcard. */
+  WEBAUTHN_ORIGINS: 'https://app.komtru.test',
 });

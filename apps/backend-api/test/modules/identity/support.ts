@@ -13,6 +13,10 @@ import { resolveTermsVersions } from '../../../src/modules/identity/domain/terms
 import type { RegistrationControllerDeps } from '../../../src/modules/identity/http/controllers/registration.controller.js';
 import type { AccountDeps } from '../../../src/modules/identity/services/auth.service.js';
 import { createHmacHasher } from '../../../src/platform/crypto/hmac.js';
+import { createEncryption } from '../../../src/platform/crypto/encryption.js';
+import type { MfaDeps } from '../../../src/modules/identity/services/mfa.service.js';
+import type { RelyingParty } from '../../../src/modules/identity/infrastructure/webauthn/relying-party.js';
+import type { WebauthnChallengeStore } from '../../../src/modules/identity/infrastructure/redis/webauthn-challenge.js';
 import { createTokenSigner } from '../../../src/modules/identity/infrastructure/jwt/access-token.js';
 import { createEpochCache } from '../../../src/modules/identity/infrastructure/redis/epoch-cache.js';
 import { createLogger } from '../../../src/platform/logger.js';
@@ -29,9 +33,13 @@ export const testConfig = (overrides: Record<string, string> = {}): AppConfig =>
     IDENTITY_SIGNING_KEY: randomBytes(32).toString('hex'),
     IDENTITY_SIGNING_KEY_ID: 'test-key',
     IDENTITY_HMAC_PEPPER: 'p'.repeat(32),
-    // T-035: identity refuses to build without it, because an invitation destination must be
-    // stored recoverably to be sent (§S9).
+    // The module refuses to build without these, the way it already refuses without the pepper:
+    // an invitation destination must be stored recoverably to be sent (T-035), and TOTP seeds and
+    // the recovery-code blob are `*_enc` columns (T-036), both §S9.
     ENCRYPTION_KEY: randomBytes(32).toString('hex'),
+    // `createRelyingParty` refuses an empty origin list by design — it is not a wildcard — and
+    // `createIdentityAuth` builds it eagerly, so every suite that builds the module needs one.
+    WEBAUTHN_ORIGINS: 'https://app.komtru.test',
     ...overrides,
   });
 
@@ -172,7 +180,133 @@ export const accountDeps = (overrides: Partial<AccountDeps> = {}): AccountDeps =
  * rate-limit keys. Nothing here is ever called: `assertRouteInvariants` reads the definitions, it
  * does not run the handlers.
  */
-export const stubAccountDeps = (): RegistrationControllerDeps => ({
+export const stubAccountDeps = (): RegistrationControllerDeps & MfaDeps => ({
   db: null as unknown as Db,
   ...accountDeps(),
+  ...mfaStubs(),
 });
+
+// ---------------------------------------------------------------------------
+// T-036
+// ---------------------------------------------------------------------------
+
+/**
+ * A `RelyingParty` that verifies whatever it is handed.
+ *
+ * WebAuthn assertions cannot be produced without an authenticator, and a test that built one by
+ * hand would be testing `@simplewebauthn/server` rather than this module. What the integration
+ * tests here are actually about is the ROW work around a verdict — the credential, the factor, the
+ * sign counter — so the verdict is supplied and the rest is real.
+ */
+export const stubRelyingParty = (
+  overrides: Partial<RelyingParty> = {},
+): RelyingParty & { challenges: string[] } => {
+  const challenges: string[] = [];
+  let counter = 0;
+  return {
+    challenges,
+    rpName: 'Komtru',
+    registrationOptions: (input) => {
+      const challenge = `challenge-${challenges.length}`;
+      challenges.push(challenge);
+      return Promise.resolve({ challenge, excludeCredentials: input.exclude });
+    },
+    verifyRegistration: () =>
+      Promise.resolve({
+        credentialId: randomBytes(16),
+        publicKey: randomBytes(64),
+        counter: 0,
+        aaguid: null,
+        transports: ['internal'],
+        backedUp: true,
+      }),
+    authenticationOptions: () => {
+      const challenge = `challenge-${challenges.length}`;
+      challenges.push(challenge);
+      return Promise.resolve({ challenge });
+    },
+    verifyAuthentication: () => {
+      counter += 1;
+      return Promise.resolve({ verified: true, newCounter: counter });
+    },
+    ...overrides,
+  };
+};
+
+/** An in-memory `WebauthnChallengeStore` with the same single-use contract as the Redis one. */
+export const memoryChallengeStore = (): WebauthnChallengeStore => {
+  const store = new Map<string, string>();
+  return {
+    put: (key, challenge) => {
+      store.set(key, challenge);
+      return Promise.resolve();
+    },
+    take: (key) => {
+      const value = store.get(key) ?? null;
+      store.delete(key);
+      return Promise.resolve(value);
+    },
+  };
+};
+
+/** The three fields `MfaDeps` adds over `AccountDeps`, for a test that only needs the shape. */
+export const mfaStubs = (): Pick<
+  MfaDeps,
+  'encryption' | 'webauthn' | 'webauthnChallenges' | 'staffRequireMfa'
+> => ({
+  encryption: createEncryption(testConfig()),
+  webauthn: stubRelyingParty(),
+  webauthnChallenges: memoryChallengeStore(),
+  staffRequireMfa: true,
+});
+
+export const mfaDeps = (overrides: Partial<MfaDeps> = {}): MfaDeps => ({
+  ...accountDeps(),
+  ...mfaStubs(),
+  ...overrides,
+});
+
+/**
+ * How many statements a piece of work sends to Postgres.
+ *
+ * The §17 timing assertion can be satisfied on a fast machine by an implementation that reads the
+ * MFA factors BEFORE the rejection and throws the answer away — one extra indexed lookup hides
+ * inside 5ms. Counting the statements does not depend on how fast the machine is, which is why the
+ * enumeration suite asserts both.
+ *
+ * It wraps BOTH `pool.query` and the `query` of every client `pool.connect()` hands out, because
+ * drizzle takes a client for a transaction and issues everything on that — a counter on the pool
+ * alone would read zero for every statement inside `db.transaction(...)`, which is all of them.
+ * Both are restored in a `finally`, so a throwing subject does not leave the pool wrapped for the
+ * rest of the file.
+ */
+export async function countStatements(pool: pg.Pool, run: () => Promise<unknown>): Promise<number> {
+  const originalQuery = pool.query.bind(pool);
+  const originalConnect = pool.connect.bind(pool);
+  let count = 0;
+
+  const mutable = pool as unknown as { query: unknown; connect: unknown };
+  mutable.query = (...args: unknown[]) => {
+    count += 1;
+    return (originalQuery as (...a: unknown[]) => unknown)(...args);
+  };
+  mutable.connect = async (...args: unknown[]) => {
+    const client = (await (originalConnect as (...a: unknown[]) => unknown)(...args)) as {
+      query: (...a: unknown[]) => unknown;
+    };
+    const clientQuery = client.query.bind(client);
+    client.query = (...args2: unknown[]) => {
+      count += 1;
+      return clientQuery(...args2);
+    };
+    return client;
+  };
+
+  try {
+    await run();
+  } finally {
+    mutable.query = originalQuery;
+    mutable.connect = originalConnect;
+  }
+  return count;
+}

@@ -21,7 +21,7 @@ import { createRateLimitGate } from '../../../../src/platform/http/rateLimit.js'
 import { infraEnabled } from '../../../support/db-urls.js';
 import { useTestDatabase } from '../../../support/db.js';
 import {
-  accountDeps,
+  mfaDeps,
   countingHasher,
   createTestRedis,
   redisReady,
@@ -72,7 +72,7 @@ describe.runIf(infraEnabled)('enumeration (M1 §17)', () => {
     await t.db().transaction(async (tx) => {
       const email = await attachEmail(tx, { userId, email: KNOWN, makePrimary: true });
       await markEmailVerified(tx, { userId, emailId: email.emailId, source: 'otp' });
-      await setPassword(tx, accountDeps(), { userId, password: PASSWORD });
+      await setPassword(tx, mfaDeps(), { userId, password: PASSWORD });
     });
     return userId;
   };
@@ -89,7 +89,7 @@ describe.runIf(infraEnabled)('enumeration (M1 §17)', () => {
       // measuring it here would spend two minutes of CPU confirming that. What this measures instead
       // is the DATABASE work, which is where a real difference would hide: an extra credential
       // lookup on the hit path and none on the miss path is precisely the oracle §S3 is about.
-      const deps = accountDeps({ hasher: countingHasher({ matches: false }) });
+      const deps = mfaDeps({ hasher: countingHasher({ matches: false }) });
       const attempt = (identifier: string) =>
         login(t.db(), deps, { identifier, password: 'not the password', ip: null, userAgent: null });
 

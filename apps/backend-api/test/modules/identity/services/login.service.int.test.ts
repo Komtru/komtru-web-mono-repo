@@ -11,7 +11,7 @@ import { setPassword } from '../../../../src/modules/identity/services/credentia
 import { sha256 } from '../../../../src/platform/crypto/hmac.js';
 import { infraEnabled } from '../../../support/db-urls.js';
 import { useTestDatabase } from '../../../support/db.js';
-import { accountDeps, countingHasher, seedUser } from '../support.js';
+import { countingHasher, mfaDeps, seedUser } from '../support.js';
 
 const PASSWORD = 'a sturdy passphrase 1';
 const EMAIL = 'jane@example.com';
@@ -19,7 +19,7 @@ const PHONE = '+2348023415567';
 
 describe.runIf(infraEnabled)('password login', () => {
   const t = useTestDatabase();
-  const deps = accountDeps();
+  const deps = mfaDeps();
 
   /** A user with a verified email, a verified phone, a handle and a password. */
   const seedSignedUp = async (status = 'ACTIVE') => {
@@ -134,7 +134,7 @@ describe.runIf(infraEnabled)('password login', () => {
       ['no-such-handle', false],
     ] as const) {
       const hasher = countingHasher({ matches });
-      await attempt(identifier, PASSWORD, accountDeps({ hasher }));
+      await attempt(identifier, PASSWORD, mfaDeps({ hasher }));
       const calls = hasher.calls();
       expect(calls.verify + calls.decoy, `identifier ${identifier}`).toBe(1);
     }
@@ -143,7 +143,7 @@ describe.runIf(infraEnabled)('password login', () => {
   it('rehashes a weak stored hash on a successful sign-in (S1)', async () => {
     const userId = await seedSignedUp();
     const hasher = countingHasher({ matches: true, needsRehash: true });
-    const result = await attempt(EMAIL, PASSWORD, accountDeps({ hasher }));
+    const result = await attempt(EMAIL, PASSWORD, mfaDeps({ hasher }));
     expect(result.outcome).toBe('SESSION');
     expect(hasher.calls().hash).toBe(1);
 

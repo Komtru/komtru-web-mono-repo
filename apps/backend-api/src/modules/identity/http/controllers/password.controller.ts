@@ -9,8 +9,9 @@ import type { z } from 'zod';
 import type { Db } from '../../../../db/index.js';
 import { ApiError } from '../../../../platform/errors.js';
 import type { Actor } from '../../../../platform/http/principal.js';
-import type { AccountDeps } from '../../services/auth.service.js';
 import { login } from '../../services/login.service.js';
+import { completeMfaLogin, resolveMfaToken } from '../../services/mfa-login.service.js';
+import { findOwnFactor, issueFactorChallenge, type MfaDeps } from '../../services/mfa.service.js';
 import {
   changePassword,
   completePasswordReset,
@@ -20,24 +21,33 @@ import type {
   changePasswordRequestSchema,
   forgotPasswordRequestSchema,
   loginRequestSchema,
+  mfaChallengeRequestSchema,
+  mfaVerifyRequestSchema,
   resetPasswordRequestSchema,
 } from '../validations/password.validation.js';
 import { callerAgent, callerIp } from './request.js';
 
-export interface PasswordControllerDeps extends AccountDeps {
+export interface PasswordControllerDeps extends MfaDeps {
   db: Db;
 }
 
 /**
  * The single rejection. Built fresh each time rather than shared, because an ApiError carries a
  * stack and sharing one instance across requests would attribute every rejection to the first.
+ *
+ * `extensions` is used by ONE caller, `/auth/mfa/verify`, to add `attemptsRemaining` — and only
+ * once the mfa token itself has matched, which means the caller has already proved the password.
+ * The status, the code and the title are identical either way, so §S3's promise is untouched: what
+ * differs is a field nobody without the credentials can ever see.
  */
-const rejected = (): ApiError =>
+const rejected = (extensions?: Record<string, unknown>): ApiError =>
   new ApiError(
     401,
     'INVALID_CREDENTIALS',
     'Sign in failed',
     'Check the details and try again, or reset your password',
+    undefined,
+    extensions,
   );
 
 export async function signIn(
@@ -53,6 +63,17 @@ export async function signIn(
     userAgent: callerAgent(req),
   });
 
+  // §10.1's second 200. Placed BEFORE the rejection so this function still has exactly ONE throw:
+  // a controller with two error branches is how §S3's promise gets broken later by somebody being
+  // helpful.
+  if (result.outcome === 'MFA_REQUIRED') {
+    return {
+      mfaRequired: true as const,
+      mfaToken: result.mfaToken,
+      expiresAt: result.expiresAt.getTime(),
+      factors: result.factors,
+    };
+  }
   if (result.outcome !== 'SESSION') throw rejected();
 
   return {
@@ -63,6 +84,86 @@ export async function signIn(
     expiresAt: Date.now() + result.session.expiresIn * 1000,
     nextStep: result.nextStep,
     user: result.user,
+  };
+}
+
+/**
+ * `POST /auth/mfa/verify`.
+ *
+ * Two outcomes reach the client and both are the SAME 401 with the same code and the same title;
+ * only an extension member differs. That is not a §S3 exception: §S3 is about an unauthenticated
+ * caller learning whether an account exists, and everyone who can see `attemptsRemaining` here has
+ * already presented a valid `mfaToken`, which is only ever issued against a correct password. A
+ * forged token gets the bare rejection with no counter at all, so the field cannot be used to tell
+ * a real token from an invented one.
+ */
+export async function verifyMfa(
+  deps: PasswordControllerDeps,
+  req: Request,
+  body: z.output<typeof mfaVerifyRequestSchema>,
+) {
+  const result = await completeMfaLogin(deps.db, deps, {
+    mfaToken: body.mfaToken,
+    factorId: body.factorId,
+    ...(body.code !== undefined ? { code: body.code } : {}),
+    ...(body.assertion !== undefined ? { assertion: body.assertion } : {}),
+    ...(body.deviceFingerprint ? { deviceFingerprint: body.deviceFingerprint } : {}),
+    ip: callerIp(req),
+    userAgent: callerAgent(req),
+  });
+
+  if (result.outcome === 'WRONG_CODE') {
+    throw rejected({ attemptsRemaining: result.attemptsRemaining });
+  }
+  if (result.outcome !== 'SESSION') throw rejected();
+
+  return {
+    accessToken: result.session.accessToken,
+    refreshToken: result.session.refreshToken,
+    scope: result.session.scope,
+    expiresIn: result.session.expiresIn,
+    expiresAt: Date.now() + result.session.expiresIn * 1000,
+    nextStep: result.nextStep,
+    user: result.user,
+  };
+}
+
+/**
+ * `POST /auth/mfa/challenge`: send the SMS, or build the passkey options.
+ *
+ * Answers the SAME 401 for an unknown token as `/auth/mfa/verify` does, and charges no attempt —
+ * asking for a code to be sent is not a guess, and metering it would let a user who taps "resend"
+ * twice lock themselves out of their own sign-in.
+ */
+export async function challengeMfa(
+  deps: PasswordControllerDeps,
+  req: Request,
+  body: z.output<typeof mfaChallengeRequestSchema>,
+) {
+  const challenge = await deps.db.transaction(async (tx) => {
+    const resolved = await resolveMfaToken(tx, deps, body.mfaToken);
+    if (!resolved) return null;
+
+    const factor = await findOwnFactor(tx, { userId: resolved.userId, factorId: body.factorId });
+    if (!factor) return null;
+
+    return issueFactorChallenge(tx, deps, {
+      userId: resolved.userId,
+      factor,
+      ceremonyKey: `mfa:${resolved.challengeId}`,
+      ip: callerIp(req),
+    });
+  });
+
+  if (!challenge) throw rejected();
+  if (challenge.kind === 'PASSKEY') return { kind: 'PASSKEY' as const, options: challenge.options };
+
+  return {
+    kind: 'CODE' as const,
+    challengeId: challenge.challengeId,
+    maskedDestination: challenge.maskedDestination,
+    expiresAt: challenge.expiresAt ? challenge.expiresAt.getTime() : null,
+    delivered: challenge.delivered,
   };
 }
 

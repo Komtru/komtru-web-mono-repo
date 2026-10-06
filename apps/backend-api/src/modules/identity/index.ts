@@ -15,9 +15,13 @@ import { argon2Hasher } from './domain/credential/hashing.js';
 import { resolveTermsVersions } from './domain/terms.js';
 import { createActorResolver } from './http/middleware.js';
 import { authRoutes } from './http/routes/auth.routes.js';
+import { deviceRoutes } from './http/routes/device.routes.js';
+import { mfaRoutes } from './http/routes/mfa.routes.js';
 import { passwordRoutes } from './http/routes/password.routes.js';
 import { registrationRoutes } from './http/routes/registration.routes.js';
-import type { AccountDeps } from './services/auth.service.js';
+import type { MfaDeps } from './services/mfa.service.js';
+import { createRelyingParty } from './infrastructure/webauthn/relying-party.js';
+import { createWebauthnChallengeStore } from './infrastructure/redis/webauthn-challenge.js';
 import { usernameRoutes } from './http/username.controller.js';
 import { partyRoutes } from './http/routes/party.routes.js';
 import type { PartyControllerDeps } from './http/controllers/party.controller.js';
@@ -71,12 +75,46 @@ export * from './domain/otp/challenge.js';
 export * from './domain/registration.js';
 export { resolvePrincipal, type PrincipalDeps } from './services/principal.service.js';
 export { bearerToken, createActorResolver } from './http/middleware.js';
+export * from './domain/mfa/policy.js';
+export * from './domain/mfa/totp.js';
+export * from './domain/mfa/recovery-codes.js';
+export {
+  activeFactors,
+  findOwnFactor,
+  holdsLiveAdminRole,
+  issueFactorChallenge,
+  listFactors,
+  removeFactor,
+  verifyFactor,
+  type FactorRow,
+  type FactorView,
+  type MfaDeps,
+} from './services/mfa.service.js';
+export { issueStepUpToken, consumeStepUpToken, requireStepUp } from './services/step-up.service.js';
+export { completeMfaLogin, issueMfaToken, type MfaChallengeView } from './services/mfa-login.service.js';
+export { createRelyingParty, type RelyingParty } from './infrastructure/webauthn/relying-party.js';
+export {
+  createWebauthnChallengeStore,
+  type WebauthnChallengeStore,
+} from './infrastructure/redis/webauthn-challenge.js';
+export {
+  deviceLabel,
+  listDevices,
+  registerDevice,
+  retireDevice,
+  signInLocation,
+  trustDevice,
+  upsertDevice,
+  type DeviceView,
+} from './services/device.service.js';
 export {
   applyKillSwitch,
   bumpSessionsEpoch,
   createSession,
   refreshSession,
+  listSessions,
   revokeAllSessions,
+  revokeSession,
   revokeSessionFamily,
   type CreateSessionInput,
   type IssuedSession,
@@ -168,14 +206,14 @@ export function createIdentityAuth(options: IdentityAuthOptions): IdentityAuth {
     throw new Error('IDENTITY_HMAC_PEPPER is required to build the identity module');
   }
 
-  // §S9's envelope encryption, for `party_invitations.destination_enc`. Built here rather than on
-  // first use for the same reason as the pepper above: an invitation has to be stored recoverably to
-  // be sent, and a process that cannot encrypt one should say so while it is starting, naming the
-  // variable, rather than on somebody's first invitation. `createEncryption` throws naming
-  // ENCRYPTION_KEY.
+  // §S9's envelope encryption: `party_invitations.destination_enc` (T-035), and TOTP seeds and the
+  // recovery-code sheet (T-036). Built here rather than on first use for the same reason as the
+  // pepper above — an invitation has to be stored recoverably to be sent, and a process that will
+  // serve `/me/mfa/totp/enroll` should say so while it is starting, naming ENCRYPTION_KEY, rather
+  // than at somebody's first invitation or first enrolment.
   const encryption = createEncryption(config);
 
-  const account: AccountDeps & { db: Db } = {
+  const account: MfaDeps & { db: Db } = {
     db,
     signer,
     epochs,
@@ -185,6 +223,13 @@ export function createIdentityAuth(options: IdentityAuthOptions): IdentityAuth {
     breach: { enabled: config.identity.breachCheckEnabled, logger },
     terms: resolveTermsVersions(config.terms),
     mirrorPhoneOtpToEmail: config.identity.mirrorPhoneOtpToEmail,
+    encryption,
+    // Allowed to throw here, naming its variable, the way the pepper check above does: an empty
+    // WebAuthn origin list is not a wildcard, and a process that will serve a passkey ceremony
+    // should fail at boot rather than at a user's first enrolment.
+    webauthn: createRelyingParty(config, logger),
+    webauthnChallenges: createWebauthnChallengeStore(redis, logger),
+    staffRequireMfa: config.identity.staffRequireMfa,
   };
 
   // T-035. `enrich` is deliberately absent: M7's completed-trade count, M5's merchant name and
@@ -209,6 +254,8 @@ export function createIdentityAuth(options: IdentityAuthOptions): IdentityAuth {
       ...passwordRoutes(account),
       ...usernameRoutes({ db }),
       ...partyRoutes(party),
+      ...deviceRoutes({ db, logger }),
+      ...mfaRoutes(account),
     ],
     schedules: [
       {

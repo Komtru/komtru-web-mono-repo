@@ -101,6 +101,27 @@ const VARIABLES = {
   IDENTITY_HMAC_PEPPER: { schema: z.string().min(32), required: false },
   IDENTITY_BREACH_CHECK_ENABLED: { schema: bool, required: false },
   /**
+   * The WebAuthn relying party (T-036). `rpID` is a bare registrable domain, never a URL — the
+   * browser compares it against the origin's effective domain and a scheme here simply fails every
+   * ceremony. `WEBAUTHN_ORIGINS` is the exact list `verifyAuthenticationResponse` is given; an
+   * empty list is not a wildcard and `createRelyingParty` refuses to build one.
+   */
+  WEBAUTHN_RP_ID: {
+    schema: z
+      .string()
+      .min(1)
+      .regex(/^[a-z0-9.-]+$/),
+    required: false,
+  },
+  WEBAUTHN_RP_NAME: { schema: z.string().min(1), required: false },
+  WEBAUTHN_ORIGINS: { schema: list, required: false },
+  /**
+   * M1 §S13 and D2 C4: a staff session needs MFA, and granting an admin role to a user without it
+   * puts them in forced setup. Defaults to ON — the variable exists to relax the rule in a local
+   * sandbox, so an operator who forgets it gets the rule rather than the exception.
+   */
+  IDENTITY_STAFF_REQUIRE_MFA: { schema: bool, required: false },
+  /**
    * Local convenience, off everywhere else: SMS runs dry outside production, so a developer never
    * sees a phone OTP. With this on, a phone OTP is also emailed to the user's address if they have
    * one. It never replaces the SMS, and it never applies to a user with no email.
@@ -251,6 +272,10 @@ export interface AppConfig {
     /** §S2's k-anonymity check. Off by default so a local run never reaches out to HIBP. */
     breachCheckEnabled: boolean;
     mirrorPhoneOtpToEmail: boolean;
+    /** M1 §S13 / D2 C4. On unless an operator deliberately relaxes it (T-036). */
+    staffRequireMfa: boolean;
+    /** T-036's WebAuthn relying party. `origins` empty means no browser may complete a ceremony. */
+    webauthn: { rpId: string; rpName: string; origins: string[] };
   };
   /**
    * An operator's override of the published legal copy (NDPA §15). Absent means "whatever this
@@ -444,6 +469,12 @@ export function loadConfig(env: NodeJS.ProcessEnv): AppConfig {
       ...(v.IDENTITY_HMAC_PEPPER ? { hmacPepper: v.IDENTITY_HMAC_PEPPER } : {}),
       breachCheckEnabled: v.IDENTITY_BREACH_CHECK_ENABLED ?? false,
       mirrorPhoneOtpToEmail: v.IDENTITY_MIRROR_PHONE_OTP_TO_EMAIL ?? false,
+      staffRequireMfa: v.IDENTITY_STAFF_REQUIRE_MFA ?? true,
+      webauthn: {
+        rpId: v.WEBAUTHN_RP_ID ?? 'localhost',
+        rpName: v.WEBAUTHN_RP_NAME ?? 'Komtru',
+        origins: v.WEBAUTHN_ORIGINS ?? [],
+      },
     },
     terms: {
       ...(v.APP_TERMS_VERSION ? { version: v.APP_TERMS_VERSION } : {}),

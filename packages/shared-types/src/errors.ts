@@ -24,6 +24,13 @@ export const PROBLEM_CODES = [
   // A wrong, expired or exhausted OTP challenge. Carries `attemptsRemaining` as an RFC 9457
   // extension member when there are attempts left, which is what screen E3b renders (T-032).
   'OTP_INVALID',
+  /**
+   * A §S7 sensitive action asked for before the caller re-proved it is them (T-036). 403, not 401:
+   * the access token is perfectly valid, and the api-client answers a 401 with a refresh and then a
+   * sign-out — which would end a legitimate session in the middle of the action. The refusal is
+   * conditional, and the problem body's `acceptedFactors` names the condition.
+   */
+  'STEP_UP_REQUIRED',
   'INVALID_TRANSITION',
   'NO_LOGISTICS_ACCESS',
   'LAST_ADMIN',
