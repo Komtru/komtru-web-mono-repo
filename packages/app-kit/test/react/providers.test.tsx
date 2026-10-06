@@ -7,8 +7,8 @@ import {
   type SocketLike,
 } from '@komtru/api-client';
 import { QueryClient } from '@tanstack/react-query';
-import { render, screen, waitFor } from '@testing-library/react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { cleanup, render, screen, waitFor } from '@testing-library/react';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   createKomtruQueryClient,
   KomtruProviders,
@@ -55,6 +55,9 @@ const renderWith = (props: Partial<KomtruProvidersProps>, children: React.ReactN
       {children}
     </KomtruProviders>,
   );
+
+// The vitest preset does not enable globals, so RTL's auto-cleanup never registers.
+afterEach(cleanup);
 
 let fetchMock: ReturnType<typeof vi.fn>;
 

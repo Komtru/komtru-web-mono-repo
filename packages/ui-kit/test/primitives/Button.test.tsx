@@ -20,6 +20,57 @@ describe('Button', () => {
     expect(screen.getByRole('button', { name: 'Continue' })).toBeDefined();
   });
 
+  describe('asChild', () => {
+    it('lends the treatment to a link, so navigation stays a link', () => {
+      render(
+        <Button variant="secondary" asChild>
+          <a href="/trades">Go to Trades</a>
+        </Button>,
+      );
+      const link = screen.getByRole('link', { name: 'Go to Trades' });
+      expect(link.tagName).toBe('A');
+      expect(screen.queryByRole('button')).toBeNull();
+      expect(link.getAttribute('href')).toBe('/trades');
+    });
+
+    it('gives the child the same classes the button would have carried', () => {
+      const { unmount } = render(<Button variant="secondary">Go to Trades</Button>);
+      const asButton = screen.getByRole('button').className;
+      unmount();
+      render(
+        <Button variant="secondary" asChild>
+          <a href="/trades">Go to Trades</a>
+        </Button>,
+      );
+      expect(screen.getByRole('link').className).toBe(asButton);
+    });
+
+    it("keeps the child's own classes as well as the treatment", () => {
+      render(
+        <Button asChild>
+          <a href="/x" className="mt-[4px]">
+            Continue
+          </a>
+        </Button>,
+      );
+      expect(screen.getByRole('link').className).toContain('mt-[4px]');
+    });
+
+    it('refuses anything but a single element, because there is nothing to lend it to', () => {
+      const silence = vi.spyOn(console, 'error').mockImplementation(() => {});
+      expect(() => render(<Button asChild>plain text</Button>)).toThrow(/asChild/);
+      expect(() =>
+        render(
+          <Button asChild>
+            <a href="/a">a</a>
+            <a href="/b">b</a>
+          </Button>,
+        ),
+      ).toThrow(/asChild/);
+      silence.mockRestore();
+    });
+  });
+
   it('takes the reference focus ring from the keyboard', () => {
     render(<Button>Verify &amp; continue</Button>);
     expectFocusRing(screen.getByRole('button'));
