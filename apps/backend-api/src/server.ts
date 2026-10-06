@@ -43,7 +43,7 @@ export async function startApi(
   // Producer side only: the API never consumes, so slow jobs never touch the request event loop.
   // The same goes for events: the API publishes to the outbox and defines the subscriber queues, but
   // the relay and every handler run in the worker.
-  const queues = createQueueFactory({ redisUrl: config.redis.url, logger });
+  const queues = createQueueFactory({ redisUrl: config.redis.url, logger, prefix: config.redis.queuePrefix });
   const db = createDb(clients.pool);
   // Built here, after the connections exist: identity needs them to resolve a principal, and
   // mountModules takes its `resolveActor` straight off the module that declares one.

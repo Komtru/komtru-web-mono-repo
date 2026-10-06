@@ -6,10 +6,19 @@ export const KEY_PREFIX = 'komtru:';
 /** BullMQ keys: `komtru:bull:<queue>:…`. BullMQ refuses ioredis keyPrefix and takes its own. */
 export const BULL_PREFIX = 'komtru:bull';
 
-/** The app's client: commands fail fast rather than queueing while Redis is away. */
-export function createRedis(url: string, { prefix = true }: { prefix?: boolean } = {}): Redis {
+/**
+ * The app's client: commands fail fast rather than queueing while Redis is away.
+ *
+ * `keyPrefix` is a parameter rather than the constant because the integration suite runs its files
+ * in parallel against one Redis database; a namespace per worker is what stops one file's keys from
+ * being another's. `false` means no prefix at all, for a test that wants to read raw keys.
+ */
+export function createRedis(
+  url: string,
+  { keyPrefix = KEY_PREFIX }: { keyPrefix?: string | false } = {},
+): Redis {
   const redis = new Redis(url, {
-    ...(prefix ? { keyPrefix: KEY_PREFIX } : {}),
+    ...(keyPrefix === false ? {} : { keyPrefix }),
     maxRetriesPerRequest: 1,
     enableOfflineQueue: false,
   });

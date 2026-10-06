@@ -29,7 +29,7 @@ describe.runIf(infraEnabled)('queue factory', () => {
     const key = `probe-${randomUUID()}`;
     try {
       await redis.set(key, '1', 'EX', 30);
-      const raw = await ready(createRedis(redisUrl, { prefix: false }));
+      const raw = await ready(createRedis(redisUrl, { keyPrefix: false }));
       try {
         expect(await raw.get(`komtru:${key}`)).toBe('1');
       } finally {
@@ -37,6 +37,52 @@ describe.runIf(infraEnabled)('queue factory', () => {
       }
     } finally {
       redis.disconnect();
+    }
+  });
+
+  it('writes app keys under the namespace it is given', async () => {
+    const redis = await ready(createRedis(redisUrl, { keyPrefix: 'komtru_t9:' }));
+    const key = `probe-${randomUUID()}`;
+    try {
+      await redis.set(key, '1', 'EX', 30);
+      const raw = await ready(createRedis(redisUrl, { keyPrefix: false }));
+      try {
+        expect(await raw.get(`komtru_t9:${key}`)).toBe('1');
+        expect(await raw.get(`komtru:${key}`)).toBeNull();
+      } finally {
+        raw.disconnect();
+      }
+    } finally {
+      redis.disconnect();
+    }
+  });
+
+  // The bug this ticket exists for: two Vitest workers share one Redis database, so without
+  // separate prefixes one file's worker drains the other file's queue of the same name, and the
+  // job is executed against the wrong test database.
+  it('keeps two namespaces apart, so one consumer cannot drain the other', async () => {
+    const name = unique('isolated');
+    const a = createQueueFactory({ redisUrl, logger, prefix: 'komtru_a:bull' });
+    const b = createQueueFactory({ redisUrl, logger, prefix: 'komtru_b:bull' });
+    const seenA: number[] = [];
+    const seenB: number[] = [];
+    try {
+      a.consume<{ n: number }>({ name, process: ({ n }) => Promise.resolve(void seenA.push(n)) });
+      b.consume<{ n: number }>({ name, process: ({ n }) => Promise.resolve(void seenB.push(n)) });
+      a.run();
+      b.run();
+      await a.producer<{ n: number }>(name).add('run', { n: 1 });
+      await eventually(
+        () => seenA.length === 1,
+        5000,
+        () => `seenA=${JSON.stringify(seenA)} seenB=${JSON.stringify(seenB)}`,
+      );
+      // b has had a live worker on the same queue name throughout; give it room to steal.
+      await new Promise((r) => setTimeout(r, 300));
+      expect(seenA).toEqual([1]);
+      expect(seenB).toEqual([]);
+    } finally {
+      await Promise.all([a.close(), b.close()]);
     }
   });
 
@@ -49,7 +95,7 @@ describe.runIf(infraEnabled)('queue factory', () => {
     await factory.producer<{ n: number }>(name).add('run', { n: 7 });
     await eventually(() => seen.length === 1);
     expect(seen).toEqual([7]);
-    const raw = await ready(createRedis(redisUrl, { prefix: false }));
+    const raw = await ready(createRedis(redisUrl, { keyPrefix: false }));
     try {
       expect(await raw.keys(`${BULL_PREFIX}:${name}:*`)).not.toEqual([]);
     } finally {

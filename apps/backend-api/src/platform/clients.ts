@@ -23,7 +23,7 @@ export function createClients(config: AppConfig): Clients {
   // An idle client erroring (e.g. the server restarting) must not crash the process.
   pool.on('error', () => {});
 
-  const redis = createRedis(config.redis.url);
+  const redis = createRedis(config.redis.url, { keyPrefix: config.redis.keyPrefix });
 
   return {
     pool,

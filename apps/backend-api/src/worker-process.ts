@@ -46,6 +46,7 @@ export async function startWorker(
   const queues = createQueueFactory({
     redisUrl: config.redis.url,
     logger,
+    prefix: config.redis.queuePrefix,
     onDeadLetter: (letter) => {
       void publishInOwnTransaction(db, queueDeadLetteredEvent, {
         payload: {
