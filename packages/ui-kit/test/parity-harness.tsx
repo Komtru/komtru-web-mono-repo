@@ -1,18 +1,32 @@
 /**
- * The parity runner, shared by `primitives-parity.test.tsx` and `shells-parity.test.tsx`.
+ * The runner behind `primitives-parity.test.tsx`, `trustops-parity.test.tsx` and
+ * `shells-parity.test.tsx`.
  *
- * A component is only honest if what it compiles to matches what the reference HTML declares for
- * it, so both sides are reduced to the same shape and diffed property by property, in both
- * directions. A property the component does not reproduce has to be named in `deviations` with a
- * reason; a property it applies that the reference does not has to be named in `additions`; and an
- * entry in either that no longer applies fails too, so neither list can rot into a blanket excuse.
+ * T-012 built this inline; T-014 needed the same checks for the TrustOps patterns, and two copies of
+ * a rule like "a DEVIATIONS entry that no longer deviates is a failure" would drift the first time
+ * one of them was tightened. The tables stay with the components they describe; the rules live here.
+ *
+ * T-013 added the width. A primitive's reference rule is unconditional, so reading it and the
+ * compiled utilities with no viewport in mind is correct for one. A shell's is not — `.dweb-content`
+ * is 24px of padding and `.tweb-content` 20px on the same element — so a row may name the width to
+ * resolve both sides at, and a suite may hand the runner a width-aware reader. Neither is required,
+ * and with neither the runner behaves exactly as it did before.
  *
  * Node, not jsdom: under jsdom Vite rewrites `import.meta.url` into a `/@fs` URL, which breaks both
  * the reference-file read and Tailwind's stylesheet resolution. `react-dom/server` needs no DOM.
  */
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
-import { canonicalise, expandDeclaration, referenceInlineStyle, referenceRule } from './reference-css.js';
+import {
+  canonicalise,
+  compiledDeclarations,
+  expandDeclaration,
+  referenceInlineStyle,
+  referenceRule,
+} from './reference-css.js';
+
+/** What a list of classes computes to. `shells-parity` hands in the width-aware reader. */
+export type DeclarationReader = (classNames: string[], width: number) => Promise<Map<string, string>>;
 
 export interface ParityRow {
   /** Key into `deviations`/`additions`, and the name the failure is reported under. */
@@ -39,10 +53,28 @@ export interface ParityRow {
    */
   inline?: string;
   /**
-   * The viewport width to resolve the cascade at. Only a shell needs it — a primitive's reference
-   * rule is unconditional — and only when the suite passes a width-aware `declarations`.
+   * The viewport width to resolve both sides at. Only a shell needs it — a primitive's reference
+   * rule carries no media query and its utilities carry no screen variant.
    */
   width?: number;
+}
+
+/** Every property a component knowingly does not reproduce, keyed by parity id, with the reason. */
+export type Deviations = Record<string, Record<string, string>>;
+
+/** Every property a component applies that its reference rule does not declare, keyed by parity id. */
+export type Additions = Record<string, readonly string[]>;
+
+export interface ParitySuite {
+  /** The reference document, already read. */
+  html: string;
+  rows: readonly ParityRow[];
+  deviations: Deviations;
+  additions: Additions;
+  /** Defaults to the width-blind reader, which refuses to resolve a variant at all. */
+  declarations?: DeclarationReader;
+  /** Used by any row that names no width of its own. */
+  defaultWidth?: number;
 }
 
 /** The `class` attribute of every element in the rendered markup, in document order. */
@@ -50,20 +82,28 @@ export function classAttributes(element: React.ReactElement): string[] {
   return [...renderToStaticMarkup(element).matchAll(/\sclass="([^"]*)"/g)].map((match) => match[1] ?? '');
 }
 
-/** What a list of classes computes to; `shells-parity` passes the width-aware reader. */
-export type DeclarationReader = (classNames: string[], width: number) => Promise<Map<string, string>>;
+function classesOf(row: ParityRow): string[] {
+  if (row.classes !== undefined) return [...row.classes];
+  if (row.element === undefined) throw new Error(`${row.id} has neither an element nor a class list`);
+  return (classAttributes(row.element)[row.node ?? 0] ?? '').split(/\s+/);
+}
 
-export interface ParitySuite {
-  /** The reference document, already read. */
-  html: string;
-  rows: readonly ParityRow[];
-  /** Property → reason, per row id. */
-  deviations: Record<string, Record<string, string>>;
-  /** The properties a row applies that its reference rule does not declare, per row id. */
-  additions: Record<string, readonly string[]>;
-  declarations: DeclarationReader;
-  /** Used when a row names no width of its own. */
-  defaultWidth?: number;
+/** The declarations the reference gives this row, with its `extends` and inline style folded in. */
+function referenceDeclarations(
+  html: string,
+  row: ParityRow,
+  atWidth: { atWidth?: number },
+): Map<string, string> {
+  const raw = new Map<string, string>();
+  for (const selector of [...(row.extends ?? []), row.selector]) {
+    for (const [property, value] of referenceRule(html, selector, row.styleId, atWidth)) {
+      raw.set(property, value);
+    }
+  }
+  if (row.inline !== undefined) {
+    for (const [property, value] of referenceInlineStyle(html, row.inline)) raw.set(property, value);
+  }
+  return raw;
 }
 
 /**
@@ -85,32 +125,31 @@ const SINGLE_CLAIMANT = [
   'display',
 ] as const;
 
-export function describeParity(suite: ParitySuite): void {
-  const { html, rows, deviations, additions, declarations } = suite;
+/** Registers every parity check for a suite. Call it at the top level of a `*.test.tsx`. */
+export function describeParity({
+  html,
+  rows,
+  deviations,
+  additions,
+  declarations = (classNames) => compiledDeclarations(classNames),
+  defaultWidth,
+}: ParitySuite): void {
   /** The width the compiled cascade is resolved at. */
-  const widthOf = (row: ParityRow): number => row.width ?? suite.defaultWidth ?? Number.MAX_SAFE_INTEGER;
-  /** The width the *reference's* own media queries are read at; absent means "merge every copy". */
+  const widthOf = (row: ParityRow): number => row.width ?? defaultWidth ?? Number.MAX_SAFE_INTEGER;
+  /**
+   * The width the *reference's* own media queries are read at; absent means "merge every copy",
+   * which is right for a rule the reference states unconditionally.
+   */
   const referenceWidth = (row: ParityRow): { atWidth?: number } => {
-    const width = row.width ?? suite.defaultWidth;
+    const width = row.width ?? defaultWidth;
     return width === undefined ? {} : { atWidth: width };
   };
-  const classesOf = (row: ParityRow): string[] => [
-    ...(row.classes ?? (classAttributes(row.element!)[row.node ?? 0] ?? '').split(/\s+/)),
-  ];
 
   describe.each(rows)('$id', (row) => {
     const classes = classesOf(row);
 
     it(`compiles to what the reference declares for ${row.selector}`, async () => {
-      const raw = new Map<string, string>();
-      for (const selector of [...(row.extends ?? []), row.selector]) {
-        for (const [property, value] of referenceRule(html, selector, row.styleId, referenceWidth(row))) {
-          raw.set(property, value);
-        }
-      }
-      if (row.inline !== undefined) {
-        for (const [property, value] of referenceInlineStyle(html, row.inline)) raw.set(property, value);
-      }
+      const raw = referenceDeclarations(html, row, referenceWidth(row));
       const reference = canonicalise(raw);
       const compiled = await declarations(classes, widthOf(row));
       // A deviation is written against the property the reference declares; widen it to the
@@ -165,8 +204,9 @@ export function describeParity(suite: ParitySuite): void {
     });
 
     it('claims each decisive property exactly once', async () => {
-      // Keyed by variant as well as property: `hidden` and `lg:block` both claim `display`, and
-      // that is the whole mechanism of a responsive shell rather than two rules racing.
+      // Keyed by variant as well as property: `hidden` beside `lg:block` is the whole mechanism of
+      // a responsive shell, not two rules racing, and only utilities under the same variant can
+      // race at a given width.
       const claimants = new Map<string, string[]>();
       for (const utility of classes.filter((name) => name !== '')) {
         const variant = utility.includes(':') ? utility.slice(0, utility.indexOf(':')) : '';
@@ -174,7 +214,7 @@ export function describeParity(suite: ParitySuite): void {
         try {
           compiled = await declarations([utility], widthOf(row));
         } catch {
-          continue; // A variant the width-blind reader skips and compiles nothing for.
+          continue; // A variant the reader skips and compiles nothing for.
         }
         for (const property of SINGLE_CLAIMANT) {
           if (!compiled.has(property)) continue;
@@ -209,12 +249,7 @@ export function describeParity(suite: ParitySuite): void {
       for (const [id, properties] of Object.entries(deviations)) {
         const row = rows.find((candidate) => candidate.id === id);
         if (row === undefined) continue;
-        const declared = new Map<string, string>();
-        for (const selector of [...(row.extends ?? []), row.selector]) {
-          for (const [property, value] of referenceRule(html, selector, row.styleId, referenceWidth(row))) {
-            declared.set(property, value);
-          }
-        }
+        const declared = referenceDeclarations(html, row, referenceWidth(row));
         for (const property of Object.keys(properties)) {
           expect(
             declared.has(property),

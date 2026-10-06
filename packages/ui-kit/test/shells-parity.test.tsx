@@ -18,7 +18,7 @@ import {
   TopBar,
 } from '../src/index.js';
 import { REFERENCE_HTML } from '../scripts/extract-tokens.js';
-import { type ParityRow, describeParity } from './parity.js';
+import { type Additions, type Deviations, type ParityRow, describeParity } from './parity-harness.js';
 import { referenceRule } from './reference-css.js';
 import { declarationsAtWidth } from './responsive-css.js';
 
@@ -75,7 +75,7 @@ const CONSOLE_RAIL = (
 /** `<style id="komtru-nav-v2">` is the one that draws the TrustOps console shell. */
 const OPS = 'komtru-nav-v2';
 
-const DEVIATIONS: Record<string, Record<string, string>> = {
+const DEVIATIONS: Deviations = {
   'mweb-screen': {
     height:
       'The reference draws every mobile screen inside a 660px-tall scroll container inside a drawn ' +
@@ -125,7 +125,7 @@ const DEVIATIONS: Record<string, Record<string, string>> = {
   },
 };
 
-const ADDITIONS: Record<string, readonly string[]> = {
+const ADDITIONS: Additions = {
   // The viewport takes the place of the gallery frame's fixed height.
   'mweb-screen': ['min-height'],
   // `.tb-dot` is `position:absolute` and the reference declares `position:relative` on `.tb-icon`

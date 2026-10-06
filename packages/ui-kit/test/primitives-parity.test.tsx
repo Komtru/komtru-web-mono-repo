@@ -1,8 +1,13 @@
 /* eslint-disable komtru-design/no-raw-hex -- proving the harness catches a wrong colour means naming one. */
 /**
- * Every primitive is checked against the rule the reference HTML declares for it. The tables below
- * are this suite's; the runner that consumes them lives in `parity.tsx`, because `shells-parity`
- * needs the same one.
+ * Every primitive is checked against the rule the reference HTML declares for it: the component is
+ * rendered, its class attributes are compiled through the real Tailwind preset, and the resulting
+ * declarations are diffed against the reference's. A property the component does not reproduce has
+ * to be named in `DEVIATIONS` with a reason — and a `DEVIATIONS` entry that no longer deviates fails
+ * too, so the list cannot rot into a blanket excuse.
+ *
+ * The rules themselves — how a mismatch, a stale deviation or an undeclared addition is reported —
+ * live in `parity-harness.tsx`, shared with `trustops-parity.test.tsx`. Only the table is here.
  */
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
@@ -30,7 +35,7 @@ import {
   TradeRow,
 } from '../src/index.js';
 import { REFERENCE_FILE } from '../scripts/extract-tokens.js';
-import { type ParityRow, describeParity } from './parity.js';
+import { type Additions, type Deviations, type ParityRow, describeParity } from './parity-harness.js';
 import { canonicalise, compiledDeclarations, referenceRule } from './reference-css.js';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -40,7 +45,7 @@ const html = readFileSync(path.join(here, '../../../docs/design-reference', REFE
  * Every property a primitive knowingly does not reproduce, keyed by parity id, with the reason. Each
  * entry is also carried into the ticket's deferred list and into `src/primitives/DEVIATIONS.md`.
  */
-const DEVIATIONS: Record<string, Record<string, string>> = {
+const DEVIATIONS: Deviations = {
   'focus-visible': {
     'border-radius':
       "The reference's global ring also sets border-radius:4px, but that rule is declared before " +
@@ -101,7 +106,7 @@ const ICON = <svg aria-hidden viewBox="0 0 24 24" />;
  * The reference stops at the rule; a component has to be a real element as well, and that costs a
  * handful of declarations. Each one is listed so it is a decision rather than an accident.
  */
-const ADDITIONS: Record<string, readonly string[]> = {
+const ADDITIONS: Additions = {
   // The reference writes the column layout and 8px gap inline on every instance holding more than
   // one button, and the fade is a Tailwind gradient, which compiles to `background-image`.
   'btn-sticky': ['display', 'flex-direction', 'gap', 'background-image'],
@@ -477,12 +482,4 @@ describe('the parity harness', () => {
   });
 });
 
-describeParity({
-  html,
-  rows: ROWS,
-  deviations: DEVIATIONS,
-  additions: ADDITIONS,
-  // A primitive's reference rule is unconditional, so the width-blind reader is the right one:
-  // it refuses to resolve a variant at all rather than pick a width for it.
-  declarations: (classes) => compiledDeclarations(classes),
-});
+describeParity({ html, rows: ROWS, deviations: DEVIATIONS, additions: ADDITIONS });

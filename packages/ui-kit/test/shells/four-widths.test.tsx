@@ -19,7 +19,7 @@ import {
   TabBar,
   TopBar,
 } from '../../src/index.js';
-import { classAttributes } from '../parity.js';
+import { classAttributes } from '../parity-harness.js';
 import { declarationsAtWidth } from '../responsive-css.js';
 
 /** The three the reference names, plus one above `lg` — the width a desktop is actually used at. */
