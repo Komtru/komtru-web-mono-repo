@@ -21,10 +21,49 @@ export const testRedisUrl = (): string => process.env.KOMTRU_TEST_REDIS_URL ?? '
 // the wrong database.
 const workerId = (): string => process.env.VITEST_POOL_ID ?? '1';
 
+/**
+ * Set once per run by the global setup, before any worker forks. Without it two runs share a
+ * namespace, and the second inherits the first's queues — which matters because BullMQ keeps a
+ * failed job for 30 days and silently ignores re-adding its id, so a job that cannot run again is
+ * also a job that cannot be replaced. Falls back to a constant so a worker started outside the
+ * harness still produces a stable name rather than a random one per import.
+ */
+const runId = (): string => process.env.KOMTRU_TEST_RUN_ID ?? 'norun';
+
+const namespace = (): string => `${TEST_DB_PREFIX}_${runId()}_${workerId()}`;
+
 /** ioredis `keyPrefix` for this worker: rate limits, idempotency leases, caches. */
-export const testKeyPrefix = (): string => `${TEST_DB_PREFIX}_${workerId()}:`;
+export const testKeyPrefix = (): string => `${namespace()}:`;
 /** BullMQ's own prefix for this worker. BullMQ refuses ioredis's `keyPrefix` and takes this. */
-export const testQueuePrefix = (): string => `${TEST_DB_PREFIX}_${workerId()}:bull`;
+export const testQueuePrefix = (): string => `${namespace()}:bull`;
+
+/**
+ * Deletes every key this run created, and nothing else.
+ *
+ * The match is anchored on `<prefix>_<runId>_`, so a run cannot touch a concurrent run's keyspace
+ * or the application's own `komtru:` keys. SCAN rather than KEYS because this runs against the same
+ * instance a developer may have real data on, and UNLINK rather than DEL so the reclaim happens off
+ * the command thread.
+ */
+export const releaseRunKeyspace = async (): Promise<number> => {
+  const { Redis } = await import('ioredis');
+  const redis = new Redis(testRedisUrl(), { maxRetriesPerRequest: 1 });
+  let removed = 0;
+  try {
+    const match = `${TEST_DB_PREFIX}_${runId()}_*`;
+    let cursor = '0';
+    do {
+      const [next, keys] = await redis.scan(cursor, 'MATCH', match, 'COUNT', 500);
+      cursor = next;
+      if (keys.length) removed += await redis.unlink(...keys);
+    } while (cursor !== '0');
+  } catch {
+    // Teardown must never fail a run that passed: a Redis that went away takes its keys with it.
+  } finally {
+    await redis.quit().catch(() => redis.disconnect());
+  }
+  return removed;
+};
 
 /** Spread into any env a test hands to `startApi`, `startWorker` or `loadConfig`. */
 export const testRedisEnv = (): { REDIS_KEY_PREFIX: string; REDIS_QUEUE_PREFIX: string } => ({
