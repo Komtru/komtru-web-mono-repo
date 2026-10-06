@@ -1,0 +1,8 @@
+/*
+ * Copy to `app/globals.css` and import it once, from the root layout. One line reaches the tokens,
+ * the preflight, the element defaults, the keyframes and the focus ring.
+ */
+@import '@komtru/app-kit/styles.css';
+
+/* This app's own files. Tailwind scans the two packages already; it cannot know about this one. */
+@source './**/*.{ts,tsx}';
