@@ -28,6 +28,8 @@ describe('the trades module surface', () => {
       'applyTransition',
       'readTradePrincipal',
       'recordEligibilityBlock',
+      'blockBuyerOrPass',
+      'assertFundingEligibilityRecorded',
     ]) {
       expect(trades).toHaveProperty(name);
     }

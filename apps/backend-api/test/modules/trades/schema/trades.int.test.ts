@@ -38,7 +38,10 @@ describe.runIf(infraEnabled)('trade.trades', () => {
     ).toBe('trades_initiator_side');
   });
 
-  it('rejects a trade code that is not KMT-<digits>-NG', async () => {
+  // The ticket writes the code as `KMT-88213`; `tradeCodeSchema` (shared-types) treats that as the
+  // forgiving *input* form and normalises it to `KMT-88213-NG`. The column stores the normalised
+  // form only, so the database never holds two spellings of one code.
+  it('rejects a trade code that has not been normalised to KMT-<digits>-NG', async () => {
     const { buyer, seller } = await parties();
     expect(await constraintName(insertTrade(t.app(), { buyer, seller }, { trade_code: 'KMT-88213' }))).toBe(
       'trades_code_format',

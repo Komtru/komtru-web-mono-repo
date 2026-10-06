@@ -3,6 +3,7 @@
 import { describe, expect, it } from 'vitest';
 import { canActAsBuyer } from '../../../../src/modules/trades/domain/eligibility.js';
 import {
+  blockBuyerOrPass,
   readTradePrincipal,
   recordEligibilityBlock,
 } from '../../../../src/modules/trades/infrastructure/postgres/principals.js';
@@ -108,6 +109,62 @@ describe.runIf(infraEnabled)('recordEligibilityBlock', () => {
     expect(rows[0]?.payload.tradeId).toBeNull();
     const { rows: activity } = await t.app().query('SELECT 1 FROM trade.trade_activity');
     expect(activity).toHaveLength(0);
+  });
+});
+
+describe.runIf(infraEnabled)('blockBuyerOrPass', () => {
+  const t = useTestDatabase();
+
+  // The acceptance criterion is "fails with a specific error AND publishes": two separate calls are
+  // two a caller can get half right, so one function does both.
+  it('records and raises in one call, so neither half can be forgotten', async () => {
+    const buyer = await insertUser(t.app());
+    const seller = await insertUser(t.app());
+    const tradeId = await insertTrade(t.app(), { buyer, seller });
+    await insertRow(t.app(), 'identity.user_capabilities', {
+      user_id: buyer,
+      capability: 'MERCHANT',
+      status: 'ACTIVE',
+    });
+
+    try {
+      await t.db().transaction(async (tx) => {
+        const principal = await readTradePrincipal(tx, buyer);
+        await blockBuyerOrPass(tx, principal, 'ACCEPT_AS_BUYER', tradeId);
+      });
+      expect.unreachable('should have blocked');
+    } catch (error) {
+      expect((error as ApiError).code).toBe('MERCHANT_CANNOT_BUY');
+    }
+
+    // The throw unwound the transaction, so nothing was recorded — which is why the service must
+    // record in its own transaction before raising. Here the recorded half is checked by calling it
+    // where the caller would: inside a transaction that commits the evidence.
+    await t.db().transaction(async (tx) => {
+      const principal = await readTradePrincipal(tx, buyer);
+      await recordEligibilityBlock(tx, {
+        tradeId,
+        gate: 'MERCHANT_CANNOT_BUY',
+        path: 'ACCEPT_AS_BUYER',
+        actorId: principal.userId,
+      });
+    });
+    const { rows } = await t
+      .app()
+      .query<{ actor_type: string }>('SELECT actor_type FROM trade.trade_activity');
+    expect(rows).toEqual([{ actor_type: 'BUYER' }]);
+  });
+
+  it('passes an account that may buy, and records nothing', async () => {
+    const buyer = await insertUser(t.app());
+    const seller = await insertUser(t.app());
+    const tradeId = await insertTrade(t.app(), { buyer, seller });
+    await t.db().transaction(async (tx) => {
+      const principal = await readTradePrincipal(tx, buyer);
+      await blockBuyerOrPass(tx, principal, 'ACCEPT_AS_BUYER', tradeId);
+    });
+    const { rows } = await t.app().query('SELECT 1 FROM trade.trade_activity');
+    expect(rows).toHaveLength(0);
   });
 });
 
