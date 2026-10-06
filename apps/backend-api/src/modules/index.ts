@@ -15,6 +15,7 @@ import { createIdentityAuth, identityModule, identitySeed, resolvePrincipal } fr
 import { ledgerModule } from './ledger/index.js';
 import { notifyModule } from './notify/index.js';
 import { createSocketModule } from './socket/index.js';
+import { createTrustModule } from './trust/index.js';
 
 export interface ProcessDeps {
   db: Db;
@@ -29,27 +30,32 @@ export type ModuleBuilder = (deps: ProcessDeps) => KomtruModule[];
 // that posts money reads a snapshot taken from it. identity next, because its RBAC catalogue and
 // reserved namespace are what every other module's permissions are checked against. files after
 // identity, because every one of its routes is scope-checked against the actor identity resolves.
+// trust after files, because a liveness selfie is a file record it resolves through M20's barrel.
 // notify after those: it only subscribes to what the others publish.
 export const createModules: ModuleBuilder = (deps) => {
   const auth = createIdentityAuth(deps);
+  // Built before the array so trust can be handed its gateway, and placed LAST in the array so the
+  // start order is unchanged: it produces nothing of its own, it only pushes what the others
+  // produce. It takes identity's own resolver so a socket's handshake and its re-validation sweep
+  // reach the same verdict, by the same query, as an HTTP request carrying the same token.
+  const socket = createSocketModule({
+    config: deps.config,
+    logger: deps.logger,
+    authenticate: (token) =>
+      resolvePrincipal({ db: deps.db, signer: auth.signer, epochs: auth.epochs, logger: deps.logger }, token),
+  });
+
   return [
     configModule,
     identityModule(auth),
     filesModule,
+    // Takes the gateway rather than reaching for it: a verification outcome is decided in the worker
+    // and pushed from there, and the Redis adapter carries it to whichever API instance holds the
+    // user's socket.
+    createTrustModule({ gateway: socket.gateway }),
     ledgerModule,
     notifyModule,
-    // Last: it produces nothing of its own, it only pushes what the others produce. It takes
-    // identity's own resolver so a socket's handshake and its re-validation sweep reach the same
-    // verdict, by the same query, as an HTTP request carrying the same token.
-    createSocketModule({
-      config: deps.config,
-      logger: deps.logger,
-      authenticate: (token) =>
-        resolvePrincipal(
-          { db: deps.db, signer: auth.signer, epochs: auth.epochs, logger: deps.logger },
-          token,
-        ),
-    }),
+    socket,
   ];
 };
 

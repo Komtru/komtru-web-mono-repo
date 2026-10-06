@@ -80,6 +80,21 @@
       "table": "trade.trade_holds",
       "name": "trade_holds_one_active",
       "definition": "CREATE UNIQUE INDEX trade_holds_one_active ON trade.trade_holds USING btree (trade_id, source) WHERE (released_at IS NULL)"
+    },
+    {
+      "table": "trust.bvn_verifications",
+      "name": "bvn_verifications_hash_active_unique",
+      "definition": "CREATE UNIQUE INDEX bvn_verifications_hash_active_unique ON trust.bvn_verifications USING btree (bvn_hash) WHERE (verified_at IS NOT NULL)"
+    },
+    {
+      "table": "trust.nin_verifications",
+      "name": "nin_verifications_hash_active_unique",
+      "definition": "CREATE UNIQUE INDEX nin_verifications_hash_active_unique ON trust.nin_verifications USING btree (nin_hash) WHERE (verified_at IS NOT NULL)"
+    },
+    {
+      "table": "trust.verification_requests",
+      "name": "verification_requests_one_in_flight",
+      "definition": "CREATE UNIQUE INDEX verification_requests_one_in_flight ON trust.verification_requests USING btree (user_id, verification_type) WHERE (status = ANY (ARRAY['SUBMITTED'::trust.verification_request_status, 'PROVIDER_PENDING'::trust.verification_request_status, 'MANUAL_REVIEW'::trust.verification_request_status]))"
     }
   ],
   "checkConstraints": [
@@ -287,6 +302,11 @@
       "table": "trade.trades",
       "name": "trades_window_positive",
       "definition": "CHECK (((inspection_window_hours > 0) AND (delivery_grace_hours > 0)))"
+    },
+    {
+      "table": "trust.verification_requests",
+      "name": "verification_requests_target_level",
+      "definition": "CHECK (((target_level >= 2) AND (target_level <= 4)))"
     }
   ],
   "triggers": [
@@ -384,6 +404,11 @@
       "table": "trade.trades",
       "name": "trade_status_needs_revision",
       "definition": "[O] CREATE TRIGGER trade_status_needs_revision BEFORE UPDATE ON trade.trades FOR EACH ROW WHEN (((old.status IS DISTINCT FROM new.status) AND (old.status_revision = new.status_revision))) EXECUTE FUNCTION trade.reject_unversioned_status()"
+    },
+    {
+      "table": "trust.verification_level_changes",
+      "name": "komtru_append_only",
+      "definition": "[O] CREATE TRIGGER komtru_append_only BEFORE DELETE OR UPDATE ON trust.verification_level_changes FOR EACH ROW EXECUTE FUNCTION platform.reject_mutation()"
     }
   ]
 }

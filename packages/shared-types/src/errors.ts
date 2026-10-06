@@ -42,6 +42,10 @@ export const PROBLEM_CODES = [
   // Every storage account in a pool is at its quota, so the upload fails closed (M20 D6). Capacity,
   // not a bug: the same reason PAYMENT_PROVIDER_UNAVAILABLE is not INTERNAL.
   'FILE_STORAGE_UNAVAILABLE',
+  // T-050. M6 §2 requires a confirmed email AND phone before an identity check. The client renders
+  // "verify your contact details first" and links to that screen, which it cannot do from a bare
+  // CONFLICT — and the user's next action is a different one from every other 409 on this surface.
+  'CONTACT_VERIFICATION_REQUIRED',
 ] as const;
 
 export const problemCodeSchema = z.enum(PROBLEM_CODES);
