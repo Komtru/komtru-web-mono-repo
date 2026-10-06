@@ -1,6 +1,11 @@
 // What trust publishes (M6 §9), through the transactional outbox: a row written in the same
 // transaction as the state change, so a rollback publishes nothing and a commit cannot lose it.
 //
+// The names carry a `trust.` prefix the spec's §9 table does not: the platform's event bus requires
+// `<module>.<aggregate>.<action>` and refuses a two-segment name at import, and every existing
+// module follows it (`identity.user.registered`, `files.file.uploaded`). The spec's own suffixes are
+// kept verbatim after the prefix, so the mapping back to §9 is one to one.
+//
 // Every field here lands in `platform.outbox` and stays there, so each one is a deliberate choice.
 // None of them carries an identifier, a name or a date of birth — D1 applies to the event stream
 // exactly as it applies to the tables, and an outbox is the easiest place to forget that.
@@ -12,7 +17,7 @@ const verificationType = z.enum(VERIFICATION_TYPES);
 
 /** Consumed by Notifications: "we have your details, this usually takes a few minutes". */
 export const verificationSubmitted = defineEvent(
-  'verification.submitted',
+  'trust.verification.submitted',
   1,
   z.object({ requestId: z.uuid(), userId: z.uuid(), type: verificationType }),
 );
@@ -25,7 +30,7 @@ export const verificationSubmitted = defineEvent(
  * export — should not have to join back to this module's tables to find that out.
  */
 export const verificationLevelAttained = defineEvent(
-  'verification.level_attained',
+  'trust.verification.level_attained',
   1,
   z.object({
     userId: z.uuid(),
@@ -37,7 +42,7 @@ export const verificationLevelAttained = defineEvent(
 
 /** Consumed by Identity (M1), Notifications, Risk (M13) and Tickets. */
 export const verificationLevelRevoked = defineEvent(
-  'verification.level_revoked',
+  'trust.verification.level_revoked',
   1,
   z.object({
     userId: z.uuid(),
@@ -53,7 +58,7 @@ export const verificationLevelRevoked = defineEvent(
  * making the consumer count rows in a schema it does not own.
  */
 export const verificationRejected = defineEvent(
-  'verification.rejected',
+  'trust.verification.rejected',
   1,
   z.object({
     requestId: z.uuid(),
@@ -72,7 +77,7 @@ export const verificationRejected = defineEvent(
  * the fact a reviewer needs, and the number itself is not required to establish it (D1).
  */
 export const verificationDuplicateIdentityDetected = defineEvent(
-  'verification.duplicate_identity_detected',
+  'trust.verification.duplicate_identity_detected',
   1,
   z.object({
     identifierType: verificationType,

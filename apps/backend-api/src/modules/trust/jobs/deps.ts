@@ -18,6 +18,3 @@ export interface TrustJobDeps {
   gateway: SocketGateway;
   logger: Logger;
 }
-
-/** What a client is told over the socket when a verification reaches an answer. */
-export const VERIFICATION_SOCKET_EVENT = 'verification:updated';

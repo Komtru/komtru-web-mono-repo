@@ -1,13 +1,20 @@
 // What the jobs share: the terminal-status guard, the provider call log, the level re-evaluation,
 // and the push. One copy, because the identity check and the liveness check differ only in which
 // provider method they call and which table the answer lands in.
+//
+// It lives in `jobs/` rather than `services/` because that is what it is. An earlier version sat in
+// `services/` and imported `jobs/deps.js` for `TrustJobDeps` — which the T-028 scanner flagged as
+// `jobs-outside-jobs`, and rightly: a service that can reach a type carrying the provider adapter is
+// one import away from a request handler that can reach the adapter itself. Nothing on the request
+// path calls any of this.
 import { isUniqueViolation } from '../../../db/errors.js';
 import { earnedIdentityLevel, IDENTITY_VERIFIED_LEVEL } from '../domain/levels.js';
 import type { CheckVerdict } from '../domain/provider.js';
 import type { IdentifierType, VerificationRequestStatus } from '../infrastructure/postgres/schema/enums.js';
 import type { VerificationRequest } from '../infrastructure/postgres/schema/requests.js';
 import type { ProviderCallInput } from '../infrastructure/postgres/store.js';
-import { VERIFICATION_SOCKET_EVENT, type TrustJobDeps } from '../jobs/deps.js';
+import { VERIFICATION_SOCKET_EVENT } from '../domain/queues.js';
+import type { TrustJobDeps } from './deps.js';
 
 /** A request nobody should call a provider about again. */
 const TERMINAL: readonly VerificationRequestStatus[] = ['APPROVED', 'REJECTED', 'EXPIRED'];

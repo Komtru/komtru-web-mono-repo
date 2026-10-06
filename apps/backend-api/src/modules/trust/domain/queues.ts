@@ -35,3 +35,12 @@ export interface IdentityCheckJob {
 export interface LivenessCheckJob {
   requestId: string;
 }
+
+/**
+ * What a client is told over the socket when a verification reaches an answer.
+ *
+ * Protocol, so it lives here beside the queue names rather than in `jobs/`: a consuming module and
+ * the web client need the name, and nothing that needs a name should have to import the directory
+ * holding the provider adapter.
+ */
+export const VERIFICATION_SOCKET_EVENT = 'verification:updated';

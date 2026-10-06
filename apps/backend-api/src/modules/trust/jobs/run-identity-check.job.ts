@@ -18,7 +18,7 @@ import {
   pushOutcome,
   recordCall,
   timeProviderCall,
-} from '../services/outcome.service.js';
+} from './outcome.js';
 import type { TrustJobDeps } from './deps.js';
 
 /** Parsed rather than cast: the sealed blob is this program's own, but an unsealed shape is not typed. */

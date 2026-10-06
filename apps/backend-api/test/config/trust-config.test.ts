@@ -3,11 +3,14 @@
 // misconfiguration anyone should be able to make quietly (owner's decision Q7).
 import { describe, expect, it } from 'vitest';
 import { ConfigError, loadConfig } from '../../src/config/env.js';
-import { testRedisUrl } from '../support/db-urls.js';
+import { testRedisEnv, testRedisUrl } from '../support/db-urls.js';
 
 const minimal = {
   POSTGRES_URL: 'postgresql://komtru:komtru@localhost:56432/komtru_v2_dev',
   REDIS_URL: testRedisUrl(),
+  // Per-worker Redis namespace: test/support/shared-redis.test.ts fails any env that names the
+  // shared instance without it, because one file flushing a shared keyspace kills another's job.
+  ...testRedisEnv(),
 };
 
 const failure = (env: Record<string, string>): ConfigError => {

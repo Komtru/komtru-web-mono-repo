@@ -2,13 +2,7 @@
 // carries it, so the job payload is a request id and nothing else.
 import { decideLivenessOutcome } from '../domain/decision.js';
 import type { LivenessCheckJob } from '../domain/queues.js';
-import {
-  claimRequest,
-  evaluateLevel,
-  pushOutcome,
-  recordCall,
-  timeProviderCall,
-} from '../services/outcome.service.js';
+import { claimRequest, evaluateLevel, pushOutcome, recordCall, timeProviderCall } from './outcome.js';
 import type { TrustJobDeps } from './deps.js';
 
 export async function runLivenessCheck(deps: TrustJobDeps, data: LivenessCheckJob): Promise<void> {

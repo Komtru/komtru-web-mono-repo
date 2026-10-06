@@ -12,4 +12,6 @@
 //    change log or not at all.
 export * from './infrastructure/postgres/schema/index.js';
 
-export { createTrustModule, trustModule } from './module.js';
+export { createTrustModule, EXPIRE_STALE_CRON, type TrustModuleOptions } from './module.js';
+export * from './domain/events.js';
+export { TRUST_QUEUES, TRUST_SCHEDULES, VERIFICATION_SOCKET_EVENT } from './domain/queues.js';

@@ -175,3 +175,52 @@ async function createRequest(deps: VerificationDeps, input: Parameters<TrustStor
     throw error;
   }
 }
+
+export interface VerificationStatus {
+  level: string;
+  levelNumber: number;
+  levelAttainedAt: string | null;
+  /** What §4 still wants for level 2. Two booleans, because that is what the screen renders. */
+  requirements: { identifier: boolean; liveness: boolean };
+  inFlight: {
+    requestId: string;
+    type: string;
+    status: string;
+    submittedAt: string;
+    expiresAt: string;
+  }[];
+}
+
+/**
+ * M6 §11's status endpoint, and the contract screens J2 and VF1 read.
+ *
+ * It carries no masked value, no provider reference and no score. A user asking "am I verified"
+ * needs the answer and what is left to do; echoing the stored shadow of their own number back at
+ * them adds nothing and puts it in one more log, one more cache and one more crash report.
+ */
+export async function readVerificationStatus(
+  deps: Pick<VerificationDeps, 'store'>,
+  userId: string,
+): Promise<VerificationStatus> {
+  const subject = await deps.store.findSubject(userId);
+  if (!subject) throw new ApiError(401, 'UNAUTHENTICATED', 'Sign in to see your verification status');
+
+  const [facts, open] = await Promise.all([
+    deps.store.identityFacts(userId),
+    deps.store.listOpenRequests(userId),
+  ]);
+
+  return {
+    level: subject.verificationLevel,
+    levelNumber: levelNumber(subject.verificationLevel),
+    levelAttainedAt: facts.levelAttainedAt?.toISOString() ?? null,
+    requirements: { identifier: facts.identifierVerified, liveness: facts.livenessPassed },
+    inFlight: open.map((request) => ({
+      requestId: request.id,
+      type: request.verificationType,
+      status: request.status,
+      submittedAt: request.submittedAt.toISOString(),
+      expiresAt: request.expiresAt.toISOString(),
+    })),
+  };
+}
