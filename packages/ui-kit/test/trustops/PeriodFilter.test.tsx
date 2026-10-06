@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { fireEvent, render, screen, within } from '@testing-library/react';
+import { useState } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 import { PERIODS, PeriodFilter, type Period } from '../../src/index.js';
 import '../primitives/setup.js';
@@ -72,20 +73,67 @@ describe('PeriodFilter', () => {
   });
 
   it.each([
-    ['ArrowRight', 'week', 'month'],
-    ['ArrowDown', 'week', 'month'],
-    ['ArrowLeft', 'week', 'custom'],
-    ['ArrowUp', 'month', 'week'],
-    ['Home', 'quarter', 'week'],
-    ['End', 'week', 'custom'],
-  ])('moves with %s', (key, from, expected) => {
-    const { onChange } = filter({ value: from as Period });
+    ['ArrowRight', 'week', 'month', 'Month'],
+    ['ArrowDown', 'week', 'month', 'Month'],
+    ['ArrowLeft', 'week', 'custom', 'Custom range'],
+    ['ArrowUp', 'month', 'week', 'This week'],
+    ['Home', 'quarter', 'week', 'This week'],
+    ['End', 'week', 'custom', 'Custom range'],
+  ])('moves with %s, and focus follows the committed selection', (key, from, expected, label) => {
+    // A real parent: the component is controlled, so focus can only follow once `value` comes back.
+    function Controlled() {
+      const [period, setPeriod] = useState<Period>(from as Period);
+      return <PeriodFilter value={period} onChange={setPeriod} />;
+    }
+    render(
+      <main>
+        <Controlled />
+      </main>,
+    );
     const current = within(group())
       .getAllByRole('radio')
       .find((radio) => radio.tabIndex === 0);
     if (current === undefined) throw new Error('no tabbable radio');
     fireEvent.keyDown(current, { key });
-    expect(onChange).toHaveBeenCalledWith(expected);
+    const moved = screen.getByRole('radio', { name: label });
+    expect(moved.getAttribute('aria-checked')).toBe('true');
+    expect(moved.tabIndex).toBe(0);
+    expect(document.activeElement).toBe(moved);
+    expect(PERIODS[PERIODS.findIndex((period) => period.id === expected)]?.label).toBe(label);
+  });
+
+  /**
+   * Focusing straight from the key handler would leave the keyboard on a radio with `tabIndex={-1}`
+   * whenever a controlled parent rejected or debounced the change, and the group would then have
+   * two tab stops disagreeing with each other.
+   */
+  it('leaves focus alone when the parent declines the change', () => {
+    const { onChange } = filter({ value: 'week' });
+    const first = screen.getByRole('radio', { name: 'This week' });
+    first.focus();
+    fireEvent.keyDown(first, { key: 'ArrowRight' });
+    expect(onChange).toHaveBeenCalledWith('month');
+    expect(document.activeElement).toBe(first);
+    expect(first.tabIndex).toBe(0);
+    expect(screen.getByRole('radio', { name: 'Month' }).tabIndex).toBe(-1);
+  });
+
+  it('does not steal focus when the period changes for some other reason', () => {
+    const { rerender } = render(
+      <main>
+        <button type="button">Elsewhere</button>
+        <PeriodFilter value="week" onChange={() => undefined} />
+      </main>,
+    );
+    const elsewhere = screen.getByRole('button', { name: 'Elsewhere' });
+    elsewhere.focus();
+    rerender(
+      <main>
+        <button type="button">Elsewhere</button>
+        <PeriodFilter value="year" onChange={() => undefined} />
+      </main>,
+    );
+    expect(document.activeElement).toBe(elsewhere);
   });
 
   it('ignores a key that is not part of the radio-group contract', () => {

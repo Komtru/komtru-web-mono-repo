@@ -55,17 +55,41 @@ describe('Timeline', () => {
     expect(screen.getByText('Case opened')).toBeDefined();
   });
 
-  it('refuses to render with no events', () => {
-    expect(() => render(<Timeline events={[]} />)).toThrow(/no events/);
+  /**
+   * `events` is server data — a case opened seconds ago, a filtered trail, a partial response — so
+   * an empty list degrades. An earlier version threw, which would have taken out the whole case
+   * route from a server component rather than showing the reviewer an empty rail.
+   */
+  it('says so when there is nothing on the trail yet', () => {
+    render(
+      <main>
+        <Timeline events={[]} />
+      </main>,
+    );
+    expect(screen.getByRole('region', { name: 'Case timeline' })).toBeDefined();
+    expect(screen.getByText('Nothing has happened on this case yet.')).toBeDefined();
+    expect(screen.queryByRole('list')).toBeNull();
   });
 
-  it('passes axe', async () => {
-    const { container } = render(
+  it('takes a case-specific empty state', () => {
+    render(<Timeline events={[]} empty="No custody events match this filter." />);
+    expect(screen.getByText('No custody events match this filter.')).toBeDefined();
+  });
+
+  it('passes axe, with events and without', async () => {
+    const filled = render(
       <main>
         <Timeline events={EVENTS} />
       </main>,
     );
-    await expectNoAxeViolations(container);
+    await expectNoAxeViolations(filled.container);
+    filled.unmount();
+    const blank = render(
+      <main>
+        <Timeline events={[]} />
+      </main>,
+    );
+    await expectNoAxeViolations(blank.container);
   });
 });
 

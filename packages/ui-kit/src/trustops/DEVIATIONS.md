@@ -94,5 +94,15 @@ Shot so far: N2 (`docs/ui-review/T-014/T-142/N2.md`, 4.83% of pixels differ) and
 - **`PeriodFilter` is a `radiogroup` with roving tabindex**, not five `aria-pressed` chips. Five
   toggles tell a reader there are five independent switches when there is one choice.
 - **`DataTable` requires a `caption`** and scopes every column header.
-- **Runtime guards:** no actions on a `DecisionPanel`, no rows on an `EvidenceMatrix`, no events on a
-  `Timeline` and no advice in an `AdvisoryBox` all throw rather than render an empty shell.
+- **Runtime guards on the invariants, empty states on the data.** `DecisionPanel` throws when it is
+  given no actions (including the `actions={canApprove && <Button/>}` false branch, which
+  `Children.count` used to let through), when an `AdvisoryBox` is smuggled in among the actions, and
+  when `heading`, `actionsLabel`, `divider` or `advisoryLabel` is blank — a blank `aria-label` leaves
+  a `<section>` with no accessible name, which is not a landmark at all. `AdvisoryBox` throws on a
+  blank label and on anything that is not a string. `EvidenceMatrix` and `Timeline` do **not** throw:
+  their rows and events are server data, so zero of them renders an empty state rather than taking a
+  case route down.
+- **No `aria-owns`, ever, on the action group.** `aria-owns` reparents a node in the accessibility
+  tree without moving it in the DOM, so one attribute would put the advisory inside the group for
+  every screen reader while every DOM-containment assertion kept passing. `DecisionPanel.test.tsx`
+  checks for it by name.

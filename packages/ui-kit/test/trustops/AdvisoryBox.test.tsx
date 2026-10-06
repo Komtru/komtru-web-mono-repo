@@ -49,6 +49,17 @@ describe('AdvisoryBox', () => {
     expect(() => render(<AdvisoryBox>{smuggled}</AdvisoryBox>)).toThrow(/prose only/);
   });
 
+  /**
+   * `<section aria-label="">` has no accessible name, and a `<section>` without one is not a region
+   * landmark at all — so a blank label deletes the semantic half of the separation while leaving
+   * the dashed border that makes it look intact. The package teaches the empty-string-drops-it
+   * convention one file away on `TrustTrail`'s caption, which is precisely why this has to say no.
+   */
+  it('refuses a blank label, which would silently delete the landmark', () => {
+    expect(() => render(<AdvisoryBox label="">{ADVICE}</AdvisoryBox>)).toThrow(/cannot be unnamed/);
+    expect(() => render(<AdvisoryBox label="   ">{ADVICE}</AdvisoryBox>)).toThrow(/cannot be unnamed/);
+  });
+
   it('refuses to render with no advice at all', () => {
     expect(() => render(<AdvisoryBox>{[]}</AdvisoryBox>)).toThrow(/no advice/);
   });

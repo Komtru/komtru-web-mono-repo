@@ -63,6 +63,7 @@ export const ApplicationReview: Story = {
     policy: {
       policy: 'Park Hub Verification Policy',
       section: '1.1',
+      joiner: '·',
       note: 'decision is written to the Trust Trail',
     },
   },

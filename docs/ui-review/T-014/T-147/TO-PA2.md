@@ -3,7 +3,7 @@
 - **Reference:** `docs/design-reference/Komtru — UI Screens Living Master File.html` line 8855 — TrustOps Console — Desktop · Park Agent queue & lifecycle controls
 - **Built:** http://localhost:6006/iframe.html?id=trustops-caselayout--application-review&viewMode=story
 - **Frame:** desktop, 1040px reference frame; compared at 1040 × 652
-- **Differing pixels:** 28,344 of 678,080 (4.18%)
+- **Differing pixels:** 28,339 of 678,080 (4.18%)
 - **Side by side:** `TO-PA2.png` (reference · built · heat map) — **heat map:** `TO-PA2.diff.png`
 
 ## Deviations
@@ -22,9 +22,10 @@
    T-014 was asked for. The `.p13-audit` treatment itself _is_ shipped — it is the emerald rule under
    `TrustTrail`'s caption — but it is not a standalone export. This is the largest single block of
    heat on the page.
-3. **The policy cite joins its trailing clause with `—`; the reference writes `·` on this screen.**
-   The reference uses both glyphs (N2 line 3631 uses `—`, TO-PA2 line 8884 uses `·`). `PolicyCite`
-   prints one of them. Deferred: a `joiner` prop for one character is worse than the inconsistency.
+3. **Fixed after review:** the policy cite now takes a `joiner`. The reference uses both glyphs —
+   `—` on N2 line 3631, `·` on TO-PA2 line 8884 — and the first review of this file deferred it as
+   "a prop for one character". That was an excuse: the glyph is part of the screen's copy, so the
+   screen passes it. This story passes `joiner="·"` and matches.
 4. **Evidence rows drift ~2px lower each, ~8px by the fourth.** Same cause as N2 item 4: no global
    body line-height. The row pitch, the 28px icon tile, the 11.5px label and the 10.5px/1.4 detail
    all match; the accumulation is line-box rounding.

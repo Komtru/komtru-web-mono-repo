@@ -2,7 +2,7 @@
 import { render } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import '../primitives/setup.js';
-import { axeConfiguration, expectNoAxeViolations } from './axe.js';
+import { axeConfiguration, axeOutcome, expectNoAxeViolations } from './axe.js';
 
 /**
  * A check that cannot fail proves nothing, so the helper every other test in this ticket leans on is
@@ -50,5 +50,32 @@ describe('expectNoAxeViolations', () => {
 
   it('turns off colour contrast, because jsdom paints nothing to sample', () => {
     expect(axeConfiguration.disabled).toEqual(['color-contrast']);
+  });
+
+  /**
+   * "Needs review" is not "passed". The bucket is where jsdom-ambiguous results go — and also where
+   * a real failure goes when axe cannot finish deciding: two panels sharing an id reported
+   * `duplicate-id-aria` as `incomplete`, not as a violation, so ignoring this bucket let a genuine
+   * bug through a whole suite.
+   */
+  it('fails on a check axe could not clear, not only on a violation', async () => {
+    const { container } = render(
+      <main>
+        <p id="shared">first</p>
+        <p id="shared">second</p>
+        <button type="button" aria-describedby="shared">
+          Approve
+        </button>
+      </main>,
+    );
+    await expect(expectNoAxeViolations(container)).rejects.toThrow(/could not clear/);
+    await expect(
+      expectNoAxeViolations(container, { allowIncomplete: ['duplicate-id-aria'] }),
+    ).resolves.toBeUndefined();
+  });
+
+  it('reports a page-level rule as inapplicable when the run is scoped to a container', async () => {
+    const { container } = render(<p>loose</p>);
+    expect(await axeOutcome(container, 'region')).toBe('inapplicable');
   });
 });

@@ -1,6 +1,6 @@
 'use client';
 
-import { useRef } from 'react';
+import { useEffect, useRef } from 'react';
 import { cx } from '../primitives/cx.js';
 import { FOCUS_RING } from '../primitives/focus.js';
 
@@ -53,12 +53,23 @@ export function PeriodFilter({
   className,
 }: PeriodFilterProps): React.JSX.Element {
   const buttons = useRef<(HTMLButtonElement | null)[]>([]);
+  // Set by a key press, cleared once focus has followed. Focus moves only after the parent has
+  // committed the change: focusing straight from the handler would leave the keyboard on a radio
+  // with `tabIndex={-1}` whenever a controlled parent rejected or debounced the change, and the
+  // group would then have two tab stops disagreeing with each other.
+  const followFocus = useRef(false);
+
+  useEffect(() => {
+    if (!followFocus.current) return;
+    followFocus.current = false;
+    buttons.current[PERIODS.findIndex((period) => period.id === value)]?.focus();
+  }, [value]);
 
   const move = (index: number) => {
     const period = PERIODS[index];
     if (period === undefined) return;
+    followFocus.current = true;
     onChange(period.id);
-    buttons.current[index]?.focus();
   };
 
   const onKeyDown = (event: React.KeyboardEvent<HTMLButtonElement>, index: number) => {

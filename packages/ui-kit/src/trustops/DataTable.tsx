@@ -85,10 +85,11 @@ export function DataTable<Row>({
           {rows.length === 0 ? (
             <tr>
               <td
-                colSpan={columns.length}
+                // `colspan="0"` is spec'd to span the colgroup and implemented by nobody.
+                colSpan={Math.max(1, columns.length)}
                 className="py-[12px] px-[14px] text-center align-middle text-slate"
               >
-                {empty ?? 'Nothing to show.'}
+                {empty === undefined ? 'Nothing to show.' : empty}
               </td>
             </tr>
           ) : (

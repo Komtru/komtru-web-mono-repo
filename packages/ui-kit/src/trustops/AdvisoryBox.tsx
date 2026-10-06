@@ -14,7 +14,7 @@ export interface AdvisoryBoxProps {
    * covers the JavaScript caller that `tsc` never sees.
    */
   children: string | readonly string[];
-  /** Overridable for a non-AI advisory (a policy engine, a partner's risk score). */
+  /** Overridable for a non-AI advisory (a policy engine, a partner's risk score). Never blank. */
   label?: string;
   id?: string;
   className?: string;
@@ -54,6 +54,16 @@ export function AdvisoryBox({
   id,
   className,
 }: AdvisoryBoxProps): React.JSX.Element {
+  // `<section aria-label="">` has no accessible name, and a `<section>` without one is not a region
+  // landmark at all — so a blank label would delete the semantic half of the separation while
+  // leaving the dashed border that makes it look intact. The package teaches the opposite
+  // convention one file away (`TrustTrail`'s `caption=""` drops the caption), so this has to say no.
+  if (label.trim() === '') {
+    throw new TypeError(
+      'AdvisoryBox cannot be unnamed: an unlabelled section is not a landmark, and the landmark is ' +
+        'what keeps the advice separable from the decision. Give it a label or omit the advisory.',
+    );
+  }
   return (
     <section
       id={id}

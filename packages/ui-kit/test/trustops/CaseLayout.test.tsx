@@ -11,7 +11,7 @@ import {
   Timeline,
 } from '../../src/index.js';
 import '../primitives/setup.js';
-import { expectNoAxeViolations } from './axe.js';
+import { axeOutcome, expectNoAxeViolations } from './axe.js';
 
 /** N2 (reference line 3581), assembled out of the patterns this ticket ships. */
 function n2() {
@@ -117,5 +117,44 @@ describe('CaseLayout', () => {
   it('passes axe — four nested landmarks, all distinctly named', async () => {
     const { container } = n2();
     await expectNoAxeViolations(container);
+  });
+
+  /**
+   * The other nine axe runs are scoped to a container, which makes the page-level rules — `region`,
+   * `landmark-one-main`, `page-has-heading-one`, `html-has-lang` — report `inapplicable` and prove
+   * nothing. This one runs over the whole document inside the skeleton a real console page has, so
+   * "all content is inside a landmark" is actually evaluated against the composed case screen.
+   */
+  it('passes axe at page scope, inside a real page skeleton', async () => {
+    document.documentElement.lang = 'en';
+    render(
+      <>
+        <h1>Park Agent Applications</h1>
+        <CaseLayout
+          caseId="PH-10482"
+          subject="Jibowu Park Hub"
+          status={<Chip tone="risk">High Risk</Chip>}
+          evidence={
+            <EvidenceMatrix
+              headingLevel={3}
+              rows={[{ id: 'a', label: 'Identity', detail: 'Verified', state: 'pass' }]}
+            />
+          }
+          decision={
+            <DecisionPanel
+              headingLevel={3}
+              advisory="Suggest: request a management letter before activation."
+              actions={<Button>Approve &amp; activate</Button>}
+              policy={{ policy: 'Park Hub Verification Policy', section: '1.1' }}
+            />
+          }
+        />
+      </>,
+      { container: document.body.appendChild(document.createElement('main')) },
+    );
+    await expectNoAxeViolations(document.body);
+    // And prove the run was worth making: `region` is the rule that says every piece of content is
+    // inside a landmark, and it only evaluates anything at page scope.
+    expect(await axeOutcome(document.body, 'region')).toBe('passes');
   });
 });

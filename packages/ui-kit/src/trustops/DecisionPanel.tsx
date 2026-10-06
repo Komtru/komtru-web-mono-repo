@@ -1,6 +1,8 @@
-import { Children } from 'react';
+'use client';
+
+import { Children, isValidElement, useId } from 'react';
 import { AdvisoryBox } from './AdvisoryBox.js';
-import { Heading, type HeadingLevel, slugId } from './heading.js';
+import { Heading, type HeadingLevel } from './heading.js';
 import { PolicyCite, type PolicyCiteProps } from './PolicyCite.js';
 
 /** The reference's `.human-decides` copy, drawn under every advisory in the document. */
@@ -12,7 +14,7 @@ export interface DecisionPanelProps {
   /** Prose only — see `AdvisoryBox`. Omit it where a case carries no suggestion. */
   advisory?: string | readonly string[];
   advisoryLabel?: string;
-  /** Rewordable for a different surface, never removable. */
+  /** Rewordable for a different surface, never removable, never blank. */
   divider?: string;
   /** The buttons. At least one: a panel with no action is a decision the machine already made. */
   actions: React.ReactNode;
@@ -22,13 +24,37 @@ export interface DecisionPanelProps {
   policy: PolicyCiteProps;
   /** The reference's grey note under the card (N2, line 3633). */
   footnote?: string;
-  /**
-   * Disambiguates the `aria-describedby` ids when two panels citing the same policy section share a
-   * page. Defaults to a slug of the policy and section, which keeps the panel a server component —
-   * `useId` would force a client boundary on every case screen in the console.
-   */
+  /** Fixes the generated ids, for a test that wants to assert on them. */
   idPrefix?: string;
   className?: string;
+}
+
+/** A name that is only whitespace is no name, and an unnamed `<section>` is not a landmark at all. */
+function requireText(value: string, prop: string, why: string): string {
+  if (value.trim() === '') {
+    throw new TypeError(`DecisionPanel's \`${prop}\` cannot be blank: ${why}`);
+  }
+  return value;
+}
+
+/**
+ * True if an `AdvisoryBox` is anywhere in this element tree.
+ *
+ * `actions` is a `ReactNode`, so the type system cannot keep an advisory out of the button group the
+ * way `AdvisoryBox`'s `string` children keep a button out of the advisory. This closes the other
+ * half: a screen that passes `actions={<><AdvisoryBox …/><Button/></>}` would otherwise put a second,
+ * correctly-named advisory landmark *inside* the group, which is the exact arrangement the panel
+ * exists to prevent. The walk is depth-limited and only sees elements, not what a wrapper component
+ * returns — it catches the mistake someone actually makes, not every mistake possible.
+ */
+function containsAdvisory(node: React.ReactNode, depth = 0): boolean {
+  if (depth > 8) return false;
+  return Children.toArray(node).some((child) => {
+    if (!isValidElement(child)) return false;
+    if (child.type === AdvisoryBox) return true;
+    const { children } = child.props as { children?: React.ReactNode };
+    return children === undefined ? false : containsAdvisory(children, depth + 1);
+  });
 }
 
 /**
@@ -46,6 +72,13 @@ export interface DecisionPanelProps {
  * announces "…, a human decides, always. Applied per New-Buyer Proposal Policy §2.1". In the
  * reference those two lines are 11px grey text that a screen-reader user moving by control skips
  * entirely; tying them to the group is what turns them from decoration into part of the control.
+ *
+ * `'use client'` for one reason: `useId`. The ids behind `aria-describedby` have to be unique on a
+ * page, and an earlier version derived them from the policy citation to stay a server component —
+ * which meant two panels citing the same clause, the ordinary case on a queue screen, emitted
+ * duplicate ids and the second panel described itself with the first one's text. A silent
+ * mis-description on the control this component exists to make honest is not worth a server
+ * boundary; this is the same trade T-012 took for `TextField`.
  */
 export function DecisionPanel({
   heading = 'Decision',
@@ -60,15 +93,36 @@ export function DecisionPanel({
   idPrefix,
   className,
 }: DecisionPanelProps): React.JSX.Element {
-  if (Children.count(actions) === 0) {
+  const generated = useId();
+
+  // `Children.toArray`, not `Children.count`: `count` counts `false` and `null` as children, so the
+  // idiomatic `actions={canApprove && <Button/>}` sailed past this guard and rendered an empty group
+  // under an AI suggestion — a decision surface with nothing to press, which is what it forbids.
+  if (Children.toArray(actions).length === 0) {
     throw new TypeError(
       'DecisionPanel was given no actions. A decision surface with nothing to press is a decision ' +
         'that has already been made without a human, which is the one thing this panel exists to ' +
         'prevent. Pass the buttons, or do not render a DecisionPanel.',
     );
   }
+  if (containsAdvisory(actions)) {
+    throw new TypeError(
+      'DecisionPanel was given an AdvisoryBox among its actions. Advice and action are separate ' +
+        'landmarks here on purpose: an advisory inside the button group is read as part of the ' +
+        'controls. Pass the prose as `advisory` instead.',
+    );
+  }
 
-  const prefix = idPrefix ?? slugId('decision', policy.policy, policy.section);
+  requireText(heading, 'heading', 'it names the panel’s landmark.');
+  requireText(actionsLabel, 'actionsLabel', 'it names the action group.');
+  requireText(
+    divider,
+    'divider',
+    'it is the sentence the action group is described by — blanking it removes "a human decides, ' +
+      'always" from what a screen reader announces on the buttons.',
+  );
+
+  const prefix = idPrefix ?? generated;
   const dividerId = `${prefix}-divider`;
   const policyId = `${prefix}-policy`;
   const describedBy = [advisory === undefined ? undefined : dividerId, policyId]
@@ -104,6 +158,12 @@ export function DecisionPanel({
           </p>
         )}
 
+        {/*
+          No `aria-owns` here, ever. It reparents a node in the accessibility tree without moving it
+          in the DOM, so adding one pointing at the advisory would put the advisory inside this group
+          for every screen reader while every DOM-containment assertion kept passing. The test suite
+          checks for it explicitly.
+        */}
         <div
           role="group"
           aria-label={actionsLabel}

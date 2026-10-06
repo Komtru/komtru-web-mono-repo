@@ -8,6 +8,11 @@ export interface PolicyCiteProps {
   section: string;
   /** The reference's trailing clause: "same threshold, every case". */
   note?: string;
+  /**
+   * What separates the clause from the citation. The reference writes `—` on N2 (line 3631) and `·`
+   * on TO-PA2 (line 8884); both are in the document, so the component prints whichever it is told.
+   */
+  joiner?: string;
   id?: string;
   className?: string;
 }
@@ -21,7 +26,14 @@ export interface PolicyCiteProps {
  * field rather than part of `policy` so that a panel cannot cite a policy without citing the clause
  * inside it, which is the difference between "we have a rule" and "here is the rule we applied".
  */
-export function PolicyCite({ policy, section, note, id, className }: PolicyCiteProps): React.JSX.Element {
+export function PolicyCite({
+  policy,
+  section,
+  note,
+  joiner = '—',
+  id,
+  className,
+}: PolicyCiteProps): React.JSX.Element {
   // A caller who writes `section="§2.1"` gets `§2.1`, not `§§2.1`.
   const clause = section.replace(/^§\s*/, '');
   return (
@@ -32,7 +44,7 @@ export function PolicyCite({ policy, section, note, id, className }: PolicyCiteP
       <span aria-hidden className="h-[12px] w-[12px] shrink-0 stroke-trust-gray">
         <PolicyIcon />
       </span>
-      {`Applied per ${policy} §${clause}${note === undefined ? '' : ` — ${note}`}`}
+      {`Applied per ${policy} §${clause}${note === undefined ? '' : ` ${joiner} ${note}`}`}
     </p>
   );
 }

@@ -26,7 +26,7 @@ import {
 } from '../src/index.js';
 import { REFERENCE_FILE } from '../scripts/extract-tokens.js';
 import { type Additions, type Deviations, type ParityRow, describeParity } from './parity-harness.js';
-import { referenceRule } from './reference-css.js';
+import { baseUtility, compiledDeclarations, referenceRule } from './reference-css.js';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const html = readFileSync(path.join(here, '../../../docs/design-reference', REFERENCE_FILE), 'utf8');
@@ -344,6 +344,36 @@ describe('the TrustOps parity harness', () => {
 
   it('refuses a selector the reference does not declare', () => {
     expect(() => referenceRule(html, '.decision-panel')).toThrow(/declares no rule/);
+  });
+
+  it('reads the utility out of a variant class', () => {
+    expect(baseUtility('md:grid-cols-[1.3fr_1fr]')).toBe('grid-cols-[1.3fr_1fr]');
+    expect(baseUtility('group-last:border-b-0')).toBe('border-b-0');
+    // Not a split on every colon: the one inside an arbitrary value is part of the utility.
+    expect(baseUtility('bg-[length:200%_100%]')).toBe('bg-[length:200%_100%]');
+  });
+
+  /**
+   * A variant class is skipped by the comparison, which used to mean a misspelled one was skipped
+   * too: `md:grid-colz-[1fr]` and `md:grid-cols-[1.3fr_1fr]` both contributed nothing, so a typo in
+   * the class that makes `.case-layout` two columns would have passed parity in silence. The
+   * `case-layout` deviation leans on exactly that skip, so the skip has to be the only thing it is.
+   */
+  it('still refuses a variant class whose utility does not exist', async () => {
+    await expect(compiledDeclarations(['md:grid-colz-[1fr]'])).rejects.toThrow(/compiles to no rule/);
+    await expect(compiledDeclarations(['hover:bg-red-500'])).rejects.toThrow(/compiles to no rule/);
+  });
+
+  it('accepts every variant class this ticket actually emits', async () => {
+    for (const variant of [
+      'md:grid-cols-[1.3fr_1fr]',
+      'first:border-t-0',
+      'group-last:border-b-0',
+      'hover:bg-surface-secondary',
+      'focus-visible:outline-trust-indigo',
+    ]) {
+      await expect(compiledDeclarations([variant])).resolves.toBeDefined();
+    }
   });
 });
 

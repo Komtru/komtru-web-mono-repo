@@ -10,13 +10,19 @@ export interface FilterChip {
   active?: boolean;
 }
 
-export interface FilterBarSearch {
+interface FilterBarSearchBase {
   /** The accessible name. Visually hidden: the reference labels the field with its placeholder. */
   label: string;
   placeholder?: string;
-  value?: string;
-  onChange?: (value: string) => void;
 }
+
+/**
+ * Controlled or uncontrolled, never half of each: `value` without `onChange` renders a field the
+ * user cannot type in, and React only says so in a console warning nobody reads.
+ */
+export type FilterBarSearch =
+  | (FilterBarSearchBase & { value: string; onChange: (value: string) => void })
+  | (FilterBarSearchBase & { value?: undefined; onChange?: undefined });
 
 export interface FilterBarProps {
   search?: FilterBarSearch;
@@ -65,7 +71,7 @@ export function FilterBar({
             {...(search.value === undefined ? {} : { value: search.value })}
             {...(search.onChange === undefined
               ? {}
-              : { onChange: (event) => search.onChange?.(event.target.value) })}
+              : { onChange: (event) => search.onChange(event.target.value) })}
             className={cx(
               'w-full rounded-sm border-[1.5px] border-solid border-border-hairline bg-surface-elevated py-[9px] pl-[36px] pr-[12px] font-body text-[13px] text-midnight-text',
               FOCUS_RING,

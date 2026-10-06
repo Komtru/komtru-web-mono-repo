@@ -16,18 +16,3 @@ export function Heading({ level, className, children }: HeadingProps): React.JSX
   const Tag = `h${String(level)}` as 'h2' | 'h3' | 'h4';
   return <Tag className={className}>{children}</Tag>;
 }
-
-/**
- * A stable, render-independent id prefix. The alternative is `useId`, which would make every
- * TrustOps panel a client component — the trade T-012 took for `TextField` and the one this ticket
- * declines, because a decision panel is a read-mostly server surface and its `actions` are already
- * the caller's own client components.
- */
-export function slugId(prefix: string, ...parts: string[]): string {
-  const slug = parts
-    .join('-')
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '');
-  return `komtru-${prefix}-${slug === '' ? 'anon' : slug}`;
-}

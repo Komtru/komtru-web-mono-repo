@@ -23,6 +23,23 @@ describe('PolicyCite', () => {
     expect(screen.getByText('Applied per Item Mismatch Policy §4.1')).toBeDefined();
   });
 
+  /** The reference writes `—` on N2 (line 3631) and `·` on TO-PA2 (line 8884). Both are correct. */
+  it('takes the joiner the screen’s own copy uses', () => {
+    render(
+      <PolicyCite
+        policy="Park Hub Verification Policy"
+        section="1.1"
+        joiner="·"
+        note="decision is written to the Trust Trail"
+      />,
+    );
+    expect(
+      screen.getByText(
+        'Applied per Park Hub Verification Policy §1.1 · decision is written to the Trust Trail',
+      ),
+    ).toBeDefined();
+  });
+
   it('is set in the mono face, because a citation has to be quotable', () => {
     const { container } = render(<PolicyCite policy="Velocity & Abuse Policy" section="2.4" />);
     expect(container.firstElementChild?.className).toContain('font-mono');

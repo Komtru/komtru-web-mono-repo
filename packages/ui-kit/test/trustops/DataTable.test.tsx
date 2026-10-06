@@ -116,6 +116,20 @@ describe('DataTable', () => {
     expect(cell.getAttribute('colspan')).toBe('5');
   });
 
+  it('lets a caller ask for a blank empty cell', () => {
+    table([], { empty: null });
+    expect(screen.getByRole('cell').textContent).toBe('');
+  });
+
+  it('never emits colspan="0", which is specified and implemented by nobody', () => {
+    render(
+      <main>
+        <DataTable caption="Nothing at all" columns={[]} rows={[]} rowKey={(row: Proposal) => row.code} />
+      </main>,
+    );
+    expect(screen.getByRole('cell').getAttribute('colspan')).toBe('1');
+  });
+
   it('offers no sort affordance — the reference draws none, and a dead one is worse than none', () => {
     table();
     expect(screen.queryByRole('button')).toBeNull();

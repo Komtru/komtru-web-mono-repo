@@ -77,12 +77,28 @@ describe('EvidenceMatrix', () => {
     expect(container.querySelectorAll('li svg[aria-hidden="true"]')).toHaveLength(4);
   });
 
-  it('refuses to render with no rows', () => {
-    expect(() => render(<EvidenceMatrix rows={[]} />)).toThrow(/no rows/);
+  /** Same argument as `Timeline`: these rows are server data, so zero of them degrades. */
+  it('says so when no evidence has been recorded', () => {
+    render(
+      <main>
+        <EvidenceMatrix rows={[]} />
+      </main>,
+    );
+    expect(screen.getByRole('region', { name: 'Evidence matrix' })).toBeDefined();
+    expect(screen.getByText('No evidence has been recorded on this case yet.')).toBeDefined();
+    expect(screen.queryByRole('list')).toBeNull();
   });
 
-  it('passes axe', async () => {
-    const { container } = matrix();
-    await expectNoAxeViolations(container);
+  it('takes a case-specific empty state', () => {
+    render(<EvidenceMatrix rows={[]} empty="Waiting on the applicant’s first upload." />);
+    expect(screen.getByText('Waiting on the applicant’s first upload.')).toBeDefined();
+  });
+
+  it('passes axe, with rows and without', async () => {
+    const filled = matrix();
+    await expectNoAxeViolations(filled.container);
+    filled.unmount();
+    const blank = matrix([]);
+    await expectNoAxeViolations(blank.container);
   });
 });

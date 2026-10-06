@@ -32,6 +32,12 @@ export interface EvidenceMatrixProps {
   rows: readonly EvidenceRow[];
   heading?: string;
   headingLevel?: HeadingLevel;
+  /**
+   * Shown in place of the rows when there are none. `rows` is server data — a case opened seconds
+   * ago, a filtered view, a partial response — so an empty list degrades rather than throwing and
+   * taking the case route down with it.
+   */
+  empty?: React.ReactNode;
   className?: string;
 }
 
@@ -47,52 +53,53 @@ export function EvidenceMatrix({
   rows,
   heading = 'Evidence matrix',
   headingLevel = 2,
+  empty,
   className,
 }: EvidenceMatrixProps): React.JSX.Element {
-  if (rows.length === 0) {
-    throw new TypeError(
-      'EvidenceMatrix was given no rows. A review with no criteria is not a review; render the ' +
-        'case’s empty state instead.',
-    );
-  }
   return (
     <CasePanel
       heading={heading}
       headingLevel={headingLevel}
       {...(className === undefined ? {} : { className })}
     >
-      <ul className="list-none">
-        {rows.map((row) => (
-          <li
-            key={row.id}
-            className="flex gap-[10px] border-t border-solid border-t-border-hairline py-[10px] px-[0px] first:border-t-0"
-          >
-            <span
-              aria-hidden
-              className="flex h-[28px] w-[28px] shrink-0 items-center justify-center rounded-sm bg-info-soft"
+      {rows.length === 0 ? (
+        <p className="text-[11.5px] leading-[1.5] text-slate">
+          {empty === undefined ? 'No evidence has been recorded on this case yet.' : empty}
+        </p>
+      ) : (
+        <ul className="list-none">
+          {rows.map((row) => (
+            <li
+              key={row.id}
+              className="flex gap-[10px] border-t border-solid border-t-border-hairline py-[10px] px-[0px] first:border-t-0"
             >
-              <span className="block h-[14px] w-[14px] stroke-info-on-soft">
-                {row.icon ?? <EvidenceIcon />}
+              <span
+                aria-hidden
+                className="flex h-[28px] w-[28px] shrink-0 items-center justify-center rounded-sm bg-info-soft"
+              >
+                <span className="block h-[14px] w-[14px] stroke-info-on-soft">
+                  {row.icon ?? <EvidenceIcon />}
+                </span>
               </span>
-            </span>
-            {/* No `flex-1`: the reference lets the state badge sit immediately after the text, so
+              {/* No `flex-1`: the reference lets the state badge sit immediately after the text, so
                 the badge column is ragged. Right-aligning it would scan better and would also stop
                 reproducing the screen this component exists to reproduce. */}
-            <div className="min-w-0">
-              <b className="block text-[11.5px]">{row.label}</b>
-              <span className="text-[10.5px] leading-[1.4] text-slate">{row.detail}</span>
-            </div>
-            <span
-              className={cx(
-                'inline-flex items-center gap-[6px] rounded-full py-[5px] px-[9px] text-[10px] font-bold',
-                STATE_TONES[row.state],
-              )}
-            >
-              {STATE_LABELS[row.state]}
-            </span>
-          </li>
-        ))}
-      </ul>
+              <div className="min-w-0">
+                <b className="block text-[11.5px]">{row.label}</b>
+                <span className="text-[10.5px] leading-[1.4] text-slate">{row.detail}</span>
+              </div>
+              <span
+                className={cx(
+                  'inline-flex items-center gap-[6px] rounded-full py-[5px] px-[9px] text-[10px] font-bold',
+                  STATE_TONES[row.state],
+                )}
+              >
+                {STATE_LABELS[row.state]}
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
     </CasePanel>
   );
 }

@@ -31,6 +31,7 @@ export const WritesToTheTrustTrail: Story = {
   args: {
     policy: 'Park Hub Verification Policy',
     section: '1.1',
+    joiner: '·',
     note: 'decision is written to the Trust Trail',
   },
 };
@@ -40,7 +41,12 @@ export const EveryPolicyTheReferenceCites: Story = {
     <div>
       <PolicyCite policy="New-Buyer Proposal Policy" section="2.1" note="same threshold, every case" />
       <PolicyCite policy="Item Mismatch Policy" section="4.1" note="same policy, every case" />
-      <PolicyCite policy="Park Hub Verification Policy" section="1.1" />
+      <PolicyCite
+        policy="Park Hub Verification Policy"
+        section="1.1"
+        joiner="·"
+        note="decision is written to the Trust Trail"
+      />
       <PolicyCite policy="Velocity & Abuse Policy" section="2.4" />
       <PolicyCite policy="Business Verification Policy" section="1.4" />
     </div>
