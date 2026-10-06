@@ -15,13 +15,23 @@ export const userStatus = identity.enum('user_status', [
   'ANONYMISED', // erasure executed
 ]);
 
-export const verificationLevel = identity.enum('verification_level', [
+/**
+ * M1 §2's ladder, named as a value because the ORDER is load-bearing: M6 (T-050) stores a level as
+ * a NUMBER in its append-only change log and identity stores it as a NAME here, so the array index
+ * is the conversion between them. Retyping the list in trust would be a second copy of a ladder
+ * whose drift shows up as a user granted the wrong level.
+ */
+export const VERIFICATION_LEVELS = [
   'UNVERIFIED',
   'CONTACT_VERIFIED',
   'IDENTITY_VERIFIED',
   'BUSINESS_VERIFIED',
   'ENHANCED',
-]);
+] as const;
+
+export type VerificationLevelName = (typeof VERIFICATION_LEVELS)[number];
+
+export const verificationLevel = identity.enum('verification_level', VERIFICATION_LEVELS);
 
 export const capabilityType = identity.enum('capability_type', ['MERCHANT', 'MERCHANT_MEMBER', 'STAFF']);
 
