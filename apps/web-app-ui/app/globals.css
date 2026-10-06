@@ -1,0 +1,9 @@
+/*
+ * The app's one stylesheet. The import reaches the tokens, the preflight, the element defaults, the
+ * keyframes and the focus ring; `@komtru/app-kit` already points Tailwind at its own source and at
+ * `ui-kit`'s, so the two `@source` lines here are this app's own files.
+ */
+@import '@komtru/app-kit/styles.css';
+
+@source './**/*.{ts,tsx}';
+@source '../src/**/*.{ts,tsx}';
