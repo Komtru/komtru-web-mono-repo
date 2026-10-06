@@ -58,3 +58,32 @@ export const insertUser = async (pool: pg.Pool, overrides: Record<string, unknow
   if (!id) throw new Error('insertUser(): no row returned');
   return id;
 };
+
+/**
+ * Twelve handles that share a typeahead prefix and are genuinely DISTINCT under M1 §6.3.
+ *
+ * The obvious fixture — `janedoe0` … `janedoe11` — cannot be inserted, and that is T-033 working
+ * rather than T-033 being wrong. `skeleton()` folds confusable glyphs and then collapses runs, so
+ * `janedoe6` and `janedoe9` both become `janedoeg`, and `janedoe11` becomes `janedoel`, which is
+ * what `janedoe1` already became. `users_username_skeleton_unique` refuses the second of each pair.
+ *
+ * The lesson generalises: **appending a counter is not a way to generate distinct handles on this
+ * platform**, because the namespace these rows live in is the skeleton's and not the handle's.
+ * Names it is, which is what real handles look like anyway. `fixtures.test.ts` pins the property so
+ * the next person who reaches for a loop finds out in a unit test rather than in a 23505 during
+ * someone else's integration run.
+ */
+export const TYPEAHEAD_HANDLES: readonly string[] = [
+  'janadeola',
+  'janbello',
+  'janchidi',
+  'jandada',
+  'janemeka',
+  'janfunke',
+  'jangbenga',
+  'janhauwa',
+  'jankemi',
+  'janmusa',
+  'janngozi',
+  'janobi',
+];
