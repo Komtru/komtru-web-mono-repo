@@ -34,7 +34,11 @@ export const Account: Story = {
           <TextField label="Full name" defaultValue="Amaka Balogun" />
           <TextField label="Phone number" defaultValue="0802 341 5567" disabled />
           <TextField label="Email (optional)" placeholder="you@example.com" />
-          <Button className="w-auto pt-[10px] pr-[22px] pb-[10px] pl-[22px]">Save changes</Button>
+          {/* `w-full` is part of `.btn-primary`, and `cx` appends rather than overrides, so the
+              shrink-wrap is the parent's job — an inline flex box is as wide as its content. */}
+          <span className="inline-flex">
+            <Button className="pt-[10px] pr-[22px] pb-[10px] pl-[22px]">Save changes</Button>
+          </span>
         </div>
       </>
     ),

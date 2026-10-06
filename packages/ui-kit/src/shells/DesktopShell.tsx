@@ -19,6 +19,10 @@ export interface DesktopShellProps {
  * reason it draws no desktop screen narrower than a tablet. This shell still lays out there, with
  * the top nav, because a screen that was never given a mobile design has to render *something*.
  *
+ * The page's background comes from the shell, as it does on mobile: the reference states it on the
+ * drawn frame (`.dweb-frame{background:var(--surface-primary)}`), which *is* the page once the
+ * frame is gone, the same way `.mweb-screen`'s `--surface-secondary` is the mobile page's.
+ *
  * Two deviations from the drawing, both the gallery's rather than the product's: `.dweb-shell`'s
  * `min-height` (declared twice, as 520px and 560px, for two sections of the document) becomes the
  * viewport, and `.dweb-content`'s `overflow-y:auto` goes — in a real page the document scrolls, and
@@ -32,7 +36,7 @@ export function DesktopShell({
   children,
 }: DesktopShellProps): React.JSX.Element {
   return (
-    <div className="flex min-h-dvh flex-col lg:flex-row">
+    <div className="flex min-h-dvh flex-col bg-surface-primary lg:flex-row">
       <TopNav
         brandLabel={brandLabel}
         brandIcon={brandIcon}

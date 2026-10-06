@@ -65,9 +65,12 @@ export const TradesEmpty: Story = {
           icon={BriefcaseIcon}
           title="No protected Trades yet"
           body="Start one, or enter a Trade Code from a seller — every completed Trade adds to your Trust Profile."
-          action={<Button>Start a Trade</Button>}
-          secondaryAction={<Button variant="secondary">Enter a Trade Code</Button>}
         />
+        {/* AC1 puts the two actions below the panel, not inside it. */}
+        <div className="mt-[16px] flex flex-col gap-[8px]">
+          <Button>Start a Trade</Button>
+          <Button variant="secondary">Enter a Trade Code</Button>
+        </div>
       </div>
     ),
     tabs: <TabBar items={TABS} />,

@@ -23,7 +23,7 @@ export interface PublicShellProps {
  */
 export function PublicShell({ brandLabel, brandIcon, aside, children }: PublicShellProps): React.JSX.Element {
   return (
-    <div className="flex min-h-dvh flex-col">
+    <div className="flex min-h-dvh flex-col bg-surface-primary">
       {brandLabel !== undefined && <TopNav brandLabel={brandLabel} brandIcon={brandIcon} />}
       <div className="flex-1 p-[20px] lg:p-[24px]">
         <div className="flex flex-col items-start gap-[24px] lg:flex-row">

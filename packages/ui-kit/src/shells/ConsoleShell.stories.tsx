@@ -36,7 +36,7 @@ const COLLAPSE = (
   </button>
 );
 
-const STATS = (
+const stats = (withTrend: boolean) => (
   <div className="grid grid-cols-2 gap-[14px]">
     {[
       { label: 'Active hubs', value: '126', trend: '+8 this quarter', tone: 'text-success-on-soft' },
@@ -48,7 +48,7 @@ const STATS = (
       >
         <div className="text-[11px] tracking-[.04em] text-slate uppercase">{stat.label}</div>
         <div className="mt-[6px] font-mono text-[22px] font-semibold">{stat.value}</div>
-        <div className={`mt-[4px] text-[11px] font-semibold ${stat.tone}`}>{stat.trend}</div>
+        {withTrend && <div className={`mt-[4px] text-[11px] font-semibold ${stat.tone}`}>{stat.trend}</div>}
       </div>
     ))}
   </div>
@@ -70,8 +70,14 @@ export const ParkAgents: Story = {
     navFooter: COLLAPSE,
     title: 'Park Agents',
     description: 'Applications, hubs, custody and agent lifecycle.',
-    actions: <Button className="w-auto">+ Register New Park Hub</Button>,
-    children: STATS,
+    actions: (
+      // `.btn-primary` is `width:100%`; the reference's page-head buttons are written `width:auto`,
+      // and an inline flex box is the parent-side way to say that.
+      <span className="inline-flex shrink-0">
+        <Button>+ Register New Park Hub</Button>
+      </span>
+    ),
+    children: stats(true),
   },
 };
 
@@ -82,12 +88,16 @@ export const TabletRail: Story = {
     collapsed: true,
     title: 'All Park Hubs',
     description: 'Same shell and information hierarchy at tablet width.',
-    actions: <Button className="w-auto">+ Register</Button>,
-    children: STATS,
+    actions: (
+      <span className="inline-flex shrink-0">
+        <Button>+ Register</Button>
+      </span>
+    ),
+    children: stats(false),
   },
 };
 
 /** A screen whose title says everything there is to say. */
 export const NoDescription: Story = {
-  args: { nav: OPS_NAV, title: 'Fraud Signals', children: STATS },
+  args: { nav: OPS_NAV, title: 'Fraud Signals', children: stats(true) },
 };

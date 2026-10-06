@@ -106,6 +106,14 @@ describe('DesktopShell', () => {
     expect(container.querySelector('main')?.className).not.toContain('overflow-y-auto');
   });
 
+  it('paints the page white, the way the drawn frame is', () => {
+    // `.dweb-frame{background:var(--surface-primary)}`. Once the frame is gone that is the page's
+    // background, exactly as `.mweb-screen`'s cloud-gray is the mobile page's — and without it a
+    // desktop screen sits on whatever the app's body happens to be.
+    const { container } = shell();
+    expect(container.firstElementChild?.className).toContain('bg-surface-primary');
+  });
+
   it('lays out as a column below lg and a row at lg', () => {
     const { container } = shell();
     const root = container.firstElementChild?.className ?? '';
