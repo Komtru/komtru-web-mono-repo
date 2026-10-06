@@ -23,6 +23,11 @@ export const registryConfig = (overrides: Record<string, string> = {}): AppConfi
     IDENTITY_SIGNING_KEY_ID: 'test-key',
     // Identity refuses to build without it (T-032): an HMAC under an empty key is not an HMAC.
     IDENTITY_HMAC_PEPPER: 'p'.repeat(32),
+    // Same rule, two more keys (T-036): TOTP seeds and the recovery-code blob are envelope-encrypted
+    // (§S9), and an empty WebAuthn origin list is not a wildcard. Both fail at boot naming the
+    // variable rather than at a user's first enrolment, so the registry needs them to build.
+    ENCRYPTION_KEY: randomBytes(32).toString('hex'),
+    WEBAUTHN_ORIGINS: 'https://app.komtru.test',
     ...overrides,
   });
 

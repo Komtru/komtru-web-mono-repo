@@ -8,3 +8,4 @@ Task 4: Ruling: the plan put `completePasskeyRegistration` in passkey.service.ts
 Task 4 (+Task 6 infrastructure, per ruling): complete (commits 3bd0599..d6fe789, tests: vitest run -> 1524 passed; eslint src -> clean; turbo typecheck --force -> 2 successful)
 Task 5: complete (commits d6fe789..67893da, tests: vitest run -> 1514 passed/938 skipped; turbo typecheck+lint --force IN THE WORKTREE -> 3 successful)
 NOTE: earlier turbo runs for tasks 1-4 were executed from the main checkout by mistake and verified nothing; re-verified in the worktree at task 5 and two real defects surfaced (SessionView.amr readonly, 13 lint errors in the new int tests), both fixed.
+Task 6: complete (commits 67893da..19d2e68; implementation landed in task 4 per ruling, tests here; turbo typecheck+lint --force -> 3 successful)

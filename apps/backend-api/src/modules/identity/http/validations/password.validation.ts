@@ -19,7 +19,15 @@ export const loginRequestSchema = z.strictObject({
   deviceFingerprint: deviceFingerprintSchema.optional(),
 });
 
-export const loginResponseSchema = z.object({
+/** §10.1's `{ "id", "type", "hint" }`. A label, never a secret and never a full address. */
+export const mfaFactorHintSchema = z.strictObject({
+  id: z.uuid(),
+  type: z.enum(['TOTP', 'SMS_OTP', 'EMAIL_OTP', 'PASSKEY', 'RECOVERY_CODE']),
+  hint: z.string().nullable(),
+  isDefault: z.boolean(),
+});
+
+export const sessionBodySchema = z.strictObject({
   accessToken: z.string().min(1),
   refreshToken: z.string().min(1),
   scope: sessionScopeSchema,
@@ -29,6 +37,62 @@ export const loginResponseSchema = z.object({
   nextStep: nextStepSchema,
   user: publicUserSchema,
 });
+
+/**
+ * §10.1's second 200: the password was right and a factor is still owed.
+ *
+ * It carries no token of any kind. A client that found an access token beside `mfaRequired: true`
+ * would reasonably use it, which is the second factor skipped entirely — so both branches are
+ * STRICT objects and the union refuses a body carrying members of both. That is a type-level
+ * guarantee rather than a convention somebody has to keep.
+ */
+const loginChallengeSchema = z.strictObject({
+  mfaRequired: z.literal(true),
+  /** `<challengeId>.<secret>`; 256 bits, five minutes, five attempts. */
+  mfaToken: z.string().min(1).max(512),
+  expiresAt: z.number().int().positive(),
+  factors: z.array(mfaFactorHintSchema),
+});
+
+export const loginResponseSchema = z.union([sessionBodySchema, loginChallengeSchema]);
+
+export const mfaVerifyRequestSchema = z
+  .strictObject({
+    mfaToken: z.string().min(1).max(512),
+    factorId: z.uuid(),
+    /** A TOTP code, an SMS code or a recovery code. */
+    code: z.string().min(1).max(64).optional(),
+    /** A WebAuthn assertion, for a PASSKEY factor. Shape checked by the relying party, not here. */
+    assertion: z.unknown().optional(),
+    deviceFingerprint: deviceFingerprintSchema.optional(),
+  })
+  // Exactly one. A body carrying both would leave the service picking, and which it picked would be
+  // an implementation detail a client could come to depend on.
+  .refine((body) => (body.code !== undefined) !== (body.assertion !== undefined), {
+    message: 'Send exactly one of code and assertion',
+    path: ['code'],
+  });
+
+export const mfaChallengeRequestSchema = z.strictObject({
+  mfaToken: z.string().min(1).max(512),
+  factorId: z.uuid(),
+});
+
+/** What `POST /auth/mfa/challenge` answers: how to present the factor, never the secret itself. */
+export const mfaChallengeResponseSchema = z.union([
+  z.strictObject({
+    kind: z.literal('CODE'),
+    challengeId: z.uuid().nullable(),
+    maskedDestination: z.string().nullable(),
+    expiresAt: z.number().int().positive().nullable(),
+    delivered: z.boolean(),
+  }),
+  z.strictObject({
+    kind: z.literal('PASSKEY'),
+    /** `navigator.credentials.get()` options, as the relying party built them. */
+    options: z.record(z.string(), z.unknown()),
+  }),
+]);
 
 export const forgotPasswordRequestSchema = z.strictObject({
   identifier: identifierSchema,

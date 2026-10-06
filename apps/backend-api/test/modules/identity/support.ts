@@ -176,9 +176,10 @@ export const accountDeps = (overrides: Partial<AccountDeps> = {}): AccountDeps =
  * rate-limit keys. Nothing here is ever called: `assertRouteInvariants` reads the definitions, it
  * does not run the handlers.
  */
-export const stubAccountDeps = (): RegistrationControllerDeps => ({
+export const stubAccountDeps = (): RegistrationControllerDeps & MfaDeps => ({
   db: null as unknown as Db,
   ...accountDeps(),
+  ...mfaStubs(),
 });
 
 // ---------------------------------------------------------------------------
@@ -244,14 +245,64 @@ export const memoryChallengeStore = (): WebauthnChallengeStore => {
   };
 };
 
-export const mfaDeps = (overrides: Partial<MfaDeps> = {}): MfaDeps => {
-  const config = testConfig();
-  return {
-    ...accountDeps(),
-    encryption: createEncryption(config),
-    webauthn: stubRelyingParty(),
-    webauthnChallenges: memoryChallengeStore(),
-    staffRequireMfa: true,
-    ...overrides,
+/** The three fields `MfaDeps` adds over `AccountDeps`, for a test that only needs the shape. */
+export const mfaStubs = (): Pick<
+  MfaDeps,
+  'encryption' | 'webauthn' | 'webauthnChallenges' | 'staffRequireMfa'
+> => ({
+  encryption: createEncryption(testConfig()),
+  webauthn: stubRelyingParty(),
+  webauthnChallenges: memoryChallengeStore(),
+  staffRequireMfa: true,
+});
+
+export const mfaDeps = (overrides: Partial<MfaDeps> = {}): MfaDeps => ({
+  ...accountDeps(),
+  ...mfaStubs(),
+  ...overrides,
+});
+
+/**
+ * How many statements a piece of work sends to Postgres.
+ *
+ * The §17 timing assertion can be satisfied on a fast machine by an implementation that reads the
+ * MFA factors BEFORE the rejection and throws the answer away — one extra indexed lookup hides
+ * inside 5ms. Counting the statements does not depend on how fast the machine is, which is why the
+ * enumeration suite asserts both.
+ *
+ * It wraps BOTH `pool.query` and the `query` of every client `pool.connect()` hands out, because
+ * drizzle takes a client for a transaction and issues everything on that — a counter on the pool
+ * alone would read zero for every statement inside `db.transaction(...)`, which is all of them.
+ * Both are restored in a `finally`, so a throwing subject does not leave the pool wrapped for the
+ * rest of the file.
+ */
+export async function countStatements(pool: pg.Pool, run: () => Promise<unknown>): Promise<number> {
+  const originalQuery = pool.query.bind(pool);
+  const originalConnect = pool.connect.bind(pool);
+  let count = 0;
+
+  const mutable = pool as unknown as { query: unknown; connect: unknown };
+  mutable.query = (...args: unknown[]) => {
+    count += 1;
+    return (originalQuery as (...a: unknown[]) => unknown)(...args);
   };
-};
+  mutable.connect = async (...args: unknown[]) => {
+    const client = (await (originalConnect as (...a: unknown[]) => unknown)(...args)) as {
+      query: (...a: unknown[]) => unknown;
+    };
+    const clientQuery = client.query.bind(client);
+    client.query = (...args2: unknown[]) => {
+      count += 1;
+      return clientQuery(...args2);
+    };
+    return client;
+  };
+
+  try {
+    await run();
+  } finally {
+    mutable.query = originalQuery;
+    mutable.connect = originalConnect;
+  }
+  return count;
+}

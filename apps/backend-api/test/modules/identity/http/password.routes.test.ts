@@ -4,6 +4,7 @@ import { passwordRoutes } from '../../../../src/modules/identity/http/routes/pas
 import {
   changePasswordRequestSchema,
   loginRequestSchema,
+  loginResponseSchema,
 } from '../../../../src/modules/identity/http/validations/password.validation.js';
 import { assertRouteInvariants, type RouteDefinition } from '../../../../src/platform/http/route.js';
 import { stubAccountDeps } from '../support.js';
@@ -117,5 +118,57 @@ describe('the login and password request shapes', () => {
         newPassword: 'x'.repeat(12),
       }).success,
     ).toBe(true);
+  });
+});
+
+describe('the mfaRequired branch T-036 adds to §10.1', () => {
+  const session = {
+    accessToken: 'a',
+    refreshToken: 'r',
+    scope: 'CONSUMER' as const,
+    expiresIn: 600,
+    expiresAt: Date.now() + 600_000,
+    nextStep: 'DONE' as const,
+    user: {
+      id: '11111111-1111-4111-8111-111111111111',
+      publicId: 'ab12cd',
+      username: null,
+      displayName: null,
+      status: 'ACTIVE',
+      verificationLevel: 'CONTACT_VERIFIED',
+    },
+  };
+
+  const challenge = {
+    mfaRequired: true as const,
+    mfaToken: '11111111-1111-7111-8111-111111111111.secret',
+    expiresAt: Date.now() + 300_000,
+    factors: [
+      {
+        id: '22222222-2222-4222-8222-222222222222',
+        type: 'TOTP' as const,
+        hint: 'Authenticator app',
+        isDefault: true,
+      },
+    ],
+  };
+
+  it('accepts a session body and a challenge body on the one response schema', () => {
+    expect(loginResponseSchema.safeParse(session).success).toBe(true);
+    expect(loginResponseSchema.safeParse(challenge).success).toBe(true);
+  });
+
+  /**
+   * A body carrying both is a bug, not a richer answer: a client that found an access token beside
+   * `mfaRequired: true` would reasonably use it, which is the second factor skipped entirely.
+   */
+  it('refuses a body carrying members of both branches', () => {
+    expect(loginResponseSchema.safeParse({ ...session, ...challenge }).success).toBe(false);
+  });
+
+  it('never lets a challenge carry a token', () => {
+    expect(loginResponseSchema.safeParse({ ...challenge, accessToken: 'a', refreshToken: 'r' }).success).toBe(
+      false,
+    );
   });
 });

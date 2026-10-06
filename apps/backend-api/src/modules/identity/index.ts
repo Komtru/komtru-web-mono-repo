@@ -9,13 +9,18 @@ import { defineModule, type KomtruModule, type SeedableModule } from '../../plat
 import type { Actor, CompanyMembership } from '../../platform/http/principal.js';
 import type { Request } from 'express';
 import { createHmacHasher } from '../../platform/crypto/hmac.js';
+import { createEncryption } from '../../platform/crypto/encryption.js';
 import { argon2Hasher } from './domain/credential/hashing.js';
 import { resolveTermsVersions } from './domain/terms.js';
 import { createActorResolver } from './http/middleware.js';
 import { authRoutes } from './http/routes/auth.routes.js';
+import { deviceRoutes } from './http/routes/device.routes.js';
+import { mfaRoutes } from './http/routes/mfa.routes.js';
 import { passwordRoutes } from './http/routes/password.routes.js';
 import { registrationRoutes } from './http/routes/registration.routes.js';
-import type { AccountDeps } from './services/auth.service.js';
+import type { MfaDeps } from './services/mfa.service.js';
+import { createRelyingParty } from './infrastructure/webauthn/relying-party.js';
+import { createWebauthnChallengeStore } from './infrastructure/redis/webauthn-challenge.js';
 import { usernameRoutes } from './http/username.controller.js';
 import { createTokenSigner, type TokenSigner } from './infrastructure/jwt/access-token.js';
 import { createEpochCache, type EpochCache } from './infrastructure/redis/epoch-cache.js';
@@ -56,12 +61,46 @@ export * from './domain/otp/challenge.js';
 export * from './domain/registration.js';
 export { resolvePrincipal, type PrincipalDeps } from './services/principal.service.js';
 export { bearerToken, createActorResolver } from './http/middleware.js';
+export * from './domain/mfa/policy.js';
+export * from './domain/mfa/totp.js';
+export * from './domain/mfa/recovery-codes.js';
+export {
+  activeFactors,
+  findOwnFactor,
+  holdsLiveAdminRole,
+  issueFactorChallenge,
+  listFactors,
+  removeFactor,
+  verifyFactor,
+  type FactorRow,
+  type FactorView,
+  type MfaDeps,
+} from './services/mfa.service.js';
+export { issueStepUpToken, consumeStepUpToken, requireStepUp } from './services/step-up.service.js';
+export { completeMfaLogin, issueMfaToken, type MfaChallengeView } from './services/mfa-login.service.js';
+export { createRelyingParty, type RelyingParty } from './infrastructure/webauthn/relying-party.js';
+export {
+  createWebauthnChallengeStore,
+  type WebauthnChallengeStore,
+} from './infrastructure/redis/webauthn-challenge.js';
+export {
+  deviceLabel,
+  listDevices,
+  registerDevice,
+  retireDevice,
+  signInLocation,
+  trustDevice,
+  upsertDevice,
+  type DeviceView,
+} from './services/device.service.js';
 export {
   applyKillSwitch,
   bumpSessionsEpoch,
   createSession,
   refreshSession,
+  listSessions,
   revokeAllSessions,
+  revokeSession,
   revokeSessionFamily,
   type CreateSessionInput,
   type IssuedSession,
@@ -115,7 +154,7 @@ export function createIdentityAuth(options: IdentityAuthOptions): IdentityAuth {
     throw new Error('IDENTITY_HMAC_PEPPER is required to build the identity module');
   }
 
-  const account: AccountDeps & { db: Db } = {
+  const account: MfaDeps & { db: Db } = {
     db,
     signer,
     epochs,
@@ -125,6 +164,14 @@ export function createIdentityAuth(options: IdentityAuthOptions): IdentityAuth {
     breach: { enabled: config.identity.breachCheckEnabled, logger },
     terms: resolveTermsVersions(config.terms),
     mirrorPhoneOtpToEmail: config.identity.mirrorPhoneOtpToEmail,
+    // Both built eagerly and both allowed to throw here, naming their variable, the way
+    // `createTokenSigner` and the pepper check above already do (T-036). A process that will serve
+    // `/me/mfa/totp/enroll` and has no ENCRYPTION_KEY — or that will serve a passkey ceremony with
+    // no WEBAUTHN_ORIGINS — should fail at boot and not at a user's first enrolment.
+    encryption: createEncryption(config),
+    webauthn: createRelyingParty(config, logger),
+    webauthnChallenges: createWebauthnChallengeStore(redis, logger),
+    staffRequireMfa: config.identity.staffRequireMfa,
   };
 
   return {
@@ -136,6 +183,8 @@ export function createIdentityAuth(options: IdentityAuthOptions): IdentityAuth {
       ...registrationRoutes(account),
       ...passwordRoutes(account),
       ...usernameRoutes({ db }),
+      ...deviceRoutes({ db, logger }),
+      ...mfaRoutes(account),
     ],
   };
 }

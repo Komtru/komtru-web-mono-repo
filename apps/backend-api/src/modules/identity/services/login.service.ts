@@ -23,7 +23,10 @@ import { sessionUsableUnder } from '../domain/session/status.js';
 import { userEmails, userPhones } from '../infrastructure/postgres/schema/contacts.js';
 import { users } from '../infrastructure/postgres/schema/users.js';
 import { AUDIT_ACTIONS, writeAudit } from './audit.service.js';
-import { onboarding, type AccountDeps, type PublicUser } from './auth.service.js';
+import { onboarding, type PublicUser } from './auth.service.js';
+import { mfaRequirement } from '../domain/mfa/policy.js';
+import { issueMfaToken, type MfaChallengeView } from './mfa-login.service.js';
+import { activeFactors, type MfaDeps } from './mfa.service.js';
 import { verifyAndRecord } from './credential.service.js';
 import { deviceLabel, signInLocation, upsertDevice } from './device.service.js';
 import { createSession, type IssuedSession } from './session.service.js';
@@ -31,7 +34,17 @@ import type { Tx } from '../../../platform/events/publish.js';
 
 export type LoginResult =
   | { outcome: 'SESSION'; session: IssuedSession; user: PublicUser; nextStep: NextStep }
-  /** The only failure. §S3: one status, one body, one cost, whatever actually went wrong. */
+  /**
+   * §10.1's `{ mfaRequired: true, mfaToken, factors }` (T-036).
+   *
+   * A SECOND SUCCESS, not a second failure, and the distinction is the whole design. This variant
+   * is reachable only once the password has verified and the status has passed — only, that is, for
+   * somebody who already holds the account's credentials — so it cannot tell an attacker which of
+   * two identifiers names a real account. The §17 suite holds that with a statement count as well
+   * as a stopwatch; see `mfa-login.service.ts` for why both.
+   */
+  | { outcome: 'MFA_REQUIRED'; mfaToken: string; expiresAt: Date; factors: MfaChallengeView[] }
+  /** Still the only failure. §S3: one status, one body, one cost, whatever actually went wrong. */
   | { outcome: 'REJECTED' };
 
 export interface LoginInput {
@@ -113,7 +126,7 @@ const safeEmailNormal = (value: string): string | null => {
 const identifierDigest = (identifier: string): string =>
   sha256(identifier.trim().toLowerCase()).toString('hex');
 
-export async function login(db: Db, deps: AccountDeps, input: LoginInput): Promise<LoginResult> {
+export async function login(db: Db, deps: MfaDeps, input: LoginInput): Promise<LoginResult> {
   return db.transaction(async (tx): Promise<LoginResult> => {
     const candidate = await resolveLoginCandidate(tx, input.identifier);
 
@@ -131,6 +144,64 @@ export async function login(db: Db, deps: AccountDeps, input: LoginInput): Promi
     if (verdict.outcome !== 'OK' || !candidate || !usable) {
       await recordFailure(tx, input, candidate, verdict.outcome, usable);
       return { outcome: 'REJECTED' };
+    }
+
+    // ───────────────────────────────────────────────────────────────────────────────────────────
+    // EVERYTHING BELOW THIS LINE HAS ALREADY PROVED THE PASSWORD.
+    //
+    // Nothing above it may learn whether this account holds an MFA factor. A statement moved up
+    // there — even one whose answer is discarded — turns "is this account hardened?" into a
+    // difference between a hit and a miss, which is precisely the §17 property T-032 built the
+    // single failure variant to protect and the one thing this branch could have broken.
+    //
+    // `login.mfa-enumeration.int.test.ts` holds the line two ways: a timing comparison, which is
+    // what §17 literally asks for, and a COUNT of the statements the rejected path issues, which a
+    // fast machine cannot hide an extra indexed lookup inside.
+    // ───────────────────────────────────────────────────────────────────────────────────────────
+    const factors = await activeFactors(tx, candidate.userId);
+    const requirement = mfaRequirement({
+      scope: 'CONSUMER',
+      activeFactorTypes: factors.map((factor) => factor.factorType),
+      // Not a lookup, deliberately. `mfaRequirement` makes this inert for CONSUMER (D2 C4's forced
+      // setup is about STAFF sessions, §S13), so querying the role grants here would be a round
+      // trip on the success path that cannot change the answer. T-037's staff login passes the
+      // real value.
+      holdsAdminRole: false,
+      staffRequireMfa: deps.staffRequireMfa,
+    });
+
+    if (requirement.required) {
+      const challenge = await issueMfaToken(tx, deps, {
+        userId: candidate.userId,
+        factors,
+        ip: input.ip,
+      });
+
+      // No device row and no session: both belong in the transaction that COMPLETES the login
+      // (`completeMfaLogin`). A device row written here would make `isNewDevice` false by the time
+      // the session opens, and §S11's new-device notification would never fire for an MFA user.
+      // `users.last_login_at` is untouched for the same reason — this sign-in has not happened yet.
+      await writeAudit(tx, {
+        action: AUDIT_ACTIONS.MFA_CHALLENGED,
+        outcome: 'SUCCESS',
+        actorType: 'USER',
+        actorUserId: candidate.userId,
+        subjectUserId: candidate.userId,
+        ip: input.ip,
+        userAgent: input.userAgent,
+        metadata: {
+          challengeId: challenge.challengeId,
+          factorCount: challenge.factors.length,
+          rehashed: verdict.rehashed,
+        },
+      });
+
+      return {
+        outcome: 'MFA_REQUIRED',
+        mfaToken: challenge.mfaToken,
+        expiresAt: challenge.expiresAt,
+        factors: challenge.factors,
+      };
     }
 
     const device = await upsertDevice(tx, {
