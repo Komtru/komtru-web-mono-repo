@@ -89,7 +89,10 @@ describe.runIf(infraEnabled)('TOTP enrolment (screen TF1)', () => {
     expect(await outboxEventTypes(t.app())).toContain('identity.mfa.enrolled');
     const { rows } = await t
       .app()
-      .query(`SELECT action FROM identity.identity_audit_log WHERE subject_user_id = $1`, [userId]);
+      .query<{ action: string }>(
+        `SELECT action FROM identity.identity_audit_log WHERE subject_user_id = $1`,
+        [userId],
+      );
     expect(rows.map((r) => r.action)).toContain('MFA_ENROLLED');
   });
 
@@ -107,7 +110,7 @@ describe.runIf(infraEnabled)('TOTP enrolment (screen TF1)', () => {
 
     const { rows } = await t
       .app()
-      .query(
+      .query<{ attempts: number }>(
         `SELECT attempts FROM identity.otp_challenges WHERE user_id = $1 AND purpose = 'MFA_CHALLENGE'`,
         [userId],
       );
@@ -142,7 +145,9 @@ describe.runIf(infraEnabled)('TOTP enrolment (screen TF1)', () => {
 
     const { rows } = await t
       .app()
-      .query(`SELECT code_hash FROM identity.otp_challenges WHERE id = $1`, [sms.challengeId]);
+      .query<{ code_hash: Buffer }>(`SELECT code_hash FROM identity.otp_challenges WHERE id = $1`, [
+        sms.challengeId,
+      ]);
     expect(rows).toHaveLength(1);
 
     const code = await liveCodeFor(t, sms.challengeId);
@@ -189,7 +194,7 @@ describe.runIf(infraEnabled)('TOTP enrolment (screen TF1)', () => {
     expect(totpResult.outcome).toBe('ACTIVATED');
     expect(smsResult.outcome).toBe('ACTIVATED');
 
-    const { rows } = await t.app().query(
+    const { rows } = await t.app().query<{ n: number }>(
       `SELECT count(*)::int AS n FROM identity.mfa_factors
         WHERE user_id = $1 AND is_default AND revoked_at IS NULL`,
       [userId],
@@ -206,7 +211,9 @@ describe.runIf(infraEnabled)('SMS factor enrolment', () => {
     const { userId } = await seedUser(t.app());
     expect((await enrolSmsFactor(t.db(), deps, { userId })).outcome).toBe('NO_VERIFIED_PHONE');
 
-    const { rows } = await t.app().query(`SELECT count(*)::int AS n FROM identity.mfa_factors`);
+    const { rows } = await t
+      .app()
+      .query<{ n: number }>(`SELECT count(*)::int AS n FROM identity.mfa_factors`);
     expect(rows[0]?.n).toBe(0);
   });
 
@@ -225,7 +232,7 @@ describe.runIf(infraEnabled)('SMS factor enrolment', () => {
 
     const { rows } = await t
       .app()
-      .query(
+      .query<{ channels: string }>(
         `SELECT payload->>'channels' AS channels FROM platform.outbox WHERE event_type = 'identity.otp.requested'`,
       );
     expect(rows[0]?.channels).toBe('["SMS"]');

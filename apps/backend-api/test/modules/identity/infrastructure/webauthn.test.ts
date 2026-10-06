@@ -119,7 +119,9 @@ describe('createWebauthnChallengeStore', () => {
     const { redis } = fakeRedis();
     const challenges = createWebauthnChallengeStore(redis, testLogger);
     await challenges.put('session-1', 'the-challenge');
-    expect(redis.set).toHaveBeenCalledWith(
+    // eslint-disable-next-line @typescript-eslint/unbound-method -- a vi.fn spy, not a bound method
+    const set = redis.set;
+    expect(set).toHaveBeenCalledWith(
       'mfa:webauthn:session-1',
       'the-challenge',
       'EX',

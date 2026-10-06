@@ -55,7 +55,7 @@ describe.runIf(infraEnabled)('the device registry (M1 §10.5)', () => {
     // The model it told us the first time survives a launch that does not repeat it.
     expect(second.device.model).toBe('Pixel 8');
 
-    const { rows } = await t.app().query(`SELECT count(*)::int AS n FROM identity.devices`);
+    const { rows } = await t.app().query<{ n: number }>(`SELECT count(*)::int AS n FROM identity.devices`);
     expect(rows[0]?.n).toBe(1);
   });
 
@@ -67,7 +67,7 @@ describe.runIf(infraEnabled)('the device registry (M1 §10.5)', () => {
       await registerDevice(tx, { userId: a.userId, fingerprint: FINGERPRINT });
       await registerDevice(tx, { userId: b.userId, fingerprint: FINGERPRINT });
     });
-    const { rows } = await t.app().query(`SELECT count(*)::int AS n FROM identity.devices`);
+    const { rows } = await t.app().query<{ n: number }>(`SELECT count(*)::int AS n FROM identity.devices`);
     expect(rows[0]?.n).toBe(2);
   });
 
@@ -95,7 +95,10 @@ describe.runIf(infraEnabled)('the device registry (M1 §10.5)', () => {
 
     const { rows } = await t
       .app()
-      .query(`SELECT status, push_token FROM identity.devices WHERE id = $1`, [device.id]);
+      .query<{ status: string; push_token: string | null }>(
+        `SELECT status, push_token FROM identity.devices WHERE id = $1`,
+        [device.id],
+      );
     expect(rows[0]).toEqual({ status: 'RETIRED', push_token: null });
   });
 
@@ -112,7 +115,9 @@ describe.runIf(infraEnabled)('the device registry (M1 §10.5)', () => {
       expect(await trustDevice(tx, { userId: b.userId, deviceId: device.id })).toBe(false);
     });
 
-    const { rows } = await t.app().query(`SELECT status FROM identity.devices WHERE id = $1`, [device.id]);
+    const { rows } = await t
+      .app()
+      .query<{ status: string }>(`SELECT status FROM identity.devices WHERE id = $1`, [device.id]);
     expect(rows[0]?.status).toBe('ACTIVE');
   });
 
@@ -125,9 +130,10 @@ describe.runIf(infraEnabled)('the device registry (M1 §10.5)', () => {
     expect(await t.db().transaction((tx) => trustDevice(tx, { userId, deviceId: device.id }))).toBe(true);
     const { rows } = await t
       .app()
-      .query(`SELECT status, trusted_at IS NOT NULL AS trusted FROM identity.devices WHERE id = $1`, [
-        device.id,
-      ]);
+      .query<{ status: string; trusted: boolean }>(
+        `SELECT status, trusted_at IS NOT NULL AS trusted FROM identity.devices WHERE id = $1`,
+        [device.id],
+      );
     expect(rows[0]).toEqual({ status: 'TRUSTED', trusted: true });
   });
 
@@ -218,9 +224,10 @@ describe.runIf(infraEnabled)(
 
       const { rows } = await t
         .app()
-        .query(`SELECT revoked_at, revoke_reason FROM identity.sessions WHERE family_id = $1`, [
-          session.familyId,
-        ]);
+        .query<{ revoked_at: Date | null; revoke_reason: string | null }>(
+          `SELECT revoked_at, revoke_reason FROM identity.sessions WHERE family_id = $1`,
+          [session.familyId],
+        );
       expect(rows).toHaveLength(1);
       expect(rows[0]?.revoked_at).not.toBeNull();
       expect(rows[0]?.revoke_reason).toBe('test');
@@ -244,7 +251,9 @@ describe.runIf(infraEnabled)(
 
       const { rows } = await t
         .app()
-        .query(`SELECT revoked_at FROM identity.sessions WHERE id = $1`, [session.sessionId]);
+        .query<{ revoked_at: Date | null }>(`SELECT revoked_at FROM identity.sessions WHERE id = $1`, [
+          session.sessionId,
+        ]);
       expect(rows[0]?.revoked_at).toBeNull();
     });
   },

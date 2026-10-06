@@ -393,7 +393,7 @@ export interface SessionView {
   id: string;
   scope: SessionScope;
   /** How the holder authenticated. The user reads this as "password + authenticator app". */
-  amr: readonly string[];
+  amr: string[];
   deviceId: string | null;
   /** `Chrome on Android`, from the stored user agent; the full string is noise on this screen. */
   deviceLabel: string;
