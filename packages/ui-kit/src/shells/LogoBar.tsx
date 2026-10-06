@@ -1,10 +1,13 @@
 import { KomtruLogo } from '../brand/KomtruLogo.js';
+import { cx } from '../primitives/cx.js';
 import { type TopBarAction, TopBarControl } from './TopBar.js';
 
 export interface LogoBarProps {
   /** `'ops'` gives the staff lockup; omitted gives the consumer one. */
   product?: 'ops';
   action?: TopBarAction;
+  /** The shell's own visibility, as on `<SideNav>`: an app with one shell hides this from `md` up. */
+  className?: string;
 }
 
 /**
@@ -15,9 +18,14 @@ export interface LogoBarProps {
  * The lockup is `<KomtruLogo>` rather than a local one: `.scr-logo` never carries anything but the
  * product's own name, so there is nothing here for a caller to vary.
  */
-export function LogoBar({ product, action }: LogoBarProps): React.JSX.Element {
+export function LogoBar({ product, action, className }: LogoBarProps): React.JSX.Element {
   return (
-    <header className="flex items-center justify-between bg-surface-primary pt-[16px] pr-[16px] pb-[10px] pl-[16px]">
+    <header
+      className={cx(
+        'flex items-center justify-between bg-surface-primary pt-[16px] pr-[16px] pb-[10px] pl-[16px]',
+        className,
+      )}
+    >
       <KomtruLogo product={product} />
       {action !== undefined && <TopBarControl action={action} />}
     </header>

@@ -50,6 +50,14 @@ describe('TabBar', () => {
     expect(other.lastElementChild?.className).toContain('text-trust-gray');
   });
 
+  it('takes a class list, so a one-shell app can hide it where the top nav takes over', () => {
+    // The nav does not decide its own visibility, the same way `<SideNav>` does not — an app that
+    // draws one responsive shell rather than two needs the tab bar gone from `md` up.
+    const { container } = render(<TabBar items={TABS} className="md:hidden" />);
+    expect(container.firstElementChild?.className).toContain('md:hidden');
+    expect(container.firstElementChild?.className).toContain('sticky');
+  });
+
   it('renders a tab with an href as a link', () => {
     render(<TabBar items={[{ label: 'Trades', icon: ICON, href: '/trades' }]} />);
     expect(screen.getByRole('link', { name: 'Trades' }).getAttribute('href')).toBe('/trades');

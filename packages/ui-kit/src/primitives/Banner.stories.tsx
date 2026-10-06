@@ -1,7 +1,10 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { Banner } from './Banner.js';
-import { AlertIcon, OfflineIcon } from './story-icons.js';
+import { AlertIcon } from './story-icons.js';
 
+// OF1's offline banner was a story here until T-110 measured it: `.offline-banner` sets its own
+// gap, padding, type sizes and icon size, none of which are `.guard-lock-banner`'s. It is
+// `<OfflineBanner>` now — see `Offline.stories.tsx`.
 const meta = {
   title: 'Primitives/Banner',
   component: Banner,
@@ -21,16 +24,6 @@ export const Ready: Story = {
     icon: AlertIcon,
     title: 'Ready to accept',
     children: 'Your proof is attached and timestamped.',
-  },
-};
-
-/** OF1's `.offline-banner`. */
-export const Offline: Story = {
-  args: {
-    tone: 'warning',
-    icon: OfflineIcon,
-    title: "You're offline",
-    children: "Showing your last saved data — we'll sync automatically once you're back.",
   },
 };
 
