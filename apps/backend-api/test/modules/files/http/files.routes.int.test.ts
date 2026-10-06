@@ -83,6 +83,10 @@ describe.runIf(infraEnabled)('files routes', () => {
         jobs.push({ name, data });
         return Promise.resolve({ id: 'stub' });
       },
+      // The controller clears any spent job before enqueuing, so the stub has to answer `remove`
+      // too — a stub missing a method the code calls is a TypeError, and this one used to be
+      // swallowed by an over-broad catch that made the enqueue silently vanish.
+      remove: () => Promise.resolve(0),
     }),
   } as never;
 

@@ -159,25 +159,35 @@ export const finalizeUpload = async (
 
     if (record.uploadState !== 'READY') {
       const queue = deps.queues().producer<FinalizeUploadJob>(FILES_QUEUES.FINALIZE);
+
+      /**
+       * Clear any spent job FIRST, and catch ONLY this.
+       *
+       * The job id is the file id, which is what stops a double-submit queueing two
+       * reconciliations — but BullMQ keeps a failed job for 30 days and `add` with an existing id
+       * is a silent no-op. Without this remove, a finalize that exhausted its attempts could never
+       * be retried: every later call would answer 202 and do nothing, until the abandoned sweep
+       * tombstoned a file that had actually landed.
+       *
+       * `remove` refuses a job that is actively being worked, and that is the benign case — the
+       * reconciliation the caller is asking for is already running — so it is logged and the
+       * enqueue below is still attempted.
+       */
       try {
-        /**
-         * Clear any spent job FIRST.
-         *
-         * The job id is the file id, which is what stops a double-submit queueing two
-         * reconciliations — but BullMQ keeps a failed job for 30 days and `add` with an existing id
-         * is a silent no-op. Without this remove, a finalize that exhausted its attempts could
-         * never be retried: every later call would answer 202 and do nothing, until the abandoned
-         * sweep tombstoned a file that had actually landed.
-         *
-         * `remove` refuses a job that is actively being worked, and that is the benign case — the
-         * reconciliation the caller is asking for is already running — so the failure is logged at
-         * debug and the 202 stands.
-         */
         await queue.remove(record.id);
-        await queue.add('finalize', { fileId: record.id }, { jobId: record.id });
       } catch (error) {
         deps.logger().debug({ err: error, fileId: record.id }, 'files: finalize job is already in flight');
       }
+
+      /**
+       * NOT inside that try.
+       *
+       * `guardEnqueue` throws QueueUnavailableError when Redis is unreachable, precisely so an
+       * enqueue during an outage fails rather than hanging. Swallowing it would answer 202 for work
+       * that will never run — the same false acceptance this code path exists to prevent, arriving
+       * through the error handler instead of through BullMQ's deduplication.
+       */
+      await queue.add('finalize', { fileId: record.id }, { jobId: record.id });
     }
 
     return { fileId: record.id, uploadState: record.uploadState };

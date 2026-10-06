@@ -96,6 +96,27 @@ describe('finalizeUpload', () => {
     vi.restoreAllMocks();
   });
 
+  it('propagates an enqueue failure instead of answering 202 with nothing queued', async () => {
+    // The catch must cover the REMOVE only. `guardEnqueue` throws QueueUnavailableError when Redis
+    // is not reachable, precisely so an enqueue during an outage fails instead of hanging — and
+    // swallowing it here hands the caller a 202 for work that will never run, which is the very
+    // failure this whole code path was written to close: nothing reconciles, and the abandoned
+    // sweep later tombstones a file that did land.
+    const { deps } = harness();
+    const queues = {
+      producer: () => ({
+        remove: () => Promise.resolve(1),
+        add: () => Promise.reject(new Error('queue is unavailable: Redis is not reachable')),
+      }),
+    } as unknown as QueueFactory;
+    vi.spyOn(fileService, 'requestFinalize').mockResolvedValue(record('RECONCILING'));
+
+    await expect(
+      finalizeUpload({ ...deps, queues: () => queues }, { uploaderUserId: 'u', fileId: FILE_ID }),
+    ).rejects.toThrow(/Redis is not reachable/);
+    vi.restoreAllMocks();
+  });
+
   it('does not fail the request when clearing the spent job fails', async () => {
     // A locked job (one actively being worked) cannot be removed. That is the benign case — the
     // reconciliation the caller is asking for is already running — so the enqueue is skipped and
