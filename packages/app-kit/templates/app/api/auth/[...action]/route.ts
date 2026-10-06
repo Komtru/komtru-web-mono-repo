@@ -1,4 +1,8 @@
-// Copy to `app/api/auth/[action]/route.ts`. Serves login, refresh and logout; 404s anything else.
+// Copy to `app/api/auth/[...action]/route.ts`. Serves login, refresh and logout; 404s anything else.
+//
+// A catch-all segment, not `[action]`: `komtruAuthRoute` reads `params.action` as the segments
+// after `/api/auth` and 404s anything that is not exactly one of the three, so a single-segment
+// route would not even typecheck against it.
 //
 // This is the only code in the app that touches a refresh token, and the only reason the browser
 // never has to hold one.

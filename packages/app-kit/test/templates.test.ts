@@ -64,7 +64,7 @@ const exportedNames = async (specifier: string): Promise<string[]> => {
 describe('the per-app templates', () => {
   it('ships one for every file an app has to add', () => {
     expect(templateFiles.map(relative).sort()).toEqual([
-      'app/api/auth/[action]/route.ts',
+      'app/api/auth/[...action]/route.ts',
       'app/error.tsx',
       'app/global-error.tsx',
       'app/globals.css',
@@ -136,7 +136,7 @@ describe('the per-app templates', () => {
   });
 
   it('marks the auth route dynamic, so a cookie is never baked into a static response', () => {
-    expect(read(path.join(templates, 'app/api/auth/[action]/route.ts'))).toContain(
+    expect(read(path.join(templates, 'app/api/auth/[...action]/route.ts'))).toContain(
       "export const dynamic = 'force-dynamic'",
     );
   });

@@ -19,7 +19,7 @@ Copy `templates/**` into the app, keeping the paths, and add one module of your 
 middleware.ts                      → scope enforcement on every navigation
 instrumentation.ts                 → Sentry, server and edge
 instrumentation-client.ts          → Sentry, browser
-app/api/auth/[action]/route.ts     → login, refresh, logout
+app/api/auth/[...action]/route.ts     → login, refresh, logout
 app/error.tsx                      → inside the layout
 app/global-error.tsx               → replaces the document, so it carries <html>, <body>, <main>
 app/not-found.tsx
