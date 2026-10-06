@@ -27,9 +27,12 @@ export const storageAccounts = files.table(
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [
-    // D5 structurally rather than by convention: a second dedicated account can never split the
-    // traffic of a pool that is single-account by design. `status <> 'DISABLED'` is what lets an
-    // account be replaced — disable the old row first, then register the new one.
+    // D5 structurally rather than by convention: a second row can never split the traffic of a pool
+    // that is single-account by design. `status <> 'DISABLED'` is what still lets one be replaced —
+    // disable the old row first, then register the new one.
+    //
+    // (Worded without the adjective M8 §1 reserves: test/support/forbidden-primitives.ts keeps
+    // Paystack's virtual-account primitive out of the codebase, prose included.)
     uniqueIndex('storage_accounts_singleton_pool')
       .on(table.pool)
       .where(sql`${table.pool} IN ('PROFILE', 'CHAT_ATTACHMENT') AND ${table.status} <> 'DISABLED'`),
