@@ -107,6 +107,27 @@ describe.runIf(infraEnabled)('username service', () => {
     });
   });
 
+  // Every other "taken" case in this file is answered by the availability pre-check. This one is
+  // not: both callers check, both are told the handle is free, and the unique index decides. That
+  // is the only path through `translateWriteError`, and the only one where a driver error reaches
+  // it — so it is the one that proves the mapping survives however drizzle wraps the error.
+  it('turns a lost race for a handle into a 409, not a 500', async () => {
+    await seeded();
+    const [a, b] = [await insertUser(t.app()), await insertUser(t.app())];
+    const settled = await Promise.allSettled([
+      claimUsername(deps(), { userId: a, username: 'racetarget' }),
+      claimUsername(deps(), { userId: b, username: 'racetarget' }),
+    ]);
+
+    const won = settled.filter((r) => r.status === 'fulfilled');
+    const lost = settled.filter((r) => r.status === 'rejected');
+    expect(won).toHaveLength(1);
+    expect(lost).toHaveLength(1);
+    const reason: unknown = lost[0]?.reason;
+    expect(reason).toBeInstanceOf(ApiError);
+    expect(reason).toMatchObject({ status: 409 });
+  });
+
   // The CHECK casts to text and so fires before the unique index: SQLSTATE 23514, not 23505. A
   // service that mapped every rejected write to "taken" would tell a user their own free handle is
   // gone. The application regex stops it first; this proves the mapping if it ever does not.

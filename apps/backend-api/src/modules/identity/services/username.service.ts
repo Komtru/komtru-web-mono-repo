@@ -8,6 +8,7 @@ import type { Paged } from '@komtru/shared-types';
 import { and, desc, eq, inArray, isNotNull, isNull, sql } from 'drizzle-orm';
 import type { Db } from '../../../db/index.js';
 import { ApiError } from '../../../platform/errors.js';
+import { pgErrorIn } from '../../../db/errors.js';
 import { publish, type Tx } from '../../../platform/events/publish.js';
 import { usernameChangedEvent, usernameClaimedEvent } from '../domain/events.js';
 import {
@@ -76,9 +77,16 @@ const REASON_DETAIL: Record<Exclude<UnavailableReason, 'INVALID'>, string> = {
   QUARANTINED: 'That handle was recently released and is not yet available.',
 };
 
-/** Postgres tells us which rule fired; the caller deserves to know which one too. */
-const translateWriteError = (error: unknown): ApiError | undefined => {
-  const { code, constraint } = (error ?? {}) as { code?: string; constraint?: string };
+/**
+ * Postgres tells us which rule fired; the caller deserves to know which one too.
+ *
+ * Exported for its own test: this runs only when both callers passed the availability pre-check and
+ * the index decided, which is the one interleaving an integration test cannot force on demand.
+ */
+export const translateWriteError = (error: unknown): ApiError | undefined => {
+  // Through `pgErrorIn`, because drizzle hands back its own error with the driver's on `cause`;
+  // reading `code` off the top level sees undefined and lets a 409 escape as a 500.
+  const { code, constraint } = pgErrorIn(error) ?? {};
   if (code === '23505') {
     if (constraint?.includes('skeleton')) return conflict(REASON_DETAIL.CONFUSABLE);
     return conflict(REASON_DETAIL.TAKEN);
