@@ -32,6 +32,21 @@ export const STALE_IN_FLIGHT_MS = 60_000;
 export const IDEMPOTENCY_TTL_HOURS = 24;
 /** The owner's lease. Renewed while the handler runs, so only a dead owner's lease lapses. */
 export const LEASE_TTL_MS = 30_000;
+
+/**
+ * Whether a completed record is spent. The boundary is inclusive: an age of exactly `ttlHours`
+ * counts as expired, so a ttl of 0 means "spent the moment it completed".
+ *
+ * This runs on a coarser clock than the Postgres retake predicate below, because
+ * `completedAt.getTime()` truncates the timestamptz to milliseconds. With a strict `>` the two
+ * disagreed: a record completed inside the current millisecond read as still live here while
+ * Postgres, at microsecond resolution, already called it expired — so a caller that should have
+ * re-run the work got the previous response replayed instead (T-029). Both sides use the same
+ * inclusive boundary now. Keep them that way: when they disagree, the retake matches no row, the
+ * request falls into the mid-flight poll and ends in a spurious 409.
+ */
+export const isExpired = (completedAt: Date | null, ttlHours: number, nowMs: number = Date.now()): boolean =>
+  completedAt !== null && nowMs - completedAt.getTime() >= ttlHours * 60 * 60 * 1000;
 const LEASE_RENEW_MS = 10_000;
 const POLL_MS = 25;
 /** A key is a client-chosen token: bounded, printable, and never a place to smuggle bytes. */
@@ -197,8 +212,7 @@ export function createIdempotencyGate({
       return result;
     };
 
-    const expired = (completedAt: Date | null): boolean =>
-      completedAt !== null && Date.now() - completedAt.getTime() > ttlHours * 60 * 60 * 1000;
+    const expired = (completedAt: Date | null): boolean => isExpired(completedAt, ttlHours);
 
     const reused = () =>
       new ApiError(
@@ -241,7 +255,7 @@ export function createIdempotencyGate({
           completedAt: null,
           createdAt: sql`now()`,
         })
-        .where(and(where, sql`${idempotencyKeys.completedAt} < now() - make_interval(hours => ${ttlHours})`))
+        .where(and(where, sql`${idempotencyKeys.completedAt} <= now() - make_interval(hours => ${ttlHours})`))
         .returning({ key: idempotencyKeys.key });
       if (retaken.length) return runOwned();
     } else if (await takeOverIfStale()) {
