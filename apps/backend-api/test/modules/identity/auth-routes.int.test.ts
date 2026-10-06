@@ -1,5 +1,6 @@
 // T-031 over HTTP: the JWKS, the refresh dance the api-client performs on a 401, logout, and the
 // scope isolation suite. Skipped unless KOMTRU_INFRA_TESTS=1.
+import { randomUUID } from 'node:crypto';
 import { SESSION_SCOPES, type SessionScope } from '@komtru/shared-types';
 import type { Express } from 'express';
 import type { Redis } from 'ioredis';
@@ -145,6 +146,21 @@ describe.runIf(infraEnabled)('the session routes', () => {
         .send({ refreshToken: issued.refreshToken })
         .expect(401);
       expect(response.body).toMatchObject({ code: 'SESSION_REVOKED' });
+    });
+
+    it('never stores the tokens it mints, even when the client sends an idempotency key', async () => {
+      const issued = await login();
+      await request(app)
+        .post('/v1/auth/refresh')
+        .set('Idempotency-Key', randomUUID())
+        .send({ refreshToken: issued.refreshToken })
+        .expect(200);
+      // `retryable: false` is what keeps this empty. A stored response would hold both the access
+      // token and the new refresh token as plaintext jsonb for 24 hours, undoing refresh_token_hash.
+      const { rows } = await t
+        .app()
+        .query<{ n: string }>(`SELECT count(*) AS n FROM platform.idempotency_keys`);
+      expect(Number(rows[0]!.n)).toBe(0);
     });
 
     it('rejects a body that tries to ask for a scope', async () => {

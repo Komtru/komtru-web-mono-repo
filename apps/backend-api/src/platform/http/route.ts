@@ -176,6 +176,13 @@ export function assertRouteInvariants(routes: RouteDefinition[]): void {
     if (route.rateLimit?.by.includes('identifier') && !route.rateLimit.identifierFrom) {
       problems.push(`${label}: rate limits by identifier but provides no identifierFrom`);
     }
+    // A permission on a route anyone may call reads as protection and is never checked, which is
+    // the worst of both: the same reasoning as the idempotency and rate-limit gates above.
+    if (route.scope === 'PUBLIC' && route.permission) {
+      problems.push(
+        `${label}: declares permission "${route.permission}" on a PUBLIC route, where it can never be checked`,
+      );
+    }
   }
 
   if (problems.length) {

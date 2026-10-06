@@ -15,14 +15,13 @@ import type { Db } from '../../../db/index.js';
 import { publish, type Tx } from '../../../platform/events/publish.js';
 import type { Logger } from '../../../platform/logger.js';
 import { issueRefreshToken, refreshTokenHash } from '../domain/session/refresh-token.js';
+import { sessionUsableUnder } from '../domain/session/status.js';
 import { sessionExpiry, slidingIdleExpiry } from '../domain/session/ttl.js';
 import type { TokenSigner } from '../infrastructure/jwt/access-token.js';
+import { lockUserSessions } from '../infrastructure/postgres/session-lock.js';
 import { sessions } from '../infrastructure/postgres/schema/sessions.js';
 import { users } from '../infrastructure/postgres/schema/users.js';
 import type { EpochCache } from '../infrastructure/redis/epoch-cache.js';
-
-/** M1 D5: `/auth/refresh` re-reads the status and refuses anything outside these three. */
-const USABLE_STATUSES = ['ACTIVE', 'PENDING_VERIFICATION', 'RESTRICTED'];
 
 export interface SessionDeps {
   signer: TokenSigner;
@@ -76,9 +75,12 @@ export async function createSession(
   deps: SessionDeps,
   input: CreateSessionInput,
 ): Promise<IssuedSession> {
+  // Before the insert: a kill switch running beside this login must not miss the row it creates.
+  await lockUserSessions(tx, input.userId);
+
   const user = await userFor(tx, input.userId);
   if (!user) throw new Error(`createSession: no user ${input.userId}`);
-  if (!USABLE_STATUSES.includes(user.status)) {
+  if (!sessionUsableUnder(user.status)) {
     throw new Error(`createSession: a user with status ${user.status} may not open a session`);
   }
 
@@ -162,14 +164,25 @@ export async function refreshSession(
   const hash = refreshTokenHash(input.refreshToken);
 
   return db.transaction(async (tx) => {
-    // `FOR UPDATE` is the whole concurrency story. Two transactions presenting the same token both
-    // reach it; the second blocks on the row lock and, under READ COMMITTED, re-reads the row once
-    // the first commits — so it sees `consumed_at` set and takes the replay branch. Every check
+    // Who owns this token, read without any lock and used only to pick the lock key. A session row
+    // is never reassigned to another user, so this answer cannot go stale; the authoritative read is
+    // the locked one below.
+    const owner = (
+      await tx.select({ userId: sessions.userId }).from(sessions).where(eq(sessions.refreshTokenHash, hash))
+    )[0];
+    if (!owner) return { outcome: 'UNKNOWN' };
+    // Before the row lock, never after: see session-lock.ts for the deadlock this ordering avoids.
+    await lockUserSessions(tx, owner.userId);
+
+    // `FOR UPDATE` is the rest of the concurrency story. Two transactions presenting the same token
+    // both reach it; the second blocks on the row lock and, under READ COMMITTED, re-reads the row
+    // once the first commits — so it sees `consumed_at` set and takes the replay branch. Every check
     // below therefore runs while this row cannot change underneath it.
     const session = (
       await tx.select().from(sessions).where(eq(sessions.refreshTokenHash, hash)).for('update')
     )[0];
 
+    // Deleted between the two reads; nothing left to rotate.
     if (!session) return { outcome: 'UNKNOWN' };
     if (session.consumedAt !== null) return detectReuse(tx, deps, session, input);
     // Revoked but never consumed: the session was ended deliberately (logout, suspension, a family
@@ -186,7 +199,7 @@ export async function refreshSession(
     // new epoch and the kill switch achieves nothing.
     const user = await userFor(tx, session.userId);
     if (!user) throw new Error(`refreshSession: no user ${session.userId}`);
-    if (!USABLE_STATUSES.includes(user.status)) return { outcome: 'USER_INACTIVE' };
+    if (!sessionUsableUnder(user.status)) return { outcome: 'USER_INACTIVE' };
 
     await tx
       .update(sessions)
@@ -246,7 +259,7 @@ async function detectReuse(
   session: SessionRow,
   input: RefreshInput,
 ): Promise<RefreshOutcome> {
-  const revoked = await revokeFamily(tx, session.familyId, 'reuse_detected');
+  const revoked = await revokeFamily(tx, session.userId, session.familyId, 'reuse_detected');
   await publish(tx, identitySessionReuseDetectedEvent, {
     payload: {
       userId: session.userId,
@@ -267,14 +280,21 @@ async function detectReuse(
   return { outcome: 'REUSED', familyId: session.familyId, revoked };
 }
 
-const revokeFamily = async (tx: Tx, familyId: string, reason: string): Promise<number> =>
-  (
+/**
+ * Takes the lock itself rather than trusting its callers to. It is re-entrant, so the caller that
+ * already holds it (a replay detected mid-refresh) pays nothing, and a later ticket that revokes a
+ * family from somewhere new cannot forget it.
+ */
+const revokeFamily = async (tx: Tx, userId: string, familyId: string, reason: string): Promise<number> => {
+  await lockUserSessions(tx, userId);
+  return (
     await tx
       .update(sessions)
       .set({ revokedAt: sql`now()`, revokeReason: reason })
       .where(and(eq(sessions.familyId, familyId), isNull(sessions.revokedAt)))
       .returning({ id: sessions.id })
   ).length;
+};
 
 export interface RevokeFamilyInput {
   refreshToken: string;
@@ -301,7 +321,7 @@ export async function revokeSessionFamily(db: Db, input: RevokeFamilyInput): Pro
     if (!session) return 0;
     return input.allDevices
       ? revokeAllSessions(tx, { userId: session.userId, reason: input.reason })
-      : revokeFamily(tx, session.familyId, input.reason);
+      : revokeFamily(tx, session.userId, session.familyId, input.reason);
   });
 }
 
@@ -314,6 +334,7 @@ export interface RevokeAllInput {
 
 /** Inside the caller's transaction: suspension (T-039) and password change (T-032) both need this. */
 export async function revokeAllSessions(tx: Tx, input: RevokeAllInput): Promise<number> {
+  await lockUserSessions(tx, input.userId);
   const where = [eq(sessions.userId, input.userId), isNull(sessions.revokedAt)];
   if (input.exceptSessionId !== undefined) where.push(ne(sessions.id, input.exceptSessionId));
   return (

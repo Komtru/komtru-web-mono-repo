@@ -15,11 +15,9 @@ import {
   type Actor,
   type CompanyMembership,
 } from '../../../platform/http/principal.js';
+import { sessionUsableUnder } from '../domain/session/status.js';
 import type { AccessTokenClaims, TokenSigner } from '../infrastructure/jwt/access-token.js';
 import type { EpochCache } from '../infrastructure/redis/epoch-cache.js';
-
-/** M1 D5: a session may be used only while the account is in one of these three. */
-const USABLE_STATUSES = new Set(['ACTIVE', 'PENDING_VERIFICATION', 'RESTRICTED']);
 
 export interface PrincipalDeps {
   db: Db;
@@ -90,10 +88,13 @@ export async function resolvePrincipal(deps: PrincipalDeps, token: string): Prom
   if ('expired' in verified) return rejectedActor('TOKEN_EXPIRED');
   const claims: AccessTokenClaims = verified;
 
-  // The fast deny path. A cached epoch that disagrees with the token settles the request without
-  // touching Postgres; a cached epoch that agrees proves nothing, so the query runs anyway.
+  // The fast deny path, and `<` rather than `!==` on purpose. `sessions_epoch` only ever increases,
+  // so a token BEHIND the cache is certainly dead and can be refused here. A token ahead of it only
+  // means the cache is behind — a request that read the row just before a bump can write the old
+  // value back afterwards — and refusing that would 401 a perfectly good token for a whole TTL.
+  // A cached epoch that does not refuse proves nothing, so the query runs anyway.
   const cached = await deps.epochs.read(claims.sub);
-  if (cached !== undefined && cached !== claims.epc) return rejectedActor('EPOCH_STALE');
+  if (cached !== undefined && claims.epc < cached) return rejectedActor('EPOCH_STALE');
 
   const { rows } = await deps.db.execute<SessionRow>(principalQuery(claims.sid, claims.sub));
   const row = rows[0];
@@ -111,9 +112,11 @@ export async function resolvePrincipal(deps: PrincipalDeps, token: string): Prom
     await deps.epochs.write(row.user_id, row.sessions_epoch);
     return rejectedActor('EPOCH_STALE');
   }
-  if (!USABLE_STATUSES.has(row.status)) return rejectedActor('USER_INACTIVE');
+  if (!sessionUsableUnder(row.status)) return rejectedActor('USER_INACTIVE');
 
-  await deps.epochs.write(row.user_id, row.sessions_epoch);
+  // Only on a miss. Rewriting a value the cache already holds costs a Redis round trip per request
+  // and buys nothing: the entry is already correct, and its TTL bounds how long it may lag.
+  if (cached === undefined) await deps.epochs.write(row.user_id, row.sessions_epoch);
 
   return actorFor({
     userId: row.user_id,

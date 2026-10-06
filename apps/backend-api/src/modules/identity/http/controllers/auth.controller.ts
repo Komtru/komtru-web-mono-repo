@@ -5,6 +5,7 @@
 // TOKEN_EXPIRED for a session that simply timed out, SESSION_REVOKED for one that was ended, and
 // UNAUTHENTICATED for a token nobody ever minted.
 import type { ProblemCode } from '@komtru/shared-types';
+import { isIP } from 'node:net';
 import type { Request } from 'express';
 import type { Db } from '../../../../db/index.js';
 import { ApiError } from '../../../../platform/errors.js';
@@ -37,8 +38,13 @@ const FAILURE: Record<
   USER_INACTIVE: { code: 'SESSION_REVOKED', detail: 'This account cannot be used right now' },
 };
 
-/** `X-Forwarded-For` is honoured only as far as `TRUST_PROXY_HOPS` lets express honour it. */
-const callerIp = (req: Request): string | null => req.ip ?? null;
+/**
+ * `X-Forwarded-For` is honoured only as far as `TRUST_PROXY_HOPS` lets express honour it — and
+ * whatever comes back is checked before it reaches an `inet` column. A mis-set hop count makes
+ * `req.ip` attacker-controlled, and `'; DROP'` in that header would otherwise be a 22P02 from
+ * Postgres and a 500 from us. An unparseable address is simply not recorded.
+ */
+const callerIp = (req: Request): string | null => (req.ip !== undefined && isIP(req.ip) ? req.ip : null);
 const callerAgent = (req: Request): string | null => req.get('user-agent') ?? null;
 
 const asResponse = (session: IssuedSession) => ({

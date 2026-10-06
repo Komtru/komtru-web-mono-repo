@@ -112,3 +112,21 @@ describe('assertRouteInvariants', () => {
     );
   });
 });
+
+describe('assertRouteInvariants and PUBLIC routes', () => {
+  it('refuses a permission on a route anyone may call', () => {
+    expect(() =>
+      assertRouteInvariants([
+        defineRoute({
+          method: 'get',
+          path: '/open',
+          scope: 'PUBLIC',
+          permission: 'user.view',
+          summary: 'Open',
+          schema: { response: z.object({ ok: z.boolean() }) },
+          handler: () => Promise.resolve({ ok: true }),
+        }),
+      ]),
+    ).toThrow(/can never be checked/);
+  });
+});

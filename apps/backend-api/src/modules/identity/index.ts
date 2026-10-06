@@ -15,6 +15,7 @@ import { createEpochCache, type EpochCache } from './infrastructure/redis/epoch-
 export * from './infrastructure/postgres/schema/index.js';
 
 export { SESSION_TTLS, sessionExpiry, slidingIdleExpiry } from './domain/session/ttl.js';
+export { USABLE_STATUSES, sessionUsableUnder } from './domain/session/status.js';
 export { issueRefreshToken, refreshTokenHash } from './domain/session/refresh-token.js';
 export {
   createTokenSigner,

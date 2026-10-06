@@ -17,6 +17,7 @@ import {
   type PrincipalDeps,
 } from '../../../src/modules/identity/services/principal.service.js';
 import { sha256 } from '../../../src/platform/crypto/hmac.js';
+import { eventually } from '../../support/eventually.js';
 import { infraEnabled } from '../../support/db-urls.js';
 import { useTestDatabase } from '../../support/db.js';
 import {
@@ -356,5 +357,131 @@ describe.runIf(infraEnabled)('sessions', () => {
       await applyKillSwitch(t.db(), deps, { userId: issued.userId, reason: 'fraud' });
       expect(await redis.get(`identity:epoch:${issued.userId}`)).toBeNull();
     });
+  });
+});
+
+/**
+ * The interleaving a single family-wide UPDATE cannot see. Under READ COMMITTED the revoke's
+ * snapshot is taken when the statement starts; blocking on a locked row re-checks that row through
+ * EvalPlanQual but never re-scans for rows inserted meanwhile. The rotation's child is therefore a
+ * phantom to the revoke that runs beside it.
+ */
+describe.runIf(infraEnabled)('a revoke racing a rotation', () => {
+  const t = useTestDatabase();
+  const config = testConfig();
+  let redis: Redis;
+  let deps: SessionDeps;
+
+  beforeEach(() => {
+    redis ??= createTestRedis();
+    const { signer, epochs } = identityInfrastructure(config, redis);
+    deps = { signer, epochs, logger: testLogger };
+  });
+
+  afterAll(async () => {
+    await redis?.flushdb();
+    redis?.disconnect();
+  });
+
+  /** True once some backend in this database is waiting on a lock — i.e. the racer has arrived. */
+  const someoneIsBlocked = async () => {
+    const { rows } = await t.app().query<{ n: string }>(
+      `SELECT count(*) AS n FROM pg_stat_activity
+          WHERE datname = current_database() AND wait_event_type = 'Lock'`,
+    );
+    return Number(rows[0]!.n) > 0;
+  };
+
+  const liveSessions = async (familyId: string) => {
+    const { rows } = await t
+      .app()
+      .query<{ n: string }>(
+        `SELECT count(*) AS n FROM identity.sessions WHERE family_id = $1 AND revoked_at IS NULL`,
+        [familyId],
+      );
+    return Number(rows[0]!.n);
+  };
+
+  /**
+   * Parks a rotation inside its open transaction, after the child row is inserted and before the
+   * commit: `signer.sign` is the last thing `refreshSession` awaits before returning.
+   */
+  const pausingDeps = (): { deps: SessionDeps; parked: Promise<void>; release: () => void } => {
+    let release!: () => void;
+    let arrived!: () => void;
+    const gate = new Promise<void>((resolve) => (release = resolve));
+    const parked = new Promise<void>((resolve) => (arrived = resolve));
+    let armed = true;
+    return {
+      release,
+      parked,
+      deps: {
+        ...deps,
+        signer: {
+          ...deps.signer,
+          sign: async (claims, options) => {
+            const token = await deps.signer.sign(claims, options);
+            if (armed) {
+              armed = false;
+              arrived();
+              await gate;
+            }
+            return token;
+          },
+        },
+      },
+    };
+  };
+
+  it('kills the child a rotation committed while the family revoke was blocked', async () => {
+    const { userId } = await seedUser(t.app());
+    const first = await t
+      .db()
+      .transaction((tx) => createSession(tx, deps, { userId, scope: 'CONSUMER', amr: ['pwd'] }));
+    const second = await refreshSession(t.db(), deps, { refreshToken: first.refreshToken });
+    if (second.outcome !== 'ROTATED') throw new Error('expected a rotation');
+
+    // T1: rotate the newest token, and park it with its child row inserted but uncommitted.
+    const paused = pausingDeps();
+    const rotation = refreshSession(t.db(), paused.deps, {
+      refreshToken: second.session.refreshToken,
+    });
+    await paused.parked;
+
+    // T2: replay the oldest, consumed token of the same family. It locks a different row, so it
+    // reaches its family-wide revoke and blocks there on the row T1 holds.
+    const replay = refreshSession(t.db(), deps, { refreshToken: first.refreshToken });
+    await eventually(someoneIsBlocked);
+
+    paused.release();
+    const [rotationResult, replayResult] = await Promise.all([rotation, replay]);
+
+    expect(rotationResult.outcome).toBe('ROTATED');
+    expect(replayResult).toMatchObject({ outcome: 'REUSED' });
+    // The alarm fired, so nothing in this family may still be usable — least of all the token the
+    // rotation just minted, which in the theft case is the thief's.
+    expect(await liveSessions(first.familyId)).toBe(0);
+  });
+
+  it('kills the child a rotation committed while the kill switch was blocked', async () => {
+    const { userId } = await seedUser(t.app());
+    const issued = await t
+      .db()
+      .transaction((tx) => createSession(tx, deps, { userId, scope: 'CONSUMER', amr: ['pwd'] }));
+
+    const paused = pausingDeps();
+    const rotation = refreshSession(t.db(), paused.deps, { refreshToken: issued.refreshToken });
+    await paused.parked;
+
+    const suspension = applyKillSwitch(t.db(), deps, { userId, reason: 'fraud' });
+    await eventually(someoneIsBlocked);
+
+    paused.release();
+    const [rotationResult] = await Promise.all([rotation, suspension]);
+    expect(rotationResult.outcome).toBe('ROTATED');
+
+    // M1 D5: suspension revokes every session. A survivor would simply refresh and mint a token
+    // carrying the new epoch, which is the epoch-only kill switch bug the spec names.
+    expect(await liveSessions(issued.familyId)).toBe(0);
   });
 });
