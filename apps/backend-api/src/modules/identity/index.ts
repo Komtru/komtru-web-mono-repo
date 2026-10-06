@@ -22,6 +22,14 @@ export * from './domain/username/policy.js';
 export * from './domain/username/reserved.js';
 export * from './domain/username/skeleton.js';
 export * from './domain/username/suggest.js';
+export * from './domain/terms.js';
+export {
+  AUDIT_ACTIONS,
+  writeAudit,
+  type AuditActorType,
+  type AuditInput,
+  type AuditOutcome,
+} from './services/audit.service.js';
 export * from './services/username.service.js';
 export { seedIdentityCatalogue } from './infrastructure/postgres/seed.js';
 
