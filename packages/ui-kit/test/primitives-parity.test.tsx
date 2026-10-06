@@ -6,13 +6,12 @@
  * to be named in `DEVIATIONS` with a reason — and a `DEVIATIONS` entry that no longer deviates fails
  * too, so the list cannot rot into a blanket excuse.
  *
- * Node, not jsdom: under jsdom Vite rewrites `import.meta.url` into a `/@fs` URL, which breaks both
- * the reference-file read and Tailwind's stylesheet resolution. `react-dom/server` needs no DOM.
+ * The rules themselves — how a mismatch, a stale deviation or an undeclared addition is reported —
+ * live in `parity-harness.tsx`, shared with `trustops-parity.test.tsx`. Only the table is here.
  */
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import {
   Avatar,
@@ -36,13 +35,8 @@ import {
   TradeRow,
 } from '../src/index.js';
 import { REFERENCE_FILE } from '../scripts/extract-tokens.js';
-import {
-  canonicalise,
-  compiledDeclarations,
-  expandDeclaration,
-  referenceInlineStyle,
-  referenceRule,
-} from './reference-css.js';
+import { type Additions, type Deviations, type ParityRow, describeParity } from './parity-harness.js';
+import { canonicalise, compiledDeclarations, referenceRule } from './reference-css.js';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const html = readFileSync(path.join(here, '../../../docs/design-reference', REFERENCE_FILE), 'utf8');
@@ -51,7 +45,7 @@ const html = readFileSync(path.join(here, '../../../docs/design-reference', REFE
  * Every property a primitive knowingly does not reproduce, keyed by parity id, with the reason. Each
  * entry is also carried into the ticket's deferred list and into `src/primitives/DEVIATIONS.md`.
  */
-const DEVIATIONS: Record<string, Record<string, string>> = {
+const DEVIATIONS: Deviations = {
   'focus-visible': {
     'border-radius':
       "The reference's global ring also sets border-radius:4px, but that rule is declared before " +
@@ -112,7 +106,7 @@ const ICON = <svg aria-hidden viewBox="0 0 24 24" />;
  * The reference stops at the rule; a component has to be a real element as well, and that costs a
  * handful of declarations. Each one is listed so it is a decision rather than an accident.
  */
-const ADDITIONS: Record<string, readonly string[]> = {
+const ADDITIONS: Additions = {
   // The reference writes the column layout and 8px gap inline on every instance holding more than
   // one button, and the fade is a Tailwind gradient, which compiles to `background-image`.
   'btn-sticky': ['display', 'flex-direction', 'gap', 'background-image'],
@@ -138,37 +132,6 @@ const ADDITIONS: Record<string, readonly string[]> = {
   'proof-compare-note-icon': ['color'],
   'guard-lock-banner-icon': ['color'],
 };
-
-interface ParityRow {
-  /** Key into `DEVIATIONS`, and the name the failure is reported under. */
-  id: string;
-  /** The selector the reference HTML declares for this piece of markup. */
-  selector: string;
-  /**
-   * The rules `selector` modifies. `.chip.protected` declares a colour pair and nothing else; the
-   * element carries `.chip` too, so the comparison has to be against both or every base declaration
-   * reads as something the component invented.
-   */
-  extends?: readonly string[];
-  /** Rendered, then its class attributes harvested. */
-  element?: React.ReactElement;
-  /** Which element in the rendered markup carries the class under test. Defaults to the first. */
-  node?: number;
-  /** Given instead of `element` when the classes are not reachable through a rendered component. */
-  classes?: readonly string[];
-  /** Set where the reference carries two designs under one class name. */
-  styleId?: string;
-  /**
-   * A `class="…"` whose element carries the state inline. The reference states some states in the
-   * markup rather than in a rule, and those are the only statement of them there is.
-   */
-  inline?: string;
-}
-
-/** The `class` attribute of every element in the rendered markup, in document order. */
-function classAttributes(element: React.ReactElement): string[] {
-  return [...renderToStaticMarkup(element).matchAll(/\sclass="([^"]*)"/g)].map((match) => match[1] ?? '');
-}
 
 const ROWS: ParityRow[] = [
   { id: 'focus-visible', selector: ':focus-visible', classes: FOCUS_RING_UTILITIES },
@@ -519,152 +482,4 @@ describe('the parity harness', () => {
   });
 });
 
-describe.each(ROWS)('$id', (row) => {
-  const classes = [...(row.classes ?? (classAttributes(row.element!)[row.node ?? 0] ?? '').split(/\s+/))];
-
-  it(`compiles to what the reference declares for ${row.selector}`, async () => {
-    const raw = new Map<string, string>();
-    for (const selector of [...(row.extends ?? []), row.selector]) {
-      for (const [property, value] of referenceRule(html, selector, row.styleId)) raw.set(property, value);
-    }
-    if (row.inline !== undefined) {
-      for (const [property, value] of referenceInlineStyle(html, row.inline)) raw.set(property, value);
-    }
-    const reference = canonicalise(raw);
-    const compiled = await compiledDeclarations(classes);
-    // A deviation is written against the property the reference declares; widen it to the longhands
-    // that property expands into, so excusing `border-radius` does not mean listing four corners.
-    const excused = new Map<string, string>();
-    for (const [property, reason] of Object.entries(DEVIATIONS[row.id] ?? {})) {
-      for (const [longhand] of expandDeclaration(property, raw.get(property) ?? '0')) {
-        excused.set(longhand, reason);
-      }
-    }
-
-    const mismatches: string[] = [];
-    const excusedButMatching: string[] = [];
-    for (const [property, expected] of reference) {
-      const actual = compiled.get(property);
-      if (excused.has(property)) {
-        if (actual === expected) excusedButMatching.push(property);
-        continue;
-      }
-      if (actual !== expected) {
-        mismatches.push(`${property}: expected "${expected}", compiled "${actual ?? '(absent)'}"`);
-      }
-    }
-
-    expect(mismatches, `${row.id} drifted from ${row.selector}`).toEqual([]);
-    expect(
-      excusedButMatching,
-      `${row.id} excuses properties it actually reproduces — delete the DEVIATIONS entry`,
-    ).toEqual([]);
-
-    // The other direction. Without it the comparison is blind to anything a primitive *adds*: a
-    // `hidden` or `opacity-0` slipped into a class string reproduces every declared property
-    // perfectly and still renders nothing.
-    const declared = new Set(ADDITIONS[row.id] ?? []);
-    const undeclaredAdditions = [...compiled.keys()].filter(
-      (property) => !reference.has(property) && !declared.has(property),
-    );
-    const staleAdditions = [...declared].filter(
-      (property) => !compiled.has(property) || reference.has(property),
-    );
-    expect(
-      undeclaredAdditions,
-      `${row.id} applies properties the reference does not — name them in ADDITIONS or drop them`,
-    ).toEqual([]);
-    expect(staleAdditions, `${row.id} declares additions it no longer applies`).toEqual([]);
-
-    // A `var()` surviving canonicalisation on both sides would compare equal while meaning nothing.
-    for (const [property, value] of reference) {
-      expect(value, `${row.id} left ${property} unresolved`).not.toContain('var(');
-    }
-  });
-});
-
-describe('DEVIATIONS', () => {
-  it('names only primitives the suite actually checks', () => {
-    const ids = new Set(ROWS.map((row) => row.id));
-    expect([...Object.keys(DEVIATIONS)].filter((id) => !ids.has(id))).toEqual([]);
-  });
-
-  it('gives every excused property a reason, not a bare entry', () => {
-    for (const [id, properties] of Object.entries(DEVIATIONS)) {
-      for (const [property, reason] of Object.entries(properties)) {
-        expect(reason.length, `${id}.${property} needs a real reason`).toBeGreaterThan(40);
-      }
-    }
-  });
-
-  // A misspelled property excuses nothing and is reported by nothing: the mismatch loop never looks
-  // it up, and the staleness check only sees properties the reference declares.
-  it('names properties the reference actually declares', () => {
-    for (const [id, properties] of Object.entries(DEVIATIONS)) {
-      const row = ROWS.find((candidate) => candidate.id === id);
-      if (row === undefined) continue;
-      const declared = new Map<string, string>();
-      for (const selector of [...(row.extends ?? []), row.selector]) {
-        for (const [property, value] of referenceRule(html, selector, row.styleId)) {
-          declared.set(property, value);
-        }
-      }
-      for (const property of Object.keys(properties)) {
-        expect(
-          declared.has(property),
-          `${id} excuses "${property}", which ${row.selector} never declares`,
-        ).toBe(true);
-      }
-    }
-  });
-});
-
-/**
- * Two utilities setting the same property on one element do not layer in the order they are written
- * — the stylesheet decides — so a base and a state branch that both set a background render
- * whichever Tailwind happened to emit last. That is invisible in a class-name assertion and, until
- * the harness learned emission order, invisible in parity too. These are the properties where a
- * second claimant is always a bug rather than Tailwind composing (`border` + `border-dashed` and
- * `m-0` + `mx-[7px]` layer by design, so widths, styles and spacing are deliberately not listed).
- */
-const SINGLE_CLAIMANT = [
-  'background-color',
-  'background-image',
-  'color',
-  'border-top-color',
-  'outline-color',
-  'fill',
-  'stroke',
-  'display',
-] as const;
-
-describe.each(ROWS)('$id', (row) => {
-  const classes = [...(row.classes ?? (classAttributes(row.element!)[row.node ?? 0] ?? '').split(/\s+/))];
-
-  it('claims each decisive property exactly once', async () => {
-    const claimants = new Map<string, string[]>();
-    for (const utility of classes.filter((name) => name !== '')) {
-      let declarations: Map<string, string>;
-      try {
-        declarations = await compiledDeclarations([utility]);
-      } catch {
-        continue; // A variant class; `compiledDeclarations` skips those and compiles nothing.
-      }
-      for (const property of SINGLE_CLAIMANT) {
-        if (!declarations.has(property)) continue;
-        claimants.set(property, [...(claimants.get(property) ?? []), utility]);
-      }
-    }
-    const contested = [...claimants]
-      .filter(([, utilities]) => utilities.length > 1)
-      .map(([property, utilities]) => `${property}: ${utilities.join(' and ')}`);
-    expect(contested, `${row.id} lets the stylesheet pick, rather than picking`).toEqual([]);
-  });
-});
-
-describe('ADDITIONS', () => {
-  it('names only primitives the suite actually checks', () => {
-    const ids = new Set(ROWS.map((row) => row.id));
-    expect(Object.keys(ADDITIONS).filter((id) => !ids.has(id))).toEqual([]);
-  });
-});
+describeParity({ html, rows: ROWS, deviations: DEVIATIONS, additions: ADDITIONS });

@@ -292,6 +292,21 @@ export function expandDeclaration(property: string, rawValue: string): [string, 
       }
       return out;
     }
+    // `border-top: 1px solid var(--border-hairline)` — the one-sided shorthand. The reference reaches
+    // for it constantly (`.p13-req`, `.p13-audit`, every `data-table` cell) and Tailwind only ever
+    // emits the longhands, so without this the two sides never meet.
+    case 'border-top':
+    case 'border-right':
+    case 'border-bottom':
+    case 'border-left': {
+      const side = property.split('-')[1] ?? '';
+      const out: [string, string][] = [];
+      for (const part of value.split(/\s+/).filter(Boolean)) {
+        const facet = BORDER_STYLES.has(part) ? 'style' : isColour(part) ? 'color' : 'width';
+        out.push([`border-${side}-${facet}`, part]);
+      }
+      return out;
+    }
     case 'background': {
       // `background:none` resets every background longhand, which leaves the colour transparent.
       if (value === 'none') return [['background-color', 'transparent']];
@@ -385,6 +400,19 @@ function hasVariant(className: string): boolean {
 /** `.text-\[13\.5px\]` and `text-[13.5px]` name the same utility. */
 const unescape = (selector: string): string => selector.replace(/\\/g, '');
 
+/** `group-last:border-b-0` → `border-b-0`: everything after the last variant separator. */
+export function baseUtility(className: string): string {
+  let depth = 0;
+  let lastColon = -1;
+  for (let i = 0; i < className.length; i += 1) {
+    const char = className[i];
+    if (char === '[' || char === '(') depth += 1;
+    else if (char === ']' || char === ')') depth -= 1;
+    else if (char === ':' && depth === 0) lastColon = i;
+  }
+  return className.slice(lastColon + 1);
+}
+
 /**
  * What a list of Tailwind classes actually computes to. Variant classes (`focus-visible:…`,
  * `motion-reduce:…`) are skipped: they live inside an at-rule or a pseudo-selector and are asserted
@@ -393,6 +421,19 @@ const unescape = (selector: string): string => selector.replace(/\\/g, '');
 export async function compiledDeclarations(classNames: string[]): Promise<Map<string, string>> {
   const utilities = classNames.filter((name) => !hasVariant(name));
   const build = await compiler();
+
+  // A variant class is not compared — it lives inside an at-rule or a pseudo-selector — but it still
+  // has to be real. Compiling only the plain classes meant `md:grid-colz-[1fr]` and
+  // `first:border-t-0` were indistinguishable: both contributed nothing, so a typo in the one class
+  // that makes the two-column case layout exist would have passed parity in silence. The base
+  // utility is compiled on its own, purely for the "compiles to no rule" throw below.
+  for (const variant of classNames.filter((name) => name !== '' && hasVariant(name))) {
+    const base = baseUtility(variant);
+    if (base === '') throw new Error(`"${variant}" has a variant but no utility after it`);
+    if (!build([base]).includes(`.${base.replace(/([.[\]()%#])/g, '\\$1')}`)) {
+      throw new Error(`"${variant}" compiles to no rule — "${base}" is not a utility this preset publishes`);
+    }
+  }
   const css = build(utilities);
   const byUtility = new Map<string, Map<string, string>>();
   const themeVars = new Map<string, string>();
