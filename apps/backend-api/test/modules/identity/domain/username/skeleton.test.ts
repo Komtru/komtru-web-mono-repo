@@ -68,4 +68,31 @@ describe('skeleton', () => {
     expect(skeletonVariants('adm1n')).toEqual(['admln', 'admin']);
     expect(skeletonVariants('jane')).toEqual(['jane']);
   });
+
+  // The multigraph pass and the narrow-glyph pass are two independent axes. A handle that takes one
+  // substitution from each lands between them: before the passes were composed, `adrn1n` folded to
+  // `admln` and `adrnin` and matched neither, so it was claimable beside a reserved `admin`.
+  it('composes the multigraph and narrow passes, in both orders', () => {
+    const meets = (a: string, b: string) => {
+      const folds = new Set(skeletonVariants(b));
+      return skeletonVariants(a).some((fold) => folds.has(fold));
+    };
+    for (const [attempt, target] of [
+      ['adrn1n', 'admin'],
+      ['vvailet', 'wallet'],
+      ['cl1spute', 'dispute'],
+      ['rna1l', 'mail'],
+      ['cornpl1ance', 'compliance'],
+    ] as const)
+      expect(meets(attempt, target)).toBe(true);
+    // The specific composition that used to escape: neither single pass reaches it.
+    expect(skeletonVariants('adrn1n')).toContain('admin');
+    expect(skeleton('adrn1n')).toBe('admln');
+    expect(skeletonNarrow('adrn1n')).toBe('adrnin');
+  });
+
+  it('still returns the canonical fold first, because that is the stored value', () => {
+    expect(skeletonVariants('adrn1n')[0]).toBe(skeleton('adrn1n'));
+    expect(skeletonVariants('dellstore_ng')[0]).toBe('delstoreng');
+  });
 });

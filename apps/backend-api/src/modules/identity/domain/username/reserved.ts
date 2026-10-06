@@ -265,7 +265,3 @@ export const matchBlockedSubstring = (username: string): string | undefined => {
 
   return undefined;
 };
-
-/** True when any fold of `username` is a reserved skeleton. The caller supplies the stored set. */
-export const isReservedSkeleton = (username: string, reserved: ReadonlySet<string>): boolean =>
-  skeletonVariants(username).some((value) => reserved.has(value));

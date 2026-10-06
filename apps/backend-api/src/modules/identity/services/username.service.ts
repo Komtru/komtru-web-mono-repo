@@ -4,7 +4,8 @@
 // the write is attempted and the constraint violation is translated — a check-then-insert would let
 // two requests past the same gap (design §4.4). The pre-checks exist to produce a useful message
 // and suggestions, not to decide the outcome.
-import { and, desc, eq, inArray, isNotNull, sql } from 'drizzle-orm';
+import type { Paged } from '@komtru/shared-types';
+import { and, desc, eq, inArray, isNotNull, isNull, sql } from 'drizzle-orm';
 import type { Db } from '../../../db/index.js';
 import { ApiError } from '../../../platform/errors.js';
 import { publish, type Tx } from '../../../platform/events/publish.js';
@@ -15,6 +16,7 @@ import {
   OWNER_RECLAIM_DAYS,
   QUARANTINE_DAYS,
   SUPPORT_APPROVAL_LEVELS,
+  normaliseUsername,
   validateUsernameFormat,
   type UsernameFormatProblem,
 } from '../domain/username/policy.js';
@@ -98,6 +100,7 @@ interface QuarantineRow {
   userId: string;
   releasedAt: Date | null;
   quarantineUntil: Date | null;
+  skeleton?: string;
 }
 
 /**
@@ -115,17 +118,53 @@ const quarantineBlocks = (rows: QuarantineRow[], now: Date, forUserId?: string):
     return !reclaimable;
   });
 
-const quarantineRows = async (db: Db | Tx, variants: string[]): Promise<QuarantineRow[]> =>
+const quarantineRows = async (
+  db: Db | Tx,
+  variants: string[],
+  withSkeleton = false,
+): Promise<QuarantineRow[]> =>
   db
     .select({
       userId: usernameHistory.userId,
       releasedAt: usernameHistory.releasedAt,
       quarantineUntil: usernameHistory.quarantineUntil,
+      ...(withSkeleton ? { skeleton: usernameHistory.usernameSkeleton } : {}),
     })
     .from(usernameHistory)
     .where(
       and(inArray(usernameHistory.usernameSkeleton, variants), isNotNull(usernameHistory.quarantineUntil)),
     );
+
+/**
+ * Who, if anyone, already folds onto this skeleton.
+ *
+ * **Known gap, deliberately not papered over.** This compares the CANONICAL fold only, while the
+ * reserved-word check above compares every fold. So `@delistore` is claimable beside `@dellstore`
+ * and `@iagosdeals` beside `@lagosdeals` — the narrow fold agrees on both pairs, the canonical fold
+ * does not, and in a sans-serif font they are the same handle. Storefront impersonation is thus
+ * less well defended than `@admin` impersonation, which is backwards: a buyer is far likelier to be
+ * defrauded by a cloned seller handle.
+ *
+ * It is not fixed here because the only honest fix is a `users.username_skeleton_narrow` column
+ * with its own UNIQUE index — a migration this ticket is forbidden to write, another agent owning
+ * the next number. A service-side narrow pre-check without that index would be a full table scan on
+ * a PUBLIC endpoint and still a check-then-insert race, which is worse than the gap it closes.
+ * Carrying the gap visibly beats hiding it behind a scan that does not actually hold.
+ */
+const holder = async (
+  db: Db | Tx,
+  username: string,
+  canonical: string,
+): Promise<{ reason?: UnavailableReason }> => {
+  const rows = await db
+    .select({ username: users.username })
+    .from(users)
+    .where(eq(users.usernameSkeleton, canonical))
+    .limit(1);
+  const existing = rows[0];
+  if (!existing) return {};
+  return { reason: existing.username === username ? 'TAKEN' : 'CONFUSABLE' };
+};
 
 interface Verdict {
   username: string;
@@ -142,39 +181,89 @@ interface Verdict {
 const assess = async (db: Db | Tx, raw: string, now: Date, forUserId?: string): Promise<Verdict> => {
   const format = validateUsernameFormat(raw);
   if (!format.ok)
-    return { username: raw.trim().toLowerCase(), skeleton: '', reason: 'INVALID', problem: format.problem };
+    // normaliseUsername, not a bare lowercase: every other path echoes the handle the way it would
+    // be stored, and `@Jane` coming back as `@jane` with the sigil still on is a different answer.
+    return { username: normaliseUsername(raw), skeleton: '', reason: 'INVALID', problem: format.problem };
 
   const username = format.username;
   const variants = skeletonVariants(username);
   const canonical = variants[0] ?? skeleton(username);
 
-  const blocked = matchBlockedSubstring(username);
-  if (blocked) return { username, skeleton: canonical, reason: 'BLOCKED_TERM' };
-
+  // The table is consulted before the hardcoded substring list, because `releasable` is the escape
+  // hatch §6.2 promises: a user genuinely called Komtru gets a `releasable = true` row from Trust &
+  // Safety, and that row has to beat both the exact reservation and the substring block. A
+  // `releasable = false` row is an ordinary reservation.
   const reserved = await db
-    .select({ usernameSkeleton: reservedUsernames.usernameSkeleton })
+    .select({
+      usernameSkeleton: reservedUsernames.usernameSkeleton,
+      releasable: reservedUsernames.releasable,
+    })
     .from(reservedUsernames)
-    .where(inArray(reservedUsernames.usernameSkeleton, variants))
-    .limit(1);
-  if (reserved.length > 0) return { username, skeleton: canonical, reason: 'RESERVED' };
+    .where(inArray(reservedUsernames.usernameSkeleton, variants));
+  if (reserved.some((row) => row.usernameSkeleton === canonical && row.releasable))
+    return { username, skeleton: canonical, ...(await holder(db, username, canonical)) };
+  if (reserved.some((row) => !row.releasable)) return { username, skeleton: canonical, reason: 'RESERVED' };
+
+  if (matchBlockedSubstring(username)) return { username, skeleton: canonical, reason: 'BLOCKED_TERM' };
 
   if (quarantineBlocks(await quarantineRows(db, variants), now, forUserId))
     return { username, skeleton: canonical, reason: 'QUARANTINED' };
 
-  const existing = await db
-    .select({ id: users.id, username: users.username })
-    .from(users)
-    .where(eq(users.usernameSkeleton, canonical))
-    .limit(1);
-  const holder = existing[0];
-  if (holder)
-    return {
-      username,
-      skeleton: canonical,
-      reason: holder.username === username ? 'TAKEN' : 'CONFUSABLE',
-    };
+  return { username, skeleton: canonical, ...(await holder(db, username, canonical)) };
+};
 
-  return { username, skeleton: canonical };
+/**
+ * Which of `candidates` are free, up to `wanted`, in three queries over the whole set.
+ *
+ * Order is preserved, so the caller still gets the suggestion engine's preference order rather than
+ * whatever the database returned.
+ */
+const screen = async (
+  db: Db,
+  candidates: string[],
+  now: Date,
+  wanted: number,
+  forUserId?: string,
+): Promise<string[]> => {
+  if (candidates.length === 0 || wanted <= 0) return [];
+
+  const variantsOf = new Map(candidates.map((candidate) => [candidate, skeletonVariants(candidate)]));
+  const allVariants = [...new Set([...variantsOf.values()].flat())];
+
+  const [reserved, quarantined, taken] = await Promise.all([
+    db
+      .select({
+        usernameSkeleton: reservedUsernames.usernameSkeleton,
+        releasable: reservedUsernames.releasable,
+      })
+      .from(reservedUsernames)
+      .where(inArray(reservedUsernames.usernameSkeleton, allVariants)),
+    quarantineRows(db, allVariants, true),
+    db
+      .select({ usernameSkeleton: users.usernameSkeleton })
+      .from(users)
+      .where(inArray(users.usernameSkeleton, allVariants)),
+  ]);
+
+  const blockedSkeletons = new Set(reserved.filter((row) => !row.releasable).map((r) => r.usernameSkeleton));
+  const takenSkeletons = new Set(taken.map((row) => row.usernameSkeleton));
+  const free: string[] = [];
+
+  for (const candidate of candidates) {
+    if (free.length >= wanted) break;
+    const variants = variantsOf.get(candidate) ?? [];
+    const canonical = variants[0] ?? '';
+    if (variants.some((v) => blockedSkeletons.has(v))) continue;
+    if (matchBlockedSubstring(candidate)) continue;
+    if (takenSkeletons.has(canonical)) continue;
+    const relevant = quarantined.filter(
+      (row) => row.skeleton !== undefined && variants.includes(row.skeleton),
+    );
+    if (quarantineBlocks(relevant, now, forUserId)) continue;
+    free.push(candidate);
+  }
+
+  return free;
 };
 
 export async function checkUsernameAvailability(
@@ -187,15 +276,17 @@ export async function checkUsernameAvailability(
 
   if (!verdict.reason) return { username: verdict.username, available: true, suggestions: [] };
 
-  const wanted = options.suggestions ?? SUGGESTION_COUNT;
-  const suggestions: string[] = [];
   // §6.5: each suggestion is pre-checked against the live namespace, which is also what stops us
-  // handing an attacker something confusable with an existing account.
-  for (const candidate of suggestionCandidates(verdict.username, SUGGESTION_POOL)) {
-    if (suggestions.length >= wanted) break;
-    const check = await assess(deps.db, candidate, now, options.forUserId);
-    if (!check.reason) suggestions.push(check.username);
-  }
+  // handing an attacker something confusable with an existing account. Screened in one batch of
+  // three queries rather than three per candidate: this is a PUBLIC endpoint, and a pool of 24 run
+  // one at a time is 72 round trips for one availability check.
+  const suggestions = await screen(
+    deps.db,
+    suggestionCandidates(verdict.username, SUGGESTION_POOL),
+    now,
+    options.suggestions ?? SUGGESTION_COUNT,
+    options.forUserId,
+  );
 
   return {
     username: verdict.username,
@@ -236,7 +327,11 @@ const loadUser = async (tx: Tx, userId: string): Promise<CurrentUser> => {
     })
     .from(users)
     .where(eq(users.id, userId))
-    .limit(1);
+    .limit(1)
+    // The cooldown, the lifetime cap and the support-approval gate are read-then-write rules that
+    // no index can enforce. Without this, two concurrent PATCHes both read change_count = 2 and the
+    // user gets a fourth change. Row-level, on the caller's own row: no cross-request contention.
+    .for('update');
   const user = rows[0];
   if (!user) throw new ApiError(404, 'NOT_FOUND', 'User not found');
   return user;
@@ -313,6 +408,8 @@ export async function changeUsername(
     /** The staff member, on a forced change. */
     actorUserId?: string;
     forced?: boolean;
+    /** Reserve the released handle for good rather than quarantining it (M1 §15). */
+    retireHandle?: boolean;
   },
 ): Promise<{ username: string; previous: string }> {
   const now = deps.now?.() ?? new Date();
@@ -357,7 +454,31 @@ export async function changeUsername(
         reason: input.reason,
         ...(input.actorUserId ? { changedBy: input.actorUserId } : {}),
       })
-      .where(and(eq(usernameHistory.userId, input.userId), eq(usernameHistory.username, previous)));
+      // `isNull(releasedAt)`: a handle the owner reclaimed has two rows, and overwriting the older
+      // one's release would rewrite the quarantine history of a handle someone else may have held.
+      .where(
+        and(
+          eq(usernameHistory.userId, input.userId),
+          eq(usernameHistory.username, previous),
+          isNull(usernameHistory.releasedAt),
+        ),
+      );
+
+    // M1 §15 step 1. Quarantine alone is not enough for anonymisation: §15 step 3 deletes the
+    // user's `username_history` rows, which is where the quarantine lives, so without this the
+    // handle of an erased (often fraud-closed) seller is free the moment the procedure finishes.
+    if (input.retireHandle) {
+      await tx
+        .insert(reservedUsernames)
+        .values(
+          skeletonVariants(previous).map((fold) => ({
+            usernameSkeleton: fold,
+            category: 'SYSTEM',
+            note: 'retired by anonymisation',
+          })),
+        )
+        .onConflictDoNothing();
+    }
 
     await writeHandle(tx, {
       userId: input.userId,
@@ -387,21 +508,37 @@ export async function changeUsername(
   });
 }
 
+/**
+ * Newest first, one page at a time. A handle-churning account is rare but the route declares page
+ * pagination, and the platform's mount layer refuses a response longer than the caller's `limit` —
+ * so an unpaged query here is a 500 on a perfectly valid `?limit=1`.
+ */
 export async function listUsernameHistory(
   deps: UsernameServiceDeps,
   userId: string,
-): Promise<UsernameHistoryEntry[]> {
-  return deps.db
-    .select({
-      username: usernameHistory.username,
-      claimedAt: usernameHistory.claimedAt,
-      releasedAt: usernameHistory.releasedAt,
-      quarantineUntil: usernameHistory.quarantineUntil,
-      reason: usernameHistory.reason,
-    })
-    .from(usernameHistory)
-    .where(eq(usernameHistory.userId, userId))
-    .orderBy(desc(usernameHistory.claimedAt));
+  { page = 1, limit = 20 }: { page?: number; limit?: number } = {},
+): Promise<Paged<UsernameHistoryEntry>> {
+  const [items, totals] = await Promise.all([
+    deps.db
+      .select({
+        username: usernameHistory.username,
+        claimedAt: usernameHistory.claimedAt,
+        releasedAt: usernameHistory.releasedAt,
+        quarantineUntil: usernameHistory.quarantineUntil,
+        reason: usernameHistory.reason,
+      })
+      .from(usernameHistory)
+      .where(eq(usernameHistory.userId, userId))
+      .orderBy(desc(usernameHistory.claimedAt))
+      .limit(limit)
+      .offset((page - 1) * limit),
+    deps.db
+      .select({ total: sql<number>`count(*)::int` })
+      .from(usernameHistory)
+      .where(eq(usernameHistory.userId, userId)),
+  ]);
+
+  return { items, page, limit, total: totals[0]?.total ?? 0 };
 }
 
 /** Lowercase base32 without the letters that read as digits — the handle is shown to humans. */
@@ -425,7 +562,17 @@ const tombstoneHandle = (): string => {
 export async function tombstoneUsername(
   deps: UsernameServiceDeps,
   input: { userId: string; actorUserId?: string },
-): Promise<{ username: string }> {
+): Promise<{ username: string | null }> {
+  // Most accounts that reach erasure never claimed a handle — a social sign-up that stalled, a
+  // registration abandoned at the OTP. There is nothing to tombstone, and erasure must not fail.
+  const rows = await deps.db
+    .select({ username: users.username })
+    .from(users)
+    .where(eq(users.id, input.userId))
+    .limit(1);
+  if (!rows[0]) throw new ApiError(404, 'NOT_FOUND', 'User not found');
+  if (!rows[0].username) return { username: null };
+
   for (let attempt = 1; ; attempt += 1) {
     try {
       const { username } = await changeUsername(deps, {
@@ -434,11 +581,16 @@ export async function tombstoneUsername(
         reason: 'anonymisation',
         ...(input.actorUserId ? { actorUserId: input.actorUserId } : {}),
         forced: true,
+        retireHandle: true,
       });
       return { username };
     } catch (error) {
-      const retryable = error instanceof ApiError && error.status === 409;
-      if (!retryable || attempt >= TOMBSTONE_ATTEMPTS) throw error;
+      // Only a collision is transient. Every other 409 — no handle, a rule we cannot satisfy — would
+      // just be raised five times and then surfaced to a compliance job as the same failure.
+      const collision =
+        error instanceof ApiError &&
+        (error.detail === REASON_DETAIL.TAKEN || error.detail === REASON_DETAIL.CONFUSABLE);
+      if (!collision || attempt >= TOMBSTONE_ATTEMPTS) throw error;
     }
   }
 }

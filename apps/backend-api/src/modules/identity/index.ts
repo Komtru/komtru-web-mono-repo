@@ -44,4 +44,10 @@ export const identityModule = defineModule({
     runtimeDb = ctx.db;
     return Promise.resolve();
   },
+  // The pool is closed by the platform; holding a reference to a closed one only turns a clear
+  // "used before start" into an obscure "called end() on a closed pool".
+  stop: () => {
+    runtimeDb = undefined;
+    return Promise.resolve();
+  },
 });

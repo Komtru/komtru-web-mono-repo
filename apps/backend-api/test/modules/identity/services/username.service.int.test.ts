@@ -13,6 +13,7 @@ import {
   tombstoneUsername,
   type UsernameServiceDeps,
 } from '../../../../src/modules/identity/services/username.service.js';
+import { skeleton } from '../../../../src/modules/identity/domain/username/skeleton.js';
 import { generatePublicId } from '../../../../src/platform/identifiers.js';
 import { infraEnabled } from '../../../support/db-urls.js';
 import { useTestDatabase } from '../../../support/db.js';
@@ -81,8 +82,9 @@ describe.runIf(infraEnabled)('username service', () => {
       count: 0,
     });
     const history = await listUsernameHistory(deps(), user);
-    expect(history).toHaveLength(1);
-    expect(history[0]).toMatchObject({ username: 'dellstore_ng', releasedAt: null });
+    expect(history).toMatchObject({ page: 1, limit: 20, total: 1 });
+    expect(history.items).toHaveLength(1);
+    expect(history.items[0]).toMatchObject({ username: 'dellstore_ng', releasedAt: null });
   });
 
   it('rejects the §17 collision set once the first handle is claimed', async () => {
@@ -303,10 +305,18 @@ describe.runIf(infraEnabled)('username service', () => {
     });
 
     const history = await listUsernameHistory(deps(), user);
-    expect(history.map((entry) => entry.username)).toEqual(['afterhandle', 'beforehandle']);
-    expect(history[1]).toMatchObject({ reason: 'rebrand' });
-    expect(history[1]?.releasedAt).not.toBeNull();
-    expect(history[1]?.quarantineUntil).not.toBeNull();
+    expect(history.items.map((entry) => entry.username)).toEqual(['afterhandle', 'beforehandle']);
+    expect(history.items[1]).toMatchObject({ reason: 'rebrand' });
+    expect(history.items[1]?.releasedAt).not.toBeNull();
+    expect(history.items[1]?.quarantineUntil).not.toBeNull();
+    expect(history.total).toBe(2);
+
+    // The platform's mount layer refuses a response longer than the caller's limit.
+    const firstPage = await listUsernameHistory(deps(), user, { page: 1, limit: 1 });
+    expect(firstPage.items.map((entry) => entry.username)).toEqual(['afterhandle']);
+    expect(firstPage).toMatchObject({ page: 1, limit: 1, total: 2 });
+    const secondPage = await listUsernameHistory(deps(), user, { page: 2, limit: 1 });
+    expect(secondPage.items.map((entry) => entry.username)).toEqual(['beforehandle']);
   });
 
   it('publishes identity.username.claimed and .changed into the outbox', async () => {
@@ -367,7 +377,87 @@ describe.runIf(infraEnabled)('username service', () => {
     expect(await usernameOf(t.app(), user)).toMatchObject({ username: result.username });
 
     const history = await listUsernameHistory(deps(), user);
-    expect(history.some((entry) => entry.username === 'leavinghandle')).toBe(true);
+    expect(history.items.some((entry) => entry.username === 'leavinghandle')).toBe(true);
+  });
+
+  // §6.2 promises Trust & Safety can release a false positive individually. Without reading
+  // `releasable`, a user genuinely called Komtru had no way through at all.
+  it('lets a releasable reservation through, over the substring block too', async () => {
+    await seeded();
+    expect(await checkUsernameAvailability(deps(), 'komtrustore')).toMatchObject({
+      available: false,
+      reason: 'BLOCKED_TERM',
+    });
+
+    await t.app().query(
+      `INSERT INTO identity.reserved_usernames (username_skeleton, category, releasable)
+         VALUES ($1, 'BRAND', true)`,
+      [skeleton('komtrustore')],
+    );
+    expect(await checkUsernameAvailability(deps(), 'komtrustore')).toMatchObject({ available: true });
+
+    const user = await insertUser(t.app());
+    await expect(claimUsername(deps(), { userId: user, username: 'komtrustore' })).resolves.toMatchObject({
+      username: 'komtrustore',
+    });
+  });
+
+  // M1 §15 step 1: the released handle is reserved, not merely quarantined, because step 3 of the
+  // same procedure deletes the username_history rows that hold the quarantine.
+  it('retires an anonymised handle permanently rather than quarantining it', async () => {
+    await seeded();
+    const leaving = await insertUser(t.app());
+    await claimUsername(deps(), { userId: leaving, username: 'retiringshop' });
+    await tombstoneUsername(deps(), { userId: leaving });
+
+    // Simulate §15 step 3, which wipes the quarantine rows.
+    await t.app().query('DELETE FROM identity.username_history WHERE user_id = $1', [leaving]);
+
+    expect(await checkUsernameAvailability(deps(), 'retiringshop')).toMatchObject({
+      available: false,
+      reason: 'RESERVED',
+    });
+    // And its confusables with it.
+    expect(await checkUsernameAvailability(deps(), 'ret1ringshop')).toMatchObject({
+      available: false,
+      reason: 'RESERVED',
+    });
+  });
+
+  // Most accounts that reach erasure never claimed a handle. Erasure must not fail on them.
+  it('tombstones a handle-less account as a no-op', async () => {
+    await seeded();
+    const user = await insertUser(t.app());
+    await expect(tombstoneUsername(deps(), { userId: user })).resolves.toEqual({ username: null });
+    expect(await usernameOf(t.app(), user)).toMatchObject({ username: null });
+  });
+
+  it('refuses to tombstone a user that does not exist', async () => {
+    await seeded();
+    await expect(
+      tombstoneUsername(deps(), { userId: '11111111-1111-4111-8111-111111111111' }),
+    ).rejects.toMatchObject({ status: 404 });
+  });
+
+  // The cooldown and the lifetime cap are read-then-write rules no index can enforce, so the
+  // caller's own row is locked for the length of the change.
+  it('does not let two concurrent changes both pass the lifetime cap', async () => {
+    await seeded();
+    const clock = clockAt();
+    const user = await insertUser(t.app());
+    await claimUsername(deps({ now: clock.now }), { userId: user, username: 'racezero' });
+    for (const username of ['raceone', 'racetwo']) {
+      clock.advanceDays(31);
+      await changeUsername(deps({ now: clock.now }), { userId: user, username, reason: 'r' });
+    }
+    clock.advanceDays(31);
+
+    const results = await Promise.allSettled([
+      changeUsername(deps({ now: clock.now }), { userId: user, username: 'racethreea', reason: 'r' }),
+      changeUsername(deps({ now: clock.now }), { userId: user, username: 'racethreeb', reason: 'r' }),
+    ]);
+    expect(results.filter((r) => r.status === 'fulfilled')).toHaveLength(1);
+    expect(await usernameOf(t.app(), user)).toMatchObject({ count: 3 });
   });
 
   it('suggests alternatives when the handle is taken, none of which are taken themselves', async () => {

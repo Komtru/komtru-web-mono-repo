@@ -10,8 +10,14 @@ import { USERNAME_MAX_LENGTH, validateUsernameFormat } from './policy.js';
 import { matchBlockedSubstring } from './reserved.js';
 import { skeleton } from './skeleton.js';
 
-/** Suffixes that read as a storefront rather than as a second account of the same name. */
-const WORD_SUFFIXES = ['ng', 'hq', 'store', 'shop', 'official'] as const;
+/**
+ * Suffixes that read as a storefront rather than as a second account of the same name.
+ *
+ * No `official`: the reserved namespace holds that word precisely because it implies endorsement
+ * ("platform identity — impersonation risk"), and handing it out as a suggestion would be the
+ * platform minting the impersonation it reserves the word to prevent.
+ */
+const WORD_SUFFIXES = ['ng', 'hq', 'store', 'shop', 'deals'] as const;
 
 /** Numeric suffixes are tried in order; most are rejected, so the ceiling is generous. */
 const MAX_NUMERIC_SUFFIX = 200;

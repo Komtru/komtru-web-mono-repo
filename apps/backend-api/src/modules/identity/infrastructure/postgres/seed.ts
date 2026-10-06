@@ -22,6 +22,9 @@ import { reservedSkeletonRows } from '../../domain/username/reserved.js';
 import { permissions, rolePermissions, roles } from './schema/rbac.js';
 import { reservedUsernames } from './schema/usernames.js';
 
+/** Arbitrary but fixed: any process seeding identity reference data takes this one lock. */
+const SEED_LOCK_KEY = 1_033_000_001;
+
 export interface SeedResult {
   roles: number;
   permissions: number;
@@ -42,6 +45,11 @@ export async function seedIdentityCatalogue(db: Db): Promise<SeedResult> {
   const reserved = reservedSkeletonRows();
 
   await db.transaction(async (tx) => {
+    // Two deploys running `pnpm db:migrate` at once would contend on the role_permissions
+    // insert/delete pair and could interleave into a window with a grant missing. Transaction-scoped
+    // (never session-scoped: PgBouncer pools by transaction and would lose a session lock).
+    await tx.execute(sql`SELECT pg_advisory_xact_lock(${SEED_LOCK_KEY})`);
+
     // `requires_dual_approval` is written by the INSERT, never flipped later: T-030's
     // `roles_dual_approval_backfill` trigger refuses a false -> true transition while unapproved
     // live grants of that role exist, so a role that arrives with the flag already set can never
@@ -92,6 +100,7 @@ export async function seedIdentityCatalogue(db: Db): Promise<SeedResult> {
         },
       });
 
+    if (grants.length === 0) throw new Error('the RBAC catalogue has no grants; refusing to seed');
     await tx.insert(rolePermissions).values(grants).onConflictDoNothing();
 
     // Reconcile downwards too. A grant withdrawn from the matrix has to disappear from the database

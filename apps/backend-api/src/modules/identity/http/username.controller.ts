@@ -4,6 +4,7 @@
 // `anon`. T-031 supplies the real resolver and the `authenticate({ scope })` middleware; until then
 // `scope` here is metadata the registry records rather than a gate it enforces, and these routes
 // answer 401 to everyone. Declaring them now is what lets T-031 wire one thing rather than four.
+import { pagedSchema } from '@komtru/shared-types';
 import { z } from 'zod';
 import { ApiError } from '../../../platform/errors.js';
 import { defineRoute, type RouteDefinition } from '../../../platform/http/route.js';
@@ -34,17 +35,15 @@ const availabilityResponse = z.object({
 
 const usernameResponse = z.object({ username: z.string() });
 
-const historyResponse = z.object({
-  items: z.array(
-    z.object({
-      username: z.string(),
-      claimedAt: z.date(),
-      releasedAt: z.date().nullable(),
-      quarantineUntil: z.date().nullable(),
-      reason: z.string().nullable(),
-    }),
-  ),
-});
+const historyResponse = pagedSchema(
+  z.object({
+    username: z.string(),
+    claimedAt: z.date(),
+    releasedAt: z.date().nullable(),
+    quarantineUntil: z.date().nullable(),
+    reason: z.string().nullable(),
+  }),
+);
 
 const requireUserId = (actor: string): string => {
   const id = actor.startsWith('user:') ? actor.slice('user:'.length) : undefined;
@@ -116,7 +115,11 @@ export function usernameRoutes(deps: UsernameServiceDeps): RouteDefinition[] {
       summary: 'Every handle this account has held',
       paginated: 'page',
       schema: { response: historyResponse },
-      handler: async ({ actor }) => ({ items: await listUsernameHistory(deps, requireUserId(actor)) }),
+      // `page` and `limit` are merged into the query by mount.ts for any route declaring pagination,
+      // and it rejects a response longer than `limit` — so they have to reach the query, not just
+      // the declaration.
+      handler: async ({ actor, query }) =>
+        listUsernameHistory(deps, requireUserId(actor), { page: query.page, limit: query.limit }),
     }),
   ];
 }

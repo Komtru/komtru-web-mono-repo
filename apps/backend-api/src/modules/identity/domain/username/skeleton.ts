@@ -224,15 +224,8 @@ export const isConfusable = (a: string, b: string, version: number = CURRENT_SKE
  * that handle's skeleton at `delstoreng`. The canonical algorithm has to stay exactly as specified,
  * because it backs a UNIQUE constraint and every stored row was produced by it.
  *
- * Reserved-word matching is a lookup rather than a constraint, so it can afford to check more than one
- * fold. This second, more aggressive variant is what makes a single `admin` row also catch `adm1n` and
- * `admiiin` — which §6.2 requires and which the canonical fold alone does not deliver:
- *
- *     canonical('adm1n')   = 'admln'    ≠ canonical('admin') = 'admin'
- *     narrow('adm1n')      = 'admin'    = narrow('admin')    = 'admin'
- *
- * Multigraphs are deliberately NOT applied here: `ii -> u` and "collapse the i/l/1 class" pull in
- * opposite directions, and `admiiin` needs the collapse.
+ * Reserved-word matching is a lookup rather than a constraint, so it can afford to check more than
+ * one fold.
  */
 const NARROW_GLYPH_CLASS: Readonly<Record<string, string>> = Object.freeze({
   l: 'i',
@@ -241,30 +234,61 @@ const NARROW_GLYPH_CLASS: Readonly<Record<string, string>> = Object.freeze({
   '!': 'i',
 });
 
-export const skeletonNarrow = (username: string): string => {
-  const normalised = stripDiacritics(username.normalize('NFKC').toLowerCase()).replace(SEPARATORS, '');
-
-  const mapped = Array.from(mapSingleCharacters(normalised))
+const mapNarrowGlyphs = (value: string): string =>
+  Array.from(value)
     .map((character) => NARROW_GLYPH_CLASS[character] ?? character)
     .join('');
 
-  return collapseRuns(mapped);
-};
+/** NFKC, lowercase, diacritics stripped, separators removed, single-character confusables mapped. */
+const prepare = (username: string): string =>
+  mapSingleCharacters(stripDiacritics(username.normalize('NFKC').toLowerCase()).replace(SEPARATORS, ''));
+
+/**
+ * The i/l/1 fold alone. `narrow('adm1n')` is `admin` where `skeleton('adm1n')` is `admln`.
+ *
+ * Unversioned on purpose: it never produces a stored value, so there is nothing to grandfather. The
+ * `version` that `skeletonVariants` takes applies to the canonical fold, which does back a column.
+ */
+export const skeletonNarrow = (username: string): string => collapseRuns(mapNarrowGlyphs(prepare(username)));
+
+/**
+ * The two optional passes — multigraphs (`rn→m`, `vv→w`, `cl→d`, `ii→u`) and the narrow glyph class
+ * — applied alone and in both orders.
+ *
+ * They are two independent axes, not a pair, and that is the whole point. The lifted code checked
+ * only the ends of each axis, so a handle using ONE substitution from EACH class landed between
+ * them and matched neither stored fold:
+ *
+ *     'adrn1n'  canonical 'admln'   narrow 'adrnin'   reserved 'admin' → not caught
+ *     'vvailet' canonical 'wailet'  narrow 'vaiet'    reserved 'wallet' → not caught
+ *
+ * Composing them closes that gap: `narrow(multigraph('adrn1n'))` is `admin`. Both orders are needed
+ * because the passes interact — the narrow pass creates the `ii` that the multigraph pass folds to
+ * `u`, and the multigraph pass consumes the `l` of `cl` that the narrow pass would have turned into
+ * an `i`.
+ */
+const EXTRA_PASSES: readonly ((value: string) => string)[] = Object.freeze([
+  mapNarrowGlyphs,
+  (value: string) => mapMultigraphs(mapNarrowGlyphs(value)),
+  (value: string) => mapNarrowGlyphs(mapMultigraphs(value)),
+]);
 
 /**
  * Every fold a candidate should be checked against when testing the reserved namespace.
  *
- * Returns the canonical skeleton first, so a caller that only looks at `[0]` still gets the value that
- * belongs in `username_skeleton`. Deduplicated, because for most handles both folds agree.
+ * The canonical skeleton is always first, so a caller that only looks at `[0]` still gets the value
+ * that belongs in `username_skeleton`. Deduplicated, because for most handles the folds agree.
  *
- * Both sides of a reserved-word comparison must go through this. The lifted code folded only the
+ * **Both sides of a reserved-word comparison must go through this.** The lifted code folded only the
  * candidate and compared it against the reserved word's *canonical* fold, which leaves
  * `@fiutterwave` claimable beside a reserved `@flutterwave` — `narrow('fiutterwave')` is
  * `fiuterwave` and `skeleton('flutterwave')` is `fluterwave`, so neither fold ever meets the other.
  */
 export const skeletonVariants = (username: string, version: number = CURRENT_SKELETON_VERSION): string[] => {
-  const canonical = skeleton(username, version);
-  const narrow = skeletonNarrow(username);
+  const folds = new Set([skeleton(username, version)]);
+  const base = prepare(username);
 
-  return canonical === narrow ? [canonical] : [canonical, narrow];
+  for (const pass of EXTRA_PASSES) folds.add(collapseRuns(pass(base)));
+
+  return [...folds];
 };

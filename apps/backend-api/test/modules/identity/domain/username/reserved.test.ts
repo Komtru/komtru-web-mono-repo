@@ -35,13 +35,48 @@ describe('reserved namespace', () => {
       expect(isReserved(attempt)).toBe(true);
   });
 
+  // One substitution from the multigraph class and one from the i/l/1 class, which is what an
+  // impersonator actually writes. 3,958 such renderings of the 89 seed words were generated; these
+  // are the shapes that used to fall between the two folds.
+  it('catches a handle that composes a multigraph and a narrow-glyph substitution', () => {
+    for (const attempt of [
+      'adrn1n',
+      'aclm1n',
+      'vvailet',
+      'cl1spute',
+      'rna1l',
+      'cornpl1ance',
+      'rnon1epoint',
+      'intersvv1tch',
+      'vv1thdrawal',
+      'clepos1t',
+      'aucl1tor',
+    ])
+      expect(isReserved(attempt)).toBe(true);
+  });
+
   it('catches leet and homoglyph variants of the money words', () => {
     for (const attempt of ['escrow', '3scr0w', 'e5crow', 'p4yout', 'refund5'])
       expect(isReserved(attempt)).toBe(true);
   });
 
+  // Widening the fold costs false positives, and a false positive is a user who cannot have their
+  // own name. None of these are reserved, and they must stay that way.
   it('leaves an ordinary handle alone', () => {
-    for (const handle of ['janedoe', 'dellstore', 'bola.adeyemi', 'tunde_shop'])
+    for (const handle of [
+      'janedoe',
+      'dellstore',
+      'bola.adeyemi',
+      'tunde_shop',
+      'lagos_deals',
+      'ifeoma.store',
+      'abuja_gadgets',
+      'ngozi_fabrics',
+      'ibrahim_motors',
+      'femi.media',
+      'olu_phones',
+      'kemi.beauty',
+    ])
       expect(isReserved(handle)).toBe(false);
   });
 
