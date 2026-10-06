@@ -15,8 +15,43 @@ import {
   unescape,
 } from './reference-css.js';
 
-/** Tailwind's own screen names. A class prefixed with one of these is the only variant resolved here. */
-const SCREENS = ['sm', 'md', 'lg', 'xl', '2xl'];
+/**
+ * The variant prefixes a viewport width genuinely cannot decide. Everything *else* either is a
+ * width variant or is something this evaluator does not model — and an allowlist is the only way
+ * round that distinction: `max-lg:` and `min-[900px]:` are width variants with no screen name in
+ * them, so a list of screen names would drop them silently, and a dropped utility contributes
+ * nothing to the cascade, raises no addition, and never shows up in a diff.
+ */
+const WIDTH_BLIND_VARIANTS = [
+  'hover',
+  'focus',
+  'focus-visible',
+  'focus-within',
+  'active',
+  'visited',
+  'target',
+  'disabled',
+  'enabled',
+  'checked',
+  'required',
+  'invalid',
+  'placeholder',
+  'first',
+  'last',
+  'odd',
+  'even',
+  'before',
+  'after',
+  'motion-reduce',
+  'motion-safe',
+  'print',
+  'forced-colors',
+  'contrast-more',
+  'contrast-less',
+];
+
+/** The same, for the variants that carry an argument: `group-hover`, `aria-expanded`, `data-open`. */
+const WIDTH_BLIND_PREFIXES = ['group-', 'peer-', 'aria-', 'data-', 'has-', 'not-', 'supports-'];
 
 /** The variant segments of a class name, split on the colons outside its brackets. */
 function segments(className: string): string[] {
@@ -41,11 +76,28 @@ function segments(className: string): string[] {
  * A width decides whether `lg:block` applies; it decides nothing about `focus-visible:outline-none`
  * or `motion-reduce:transition-none`. Those are left out exactly as `compiledDeclarations` leaves
  * them out, and asserted by the component's own test, so a shell's class list can carry both.
+ *
+ * Anything that is neither throws. The alternative — assume an unrecognised prefix is width-blind —
+ * is what makes a blind spot: the class vanishes from the cascade, from the additions diff and from
+ * the "compiles to no rule" guard all at once, and the suite stays green while the shell changes
+ * shape at a breakpoint nothing is looking at.
  */
 function isWidthResolvable(className: string): boolean {
   const parts = segments(className);
   if (parts.length === 1) return true;
-  return parts.length === 2 && SCREENS.includes(parts[0] ?? '');
+  const variants = parts.slice(0, -1);
+  const blind = variants.every(
+    (variant) =>
+      WIDTH_BLIND_VARIANTS.includes(variant) ||
+      WIDTH_BLIND_PREFIXES.some((prefix) => variant.startsWith(prefix)),
+  );
+  if (blind) return false;
+  const widthDeciding = variants.every((variant) => /^(max-)?(sm|md|lg|xl|2xl)$|^(min|max)-\[/.test(variant));
+  if (widthDeciding) return true;
+  throw new Error(
+    `Cannot decide whether "${className}" depends on the viewport width. Add its variant to ` +
+      'WIDTH_BLIND_VARIANTS in test/responsive-css.ts, or teach the evaluator to resolve it.',
+  );
 }
 
 /**

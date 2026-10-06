@@ -69,3 +69,33 @@ Screens to shoot: AC1 and E3 (mobile), D9 and T1 (consumer), NAV and TO-PA9 (con
 | every nav           | `aria-current="page"`, landmark roles, `<header>`/`<main>`/`<aside>`/`<nav>` | the reference is a drawing made of `<div>`s.                                                                                                                                                       |
 | `TabBar`, `SideNav` | the focus ring as a utility                                                  | the reference states it once, globally; `ui-kit` ships no stylesheet, so each focusable element carries it. Same decision T-012 made.                                                              |
 | `ConsoleShell`      | `justify-start` at `lg`, `sm:flex-row` on the page head                      | both are the initial value, written only to undo the collapsed/stacked state the smaller width needs.                                                                                              |
+
+## Also deliberate, and not obvious from the rules
+
+- **`.scr-logo-row`'s action control has no rule in the reference, and gets one here.** `.tb-icon`
+  is only ever declared as `.scr-topbar .tb-icon` (l.85), so the bell AC1 (l.2334) and Z1 (l.2470)
+  put inside `.scr-logo-row` is an unstyled `<div>` that renders as a zero-height box.
+  `<LogoBar>` gives it the same 32px round control `<TopBar>` uses, which is plainly what the
+  markup intends. It makes the built header 18px taller than the drawing and shifts the body down
+  by the same amount — most of AC1's 7.4% in `docs/ui-review/T-113/AC1.md`.
+- **`.ko-dweb-sidebar .ds-logo` declares no `svg` rule** (l.1548), so the reference's brand mark
+  fills its box at roughly 56px. `<ConsoleShell>` draws it at the 16px every other lockup in the
+  file uses. Most of NAV's flagged pixels.
+- **Every top-bar control is `position:relative`**, where the reference declares it on `.tb-icon`
+  only. `.tb-dot` is absolutely positioned inside its control, and a control with no positioned
+  ancestor drops the dot onto the page. `TopBar`'s `back` additionally cannot take a `badge` at the
+  type level.
+- **The tab bar and the sidebar rail are a `<nav>` of links, not a `<nav><ul><li>`.** The plan said
+  list markup; `.scr-tabbar` and `.dweb-sidebar` are the flex container _and_ carry the sticky,
+  border and padding geometry, so a `<ul>` between them and the items would split one reference
+  rule across two elements. `display:contents` on the list would keep both, but it is still
+  dropping list semantics in shipping screen readers. A navigation landmark already announces its
+  link count; the positional "item 2 of 4" is what is given up.
+- **`DesktopShell`'s two navigations carry the same landmark name.** They are one `nav` list drawn
+  twice and CSS removes exactly one from the accessibility tree at every width, so naming them
+  apart would announce the same destination group under two names to the one person who sees both
+  (a reader with the stylesheet missing).
+- **`MobileShell` throws when given both a `footer` and `tabs`.** `StickyFooter` and `TabBar` are
+  both `sticky bottom-0`: measured in Chromium at 340×660 on a scrolling body, the footer pins to
+  y=614–660 and the tab bar's top lands at y=618. The reference never draws both, and which one a
+  screen wants is the screen's decision, not a default.

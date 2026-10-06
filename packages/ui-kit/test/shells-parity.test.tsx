@@ -13,6 +13,7 @@ import {
   LogoBar,
   MobileShell,
   PublicShell,
+  SideNav,
   TabBar,
   TopBar,
 } from '../src/index.js';
@@ -57,6 +58,8 @@ const DESKTOP_SHELL = (
     Body
   </DesktopShell>
 );
+/** The same rail with no `href`, so the destination is a `<button>` rather than an `<a>`. */
+const SIDE_NAV_BUTTONS = <SideNav brandLabel="Account" items={NAV.map(({ href: _href, ...rest }) => rest)} />;
 const PUBLIC = (
   <PublicShell brandLabel="Komtru" aside="Hero">
     Listings
@@ -125,12 +128,20 @@ const DEVIATIONS: Record<string, Record<string, string>> = {
 const ADDITIONS: Record<string, readonly string[]> = {
   // The viewport takes the place of the gallery frame's fixed height.
   'mweb-screen': ['min-height'],
+  // `.tb-dot` is `position:absolute` and the reference declares `position:relative` on `.tb-icon`
+  // only. Every control is positioned here, so a dot can never resolve against the page instead of
+  // its own button — which is a bug the reference's own markup never reaches, because it never
+  // draws a dot on a back button.
+  'scr-topbar-back': ['position'],
   // The sidebar is in the markup at every width and hidden below `lg`; the reference draws two
   // separate frames instead, so neither of its rules declares a display.
   'dweb-sidebar': ['display'],
   // `min-width:0` on a flex child is what stops a wide table from pushing the sidebar off-screen.
   // The reference's content never overflows, so it never needed it; a real screen does.
   'dweb-content': ['min-width'],
+  // A `<button>` is neither full-width nor left-aligned by default; the reference's rail is a
+  // `<div>`, so its rule declares neither.
+  'dweb-item-button': ['width', 'text-align'],
   // `.tweb-content` declares padding and nothing else: the same element's `flex:1` and its
   // `min-width:0` guard are stated in `.dweb-content`, and neither stops applying at tablet.
   'tweb-content': ['min-width', 'flex-grow', 'flex-shrink', 'flex-basis'],
@@ -212,6 +223,15 @@ const ROWS: ParityRow[] = [
     width: DESKTOP,
   },
   { id: 'dweb-content', selector: '.dweb-content', element: DESKTOP_SHELL, node: 12, width: DESKTOP },
+  {
+    // A destination with no `href` is a `<button>`, which does not fill its rail or left-align its
+    // label on its own. Covered separately because the anchor rows above never reach that branch.
+    id: 'dweb-item-button',
+    selector: '.dweb-item',
+    element: SIDE_NAV_BUTTONS,
+    node: 4,
+    width: DESKTOP,
+  },
 
   { id: 'tweb-topnav', selector: '.tweb-topnav', element: DESKTOP_SHELL, node: 1, width: TABLET },
   {

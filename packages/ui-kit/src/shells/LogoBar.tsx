@@ -19,7 +19,7 @@ export function LogoBar({ product, action }: LogoBarProps): React.JSX.Element {
   return (
     <header className="flex items-center justify-between bg-surface-primary pt-[16px] pr-[16px] pb-[10px] pl-[16px]">
       <KomtruLogo product={product} />
-      {action !== undefined && <TopBarControl action={action} className="relative" />}
+      {action !== undefined && <TopBarControl action={action} />}
     </header>
   );
 }

@@ -80,7 +80,7 @@ describe('MobileShell', () => {
     expect(container.querySelector('main')?.className).toContain('pb-[90px]');
   });
 
-  it('renders header, body, footer and tabs in that order', () => {
+  it('renders header, body and the sticky footer in that order', () => {
     const { container } = render(
       <MobileShell
         header={<TopBar title="Enter code" />}
@@ -89,13 +89,35 @@ describe('MobileShell', () => {
             <Button>Verify &amp; continue</Button>
           </StickyFooter>
         }
-        tabs={<TabBar items={TABS} />}
       >
         Body
       </MobileShell>,
     );
     const tags = [...(container.firstElementChild?.children ?? [])].map((child) => child.tagName);
-    expect(tags).toEqual(['HEADER', 'MAIN', 'DIV', 'NAV']);
+    expect(tags).toEqual(['HEADER', 'MAIN', 'DIV']);
+  });
+
+  it('renders header, body and the tab bar in that order', () => {
+    const { container } = render(
+      <MobileShell header={<TopBar title="My Trades" />} tabs={<TabBar items={TABS} />}>
+        Body
+      </MobileShell>,
+    );
+    const tags = [...(container.firstElementChild?.children ?? [])].map((child) => child.tagName);
+    expect(tags).toEqual(['HEADER', 'MAIN', 'NAV']);
+  });
+
+  it('refuses a screen that asks for both a sticky footer and a tab bar', () => {
+    // Both are `sticky bottom-0`: on a body long enough to scroll they pin to the same edge and
+    // overlap, and which one a person sees is whichever paints last. Measured in Chromium at
+    // 340×660: the footer lands at y=614–660 and the tab bar's top at y=618.
+    expect(() =>
+      render(
+        <MobileShell footer={<StickyFooter>f</StickyFooter>} tabs={<TabBar items={TABS} />}>
+          Body
+        </MobileShell>,
+      ),
+    ).toThrow(RangeError);
   });
 
   it('is just the body when a screen carries no chrome at all', () => {

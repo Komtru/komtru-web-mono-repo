@@ -44,6 +44,18 @@ describe('TopBar', () => {
     expect(screen.getByRole('button', { name: 'Alerts' }).querySelector('.bg-risk')).toBeNull();
   });
 
+  it('positions every control, so the unread dot cannot escape onto the page', () => {
+    // `.tb-dot` is `position:absolute`; a control with no positioned ancestor resolves it against
+    // whatever the screen's nearest one is. The reference declares `position:relative` on
+    // `.tb-icon` only, which is why `back` cannot take a badge at all.
+    const { container } = render(
+      <TopBar title="Home" back={{ label: 'Back' }} action={{ label: 'Alerts', icon: BELL }} />,
+    );
+    for (const control of container.querySelectorAll('button')) {
+      expect(control.className.split(/\s+/)).toContain('relative');
+    }
+  });
+
   it('sticks to the top of the screen, above the body', () => {
     const { container } = render(<TopBar title="Search" />);
     const header = container.querySelector('header');

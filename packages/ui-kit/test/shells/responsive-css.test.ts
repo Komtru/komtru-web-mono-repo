@@ -52,3 +52,29 @@ describe('variants a width cannot decide', () => {
     expect(at.has('background-color')).toBe(false);
   });
 });
+
+describe('variants the evaluator does not model', () => {
+  it('resolves `max-lg:`, which is a width variant with no screen name in it', async () => {
+    expect((await declarationsAtWidth(['block', 'max-lg:hidden'], 640)).get('display')).toBe('none');
+    expect((await declarationsAtWidth(['block', 'max-lg:hidden'], 1024)).get('display')).toBe('block');
+  });
+
+  it('resolves an arbitrary width variant', async () => {
+    const classes = ['w-[68px]', 'min-[900px]:w-[228px]'];
+    expect((await declarationsAtWidth(classes, 899)).get('width')).toBe('68px');
+    expect((await declarationsAtWidth(classes, 900)).get('width')).toBe('228px');
+  });
+
+  it('still refuses a retired-palette utility behind a width variant', async () => {
+    await expect(declarationsAtWidth(['max-lg:bg-white'], 640)).rejects.toThrow('compiles to no rule');
+  });
+
+  it('throws on a variant it can neither resolve nor rule out, rather than dropping it', async () => {
+    // The whole failure mode this guards: a dropped class contributes nothing to the cascade, raises
+    // no addition and escapes the "compiles to no rule" check, so the suite goes green on a shell
+    // that changes shape at a breakpoint nothing is watching.
+    await expect(declarationsAtWidth(['portrait:hidden'], 640)).rejects.toThrow(
+      'Cannot decide whether "portrait:hidden" depends on the viewport width',
+    );
+  });
+});

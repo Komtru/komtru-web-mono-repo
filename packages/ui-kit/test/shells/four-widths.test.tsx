@@ -84,9 +84,16 @@ const [MOBILE, , DESKTOP_SHELL, PUBLIC, CONSOLE, CONSOLE_RAIL] = SHELLS.map((she
 describe.each(WIDTHS)('at %ipx', (width) => {
   const atLg = width >= BREAKPOINTS.lg;
 
-  it.each(SHELLS)('renders $name', ({ element }) => {
+  it.each(SHELLS)('renders $name with its content region visible', async ({ element }) => {
+    // `renderToStaticMarkup` is width-blind, so rendering alone would be the same assertion four
+    // times. What makes this width-sensitive is resolving the region's own cascade afterwards: a
+    // shell that hid its content at one breakpoint would render perfectly good markup.
     const markup = renderToStaticMarkup(element);
     expect(markup).toContain('<main');
+    const main = classesWith(element, 'flex-1');
+    const resolved = await declarationsAtWidth(main, width);
+    expect(resolved.get('display'), 'the content region').not.toBe('none');
+    expect(resolved.get('flex-grow'), 'the content region does not fill the shell').toBe('1');
   });
 
   it('swaps the consumer shell between top nav and sidebar at lg', async () => {

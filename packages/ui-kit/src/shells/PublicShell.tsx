@@ -17,9 +17,10 @@ export interface PublicShellProps {
  * D8 — the seller's public profile. The reference's note on it: "No sidebar — this is a public page
  * a buyer lands on cold, so the layout is content-first like a landing page, not an app shell."
  *
- * So there is no navigation here, at any width, and nothing to mark current. The aside comes first
- * in source order because the hero *is* the page's subject: on a phone a buyer should meet the
- * seller before the stock list, not scroll past it.
+ * So there is no navigation here, at any width, and nothing to mark current. The rail comes first
+ * in source order so that on a phone, where the two columns stack, a buyer meets the seller before
+ * the stock list rather than scrolling past it. It is still an `<aside>`: the listings are what the
+ * page is *for*, and the passport beside them is what tells a buyer whether to trust them.
  */
 export function PublicShell({ brandLabel, brandIcon, aside, children }: PublicShellProps): React.JSX.Element {
   return (

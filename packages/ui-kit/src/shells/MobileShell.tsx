@@ -4,7 +4,7 @@ export interface MobileShellProps {
   children?: React.ReactNode;
   /** `<StickyFooter>` — the screen's real actions, pinned above the fold. */
   footer?: React.ReactNode;
-  /** `<TabBar>`. Mutually exclusive with `footer` in every screen the reference draws. */
+  /** `<TabBar>`. Mutually exclusive with `footer`; both throw. */
   tabs?: React.ReactNode;
 }
 
@@ -18,6 +18,17 @@ export interface MobileShellProps {
  * `--surface-secondary` backdrop the cards sit on — is the reference's.
  */
 export function MobileShell({ header, children, footer, tabs }: MobileShellProps): React.JSX.Element {
+  if (footer !== undefined && tabs !== undefined) {
+    // Both are `sticky bottom-0`. On a body long enough to scroll they pin to the same edge and
+    // overlap, and the one a person sees is whichever paints last — so a screen asking for both
+    // gets a broken bottom edge rather than two. The reference never draws one, and the choice is
+    // the screen's to make: a flow has actions, a tab root has tabs.
+    throw new RangeError(
+      'MobileShell: a screen has either a sticky footer or a tab bar, not both — they pin to the ' +
+        'same edge and overlap. Give it the one the screen is for.',
+    );
+  }
+
   return (
     <div className="relative flex min-h-dvh flex-col bg-surface-secondary">
       {header}

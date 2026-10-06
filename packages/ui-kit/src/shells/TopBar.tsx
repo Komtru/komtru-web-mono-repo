@@ -14,8 +14,11 @@ export interface TopBarAction {
 
 export interface TopBarProps {
   title: string;
-  /** Omitted leaves the reference's own 32px spacer, so the title stays centred. */
-  back?: TopBarAction;
+  /**
+   * Omitted leaves the reference's own 32px spacer, so the title stays centred. No `badge`: an
+   * unread marker on the way back out of a screen says nothing about anything.
+   */
+  back?: Omit<TopBarAction, 'badge'>;
   action?: TopBarAction;
 }
 
@@ -35,11 +38,9 @@ const CONTROL = 'flex h-[32px] w-[32px] items-center justify-center rounded-[50%
 export function TopBarControl({
   action,
   fallbackIcon,
-  className: extra,
 }: {
   action: TopBarAction;
   fallbackIcon?: React.ReactNode;
-  className?: string;
 }) {
   const inner = (
     <>
@@ -56,7 +57,10 @@ export function TopBarControl({
       )}
     </>
   );
-  const className = cx(CONTROL, extra, FOCUS_RING);
+  // `relative` on every control, not only the one the reference declares it on. `.tb-dot` is
+  // absolutely positioned inside its control, and a control with no positioned ancestor drops the
+  // dot onto whatever the screen's nearest one is — which is the page.
+  const className = cx(CONTROL, 'relative', FOCUS_RING);
 
   return action.href === undefined ? (
     <button type="button" aria-label={action.label} onClick={action.onClick} className={className}>
@@ -86,11 +90,7 @@ export function TopBar({ title, back, action }: TopBarProps): React.JSX.Element 
         <TopBarControl action={back} fallbackIcon={BACK_CHEVRON} />
       )}
       <b className="text-[14px] font-semibold">{title}</b>
-      {action === undefined ? (
-        <span aria-hidden className="w-[32px]" />
-      ) : (
-        <TopBarControl action={action} className="relative" />
-      )}
+      {action === undefined ? <span aria-hidden className="w-[32px]" /> : <TopBarControl action={action} />}
     </header>
   );
 }
