@@ -30,8 +30,9 @@ describe('nextInRotation', () => {
   it('spreads four uploads across three accounts evenly', () => {
     let last: string | null = null;
     const picked: string[] = [];
+
     for (let i = 0; i < 4; i += 1) {
-      const next = nextInRotation(accounts, last);
+      const next: { id: string } = nextInRotation(accounts, last);
       picked.push(next.id);
       last = next.id;
     }
