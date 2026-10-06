@@ -112,6 +112,85 @@ export function parseRules(css: string, includeAtRules: string[] = []): CssRule[
   return rules;
 }
 
+/** A rule together with the `@media` preludes it is nested inside, outermost first. */
+export interface ConditionalRule extends CssRule {
+  conditions: string[];
+}
+
+/**
+ * Every style rule in a stylesheet, in emission order, each carrying the `@media` preludes it sits
+ * inside. `parseRules` descends into those at-rules and throws the prelude away, which conflates a
+ * responsive override with the rule it overrides; this keeps them apart.
+ */
+export function parseConditionalRules(css: string): ConditionalRule[] {
+  const rules: ConditionalRule[] = [];
+  const walk = (text: string, conditions: string[]) => {
+    let depth = 0;
+    let preludeStart = 0;
+    let bodyStart = 0;
+    for (let i = 0; i < text.length; i += 1) {
+      const char = text[i];
+      if (char === '{') {
+        if (depth === 0) bodyStart = i;
+        depth += 1;
+      } else if (char === '}') {
+        depth -= 1;
+        if (depth === 0) {
+          const prelude = text.slice(preludeStart, bodyStart).trim();
+          const body = text.slice(bodyStart + 1, i);
+          if (prelude.startsWith('@')) {
+            const name = /^@([\w-]+)/.exec(prelude)?.[1] ?? '';
+            // `@keyframes`, `@property` and `@font-face` bodies are not rules a class can match.
+            if (!['keyframes', 'property', 'font-face'].includes(name)) {
+              walk(body, name === 'media' ? [...conditions, prelude] : conditions);
+            }
+          } else if (prelude !== '') {
+            rules.push({
+              selectors: splitSelectors(prelude),
+              declarations: parseDeclarations(body),
+              conditions,
+            });
+          }
+          preludeStart = i + 1;
+        }
+      }
+    }
+  };
+  walk(stripComments(css), []);
+  return rules;
+}
+
+/** The CSS root font size a `rem` in a media condition is relative to. */
+const REM = 16;
+
+/**
+ * Whether a `@media` prelude holds at a viewport width. Both sides are read through this: the
+ * reference writes `(max-width:900px)`, Tailwind v4 writes range syntax. A condition this cannot
+ * read throws rather than counting as satisfied — silently honouring an unreadable condition is
+ * how a rule gets merged that the width never applies.
+ */
+export function mediaHolds(prelude: string, width: number): boolean {
+  const body = prelude.replace(/^@media\s*/, '').trim();
+  const pixels = (value: string, unit: string): number =>
+    unit === 'rem' ? Number(value) * REM : Number(value);
+  return body.split(/\s+and\s+/).every((clause) => {
+    const range = /^\(width\s*(>=|<=|>|<)\s*([\d.]+)(rem|px)\)$/.exec(clause.trim());
+    if (range !== null) {
+      const bound = pixels(range[2] ?? '', range[3] ?? 'px');
+      if (range[1] === '>=') return width >= bound;
+      if (range[1] === '<=') return width <= bound;
+      if (range[1] === '>') return width > bound;
+      return width < bound;
+    }
+    const minMax = /^\((min|max)-width:\s*([\d.]+)(rem|px)\)$/.exec(clause.trim());
+    if (minMax !== null) {
+      const bound = pixels(minMax[2] ?? '', minMax[3] ?? 'px');
+      return minMax[1] === 'min' ? width >= bound : width <= bound;
+    }
+    throw new Error(`Cannot evaluate the media condition "${clause.trim()}" at ${String(width)}px`);
+  });
+}
+
 /** Every `<style>` block in the reference document, in source order, with its id when it has one. */
 export function styleBlocks(html: string): { id: string | undefined; css: string }[] {
   return [...html.matchAll(/<style([^>]*)>([\s\S]*?)<\/style>/g)].map((match) => ({
@@ -134,6 +213,14 @@ export function referenceRule(
    * centred-dot rail in `komtru-nav-v2` — so the component names which one it reproduces.
    */
   styleId?: string,
+  /**
+   * The viewport width to read the rule at. The reference carries its own responsive overrides —
+   * the console sheet collapses the rail under `@media(max-width:900px)` and stacks the page head
+   * under `@media(max-width:640px)` — and without a width those are merged into the base rule and
+   * reported as the reference disagreeing with itself. Omitted, every copy is merged, which is
+   * what an unconditional primitive rule wants.
+   */
+  options: { atWidth?: number } = {},
 ): Map<string, string> {
   const wanted = selector.replace(/\s+/g, ' ').trim();
   const merged = new Map<string, string>();
@@ -141,18 +228,31 @@ export function referenceRule(
   let found = false;
   for (const block of styleBlocks(html)) {
     if (styleId !== undefined && block.id !== styleId) continue;
-    for (const rule of parseRules(block.css, ['media', 'supports'])) {
+    for (const rule of parseConditionalRules(block.css)) {
       if (!rule.selectors.includes(wanted)) continue;
+      if (
+        options.atWidth !== undefined &&
+        !rule.conditions.every((condition) => mediaHolds(condition, options.atWidth ?? 0))
+      ) {
+        continue;
+      }
+      // After the width check, so a selector that exists only inside a media query this width does
+      // not satisfy reports "declares no rule" rather than silently comparing against nothing.
       found = true;
       for (const [property, value] of rule.declarations) {
-        const previous = seen.get(property);
+        // Keyed by the condition stack as well as the property: the reference restates its
+        // component rules in five near-identical blocks, and a disagreement between those copies
+        // is a real drift — but a `@media` override legitimately differs from the rule it
+        // overrides, and merging in source order is exactly what a browser does with it.
+        const key = `${rule.conditions.join(' & ')}|${property}`;
+        const previous = seen.get(key);
         if (previous !== undefined && previous !== value) {
           throw new Error(
             `The reference declares ${wanted} { ${property} } twice with different values: ` +
               `"${previous}" and "${value}". Pick the instance deliberately.`,
           );
         }
-        seen.set(property, value);
+        seen.set(key, value);
         merged.set(property, value);
       }
     }
@@ -337,6 +437,27 @@ export function expandDeclaration(property: string, rawValue: string): [string, 
       if (match[3] !== undefined) out.push(['line-height', match[3]]);
       return out;
     }
+    case 'flex': {
+      // `flex: 1` and `flex: 0 0 228px` — the shell's rails are pinned with the shorthand and the
+      // utilities that reproduce them (`grow-0 shrink-0 basis-[228px]`) are three longhands, so
+      // without this the two sides compare a shorthand against nothing.
+      const parts = value.split(/\s+/).filter(Boolean);
+      if (parts.length === 1 && /^[\d.]+$/.test(parts[0] ?? '')) {
+        return [
+          ['flex-grow', parts[0] ?? ''],
+          ['flex-shrink', '1'],
+          ['flex-basis', '0%'],
+        ];
+      }
+      if (parts.length === 3) {
+        return [
+          ['flex-grow', parts[0] ?? ''],
+          ['flex-shrink', parts[1] ?? ''],
+          ['flex-basis', parts[2] ?? ''],
+        ];
+      }
+      return [[property, value]];
+    }
     case 'inset': {
       const box = expandBox(value);
       return SIDES.map((side, i) => [side, box[i]] as [string, string]);
@@ -398,7 +519,7 @@ function hasVariant(className: string): boolean {
 }
 
 /** `.text-\[13\.5px\]` and `text-[13.5px]` name the same utility. */
-const unescape = (selector: string): string => selector.replace(/\\/g, '');
+export const unescape = (selector: string): string => selector.replace(/\\/g, '');
 
 /** `group-last:border-b-0` → `border-b-0`: everything after the last variant separator. */
 export function baseUtility(className: string): string {
@@ -414,13 +535,22 @@ export function baseUtility(className: string): string {
 }
 
 /**
+ * The stylesheet the real preset emits for a list of candidates, variants included. Separate from
+ * `compiledDeclarations` because `responsive-css.ts` needs the at-rules the declaration-level
+ * reader throws away — a `lg:` utility means nothing without the `@media` it was wrapped in.
+ */
+export async function compileUtilities(classNames: readonly string[]): Promise<string> {
+  const build = await compiler();
+  return build([...classNames]);
+}
+
+/**
  * What a list of Tailwind classes actually computes to. Variant classes (`focus-visible:…`,
  * `motion-reduce:…`) are skipped: they live inside an at-rule or a pseudo-selector and are asserted
  * by the component's own test rather than by parity against a plain reference rule.
  */
 export async function compiledDeclarations(classNames: string[]): Promise<Map<string, string>> {
   const utilities = classNames.filter((name) => !hasVariant(name));
-  const build = await compiler();
 
   // A variant class is not compared — it lives inside an at-rule or a pseudo-selector — but it still
   // has to be real. Compiling only the plain classes meant `md:grid-colz-[1fr]` and
@@ -430,11 +560,11 @@ export async function compiledDeclarations(classNames: string[]): Promise<Map<st
   for (const variant of classNames.filter((name) => name !== '' && hasVariant(name))) {
     const base = baseUtility(variant);
     if (base === '') throw new Error(`"${variant}" has a variant but no utility after it`);
-    if (!build([base]).includes(`.${base.replace(/([.[\]()%#])/g, '\\$1')}`)) {
+    if (!(await compileUtilities([base])).includes(`.${base.replace(/([.[\]()%#])/g, '\\$1')}`)) {
       throw new Error(`"${variant}" compiles to no rule — "${base}" is not a utility this preset publishes`);
     }
   }
-  const css = build(utilities);
+  const css = await compileUtilities(utilities);
   const byUtility = new Map<string, Map<string, string>>();
   const themeVars = new Map<string, string>();
   for (const rule of parseRules(css, ['layer', 'supports'])) {

@@ -1,9 +1,16 @@
 /**
- * The runner behind `primitives-parity.test.tsx` and `trustops-parity.test.tsx`.
+ * The runner behind `primitives-parity.test.tsx`, `trustops-parity.test.tsx` and
+ * `shells-parity.test.tsx`.
  *
  * T-012 built this inline; T-014 needed the same checks for the TrustOps patterns, and two copies of
  * a rule like "a DEVIATIONS entry that no longer deviates is a failure" would drift the first time
  * one of them was tightened. The tables stay with the components they describe; the rules live here.
+ *
+ * T-013 added the width. A primitive's reference rule is unconditional, so reading it and the
+ * compiled utilities with no viewport in mind is correct for one. A shell's is not — `.dweb-content`
+ * is 24px of padding and `.tweb-content` 20px on the same element — so a row may name the width to
+ * resolve both sides at, and a suite may hand the runner a width-aware reader. Neither is required,
+ * and with neither the runner behaves exactly as it did before.
  *
  * Node, not jsdom: under jsdom Vite rewrites `import.meta.url` into a `/@fs` URL, which breaks both
  * the reference-file read and Tailwind's stylesheet resolution. `react-dom/server` needs no DOM.
@@ -17,6 +24,9 @@ import {
   referenceInlineStyle,
   referenceRule,
 } from './reference-css.js';
+
+/** What a list of classes computes to. `shells-parity` hands in the width-aware reader. */
+export type DeclarationReader = (classNames: string[], width: number) => Promise<Map<string, string>>;
 
 export interface ParityRow {
   /** Key into `deviations`/`additions`, and the name the failure is reported under. */
@@ -42,6 +52,11 @@ export interface ParityRow {
    * markup rather than in a rule, and those are the only statement of them there is.
    */
   inline?: string;
+  /**
+   * The viewport width to resolve both sides at. Only a shell needs it — a primitive's reference
+   * rule carries no media query and its utilities carry no screen variant.
+   */
+  width?: number;
 }
 
 /** Every property a component knowingly does not reproduce, keyed by parity id, with the reason. */
@@ -56,6 +71,10 @@ export interface ParitySuite {
   rows: readonly ParityRow[];
   deviations: Deviations;
   additions: Additions;
+  /** Defaults to the width-blind reader, which refuses to resolve a variant at all. */
+  declarations?: DeclarationReader;
+  /** Used by any row that names no width of its own. */
+  defaultWidth?: number;
 }
 
 /** The `class` attribute of every element in the rendered markup, in document order. */
@@ -70,10 +89,16 @@ function classesOf(row: ParityRow): string[] {
 }
 
 /** The declarations the reference gives this row, with its `extends` and inline style folded in. */
-function referenceDeclarations(html: string, row: ParityRow): Map<string, string> {
+function referenceDeclarations(
+  html: string,
+  row: ParityRow,
+  atWidth: { atWidth?: number },
+): Map<string, string> {
   const raw = new Map<string, string>();
   for (const selector of [...(row.extends ?? []), row.selector]) {
-    for (const [property, value] of referenceRule(html, selector, row.styleId)) raw.set(property, value);
+    for (const [property, value] of referenceRule(html, selector, row.styleId, atWidth)) {
+      raw.set(property, value);
+    }
   }
   if (row.inline !== undefined) {
     for (const [property, value] of referenceInlineStyle(html, row.inline)) raw.set(property, value);
@@ -101,14 +126,32 @@ const SINGLE_CLAIMANT = [
 ] as const;
 
 /** Registers every parity check for a suite. Call it at the top level of a `*.test.tsx`. */
-export function describeParity({ html, rows, deviations, additions }: ParitySuite): void {
+export function describeParity({
+  html,
+  rows,
+  deviations,
+  additions,
+  declarations = (classNames) => compiledDeclarations(classNames),
+  defaultWidth,
+}: ParitySuite): void {
+  /** The width the compiled cascade is resolved at. */
+  const widthOf = (row: ParityRow): number => row.width ?? defaultWidth ?? Number.MAX_SAFE_INTEGER;
+  /**
+   * The width the *reference's* own media queries are read at; absent means "merge every copy",
+   * which is right for a rule the reference states unconditionally.
+   */
+  const referenceWidth = (row: ParityRow): { atWidth?: number } => {
+    const width = row.width ?? defaultWidth;
+    return width === undefined ? {} : { atWidth: width };
+  };
+
   describe.each(rows)('$id', (row) => {
     const classes = classesOf(row);
 
     it(`compiles to what the reference declares for ${row.selector}`, async () => {
-      const raw = referenceDeclarations(html, row);
+      const raw = referenceDeclarations(html, row, referenceWidth(row));
       const reference = canonicalise(raw);
-      const compiled = await compiledDeclarations(classes);
+      const compiled = await declarations(classes, widthOf(row));
       // A deviation is written against the property the reference declares; widen it to the
       // longhands that property expands into, so excusing `border-radius` does not mean listing
       // four corners.
@@ -161,22 +204,27 @@ export function describeParity({ html, rows, deviations, additions }: ParitySuit
     });
 
     it('claims each decisive property exactly once', async () => {
+      // Keyed by variant as well as property: `hidden` beside `lg:block` is the whole mechanism of
+      // a responsive shell, not two rules racing, and only utilities under the same variant can
+      // race at a given width.
       const claimants = new Map<string, string[]>();
       for (const utility of classes.filter((name) => name !== '')) {
-        let declarations: Map<string, string>;
+        const variant = utility.includes(':') ? utility.slice(0, utility.indexOf(':')) : '';
+        let compiled: Map<string, string>;
         try {
-          declarations = await compiledDeclarations([utility]);
+          compiled = await declarations([utility], widthOf(row));
         } catch {
-          continue; // A variant class; `compiledDeclarations` skips those and compiles nothing.
+          continue; // A variant the reader skips and compiles nothing for.
         }
         for (const property of SINGLE_CLAIMANT) {
-          if (!declarations.has(property)) continue;
-          claimants.set(property, [...(claimants.get(property) ?? []), utility]);
+          if (!compiled.has(property)) continue;
+          const key = `${variant}|${property}`;
+          claimants.set(key, [...(claimants.get(key) ?? []), utility]);
         }
       }
       const contested = [...claimants]
         .filter(([, utilities]) => utilities.length > 1)
-        .map(([property, utilities]) => `${property}: ${utilities.join(' and ')}`);
+        .map(([key, utilities]) => `${key.split('|')[1] ?? key}: ${utilities.join(' and ')}`);
       expect(contested, `${row.id} lets the stylesheet pick, rather than picking`).toEqual([]);
     });
   });
@@ -201,7 +249,7 @@ export function describeParity({ html, rows, deviations, additions }: ParitySuit
       for (const [id, properties] of Object.entries(deviations)) {
         const row = rows.find((candidate) => candidate.id === id);
         if (row === undefined) continue;
-        const declared = referenceDeclarations(html, row);
+        const declared = referenceDeclarations(html, row, referenceWidth(row));
         for (const property of Object.keys(properties)) {
           expect(
             declared.has(property),
