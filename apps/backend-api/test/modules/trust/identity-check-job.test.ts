@@ -101,6 +101,35 @@ describe('runIdentityCheck', () => {
     expect(store.grants).toHaveLength(0);
   });
 
+  it('treats the submitter’s OWN already-verified number as a success, not a fraud signal', async () => {
+    // The review finding this exists for: without the owner check, a user re-submitting their own
+    // verified NIN hits the partial unique index against their own row, gets parked in MANUAL_REVIEW
+    // — which holds their one in-flight slot and which the sweep deliberately skips — and has a
+    // duplicate-identity event published about them to Risk. There is no way out of that without SQL.
+    const request = requestRow();
+    const { store, error, emitted } = await run({
+      request,
+      applyIdentityOutcomeThrows: uniqueViolation('nin_verifications_hash_active_unique'),
+      identifierOwner: request.userId,
+    });
+
+    expect(error).toBeUndefined();
+    expect(store.duplicates).toHaveLength(0);
+    expect(store.settledAlreadyVerified).toHaveLength(1);
+    expect(emitted[0]).toMatchObject({ payload: containing({ status: 'APPROVED' }) });
+  });
+
+  it('still re-evaluates the level on a self-duplicate, so a stalled user is not stuck', async () => {
+    const request = requestRow();
+    const { store } = await run({
+      request,
+      applyIdentityOutcomeThrows: uniqueViolation('nin_verifications_hash_active_unique'),
+      identifierOwner: request.userId,
+      facts: { identifierVerified: true, livenessPassed: true },
+    });
+    expect(store.grants[0]).toMatchObject({ toLevel: 2 });
+  });
+
   it('rethrows a violation that is not the duplicate rule', async () => {
     const { error } = await run({ applyIdentityOutcomeThrows: uniqueViolation('some_other_index') });
     expect(error).toBeInstanceOf(Error);
@@ -146,6 +175,19 @@ describe('runIdentityCheck', () => {
     const { store, adapter } = await run({ request: requestRow({ status: 'REJECTED' }) });
     expect(adapter.calls).toBe(0);
     expect(store.identityOutcomes).toHaveLength(0);
+  });
+
+  it('stops when the sweep decided the request while the provider was being called', async () => {
+    // The window the review found: claimRequest reads the status once, the provider call takes
+    // seconds, and an unguarded UPDATE would then overwrite EXPIRED with APPROVED and grant level 2
+    // — on a request the sweep had already closed. The store refuses the write; the job must not
+    // then go on to grant anything or tell the user they passed.
+    const { store, emitted } = await run({
+      facts: { identifierVerified: true, livenessPassed: true },
+      outcomeApplied: false,
+    });
+    expect(store.grants).toHaveLength(0);
+    expect(emitted).toEqual([]);
   });
 
   it('does nothing for a request that is gone', async () => {

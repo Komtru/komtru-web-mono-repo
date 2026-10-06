@@ -3,7 +3,8 @@
 // It is separated from the port (store.ts) so the services and jobs above can be tested against a
 // hand-written stub, and so there is exactly one file to read when the question is "what does trust
 // actually write". Nothing here decides anything — the rules are in `domain/` and in the services.
-import { and, desc, eq, inArray, isNotNull, lt, sql } from 'drizzle-orm';
+import { and, desc, eq, inArray, isNotNull, lt, sql, type SQL } from 'drizzle-orm';
+import { TransactionRollbackError } from 'drizzle-orm/errors';
 import type { Db } from '../../../../db/index.js';
 import { publish, type Tx } from '../../../../platform/events/publish.js';
 import { fileRecords } from '../../../files/index.js';
@@ -15,8 +16,8 @@ import {
   verificationRejected,
   verificationSubmitted,
 } from '../../domain/events.js';
-import { levelName, levelNumber } from '../../domain/levels.js';
-import type { IdentifierType, KycProvider } from './schema/enums.js';
+import { decideLevelChange, levelName, levelNumber } from '../../domain/levels.js';
+import type { IdentifierType, KycProvider, VerificationRequestStatus } from './schema/enums.js';
 import { bvnVerifications, ninVerifications } from './schema/identity-checks.js';
 import { kycProviderCalls } from './schema/provider-calls.js';
 import { livenessChecks } from './schema/liveness.js';
@@ -76,6 +77,45 @@ async function insertIdentityOutcome(
   });
 }
 
+/**
+ * The caller's current level, with the row locked for the rest of the transaction.
+ *
+ * Both level paths take it, in the same order (users, then the change log), so two grants landing at
+ * once serialise rather than deadlock.
+ */
+async function lockLevel(tx: Tx, userId: string): Promise<number> {
+  const [row] = await tx
+    .select({ verificationLevel: users.verificationLevel })
+    .from(users)
+    .where(eq(users.id, userId))
+    .for('update')
+    .limit(1);
+  if (!row) throw new Error(`trust: no user ${userId} to change a verification level on`);
+  return levelNumber(row.verificationLevel);
+}
+
+/** `decided_at` is for a request that was actually decided; one still in flight has not been. */
+const decidedAtFor = (status: VerificationRequestStatus): SQL | null =>
+  status === 'PROVIDER_PENDING' || status === 'MANUAL_REVIEW' ? null : sql`now()`;
+
+/**
+ * True when the transaction committed, false when it rolled itself back because the request had
+ * already been decided elsewhere.
+ *
+ * `tx.rollback()` throws a `TransactionRollbackError` by design in drizzle; catching exactly that
+ * turns "somebody else got there first" back into a value the caller can branch on, while any real
+ * failure still propagates and fails the job.
+ */
+async function applied(work: Promise<unknown>): Promise<boolean> {
+  try {
+    await work;
+    return true;
+  } catch (error) {
+    if (error instanceof TransactionRollbackError) return false;
+    throw error;
+  }
+}
+
 export function bindStore(db: Db): TrustStore {
   return {
     findSubject: async (userId) => {
@@ -133,10 +173,20 @@ export function bindStore(db: Db): TrustStore {
         .orderBy(desc(verificationRequests.submittedAt)),
 
     markProviderPending: async (requestId, provider) => {
-      await db
+      // SUBMITTED only, not every open status: a MANUAL_REVIEW request dragged back to
+      // PROVIDER_PENDING by a redelivered job becomes sweepable, which silently closes the human
+      // case `expireStale` goes out of its way to protect.
+      const moved = await db
         .update(verificationRequests)
         .set({ status: 'PROVIDER_PENDING', provider, providerCalledAt: sql`now()` })
-        .where(eq(verificationRequests.id, requestId));
+        .where(
+          and(
+            eq(verificationRequests.id, requestId),
+            inArray(verificationRequests.status, ['SUBMITTED', 'PROVIDER_PENDING']),
+          ),
+        )
+        .returning({ id: verificationRequests.id });
+      return moved.length > 0;
     },
 
     recordProviderCall: async (input) => {
@@ -152,125 +202,173 @@ export function bindStore(db: Db): TrustStore {
     },
 
     applyIdentityOutcome: async (input) =>
-      db.transaction(async (tx) => {
-        await insertIdentityOutcome(tx, {
-          request: input.request,
-          type: input.type,
-          masked: input.masked,
-          hash: input.hash,
-          provider: input.provider,
-          providerReference: input.providerReference,
-          ...(input.nameMatchScore === undefined ? {} : { nameMatchScore: input.nameMatchScore }),
-          ...(input.dobMatch === undefined ? {} : { dobMatch: input.dobMatch }),
-          ...(input.phoneMatch === undefined ? {} : { phoneMatch: input.phoneMatch }),
-          verified: input.markVerified,
-        });
-
-        await tx
-          .update(verificationRequests)
-          .set({
-            status: input.requestStatus,
+      applied(
+        db.transaction(async (tx) => {
+          await insertIdentityOutcome(tx, {
+            request: input.request,
+            type: input.type,
+            masked: input.masked,
+            hash: input.hash,
             provider: input.provider,
             providerReference: input.providerReference,
-            rejectionReason: input.rejectionReason ?? null,
-            decidedAt: input.requestStatus === 'PROVIDER_PENDING' ? null : sql`now()`,
-          })
-          .where(eq(verificationRequests.id, input.request.id));
-
-        if (input.requestStatus === 'REJECTED') {
-          await publish(tx, verificationRejected, {
-            payload: {
-              requestId: input.request.id,
-              userId: input.request.userId,
-              type: input.type,
-              reason: input.rejectionReason ?? 'rejected',
-              attemptCount: input.request.attemptCount,
-            },
-            aggregateType: 'verification_request',
-            aggregateId: input.request.id,
+            ...(input.nameMatchScore === undefined ? {} : { nameMatchScore: input.nameMatchScore }),
+            ...(input.dobMatch === undefined ? {} : { dobMatch: input.dobMatch }),
+            ...(input.phoneMatch === undefined ? {} : { phoneMatch: input.phoneMatch }),
+            verified: input.markVerified,
           });
-        }
-      }),
+
+          const moved = await tx
+            .update(verificationRequests)
+            .set({
+              status: input.requestStatus,
+              provider: input.provider,
+              providerReference: input.providerReference,
+              rejectionReason: input.rejectionReason ?? null,
+              decidedAt: decidedAtFor(input.requestStatus),
+            })
+            .where(
+              and(
+                eq(verificationRequests.id, input.request.id),
+                inArray(verificationRequests.status, [...OPEN_STATUSES]),
+              ),
+            )
+            .returning({ id: verificationRequests.id });
+          // Roll the outcome row back with it: a `nin_verifications` row whose request was expired by
+          // the sweep is an orphan that the uniqueness index would still honour.
+          if (moved.length === 0) tx.rollback();
+
+          if (input.requestStatus === 'REJECTED') {
+            await publish(tx, verificationRejected, {
+              payload: {
+                requestId: input.request.id,
+                userId: input.request.userId,
+                type: input.type,
+                reason: input.rejectionReason ?? 'rejected',
+                attemptCount: input.request.attemptCount,
+              },
+              aggregateType: 'verification_request',
+              aggregateId: input.request.id,
+            });
+          }
+        }),
+      ),
 
     applyDuplicateIdentity: async (input) =>
-      db.transaction(async (tx) => {
-        // No verified_at: the number stays unclaimed until a human says otherwise, so the rightful
-        // owner is not locked out by someone else's attempt.
-        await insertIdentityOutcome(tx, {
-          request: input.request,
-          type: input.type,
-          masked: input.masked,
-          hash: input.hash,
-          provider: input.provider,
-          providerReference: input.providerReference,
-          ...(input.nameMatchScore === undefined ? {} : { nameMatchScore: input.nameMatchScore }),
-          verified: false,
-        });
-
-        await tx
-          .update(verificationRequests)
-          .set({
-            status: 'MANUAL_REVIEW',
+      applied(
+        db.transaction(async (tx) => {
+          // No verified_at: the number stays unclaimed until a human says otherwise, so the rightful
+          // owner is not locked out by someone else's attempt.
+          await insertIdentityOutcome(tx, {
+            request: input.request,
+            type: input.type,
+            masked: input.masked,
+            hash: input.hash,
             provider: input.provider,
             providerReference: input.providerReference,
-            rejectionReason: null,
-          })
-          .where(eq(verificationRequests.id, input.request.id));
+            ...(input.nameMatchScore === undefined ? {} : { nameMatchScore: input.nameMatchScore }),
+            verified: false,
+          });
 
-        await publish(tx, verificationDuplicateIdentityDetected, {
-          payload: {
-            identifierType: input.type,
-            // Hex, not the number: two accounts correlating to one identifier is the fact a reviewer
-            // needs, and establishing it does not require anyone to hold the number itself (D1).
-            identifierHashHex: input.hash.toString('hex'),
-            firstUserId: input.firstUserId,
-            conflictingUserId: input.request.userId,
-            requestId: input.request.id,
-          },
-          aggregateType: 'verification_request',
-          aggregateId: input.request.id,
-        });
-      }),
+          const moved = await tx
+            .update(verificationRequests)
+            .set({
+              status: 'MANUAL_REVIEW',
+              provider: input.provider,
+              providerReference: input.providerReference,
+              rejectionReason: null,
+            })
+            .where(
+              and(
+                eq(verificationRequests.id, input.request.id),
+                inArray(verificationRequests.status, [...OPEN_STATUSES]),
+              ),
+            )
+            .returning({ id: verificationRequests.id });
+          if (moved.length === 0) tx.rollback();
 
-    applyLivenessOutcome: async (input) =>
-      db.transaction(async (tx) => {
-        await tx.insert(livenessChecks).values({
-          requestId: input.request.id,
-          userId: input.request.userId,
-          matchedAgainst: input.matchedAgainst,
-          matchScore: input.matchScore.toFixed(2),
-          livenessPassed: input.livenessPassed,
-          selfieStorageRef: input.request.selfieStorageRef,
-          provider: input.provider,
-          providerReference: input.providerReference,
-          failureReason: input.rejectionReason ?? null,
-        });
-
-        await tx
-          .update(verificationRequests)
-          .set({
-            status: input.requestStatus,
-            provider: input.provider,
-            providerReference: input.providerReference,
-            rejectionReason: input.rejectionReason ?? null,
-            decidedAt: input.requestStatus === 'PROVIDER_PENDING' ? null : sql`now()`,
-          })
-          .where(eq(verificationRequests.id, input.request.id));
-
-        if (input.requestStatus === 'REJECTED') {
-          await publish(tx, verificationRejected, {
+          await publish(tx, verificationDuplicateIdentityDetected, {
             payload: {
+              identifierType: input.type,
+              // Hex, not the number: two accounts correlating to one identifier is the fact a reviewer
+              // needs, and establishing it does not require anyone to hold the number itself (D1).
+              identifierHashHex: input.hash.toString('hex'),
+              firstUserId: input.firstUserId,
+              conflictingUserId: input.request.userId,
               requestId: input.request.id,
-              userId: input.request.userId,
-              type: 'LIVENESS',
-              reason: input.rejectionReason ?? 'rejected',
-              attemptCount: input.request.attemptCount,
             },
             aggregateType: 'verification_request',
             aggregateId: input.request.id,
           });
-        }
-      }),
+        }),
+      ),
+
+    applyLivenessOutcome: async (input) =>
+      applied(
+        db.transaction(async (tx) => {
+          await tx.insert(livenessChecks).values({
+            requestId: input.request.id,
+            userId: input.request.userId,
+            matchedAgainst: input.matchedAgainst,
+            matchScore: input.matchScore.toFixed(2),
+            livenessPassed: input.livenessPassed,
+            selfieStorageRef: input.request.selfieStorageRef,
+            provider: input.provider,
+            providerReference: input.providerReference,
+            failureReason: input.rejectionReason ?? null,
+          });
+
+          const moved = await tx
+            .update(verificationRequests)
+            .set({
+              status: input.requestStatus,
+              provider: input.provider,
+              providerReference: input.providerReference,
+              rejectionReason: input.rejectionReason ?? null,
+              decidedAt: decidedAtFor(input.requestStatus),
+            })
+            .where(
+              and(
+                eq(verificationRequests.id, input.request.id),
+                inArray(verificationRequests.status, [...OPEN_STATUSES]),
+              ),
+            )
+            .returning({ id: verificationRequests.id });
+          if (moved.length === 0) tx.rollback();
+
+          if (input.requestStatus === 'REJECTED') {
+            await publish(tx, verificationRejected, {
+              payload: {
+                requestId: input.request.id,
+                userId: input.request.userId,
+                type: 'LIVENESS',
+                reason: input.rejectionReason ?? 'rejected',
+                attemptCount: input.request.attemptCount,
+              },
+              aggregateType: 'verification_request',
+              aggregateId: input.request.id,
+            });
+          }
+        }),
+      ),
+
+    settleAlreadyVerified: async (input) => {
+      const settled = await db
+        .update(verificationRequests)
+        .set({
+          status: 'APPROVED',
+          provider: input.provider,
+          providerReference: input.providerReference,
+          decidedAt: sql`now()`,
+        })
+        .where(
+          and(
+            eq(verificationRequests.id, input.request.id),
+            inArray(verificationRequests.status, [...OPEN_STATUSES]),
+          ),
+        )
+        .returning({ id: verificationRequests.id });
+      return settled.length > 0;
+    },
 
     findIdentifierOwner: async (type, hash) => {
       const table = outcomeTable(type);
@@ -324,27 +422,39 @@ export function bindStore(db: Db): TrustStore {
               ? 'BVN'
               : undefined;
 
+      const verifiedTypes: IdentifierType[] = [];
+      if (nin?.verifiedAt) verifiedTypes.push('NIN');
+      if (bvn?.verifiedAt) verifiedTypes.push('BVN');
+
       return {
         identifierVerified: latest !== undefined,
+        verifiedTypes,
         ...(latest ? { latestVerifiedIdentifier: latest } : {}),
         livenessPassed: liveness !== undefined,
         ...(attained?.occurredAt ? { levelAttainedAt: attained.occurredAt } : {}),
       };
     },
 
+    /**
+     * Reads the level under a row lock, asks `decideLevelChange`, and only then writes.
+     *
+     * The order matters and an earlier version had it wrong: it called `applyVerificationLevel`
+     * first and checked "already at or above" afterwards, so a redelivered level-2 grant reaching a
+     * BUSINESS_VERIFIED user committed the DOWNGRADE and appended no row to explain it. Deciding
+     * before writing makes that unrepresentable rather than merely unlikely.
+     */
     grantLevel: (input) =>
       db.transaction(async (tx): Promise<LevelOutcome> => {
-        const applied = await applyVerificationLevel(tx, {
-          userId: input.userId,
-          to: levelName(input.toLevel) as never,
-          reason: input.reason,
-        });
-        const from = levelNumber(applied.from);
-        // A grant to a level the user already holds writes nothing. A redelivered job must not
-        // append a second row saying they moved from 2 to 2.
-        if (!applied.changed || from >= input.toLevel) {
+        const from = await lockLevel(tx, input.userId);
+        if (!decideLevelChange({ from, to: input.toLevel, direction: 'GRANT' }).apply) {
           return { changed: false, from, to: from };
         }
+
+        await applyVerificationLevel(tx, {
+          userId: input.userId,
+          to: levelName(input.toLevel),
+          reason: input.reason,
+        });
 
         await tx.insert(verificationLevelChanges).values({
           userId: input.userId,
@@ -373,19 +483,14 @@ export function bindStore(db: Db): TrustStore {
 
     revokeLevel: (input) =>
       db.transaction(async (tx): Promise<LevelOutcome> => {
-        const [row] = await tx
-          .select({ verificationLevel: users.verificationLevel })
-          .from(users)
-          .where(eq(users.id, input.userId))
-          .for('update')
-          .limit(1);
-        if (!row) throw new Error(`trust: no user ${input.userId} to revoke a level from`);
-        const from = levelNumber(row.verificationLevel);
-        if (from <= input.toLevel) return { changed: false, from, to: from };
+        const from = await lockLevel(tx, input.userId);
+        if (!decideLevelChange({ from, to: input.toLevel, direction: 'REVOKE' }).apply) {
+          return { changed: false, from, to: from };
+        }
 
         await applyVerificationLevel(tx, {
           userId: input.userId,
-          to: levelName(input.toLevel) as never,
+          to: levelName(input.toLevel),
           reason: input.reason,
         });
 

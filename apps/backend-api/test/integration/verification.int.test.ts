@@ -228,6 +228,90 @@ describe.runIf(infraEnabled)('trust against a real database', () => {
     expect(Number(events[0]?.n)).toBe(1);
   });
 
+  it('treats the user re-submitting their OWN verified NIN as a no-op success', async () => {
+    const userId = await verifiedContactUser();
+    await runNin(userId);
+    await runLiveness(userId);
+    expect(await levelOf(userId)).toBe('IDENTITY_VERIFIED');
+
+    // The submit-time guard answers first; no provider call is spent and no review case is opened.
+    await expect(
+      submitIdentifierCheck(serviceDeps(), {
+        userId,
+        type: 'NIN',
+        identifier: RAW_NIN,
+        firstName: FIRST_NAME,
+        lastName: LAST_NAME,
+      }),
+    ).rejects.toMatchObject({ status: 409 });
+
+    const { rows } = await database
+      .app()
+      .query<{ n: string }>(
+        `SELECT count(*) AS n FROM platform.outbox WHERE event_type = 'trust.verification.duplicate_identity_detected'`,
+      );
+    expect(Number(rows[0]?.n)).toBe(0);
+    expect(await levelOf(userId)).toBe('IDENTITY_VERIFIED');
+  });
+
+  it('never downgrades a higher level through a repeated level-2 grant', async () => {
+    const userId = await verifiedContactUser();
+    await runNin(userId);
+    await runLiveness(userId);
+    // A level T-051 will grant. A redelivered level-2 job must leave it alone and append nothing.
+    await database
+      .owner()
+      .query(`UPDATE identity.users SET verification_level = 'BUSINESS_VERIFIED' WHERE id = $1`, [userId]);
+
+    const outcome = await bindStore(database.db()).grantLevel({
+      userId,
+      toLevel: 2,
+      reason: 'a redelivered job',
+      actorType: 'PROVIDER_AUTO',
+      provider: 'FAKE',
+    });
+
+    expect(outcome.changed).toBe(false);
+    expect(await levelOf(userId)).toBe('BUSINESS_VERIFIED');
+    const { rows } = await database
+      .app()
+      .query<{ n: string }>(`SELECT count(*) AS n FROM trust.verification_level_changes WHERE user_id = $1`, [
+        userId,
+      ]);
+    expect(Number(rows[0]?.n)).toBe(1);
+  });
+
+  it('does not let a job resurrect a request the sweep already expired', async () => {
+    const userId = await verifiedContactUser();
+    const submitted = await submitIdentifierCheck(serviceDeps(), {
+      userId,
+      type: 'NIN',
+      identifier: RAW_NIN,
+      firstName: FIRST_NAME,
+      lastName: LAST_NAME,
+    });
+    // The sweep closes it while the job is still queued.
+    await database
+      .owner()
+      .query(`UPDATE trust.verification_requests SET status = 'EXPIRED' WHERE id = $1`, [
+        submitted.requestId,
+      ]);
+
+    await runIdentityCheck(jobDeps(), { requestId: submitted.requestId, sealed: submitted.job.sealed });
+
+    const { rows } = await database
+      .app()
+      .query<{ status: string }>(`SELECT status FROM trust.verification_requests WHERE id = $1`, [
+        submitted.requestId,
+      ]);
+    expect(rows[0]?.status).toBe('EXPIRED');
+    expect(await levelOf(userId)).toBe('CONTACT_VERIFIED');
+    const { rows: outcomes } = await database
+      .app()
+      .query<{ n: string }>(`SELECT count(*) AS n FROM trust.nin_verifications`);
+    expect(Number(outcomes[0]?.n)).toBe(0);
+  });
+
   it('refuses a second in-flight request of the same type for one user', async () => {
     const userId = await verifiedContactUser();
     await submitIdentifierCheck(serviceDeps(), {

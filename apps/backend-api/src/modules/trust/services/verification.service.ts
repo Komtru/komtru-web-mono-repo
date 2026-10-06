@@ -76,6 +76,23 @@ export async function submitIdentifierCheck(
     );
   }
 
+  /**
+   * Already verified this type? Refuse here, before a provider call is spent.
+   *
+   * The job can cope with it — the §6.3 index would fire and the self-duplicate branch settles it —
+   * but that costs a billed call to learn something this row already knew, and the honest answer to
+   * "verify my NIN again" is that it is done.
+   */
+  const facts = await deps.store.identityFacts(input.userId);
+  if (facts.verifiedTypes.includes(input.type)) {
+    throw new ApiError(
+      409,
+      'CONFLICT',
+      `Your ${input.type} is already verified`,
+      'There is nothing more to do for this check.',
+    );
+  }
+
   const attemptCount = (await deps.store.countAttempts(input.userId, input.type)) + 1;
 
   const request = await createRequest(deps, {
@@ -164,16 +181,40 @@ async function createRequest(deps: VerificationDeps, input: Parameters<TrustStor
   try {
     return await deps.store.createRequest(input);
   } catch (error) {
-    if (isUniqueViolation(error, 'verification_requests_one_in_flight')) {
-      throw new ApiError(
-        409,
-        'CONFLICT',
-        'That check is already running',
-        'We are still working on your last submission. You will get a result shortly.',
-      );
-    }
+    if (isUniqueViolation(error, 'verification_requests_one_in_flight'))
+      throw await inFlightConflict(deps, input);
     throw error;
   }
+}
+
+/**
+ * Two different 409s, because they are two different situations for the person reading them.
+ *
+ * A request waiting on a provider really will produce a result shortly. One in MANUAL_REVIEW will
+ * not: it is waiting on a human, the expiry sweep deliberately skips it, and until T-052 ships the
+ * queue there is nobody to clear it. Telling that user "you will get a result shortly" is a
+ * falsehood they will act on by retrying, which is the worst possible advice.
+ */
+async function inFlightConflict(
+  deps: VerificationDeps,
+  input: Parameters<TrustStore['createRequest']>[0],
+): Promise<ApiError> {
+  const open = await deps.store.listOpenRequests(input.userId);
+  const blocking = open.find((request) => request.verificationType === input.verificationType);
+  if (blocking?.status === 'MANUAL_REVIEW') {
+    return new ApiError(
+      409,
+      'CONFLICT',
+      'That check is with our team',
+      'Someone is reviewing your last submission by hand. Contact support if you have been waiting a while.',
+    );
+  }
+  return new ApiError(
+    409,
+    'CONFLICT',
+    'That check is already running',
+    'We are still working on your last submission. You will get a result shortly.',
+  );
 }
 
 export interface VerificationStatus {

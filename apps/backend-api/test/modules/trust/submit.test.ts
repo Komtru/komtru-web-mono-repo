@@ -4,7 +4,14 @@
 import { randomUUID } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 import { submitIdentifierCheck } from '../../../src/modules/trust/services/verification.service.js';
-import { silentLogger, stubStore, testEncryption, testHasher, uniqueViolation } from './support.js';
+import {
+  requestRow,
+  silentLogger,
+  stubStore,
+  testEncryption,
+  testHasher,
+  uniqueViolation,
+} from './support.js';
 
 const encryption = testEncryption();
 
@@ -76,6 +83,40 @@ describe('submitIdentifierCheck', () => {
   it('rethrows a violation it does not recognise rather than calling every error a conflict', async () => {
     const store = stubStore({ createRequestThrows: uniqueViolation('some_other_index') });
     await expect(submitIdentifierCheck(deps(store), input())).rejects.not.toMatchObject({ status: 409 });
+  });
+
+  it('refuses a second submission of a type the user has already verified', async () => {
+    // Cheaper and clearer than letting the job discover it: no provider call is spent, and the user
+    // is told the truth rather than being parked in a review queue that does not exist yet.
+    const store = stubStore({ facts: { identifierVerified: true, verifiedTypes: ['NIN'] } });
+    await expect(submitIdentifierCheck(deps(store), input())).rejects.toMatchObject({
+      status: 409,
+      code: 'CONFLICT',
+    });
+    expect(store.requests).toHaveLength(0);
+  });
+
+  it('still accepts a BVN from a user who has already verified a NIN', async () => {
+    const store = stubStore({ facts: { identifierVerified: true, verifiedTypes: ['NIN'] } });
+    await expect(submitIdentifierCheck(deps(store), input({ type: 'BVN' }))).resolves.toMatchObject({
+      status: 'SUBMITTED',
+    });
+  });
+
+  it('tells a user waiting on a human something different from a user waiting on a provider', async () => {
+    const running = stubStore({
+      createRequestThrows: uniqueViolation('verification_requests_one_in_flight'),
+    });
+    const underReview = stubStore({
+      createRequestThrows: uniqueViolation('verification_requests_one_in_flight'),
+      openRequests: [requestRow({ verificationType: 'NIN', status: 'MANUAL_REVIEW' })],
+    });
+
+    const first = await submitIdentifierCheck(deps(running), input()).catch((e: unknown) => e);
+    const second = await submitIdentifierCheck(deps(underReview), input()).catch((e: unknown) => e);
+
+    expect((first as { detail: string }).detail).not.toBe((second as { detail: string }).detail);
+    expect((second as { detail: string }).detail).toMatch(/review/i);
   });
 
   it('writes no raw identifier into the request row', async () => {

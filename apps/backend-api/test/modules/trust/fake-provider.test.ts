@@ -1,6 +1,7 @@
 // The fake is the only thing attesting identities until credentials exist (owner's decision Q7), so
 // what it does is a product decision, not a test fixture. These tests pin the two properties that
 // make it useful: it is reproducible, and it does not always say yes.
+import { createHash } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 import { createFakeKycClient } from '../../../src/modules/trust/infrastructure/providers/fake-kyc.client.js';
 import {
@@ -41,23 +42,33 @@ describe('createFakeKycClient', () => {
     expect(createFakeKycClient().provider).toBe('FAKE');
   });
 
-  it('is deterministic: the same number twice is the same answer and the same reference', async () => {
-    const fake = createFakeKycClient();
-    expect(await fake.verifyNin(claim('12345678904'))).toEqual(await fake.verifyNin(claim('12345678904')));
-  });
-
-  it('returns a different reference for a different number', async () => {
+  it('is deterministic in its VERDICT and score: the same number twice gets the same answer', async () => {
     const fake = createFakeKycClient();
     const a = await fake.verifyNin(claim('12345678904'));
-    const b = await fake.verifyNin(claim('12345678914'));
-    expect(a.providerReference).not.toBe(b.providerReference);
+    const b = await fake.verifyNin(claim('12345678904'));
+    expect(a.verdict).toBe(b.verdict);
+    expect(a.nameMatchScore).toBe(b.nameMatchScore);
   });
 
-  it('separates NIN and BVN references for the same digits, as two real calls would', async () => {
+  it('does not derive the reference from the number, which would make the column brute-forceable', async () => {
+    // The reference is persisted in `nin_verifications.provider_reference`, which D1 lists among the
+    // three things it is SAFE to keep. A truncated unkeyed sha256 of an eleven-digit number is not
+    // safe: the whole space is 10^11, so that column would be a lookup table for the very value the
+    // keyed hash beside it exists to protect. A real provider's reference is random per call; so is
+    // this one.
     const fake = createFakeKycClient();
-    const nin = await fake.verifyNin(claim('12345678904'));
-    const bvn = await fake.verifyBvn(claim('12345678904'));
-    expect(nin.providerReference).not.toBe(bvn.providerReference);
+    const first = await fake.verifyNin(claim('12345678904'));
+    const second = await fake.verifyNin(claim('12345678904'));
+    expect(first.providerReference).not.toBe(second.providerReference);
+
+    const digest = createHash('sha256').update('nin:12345678904').digest('hex');
+    expect(first.providerReference).not.toContain(digest.slice(0, 16));
+    expect(first.providerReference).not.toContain('12345678904');
+  });
+
+  it('still marks the reference as the fake’s, so a row is never mistaken for a real vendor call', async () => {
+    const result = await createFakeKycClient().verifyNin(claim('12345678904'));
+    expect(result.providerReference).toMatch(/^fake_nin_/);
   });
 
   it('throws for the scripted provider error, so the job retry path is exercised', async () => {

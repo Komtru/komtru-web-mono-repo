@@ -189,6 +189,14 @@ const VARIABLES = {
   DOJAH_BASE_URL: { schema: z.url(), required: false },
 } satisfies Record<string, { schema: z.ZodType; required: boolean }>;
 
+/**
+ * Every variable this process reads, for the `.env.example` parity test.
+ *
+ * Exported rather than derived in the test, so adding a variable to `VARIABLES` and forgetting to
+ * document it fails a test rather than a production boot.
+ */
+export const CONFIG_VARIABLE_NAMES: string[] = Object.keys(VARIABLES);
+
 type VariableName = keyof typeof VARIABLES;
 type Parsed = { [K in VariableName]?: z.output<(typeof VARIABLES)[K]['schema']> };
 

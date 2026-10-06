@@ -40,7 +40,13 @@ export async function runLivenessCheck(deps: TrustJobDeps, data: LivenessCheckJo
   const selfieStorageRef = request.selfieStorageRef;
   if (!selfieStorageRef) throw new Error(`trust: liveness request ${request.id} has no selfie reference`);
 
-  await deps.store.markProviderPending(request.id, deps.adapter.provider);
+  if (!(await deps.store.markProviderPending(request.id, deps.adapter.provider))) {
+    deps.logger.info(
+      { requestId: request.id },
+      'trust: the request was decided before the provider was called',
+    );
+    return;
+  }
 
   const timed = await timeProviderCall(async () =>
     deps.adapter.checkLiveness({ selfieStorageRef, matchedAgainst }),
@@ -52,7 +58,7 @@ export async function runLivenessCheck(deps: TrustJobDeps, data: LivenessCheckJo
   );
 
   const decision = decideLivenessOutcome(result.verdict, result.livenessPassed);
-  await deps.store.applyLivenessOutcome({
+  const applied = await deps.store.applyLivenessOutcome({
     request,
     matchedAgainst,
     matchScore: result.matchScore,
@@ -62,6 +68,16 @@ export async function runLivenessCheck(deps: TrustJobDeps, data: LivenessCheckJo
     requestStatus: decision.requestStatus,
     ...(result.failureReason === undefined ? {} : { rejectionReason: result.failureReason }),
   });
+
+  // Decided elsewhere while the provider answered: grant nothing, and say nothing (see the
+  // identity-check job for the full reasoning).
+  if (!applied) {
+    deps.logger.warn(
+      { requestId: request.id },
+      'trust: the request was decided elsewhere while the provider was answering; outcome discarded',
+    );
+    return;
+  }
 
   if (decision.markVerified) await evaluateLevel(deps, request);
   pushOutcome(deps, request, decision.requestStatus, result.verdict);

@@ -29,7 +29,7 @@ const identityCheck = (operation: 'nin' | 'bvn', claim: IdentityClaim): Identity
   const outcome = scriptFor(claim.identifier);
   if (outcome === 'ERROR') throw new FakeProviderError(operation);
 
-  const reference = referenceFor(operation, claim.identifier);
+  const reference = referenceFor(operation);
   const result: IdentityCheckResult = {
     verdict: outcome,
     providerReference: reference,
@@ -64,7 +64,7 @@ export function createFakeKycClient(): KycProviderAdapter {
         const outcome = livenessScriptFor(input.selfieStorageRef);
         const result: LivenessCheckResult = {
           verdict: outcome,
-          providerReference: referenceFor('liveness', input.selfieStorageRef),
+          providerReference: referenceFor('liveness'),
           matchScore: scoreFor(outcome, `liveness:${input.selfieStorageRef}`),
           livenessPassed: outcome === 'PASSED',
         };

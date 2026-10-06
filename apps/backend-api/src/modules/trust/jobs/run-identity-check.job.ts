@@ -41,7 +41,15 @@ export async function runIdentityCheck(deps: TrustJobDeps, data: IdentityCheckJo
 
   const claim = claimSchema.parse(JSON.parse(deps.encryption.decrypt(data.sealed)));
 
-  await deps.store.markProviderPending(request.id, deps.adapter.provider);
+  // False means the sweep expired it, or a human took it, between `claimRequest` and here. Calling a
+  // provider for a request nobody is waiting on is money spent on an answer that cannot be recorded.
+  if (!(await deps.store.markProviderPending(request.id, deps.adapter.provider))) {
+    deps.logger.info(
+      { requestId: request.id },
+      'trust: the request was decided before the provider was called',
+    );
+    return;
+  }
 
   const timed = await timeProviderCall(async () =>
     type === 'NIN' ? deps.adapter.verifyNin(claim) : deps.adapter.verifyBvn(claim),
@@ -76,8 +84,9 @@ async function applyOutcome(
     ...(result.nameMatchScore === undefined ? {} : { nameMatchScore: result.nameMatchScore }),
   };
 
+  let applied: boolean;
   try {
-    await deps.store.applyIdentityOutcome({
+    applied = await deps.store.applyIdentityOutcome({
       ...shared,
       ...(result.dobMatch === undefined ? {} : { dobMatch: result.dobMatch }),
       ...(result.phoneMatch === undefined ? {} : { phoneMatch: result.phoneMatch }),
@@ -102,12 +111,49 @@ async function applyOutcome(
      * a 500 — the bug src/db/errors.ts exists to stop three modules repeating.
      */
     const firstUserId = (await deps.store.findIdentifierOwner(type, hash)) ?? null;
-    await deps.store.applyDuplicateIdentity({ ...shared, firstUserId });
+
+    /**
+     * The user's own number, submitted again.
+     *
+     * §7's flow is explicit that the duplicate branch is "already verified on a DIFFERENT active
+     * user". Without this check a double tap on the submit button produces a fraud signal to Risk
+     * about an innocent person, a `duplicate_identity_flags` row that violates its own
+     * `first_user_id <> conflicting_user_id` constraint, and — worst — a MANUAL_REVIEW request that
+     * holds the user's one in-flight slot, that the expiry sweep deliberately skips, and that
+     * nothing can decide until T-052 exists. There is no way out of that state without hand-written
+     * SQL, so it must not be reachable by tapping twice.
+     */
+    if (firstUserId === request.userId) {
+      await deps.store.settleAlreadyVerified({
+        request,
+        provider: deps.adapter.provider,
+        providerReference: result.providerReference,
+      });
+      // Re-evaluated rather than assumed: the first verification may have happened before liveness.
+      await evaluateLevel(deps, request);
+      pushOutcome(deps, request, 'APPROVED', result.verdict);
+      return;
+    }
+
+    if (!(await deps.store.applyDuplicateIdentity({ ...shared, firstUserId }))) return;
     deps.logger.warn(
       { requestId: request.id, type, firstUserId },
       'trust: an identifier already verified on another account; sent for review',
     );
     pushOutcome(deps, request, 'MANUAL_REVIEW', result.verdict);
+    return;
+  }
+
+  /**
+   * The store refused the write because the request left the open set while the provider was being
+   * called. Granting a level, or telling the user they passed, on a request the sweep already closed
+   * is the one outcome `expireStale` exists to prevent — so this path does neither.
+   */
+  if (!applied) {
+    deps.logger.warn(
+      { requestId: request.id },
+      'trust: the request was decided elsewhere while the provider was answering; outcome discarded',
+    );
     return;
   }
 

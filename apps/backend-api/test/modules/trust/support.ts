@@ -60,6 +60,7 @@ export interface RecordedStore extends TrustStore {
   readonly providerCalls: ProviderCallInput[];
   readonly identityOutcomes: IdentityOutcomeInput[];
   readonly duplicates: DuplicateIdentityInput[];
+  readonly settledAlreadyVerified: { requestId: string }[];
   readonly livenessOutcomes: LivenessOutcomeInput[];
   readonly grants: GrantInput[];
   readonly revokes: RevokeInput[];
@@ -77,6 +78,8 @@ export interface StubStoreOptions {
   createRequestThrows?: Error;
   applyIdentityOutcomeThrows?: Error;
   grantResult?: LevelOutcome;
+  /** False simulates the request having been decided by someone else mid-call. */
+  outcomeApplied?: boolean;
 }
 
 /** Records what it was asked to write, so a test asserts over the writes rather than over SQL. */
@@ -85,6 +88,7 @@ export function stubStore(options: StubStoreOptions = {}): RecordedStore {
   const providerCalls: ProviderCallInput[] = [];
   const identityOutcomes: IdentityOutcomeInput[] = [];
   const duplicates: DuplicateIdentityInput[] = [];
+  const settledAlreadyVerified: { requestId: string }[] = [];
   const livenessOutcomes: LivenessOutcomeInput[] = [];
   const grants: GrantInput[] = [];
   const revokes: RevokeInput[] = [];
@@ -95,6 +99,7 @@ export function stubStore(options: StubStoreOptions = {}): RecordedStore {
     providerCalls,
     identityOutcomes,
     duplicates,
+    settledAlreadyVerified,
     livenessOutcomes,
     grants,
     revokes,
@@ -123,7 +128,7 @@ export function stubStore(options: StubStoreOptions = {}): RecordedStore {
 
     findRequest: () => Promise.resolve(options.request),
     listOpenRequests: () => Promise.resolve(options.openRequests ?? []),
-    markProviderPending: () => Promise.resolve(),
+    markProviderPending: () => Promise.resolve(options.outcomeApplied ?? true),
     recordProviderCall: (input) => {
       providerCalls.push(input);
       return Promise.resolve();
@@ -136,23 +141,29 @@ export function stubStore(options: StubStoreOptions = {}): RecordedStore {
         return Promise.reject(options.applyIdentityOutcomeThrows);
       }
       identityOutcomes.push(input);
-      return Promise.resolve();
+      return Promise.resolve(options.outcomeApplied ?? true);
     },
 
     applyLivenessOutcome: (input) => {
       livenessOutcomes.push(input);
-      return Promise.resolve();
+      return Promise.resolve(options.outcomeApplied ?? true);
     },
 
     applyDuplicateIdentity: (input) => {
       duplicates.push(input);
-      return Promise.resolve();
+      return Promise.resolve(options.outcomeApplied ?? true);
+    },
+
+    settleAlreadyVerified: (input) => {
+      settledAlreadyVerified.push({ requestId: input.request.id });
+      return Promise.resolve(true);
     },
     findIdentifierOwner: () => Promise.resolve(options.identifierOwner),
 
     identityFacts: () =>
       Promise.resolve({
         identifierVerified: false,
+        verifiedTypes: [],
         livenessPassed: false,
         ...options.facts,
       }),

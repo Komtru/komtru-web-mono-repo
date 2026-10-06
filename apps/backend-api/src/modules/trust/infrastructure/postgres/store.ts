@@ -107,6 +107,8 @@ export interface LevelOutcome {
 
 export interface IdentityFactsRow {
   identifierVerified: boolean;
+  /** Which of NIN/BVN already carry a `verified_at` for this user. Empty when none do. */
+  verifiedTypes: IdentifierType[];
   /** Which document a liveness check should be matched against: the most recently verified one. */
   latestVerifiedIdentifier?: IdentifierType;
   livenessPassed: boolean;
@@ -126,7 +128,11 @@ export interface TrustStore {
   createRequest(input: CreateRequestInput): Promise<VerificationRequest>;
   findRequest(requestId: string): Promise<VerificationRequest | undefined>;
   listOpenRequests(userId: string): Promise<VerificationRequest[]>;
-  markProviderPending(requestId: string, provider: KycProvider): Promise<void>;
+  /**
+   * Moves an OPEN request to PROVIDER_PENDING. False means it was no longer open — the sweep
+   * expired it, or a human decided it — and the caller must not call a provider.
+   */
+  markProviderPending(requestId: string, provider: KycProvider): Promise<boolean>;
   recordProviderCall(input: ProviderCallInput): Promise<void>;
   /**
    * Insert the outcome row and move the request, in one transaction.
@@ -134,9 +140,13 @@ export interface TrustStore {
    * It does NOT catch the §6.3 uniqueness violation: the caller does, because what to do about a
    * duplicate identifier is §7's rule and not a persistence detail — and because a fake store that
    * throws it is how that rule gets tested without a database.
+   *
+   * Returns false when the request had already left the open set. The job reads the status once and
+   * then spends seconds inside a provider call, so a blind `UPDATE … WHERE id = $1` would overwrite
+   * an EXPIRED request with APPROVED and go on to grant a level the sweep had already denied.
    */
-  applyIdentityOutcome(input: IdentityOutcomeInput): Promise<void>;
-  applyLivenessOutcome(input: LivenessOutcomeInput): Promise<void>;
+  applyIdentityOutcome(input: IdentityOutcomeInput): Promise<boolean>;
+  applyLivenessOutcome(input: LivenessOutcomeInput): Promise<boolean>;
   /**
    * §7's branch: the identifier passed, but it is already verified on another account.
    *
@@ -145,7 +155,19 @@ export interface TrustStore {
    * `verification.duplicate_identity_detected`. Neither approval nor rejection — a human decides,
    * and T-052 builds the queue they decide in.
    */
-  applyDuplicateIdentity(input: DuplicateIdentityInput): Promise<void>;
+  applyDuplicateIdentity(input: DuplicateIdentityInput): Promise<boolean>;
+  /**
+   * §7's OTHER branch: the identifier is already verified — on the submitter's OWN account.
+   *
+   * Not a duplicate identity and not fraud, just a user submitting the same number twice. The first
+   * outcome row stays the record; this only settles the second request as approved. Returns false
+   * when the request had already moved on.
+   */
+  settleAlreadyVerified(input: {
+    request: VerificationRequest;
+    provider: KycProvider;
+    providerReference: string;
+  }): Promise<boolean>;
   /** Who verified this identifier first, for the duplicate event. Undefined if the row is gone. */
   findIdentifierOwner(type: IdentifierType, hash: Buffer): Promise<string | undefined>;
   identityFacts(userId: string): Promise<IdentityFactsRow>;

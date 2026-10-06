@@ -17,7 +17,7 @@
 // Deliberately not a `*.client.ts`: this is pure, has no credential and reaches nothing. Keeping the
 // script out of the client is the split T-040 made between `cloudinary.signing.ts` and
 // `cloudinary.client.ts`, and it is what lets these decisions be unit-tested at all.
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 
 /** `ERROR` is not a verdict a provider returns — it is the adapter throwing, which jobs retry. */
 export type ScriptedOutcome = 'PASSED' | 'FAILED' | 'LOW_CONFIDENCE' | 'PENDING' | 'ERROR';
@@ -68,6 +68,19 @@ export const scoreFor = (outcome: ScriptedOutcome, seed: string): number => {
   return spread(seed, 0, 40);
 };
 
-/** A provider-shaped reference: stable per call, recognisably not a real vendor's id. */
-export const referenceFor = (operation: string, seed: string): string =>
-  `fake_${operation}_${createHash('sha256').update(`${operation}:${seed}`).digest('hex').slice(0, 16)}`;
+/**
+ * A provider-shaped reference: random per call, recognisably not a real vendor's id.
+ *
+ * It is NOT derived from the identifier, and that is a correction rather than a preference. The
+ * reference is persisted in `nin_verifications.provider_reference`, which D1 names among the three
+ * things it is safe to keep — but a truncated unkeyed SHA-256 of an eleven-digit number is not safe.
+ * The whole NIN space is 10^11, so that column would have been a rainbow table for exactly the value
+ * the KEYED hash in the column beside it exists to protect, and both D1 scans would have missed it
+ * because they look for the literal digits.
+ *
+ * Randomness also happens to be the faithful behaviour: a real provider's call id has nothing to do
+ * with what was asked. The fake's determinism belongs to the VERDICT, which is what a developer
+ * reproduces from; the reference is opaque in every implementation.
+ */
+export const referenceFor = (operation: string): string =>
+  `fake_${operation}_${randomUUID().replaceAll('-', '')}`;
