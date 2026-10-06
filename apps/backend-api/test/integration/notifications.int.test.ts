@@ -15,7 +15,13 @@ import { defineBinding } from '../../src/modules/notify/domain/binding.js';
 import { templateSchema } from '../../src/modules/notify/domain/template.js';
 import { startApi } from '../../src/server.js';
 import { startWorker } from '../../src/worker-process.js';
-import { infraEnabled, pooledUrl, testQueuePrefix, testRedisEnv, testRedisUrl } from '../support/db-urls.js';
+import {
+  infraEnabled,
+  pooledUrl,
+  testQueuePrefix,
+  testProcessEnv,
+  testRedisUrl,
+} from '../support/db-urls.js';
 import { useTestDatabase, workerDatabase } from '../support/db.js';
 import { eventually } from '../support/eventually.js';
 import { startStubServer, type StubServer } from '../support/stub-server.js';
@@ -64,7 +70,7 @@ describe.runIf(infraEnabled)('notifications end to end', () => {
     LOG_LEVEL: 'silent',
     PORT: '0',
     REDIS_URL: testRedisUrl(),
-    ...testRedisEnv(),
+    ...testProcessEnv(),
     POSTGRES_URL: pooledUrl(workerDatabase()),
     // Live SMS, against the stub: the dry-run default would hide the very call this proves.
     NOTIFY_SMS_DRY_RUN: 'false',
@@ -130,7 +136,7 @@ describe.runIf(infraEnabled)('notifications end to end', () => {
       LOG_LEVEL: 'silent',
       POSTGRES_URL: pooledUrl(workerDatabase()),
       REDIS_URL: testRedisUrl(),
-      ...testRedisEnv(),
+      ...testProcessEnv(),
     });
     const factory = createQueueFactory({
       redisUrl: appConfig.redis.url,

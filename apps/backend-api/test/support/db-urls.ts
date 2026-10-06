@@ -65,6 +65,20 @@ export const releaseRunKeyspace = async (): Promise<number> => {
   return removed;
 };
 
+/**
+ * Spread into any env a test hands to `startApi` or `startWorker`.
+ *
+ * The pool cap is the point: the app defaults to 10 connections, a single integration test starts
+ * an API *and* a worker, and Vitest runs 200 files at once against a PgBouncer allowing 200 client
+ * connections in total. The suite exhausts them long before any test is at fault, and the symptom
+ * is `Connection terminated due to connection timeout` in whichever file lost the race. Three is
+ * ample for a test and leaves the ceiling far away.
+ */
+export const testProcessEnv = (): Record<string, string> => ({
+  ...testRedisEnv(),
+  POSTGRES_POOL_MAX: '3',
+});
+
 /** Spread into any env a test hands to `startApi`, `startWorker` or `loadConfig`. */
 export const testRedisEnv = (): { REDIS_KEY_PREFIX: string; REDIS_QUEUE_PREFIX: string } => ({
   REDIS_KEY_PREFIX: testKeyPrefix(),

@@ -6,7 +6,7 @@ import { io as connect, type Socket } from 'socket.io-client';
 import { createModules } from '../../../src/modules/index.js';
 import { socketModuleOf, type SocketGateway } from '../../../src/modules/socket/index.js';
 import { startApi, type RunningApi } from '../../../src/server.js';
-import { pooledUrl, testRedisEnv, testRedisUrl } from '../../support/db-urls.js';
+import { pooledUrl, testProcessEnv, testRedisUrl } from '../../support/db-urls.js';
 import { workerDatabase } from '../../support/db.js';
 import { identityProcessEnv } from '../../support/identity-env.js';
 
@@ -25,7 +25,7 @@ export const sharedEnv = (overrides: Record<string, string> = {}): Record<string
   LOG_LEVEL: 'silent',
   PORT: '0',
   REDIS_URL: testRedisUrl(),
-  ...testRedisEnv(),
+  ...testProcessEnv(),
   POSTGRES_URL: pooledUrl(workerDatabase()),
   ...identityProcessEnv(),
   ...overrides,

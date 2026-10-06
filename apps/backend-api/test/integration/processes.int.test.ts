@@ -9,7 +9,7 @@ import { defineRoute } from '../../src/platform/http/route.js';
 import { defineModule } from '../../src/platform/module.js';
 import { startApi } from '../../src/server.js';
 import { startWorker } from '../../src/worker-process.js';
-import { directUrl, infraEnabled, pooledUrl, testRedisEnv, testRedisUrl } from '../support/db-urls.js';
+import { directUrl, infraEnabled, pooledUrl, testProcessEnv, testRedisUrl } from '../support/db-urls.js';
 import { useTestDatabase, workerDatabase } from '../support/db.js';
 import { identityProcessEnv } from '../support/identity-env.js';
 
@@ -20,7 +20,7 @@ const base = {
   LOG_LEVEL: 'silent',
   PORT: '0',
   REDIS_URL: testRedisUrl(),
-  ...testRedisEnv(),
+  ...testProcessEnv(),
   ...identityProcessEnv(),
 };
 
