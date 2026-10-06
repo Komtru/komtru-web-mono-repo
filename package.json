@@ -25,7 +25,8 @@
     "tickets:index": "python3 tools/tickets/tickets_index.py tools/tickets/.tickets.json && python3 tools/tickets/regen_tickets_md.py tools/tickets/.tickets.json && prettier --write docs/TICKETS.md",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "prepare": "husky"
+    "prepare": "husky",
+    "progress": "python3 tools/tickets/progress.py"
   },
   "lint-staged": {
     "*": "secretlint --secretlintignore .secretlintignore",
