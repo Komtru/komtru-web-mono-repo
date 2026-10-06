@@ -129,7 +129,10 @@ describe('findForbiddenPaystackPrimitives', () => {
     });
 
     await expect(findForbiddenPaystackPrimitives(root)).resolves.toEqual([]);
-  });
+    // An explicit budget, because this is the one case whose cost is the repository's size rather
+    // than its own: ~400ms alone, but it runs beside 200 other workers and every agent's suite, and
+    // Vitest's 5s default turned that contention into a failure that reads as a real finding.
+  }, 60_000);
 });
 
 describe('the repository', () => {

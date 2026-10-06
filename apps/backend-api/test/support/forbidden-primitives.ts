@@ -120,6 +120,9 @@ const SKIPPED_DIRECTORIES = new Set([
   '.next',
   '.turbo',
   '.claude',
+  // Gitignored but present the moment anyone runs `build-storybook`, and thousands of generated
+  // files the guard has no opinion about.
+  'storybook-static',
   '.vercel',
 ]);
 
