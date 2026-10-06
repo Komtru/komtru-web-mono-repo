@@ -36,6 +36,9 @@ export const testConfig = (overrides: Record<string, string> = {}): AppConfig =>
     // T-036: TOTP seeds and the recovery-code blob are `*_enc` columns (§S9), so the module
     // now refuses to build without a key, the way it already refuses without the pepper.
     ENCRYPTION_KEY: randomBytes(32).toString('hex'),
+    // `createRelyingParty` refuses an empty origin list by design — it is not a wildcard — and
+    // `createIdentityAuth` builds it eagerly, so every suite that builds the module needs one.
+    WEBAUTHN_ORIGINS: 'https://app.komtru.test',
     ...overrides,
   });
 

@@ -2,6 +2,8 @@
 // KOMTRU_INFRA_TESTS=1.
 import { describe, expect, it } from 'vitest';
 import { eq } from 'drizzle-orm';
+import { issueMfaToken } from '../../../../src/modules/identity/services/mfa-login.service.js';
+import { issueOtp } from '../../../../src/modules/identity/services/otp.service.js';
 import {
   activateSmsFactor,
   activateTotp,
@@ -288,3 +290,105 @@ async function liveCodeFor(t: ReturnType<typeof useTestDatabase>, challengeId: s
   if (!code) throw new Error(`no delivered code for challenge ${challengeId}`);
   return code;
 }
+
+describe.runIf(infraEnabled)('the enrolment ceremony and the sign-in challenge are separate families', () => {
+  const t = useTestDatabase();
+  const deps: MfaDeps = mfaDeps();
+
+  const seedWithPhone = async () => {
+    const { userId } = await seedUser(t.app());
+    await t.db().transaction(async (tx) => {
+      const phone = await attachPhone(tx, { userId, phone: PHONE, makePrimary: true });
+      await markPhoneVerified(tx, { userId, phoneId: phone.phoneId });
+    });
+    return userId;
+  };
+
+  /**
+   * From review. Both families are `otp_challenges` rows of purpose MFA_CHALLENGE scoped to a user,
+   * and under one `destination_hash` they superseded each other: a sign-in on a second device
+   * consumed a half-finished enrolment, so the QR code the user had just scanned was dead and the
+   * activation answered "start the setup again".
+   */
+  it('a sign-in challenge does not kill a half-finished enrolment', async () => {
+    const userId = await seedWithPhone();
+    const enrolled = await enrolTotp(t.db(), deps, { userId, accountName: null });
+    if (enrolled.outcome !== 'ENROLLED') throw new Error('expected ENROLLED');
+
+    // The login branch's own challenge, written through the same table.
+    await t.db().transaction((tx) => issueMfaToken(tx, deps, { userId, factors: [] }));
+
+    expect(
+      (
+        await activateTotp(t.db(), deps, {
+          userId,
+          factorId: enrolled.factorId,
+          code: codeFor(enrolled.secret),
+        })
+      ).outcome,
+    ).toBe('ACTIVATED');
+  });
+
+  /** And the reverse: finishing an enrolment must not consume a live sign-in challenge. */
+  it('finishing an enrolment does not kill a live sign-in challenge', async () => {
+    const userId = await seedWithPhone();
+    const issued = await t.db().transaction((tx) => issueMfaToken(tx, deps, { userId, factors: [] }));
+
+    const enrolled = await enrolTotp(t.db(), deps, { userId, accountName: null });
+    if (enrolled.outcome !== 'ENROLLED') throw new Error('expected ENROLLED');
+    await activateTotp(t.db(), deps, { userId, factorId: enrolled.factorId, code: codeFor(enrolled.secret) });
+
+    const { rows } = await t
+      .app()
+      .query<{ consumed_at: Date | null }>(`SELECT consumed_at FROM identity.otp_challenges WHERE id = $1`, [
+        issued.challengeId,
+      ]);
+    expect(rows[0]?.consumed_at).toBeNull();
+  });
+
+  /**
+   * From review. `consumeOtp` recomputes its HMAC from the ROW's own purpose and destination, so it
+   * verifies any live challenge of that user's. Passing the caller's `challengeId` straight through
+   * meant a live email-verification code could turn an SMS factor ACTIVE without anyone ever
+   * proving possession of the handset — which on a recycled Nigerian number is a takeover path.
+   */
+  it('refuses to activate an SMS factor with a challenge that was not sent to its phone', async () => {
+    const userId = await seedWithPhone();
+    const otpDeps = { hasher: deps.otpHasher, logger: deps.logger };
+
+    const sms = await enrolSmsFactor(t.db(), deps, { userId });
+    if (sms.outcome !== 'ENROLLED') throw new Error('expected ENROLLED');
+
+    // A live challenge of the SAME user's, for a different destination and purpose.
+    const foreign = await t.db().transaction((tx) =>
+      issueOtp(tx, otpDeps, {
+        userId,
+        purpose: 'EMAIL_VERIFICATION',
+        channels: ['EMAIL'],
+        destination: 'jane@example.com',
+      }),
+    );
+    const foreignCode = await liveCodeFor(t, foreign.challengeId);
+
+    expect(
+      (
+        await activateSmsFactor(t.db(), deps, {
+          userId,
+          factorId: sms.factorId,
+          challengeId: foreign.challengeId,
+          code: foreignCode,
+        })
+      ).outcome,
+    ).toBe('UNKNOWN');
+
+    const row = (await t.db().select().from(mfaFactors).where(eq(mfaFactors.id, sms.factorId)))[0];
+    expect(row?.status).toBe('PENDING');
+    // And the other flow's challenge is untouched.
+    const { rows } = await t
+      .app()
+      .query<{ consumed_at: Date | null }>(`SELECT consumed_at FROM identity.otp_challenges WHERE id = $1`, [
+        foreign.challengeId,
+      ]);
+    expect(rows[0]?.consumed_at).toBeNull();
+  });
+});

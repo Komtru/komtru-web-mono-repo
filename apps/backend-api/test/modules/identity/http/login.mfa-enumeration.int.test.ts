@@ -120,7 +120,8 @@ describe.runIf(infraEnabled)('the mfaRequired branch is not an enumeration signa
     const activated = await activateTotp(t.db(), deps, {
       userId,
       factorId: enrolled.factorId,
-      code: totpCodeAt(enrolled.secret, totpStep(Date.now())),
+      // The PREVIOUS step, so the activation does not burn the code the sign-in below presents.
+      code: totpCodeAt(enrolled.secret, totpStep(Date.now()) - 1),
     });
     if (activated.outcome !== 'ACTIVATED') throw new Error('expected ACTIVATED');
     return userId;

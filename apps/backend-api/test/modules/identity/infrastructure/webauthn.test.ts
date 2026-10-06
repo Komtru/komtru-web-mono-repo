@@ -23,7 +23,9 @@ describe('createRelyingParty', () => {
    * the variable, is the house rule for every other credential this module needs.
    */
   it('refuses to build with no origin, naming the variable', () => {
-    const noOrigins = testConfig({ WEBAUTHN_RP_ID: 'komtru.com' });
+    // `testConfig()` supplies an origin by default, because every suite that builds the identity
+    // module needs one; this is the one place that must NOT have it.
+    const noOrigins = testConfig({ WEBAUTHN_RP_ID: 'komtru.com', WEBAUTHN_ORIGINS: '' });
     expect(() => createRelyingParty(noOrigins, testLogger)).toThrow('WEBAUTHN_ORIGINS');
   });
 

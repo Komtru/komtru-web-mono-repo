@@ -35,9 +35,24 @@ export const STEP_UP_TTL_SECONDS = 300;
  */
 export const MFA_SUBJECT_DOMAIN = 'identity.mfa.subject';
 
+/**
+ * The same shape for an ENROLMENT ceremony, under a domain of its own.
+ *
+ * From review, and it is not decoration. Both families are `otp_challenges` rows of purpose
+ * MFA_CHALLENGE scoped to a user, and `issueOtp`-style supersedes and `findLiveChallengeFor` key on
+ * `(destination_hash, purpose, user_id)`. Under one hash they were one family, so signing in on a
+ * second device superseded a half-finished enrolment — killing the QR code the user had just
+ * scanned, with a 422 telling them to start again — and finishing any enrolment consumed a live
+ * sign-in challenge. Two domains make the two families unable to see each other.
+ */
+export const MFA_ENROLMENT_DOMAIN = 'identity.mfa.enrolment';
+
 /** `otp_challenges.destination_hash` for a challenge bound to an account rather than an address. */
 export const mfaSubjectHash = (hasher: HmacHasher, userId: string): Buffer =>
   hasher.hmac(MFA_SUBJECT_DOMAIN, userId);
+
+export const mfaEnrolmentHash = (hasher: HmacHasher, userId: string): Buffer =>
+  hasher.hmac(MFA_ENROLMENT_DOMAIN, userId);
 
 export type MfaFactorType = 'TOTP' | 'SMS_OTP' | 'EMAIL_OTP' | 'PASSKEY' | 'RECOVERY_CODE';
 

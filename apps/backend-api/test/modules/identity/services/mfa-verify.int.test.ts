@@ -19,6 +19,16 @@ import { grantRole, mfaDeps, seedUser } from '../support.js';
 
 const codeNow = (secret: string): string => totpCodeAt(secret, totpStep(Date.now()));
 
+/**
+ * The code for the step BEFORE the current one — still inside `verifyTotp`'s ±1 window.
+ *
+ * From review: `activateTotp` seals the step it accepted into the factor, so activating with the
+ * CURRENT step's code and then presenting that same step a moment later is refused by the replay
+ * guard. Every assertion after an activation would then depend on a 30-second boundary happening to
+ * fall between the two calls. Spending the previous step leaves the current one free.
+ */
+const codeToActivate = (secret: string): string => totpCodeAt(secret, totpStep(Date.now()) - 1);
+
 describe.runIf(infraEnabled)('verifyFactor', () => {
   const t = useTestDatabase();
   const deps: MfaDeps = mfaDeps();
@@ -31,7 +41,7 @@ describe.runIf(infraEnabled)('verifyFactor', () => {
     await activateTotp(t.db(), deps, {
       userId,
       factorId: enrolled.factorId,
-      code: codeNow(enrolled.secret),
+      code: codeToActivate(enrolled.secret),
     });
     const factor = await t
       .db()
@@ -109,7 +119,7 @@ describe.runIf(infraEnabled)('removeFactor (§S7, D2 C4)', () => {
     const activated = await activateTotp(t.db(), deps, {
       userId,
       factorId: enrolled.factorId,
-      code: codeNow(enrolled.secret),
+      code: codeToActivate(enrolled.secret),
     });
     if (activated.outcome !== 'ACTIVATED') throw new Error('expected ACTIVATED');
     return { userId, factorId: enrolled.factorId };
@@ -205,5 +215,43 @@ describe.runIf(infraEnabled)('removeFactor (§S7, D2 C4)', () => {
         .where(eq(mfaFactors.id, second?.id as string))
     )[0];
     expect(row?.isDefault).toBe(true);
+  });
+});
+
+describe.runIf(infraEnabled)('the TOTP replay guard under concurrency', () => {
+  const t = useTestDatabase();
+  const deps: MfaDeps = mfaDeps();
+
+  /**
+   * From review. The guard is a read-modify-write of the step sealed into `secret_enc`, and the row
+   * the caller hands in was fetched without a lock. Two requests firing the same shoulder-surfed
+   * code in the same millisecond each read the old step, each accept, and each write it back — so a
+   * single code is spent twice, which is exactly what the guard exists to stop. `POST /me/step-up`
+   * has no other serialisation at all.
+   */
+  it('accepts one of two simultaneous presentations of the same code, never both', async () => {
+    const { userId } = await seedUser(t.app());
+    const enrolled = await enrolTotp(t.db(), deps, { userId, accountName: null });
+    if (enrolled.outcome !== 'ENROLLED') throw new Error('expected ENROLLED');
+    await activateTotp(t.db(), deps, {
+      userId,
+      factorId: enrolled.factorId,
+      code: totpCodeAt(enrolled.secret, totpStep(Date.now()) - 1),
+    });
+    const factor = await t
+      .db()
+      .transaction((tx) => findOwnFactor(tx, { userId, factorId: enrolled.factorId }));
+    if (!factor) throw new Error('expected an ACTIVE factor');
+
+    const code = codeNow(enrolled.secret);
+    const present = () =>
+      t
+        .db()
+        .transaction((tx) =>
+          verifyFactor(tx, deps, { userId, factor, proof: { code }, ceremonyKey: 'test' }),
+        );
+
+    const results = await Promise.all([present(), present()]);
+    expect(results.filter(Boolean)).toHaveLength(1);
   });
 });

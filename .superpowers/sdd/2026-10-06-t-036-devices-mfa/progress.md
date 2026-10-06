@@ -9,3 +9,20 @@ Task 4 (+Task 6 infrastructure, per ruling): complete (commits 3bd0599..d6fe789,
 Task 5: complete (commits d6fe789..67893da, tests: vitest run -> 1514 passed/938 skipped; turbo typecheck+lint --force IN THE WORKTREE -> 3 successful)
 NOTE: earlier turbo runs for tasks 1-4 were executed from the main checkout by mistake and verified nothing; re-verified in the worktree at task 5 and two real defects surfaced (SessionView.amr readonly, 13 lint errors in the new int tests), both fixed.
 Task 6: complete (commits 67893da..19d2e68; implementation landed in task 4 per ruling, tests here; turbo typecheck+lint --force -> 3 successful)
+Tasks 7+8: complete (commits 19d2e68..14380b9, tests: turbo typecheck+lint+test+build --force -> 5 successful, 1530 passed/980 skipped)
+Final: fresh reviewer (opus, whole branch). 1 Critical, 4 Important, 10 Minor. Re-graded: all five Critical/Important stand by effect; minors deferred.
+Final: fixed Critical 1 (testConfig() lacked WEBAUTHN_ORIGINS, so createIdentityAuth threw in 6 infra suites incl. both §17 enumeration suites) — WEBAUTHN_ORIGINS added to testConfig defaults, webauthn.test.ts's negative case now overrides it to ''; suite 1532/1532.
+Final: fixed Important 2 (three int tests activated TOTP with the CURRENT step and then presented that same step, which the replay guard refuses ~97% of runs) — `codeToActivate` uses step-1; suite green.
+Final: fixed Important 3 (the enrolment ceremony and the login mfaToken shared one (purpose, destination_hash) family, so a sign-in killed a half-finished enrolment and an enrolment killed a live sign-in) — new MFA_ENROLMENT_DOMAIN/mfaEnrolmentHash; policy.test.ts RED->GREEN plus two int regressions.
+Final: fixed Important 4 (verifyFactor's TOTP branch read an unlocked row, so two concurrent /me/step-up calls could spend one code twice) — re-selects FOR UPDATE like the RECOVERY_CODE branch; int regression added.
+Final: fixed Important 5 (activateSmsFactor passed the caller's challengeId straight to consumeOtp, which verifies ANY live challenge of that user's — an email code could activate an SMS factor with no proof of the handset) — the challenge is now resolved from the factor's own phone and the caller's id must match; int regression added.
+Final: minor (deferred): issueStepUpToken's `action` is accepted and never stored or checked, so a token minted for one §S7 action is spendable on another.
+Final: minor (deferred): a 404/409 from removeFactor still commits the step-up token's consumption; and a thrown requireStepUp rolls back the attempt it charged, so max_attempts=1 is unmetered (bounded in practice by the 10/min route budget and 256 bits).
+Final: minor (deferred): registerDevice overwrites `platform` unconditionally, so a relaunch that posts only a push token resets a known IOS to 'unknown'.
+Final: minor (deferred): isNewDevice comes from a SELECT before the upsert, so two concurrent POST /me/devices can both publish identity.device.registered.
+Final: minor (deferred): the enrolment ceremony expires in 5 minutes and expiry REVOKES the pending factor, so a user who leaves to install an authenticator loses the enrolment.
+Final: minor (deferred): AUDIT_ACTIONS.MFA_VERIFIED is defined and never written.
+Final: minor (deferred): DELETE /me/mfa/factors/:id carries its stepUpToken in a DELETE body, which some proxies drop.
+Final: minor (deferred): normaliseRecoveryCode does not fold I->1 and O->0, although the alphabet excludes them for exactly that confusion.
+Final: minor (deferred): spendRecoveryCode short-circuits once a code matches, so the comparison count varies with the code's position in the sheet.
+Final: Ruling: WEBAUTHN_ORIGINS stays `required: false` in env.ts and throws at module build instead, which is the same pattern IDENTITY_SIGNING_KEY and IDENTITY_HMAC_PEPPER already follow — flipping it to required would break every loadConfig(minimal) call in the config suite for a process that may not serve identity at all. Cost if wrong: the failure names itself one layer later than it could.

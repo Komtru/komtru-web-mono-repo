@@ -41,6 +41,16 @@ const FINGERPRINT = 'fp-handset-1';
 
 const codeNow = (secret: string): string => totpCodeAt(secret, totpStep(Date.now()));
 
+/**
+ * The code for the step BEFORE the current one — still inside `verifyTotp`'s ±1 window.
+ *
+ * From review: `activateTotp` seals the step it accepted into the factor, so activating with the
+ * CURRENT step's code and then presenting that same step a moment later is refused by the replay
+ * guard. Every assertion after an activation would then depend on a 30-second boundary happening to
+ * fall between the two calls. Spending the previous step leaves the current one free.
+ */
+const codeToActivate = (secret: string): string => totpCodeAt(secret, totpStep(Date.now()) - 1);
+
 describe.runIf(infraEnabled)('the mfaRequired login branch (M1 §10.1)', () => {
   const t = useTestDatabase();
   const config = testConfig();
@@ -70,7 +80,7 @@ describe.runIf(infraEnabled)('the mfaRequired login branch (M1 §10.1)', () => {
     const activated = await activateTotp(t.db(), d, {
       userId,
       factorId: enrolled.factorId,
-      code: codeNow(enrolled.secret),
+      code: codeToActivate(enrolled.secret),
     });
     if (activated.outcome !== 'ACTIVATED') throw new Error('expected ACTIVATED');
     return { userId, secret: enrolled.secret, deps: d };
@@ -179,7 +189,7 @@ describe.runIf(infraEnabled)('completeMfaLogin (POST /auth/mfa/verify)', () => {
     await activateTotp(t.db(), d, {
       userId,
       factorId: enrolled.factorId,
-      code: codeNow(enrolled.secret),
+      code: codeToActivate(enrolled.secret),
     });
 
     const result = await login(t.db(), d, {
