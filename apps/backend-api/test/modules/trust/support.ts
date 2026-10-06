@@ -1,10 +1,17 @@
 // A hand-written TrustStore and the pieces around it, so this module's decisions can be tested
 // without a database. The SQL behind the real store is covered by test/integration/verification.int.test.ts.
 import { randomUUID } from 'node:crypto';
+import { expect } from 'vitest';
 import type { AppConfig } from '../../../src/config/env.js';
 import { createEncryption, type Encryption } from '../../../src/platform/crypto/encryption.js';
 import { createHmacHasher, type HmacHasher } from '../../../src/platform/crypto/hmac.js';
 import { createLogger, type Logger } from '../../../src/platform/logger.js';
+import type { SocketGateway } from '../../../src/modules/socket/index.js';
+import type {
+  IdentityCheckResult,
+  KycProviderAdapter,
+  LivenessCheckResult,
+} from '../../../src/modules/trust/domain/provider.js';
 import type { VerificationRequest } from '../../../src/modules/trust/index.js';
 import type {
   DuplicateIdentityInput,
@@ -67,8 +74,8 @@ export interface StubStoreOptions {
   identifierOwner?: string | undefined;
   attempts?: number;
   expired?: ExpiredRequest[];
-  createRequestThrows?: unknown;
-  applyIdentityOutcomeThrows?: unknown;
+  createRequestThrows?: Error;
+  applyIdentityOutcomeThrows?: Error;
   grantResult?: LevelOutcome;
 }
 
@@ -171,3 +178,62 @@ export const uniqueViolation = (constraint: string): Error =>
   new Error('Failed query', {
     cause: Object.assign(new Error('duplicate key'), { code: '23505', constraint }),
   });
+
+export interface Emitted {
+  userId: string;
+  event: string;
+  payload: unknown;
+}
+
+/** A gateway that records instead of broadcasting, so a test asserts who was told what. */
+export const recordingGateway = (): SocketGateway & { emitted: Emitted[] } => {
+  const emitted: Emitted[] = [];
+  return {
+    emitted,
+    emitToUser: (userId, event, payload) => void emitted.push({ userId, event, payload }),
+    emitToRoom: () => {},
+    registerRoomAuthorizer: () => {},
+    disconnectUser: () => {},
+    connectionCount: () => 0,
+  };
+};
+
+export interface AdapterScript {
+  identity?: IdentityCheckResult | Error;
+  liveness?: LivenessCheckResult | Error;
+}
+
+/**
+ * An adapter that answers exactly what a test tells it to, and counts its calls.
+ *
+ * `.then(...)` rather than an `async` body for the same reason the real fake uses it: an Error given
+ * to this helper must arrive as a REJECTION, which is what a job's retry path is written against.
+ */
+export const scriptedAdapter = (script: AdapterScript = {}): KycProviderAdapter & { calls: number } => {
+  const notScripted = () => new Error('scriptedAdapter: this method was not scripted');
+  const adapter = {
+    calls: 0,
+    provider: 'FAKE' as const,
+    verifyNin: () => answer<IdentityCheckResult>(script.identity),
+    verifyBvn: () => answer<IdentityCheckResult>(script.identity),
+    checkLiveness: () => answer<LivenessCheckResult>(script.liveness),
+  };
+  function answer<T>(scripted: T | Error | undefined): Promise<T> {
+    return Promise.resolve().then(() => {
+      adapter.calls += 1;
+      if (scripted === undefined) throw notScripted();
+      if (scripted instanceof Error) throw scripted;
+      return scripted;
+    });
+  }
+  return adapter;
+};
+
+/**
+ * `expect.objectContaining`, typed.
+ *
+ * Vitest declares it as `any`, which `no-unsafe-assignment` rejects the moment it is put in a
+ * variable or an object literal. One cast here beats one per assertion.
+ */
+export const containing = (shape: Record<string, unknown>): unknown =>
+  expect.objectContaining(shape) as unknown;

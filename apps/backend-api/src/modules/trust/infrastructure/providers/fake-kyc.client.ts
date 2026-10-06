@@ -52,26 +52,27 @@ export function createFakeKycClient(): KycProviderAdapter {
   return {
     provider: 'FAKE',
 
-    // `async`, not `Promise.resolve(identityCheck(...))`. The argument is evaluated BEFORE the
-    // promise exists, so the scripted failure would leave the adapter as a synchronous throw — an
-    // exception on the worker's own call stack rather than a rejected job, which is the same trap
-    // the files and ledger modules documented on their queue handlers.
-    verifyNin: async (claim) => identityCheck('nin', claim),
-    verifyBvn: async (claim) => identityCheck('bvn', claim),
+    // `.then(...)`, not `Promise.resolve(identityCheck(...))`. The argument of `Promise.resolve` is
+    // evaluated BEFORE the promise exists, so the scripted failure would leave the adapter as a
+    // SYNCHRONOUS throw — an exception on the worker's own call stack rather than a rejected job,
+    // which is the same trap the files and ledger modules documented on their queue handlers.
+    verifyNin: (claim) => Promise.resolve().then(() => identityCheck('nin', claim)),
+    verifyBvn: (claim) => Promise.resolve().then(() => identityCheck('bvn', claim)),
 
-    checkLiveness: async (input: LivenessCheckInput) => {
-      const outcome = livenessScriptFor(input.selfieStorageRef);
-      const result: LivenessCheckResult = {
-        verdict: outcome,
-        providerReference: referenceFor('liveness', input.selfieStorageRef),
-        matchScore: scoreFor(outcome, `liveness:${input.selfieStorageRef}`),
-        livenessPassed: outcome === 'PASSED',
-      };
-      if (outcome === 'FAILED') result.failureReason = 'The image did not pass the liveness check';
-      if (outcome === 'LOW_CONFIDENCE') {
-        result.failureReason = 'The face matched the document only weakly';
-      }
-      return result;
-    },
+    checkLiveness: (input: LivenessCheckInput) =>
+      Promise.resolve().then(() => {
+        const outcome = livenessScriptFor(input.selfieStorageRef);
+        const result: LivenessCheckResult = {
+          verdict: outcome,
+          providerReference: referenceFor('liveness', input.selfieStorageRef),
+          matchScore: scoreFor(outcome, `liveness:${input.selfieStorageRef}`),
+          livenessPassed: outcome === 'PASSED',
+        };
+        if (outcome === 'FAILED') result.failureReason = 'The image did not pass the liveness check';
+        if (outcome === 'LOW_CONFIDENCE') {
+          result.failureReason = 'The face matched the document only weakly';
+        }
+        return result;
+      }),
   };
 }

@@ -2,16 +2,21 @@
 // what the submission refuses, and what the job does with the provider's answer.
 import { randomUUID } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
-import type {
-  IdentityCheckResult,
-  KycProviderAdapter,
-  LivenessCheckResult,
-} from '../../../src/modules/trust/domain/provider.js';
+import type { LivenessCheckResult } from '../../../src/modules/trust/domain/provider.js';
 import { runLivenessCheck } from '../../../src/modules/trust/jobs/run-liveness-check.job.js';
 import { submitLivenessCheck } from '../../../src/modules/trust/services/verification.service.js';
 import type { TrustJobDeps } from '../../../src/modules/trust/jobs/deps.js';
 import type { SelfieFile } from '../../../src/modules/trust/infrastructure/postgres/store.js';
-import { requestRow, silentLogger, stubStore, testEncryption, testHasher } from './support.js';
+import {
+  containing,
+  recordingGateway,
+  requestRow,
+  scriptedAdapter,
+  silentLogger,
+  stubStore,
+  testEncryption,
+  testHasher,
+} from './support.js';
 
 const USER = randomUUID();
 const FILE = randomUUID();
@@ -74,30 +79,6 @@ describe('submitLivenessCheck', () => {
   });
 });
 
-const adapterReturning = (result: LivenessCheckResult | Error): KycProviderAdapter => ({
-  provider: 'FAKE',
-  verifyNin: async (): Promise<IdentityCheckResult> => {
-    throw new Error('not used here');
-  },
-  verifyBvn: async (): Promise<IdentityCheckResult> => {
-    throw new Error('not used here');
-  },
-  checkLiveness: async () => {
-    if (result instanceof Error) throw result;
-    return result;
-  },
-});
-
-const emitted: unknown[] = [];
-const gateway = {
-  emitToUser: (userId: string, event: string, payload: unknown) =>
-    void emitted.push({ userId, event, payload }),
-  emitToRoom: () => {},
-  registerRoomAuthorizer: () => {},
-  disconnectUser: () => {},
-  connectionCount: () => 0,
-};
-
 const passedLiveness: LivenessCheckResult = {
   verdict: 'PASSED',
   providerReference: 'fake_liveness_abc',
@@ -112,7 +93,6 @@ const runJob = async (
     identifierVerified?: boolean;
   } = {},
 ) => {
-  emitted.length = 0;
   const request = requestRow({ userId: USER, verificationType: 'LIVENESS', selfieStorageRef: FILE });
   // The real store derives `identifierVerified` from whether there IS a latest verified identifier,
   // so the stub must not offer one while claiming there is none — that pairing cannot occur.
@@ -125,16 +105,17 @@ const runJob = async (
       livenessPassed: options.result === undefined || options.result === passedLiveness,
     },
   });
+  const gateway = recordingGateway();
   const deps: TrustJobDeps = {
     store,
-    adapter: adapterReturning(options.result ?? passedLiveness),
+    adapter: scriptedAdapter({ liveness: options.result ?? passedLiveness }),
     hasher: testHasher(),
     encryption: testEncryption(),
     gateway,
     logger: silentLogger(),
   };
   const error = await runLivenessCheck(deps, { requestId: request.id }).catch((e: unknown) => e);
-  return { store, error, emitted: [...emitted] };
+  return { store, error, emitted: gateway.emitted };
 };
 
 describe('runLivenessCheck', () => {
@@ -197,7 +178,7 @@ describe('runLivenessCheck', () => {
       {
         userId: USER,
         event: 'verification:updated',
-        payload: expect.objectContaining({ status: 'APPROVED' }),
+        payload: containing({ status: 'APPROVED' }),
       },
     ]);
   });

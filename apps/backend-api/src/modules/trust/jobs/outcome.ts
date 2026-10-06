@@ -42,6 +42,18 @@ export async function claimRequest(
   return request;
 }
 
+/**
+ * Whatever an adapter threw, as an Error.
+ *
+ * BullMQ records `error.message` on a failed job and Sentry groups on the stack, so a provider
+ * library that rejects with a string would otherwise dead-letter as `undefined` with nothing an
+ * operator can act on. The original is kept on `cause`.
+ */
+const asError = (thrown: unknown): Error =>
+  thrown instanceof Error
+    ? thrown
+    : new Error(`trust: a provider threw a non-Error (${String(thrown)})`, { cause: thrown });
+
 export interface TimedCall<T> {
   result?: T;
   error?: unknown;
@@ -78,7 +90,7 @@ export async function recordCall<T>(
     succeeded: timed.error === undefined,
     ...(timed.error === undefined ? {} : { errorKind: 'exception' }),
   });
-  if (timed.error !== undefined) throw timed.error;
+  if (timed.error !== undefined) throw asError(timed.error);
   // `result` is set whenever `error` is not: the two are written by the same branch above.
   return timed.result as T;
 }

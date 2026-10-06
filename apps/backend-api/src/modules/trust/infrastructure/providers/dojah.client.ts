@@ -38,16 +38,15 @@ const NOT_INTEGRATED = [
 ] as const;
 
 export function createDojahClient(_credentials: DojahCredentials): KycProviderAdapter {
-  const refuse = (): never => {
-    throw new KycProviderNotConfiguredError('DOJAH', NOT_INTEGRATED);
-  };
+  // A rejected promise rather than a synchronous throw: a throw out of an adapter is an exception on
+  // the worker's own call stack, not a failed job.
+  const refuse = <T>(): Promise<T> =>
+    Promise.reject(new KycProviderNotConfiguredError('DOJAH', NOT_INTEGRATED));
 
   return {
     provider: 'DOJAH',
-    // `async` rather than a plain throw: a synchronous throw out of an adapter is an exception on
-    // the worker's call stack, not a failed job.
-    verifyNin: async (): Promise<IdentityCheckResult> => refuse(),
-    verifyBvn: async (): Promise<IdentityCheckResult> => refuse(),
-    checkLiveness: async (): Promise<LivenessCheckResult> => refuse(),
+    verifyNin: () => refuse<IdentityCheckResult>(),
+    verifyBvn: () => refuse<IdentityCheckResult>(),
+    checkLiveness: () => refuse<LivenessCheckResult>(),
   };
 }

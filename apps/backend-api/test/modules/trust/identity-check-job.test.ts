@@ -4,57 +4,24 @@
 // with SQL.
 import { randomUUID } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
-import type {
-  IdentityCheckResult,
-  KycProviderAdapter,
-  LivenessCheckResult,
-} from '../../../src/modules/trust/domain/provider.js';
+import type { IdentityCheckResult } from '../../../src/modules/trust/domain/provider.js';
 import { runIdentityCheck } from '../../../src/modules/trust/jobs/run-identity-check.job.js';
 import type { TrustJobDeps } from '../../../src/modules/trust/jobs/deps.js';
 import {
+  containing,
+  recordingGateway,
   requestRow,
+  scriptedAdapter,
   silentLogger,
   stubStore,
   testEncryption,
   testHasher,
   uniqueViolation,
-  type RecordedStore,
 } from './support.js';
 import type { StubStoreOptions } from './support.js';
 
 const encryption = testEncryption();
 const RAW_NIN = '12345678904';
-
-const adapterReturning = (result: IdentityCheckResult | Error): KycProviderAdapter & { calls: number } => {
-  const adapter = {
-    calls: 0,
-    provider: 'FAKE' as const,
-    verifyNin: async (): Promise<IdentityCheckResult> => {
-      adapter.calls += 1;
-      if (result instanceof Error) throw result;
-      return result;
-    },
-    verifyBvn: async (): Promise<IdentityCheckResult> => {
-      adapter.calls += 1;
-      if (result instanceof Error) throw result;
-      return result;
-    },
-    checkLiveness: async (): Promise<LivenessCheckResult> => {
-      throw new Error('not used here');
-    },
-  };
-  return adapter;
-};
-
-const emitted: { userId: string; event: string; payload: unknown }[] = [];
-const gateway = {
-  emitToUser: (userId: string, event: string, payload: unknown) =>
-    void emitted.push({ userId, event, payload }),
-  emitToRoom: () => {},
-  registerRoomAuthorizer: () => {},
-  disconnectUser: () => {},
-  connectionCount: () => 0,
-};
 
 const passed: IdentityCheckResult = {
   verdict: 'PASSED',
@@ -68,10 +35,10 @@ interface RunOptions extends StubStoreOptions {
 }
 
 const run = async (options: RunOptions = {}) => {
-  emitted.length = 0;
   const request = options.request ?? requestRow();
   const store = stubStore({ ...options, request });
-  const adapter = adapterReturning(options.result ?? passed);
+  const adapter = scriptedAdapter({ identity: options.result ?? passed });
+  const gateway = recordingGateway();
   const deps: TrustJobDeps = {
     store,
     adapter,
@@ -86,7 +53,7 @@ const run = async (options: RunOptions = {}) => {
   const error = await runIdentityCheck(deps, { requestId: request.id, sealed }).catch(
     (caught: unknown) => caught,
   );
-  return { store: store as RecordedStore, adapter, request, error, emitted: [...emitted] };
+  return { store, adapter, request, error, emitted: gateway.emitted };
 };
 
 describe('runIdentityCheck', () => {
@@ -186,10 +153,10 @@ describe('runIdentityCheck', () => {
     const store = stubStore({ request: undefined });
     const deps: TrustJobDeps = {
       store,
-      adapter: adapterReturning(passed),
+      adapter: scriptedAdapter({ identity: passed }),
       hasher: testHasher(),
       encryption,
-      gateway,
+      gateway: recordingGateway(),
       logger: silentLogger(),
     };
     await runIdentityCheck(deps, { requestId: request.id, sealed: encryption.encrypt('{}') });
@@ -202,7 +169,7 @@ describe('runIdentityCheck', () => {
       {
         userId: request.userId,
         event: 'verification:updated',
-        payload: expect.objectContaining({ requestId: request.id, status: 'APPROVED' }),
+        payload: containing({ requestId: request.id, status: 'APPROVED' }),
       },
     ]);
   });

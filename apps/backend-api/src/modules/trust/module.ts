@@ -4,7 +4,6 @@
 // This is also the module's composition root — the one file allowed to reach into `jobs/`, where the
 // KYC adapter is constructed (design §4.4, T-028). Nothing in `services/` or `http/` can follow that
 // path, which is what keeps every provider call inside a job.
-import type { Db } from '../../db/index.js';
 import type { TrustConfig } from '../../config/env.js';
 import { createEncryption, type Encryption } from '../../platform/crypto/encryption.js';
 import { createHmacHasher, type HmacHasher } from '../../platform/crypto/hmac.js';

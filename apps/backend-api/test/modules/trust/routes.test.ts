@@ -16,7 +16,8 @@ const deps = {
   encryption: () => testEncryption(),
   requestTtlMinutes: () => 60,
   logger: () => silentLogger(),
-  queues: () => ({ producer: () => ({ add: async () => undefined }) }) as never,
+  // Never reached: these tests read route declarations, they do not run handlers.
+  queues: () => ({ producer: () => ({ add: () => Promise.resolve(undefined) }) }) as never,
 };
 
 const routes: RouteDefinition[] = trustRoutes(deps);
@@ -106,7 +107,7 @@ describe('readVerificationStatus', () => {
       openRequests: [open],
     });
 
-    const status = await readVerificationStatus({ store } as never, userId);
+    const status = await readVerificationStatus({ store }, userId);
 
     expect(status).toMatchObject({
       level: 'CONTACT_VERIFIED',
@@ -119,13 +120,13 @@ describe('readVerificationStatus', () => {
   it('never echoes anything that could identify the number behind a check', async () => {
     const userId = randomUUID();
     const store = stubStore({ openRequests: [requestRow({ userId })] });
-    const status = await readVerificationStatus({ store } as never, userId);
+    const status = await readVerificationStatus({ store }, userId);
     expect(JSON.stringify(status)).not.toMatch(/masked|hash|nin_|bvn_/i);
   });
 
   it('refuses a caller whose user row is gone', async () => {
     await expect(
-      readVerificationStatus({ store: stubStore({ subject: undefined }) } as never, randomUUID()),
+      readVerificationStatus({ store: stubStore({ subject: undefined }) }, randomUUID()),
     ).rejects.toMatchObject({ status: 401 });
   });
 });
