@@ -17,13 +17,24 @@ import { publish, type PublishInput, type Tx } from './publish.js';
 
 export const SUBSCRIBER_QUEUE_PREFIX = 'events.';
 
+/** Work a handler defers until its transaction has committed. See `EventSubscription.handler`. */
+export type AfterCommit = () => Promise<void>;
+
 /** `module.handler`, e.g. `ledger.on-trade-completed`: the queue name and the processed_events key. */
 const SUBSCRIBER_NAME = /^[a-z][a-z0-9_]*\.[a-z][a-z0-9-]*$/;
 
 export interface EventSubscription<S extends z.ZodType = z.ZodType> {
   name: string;
   event: EventDefinition<S>;
-  handler: (envelope: EventEnvelope<z.output<S>>, tx: Tx) => Promise<void>;
+  /**
+   * Runs inside the claim's transaction. Anything that must NOT happen until those writes are
+   * visible — enqueueing a job that reads them, calling out to a provider — is returned as a
+   * callback instead, and the bus runs it after the commit.
+   *
+   * Doing that work inside the handler races the commit: a worker can pick the job up and find no
+   * row, which costs an attempt at best and dead-letters a perfectly good notification at worst.
+   */
+  handler: (envelope: EventEnvelope<z.output<S>>, tx: Tx) => Promise<AfterCommit | void>;
   attempts?: number;
   /**
    * One at a time by default, so a subscriber's queue is worked in the order the relay enqueued it.
@@ -83,6 +94,7 @@ export function createEventBus({ db, queues, logger, role }: EventBusOptions): E
           );
         }
         const payload = event.payload.parse(envelope.payload);
+        let afterCommit: AfterCommit | undefined;
         await db.transaction(async (tx) => {
           const claimed = await tx
             .insert(processedEvents)
@@ -93,8 +105,12 @@ export function createEventBus({ db, queues, logger, role }: EventBusOptions): E
             logger.debug({ subscriber: name, eventId: envelope.eventId }, 'events: already processed');
             return;
           }
-          await handler({ ...envelope, payload }, tx);
+          afterCommit = (await handler({ ...envelope, payload }, tx)) ?? undefined;
         });
+        // Only once the writes above are visible to every other connection. A redelivery is already
+        // a no-op by the claim, so a failure here is not retried by this path — which is why a
+        // handler's deferred work is expected to carry its own floor, the way notify's sweep does.
+        await afterCommit?.();
       },
     };
 

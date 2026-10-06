@@ -76,6 +76,34 @@ describe.runIf(infraEnabled)('event bus', () => {
     expect((await processed()).rows).toEqual([{ subscriber: 'ledger.on-trade-completed' }]);
   });
 
+  // A subscriber that enqueues a job for its own rows cannot do it inside the handler: the worker
+  // can pick the job up and read the row before the transaction that wrote it has committed. The
+  // send job already anticipates that and throws "is not committed yet", which burns an attempt —
+  // with two attempts and a 100ms backoff, both can land early and the notification dead-letters
+  // even though nothing was wrong with it. So the bus takes the work and runs it after the commit.
+  it('runs a handler\u2019s deferred work after the transaction has committed', async () => {
+    const queues = stubQueues();
+    const bus = createEventBus({ db: t.db(), queues: queues.factory, logger, role: 'worker' });
+    let visibleFromAnotherConnection: number | undefined;
+
+    bus.subscribe({
+      name: 'ledger.on-trade-completed',
+      event: tradeCompleted,
+      handler: () =>
+        Promise.resolve(async () => {
+          // A separate pool connection: it can only see rows the handler's transaction committed.
+          const { rows } = await t
+            .app()
+            .query<{ n: string }>('SELECT count(*) AS n FROM platform.processed_events');
+          visibleFromAnotherConnection = Number(rows[0]!.n);
+        }),
+    });
+
+    await queues.deliver('events.ledger.on-trade-completed', envelope());
+
+    expect(visibleFromAnotherConnection).toBe(1);
+  });
+
   it('is a no-op when the same envelope is delivered again', async () => {
     const queues = stubQueues();
     const handler = vi.fn(async () => {});
