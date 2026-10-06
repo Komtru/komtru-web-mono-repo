@@ -13,6 +13,7 @@ export const socketConfig = (overrides: Record<string, string> = {}): AppConfig 
     ...testRedisEnv(),
     IDENTITY_SIGNING_KEY: randomBytes(32).toString('hex'),
     IDENTITY_SIGNING_KEY_ID: 'test-key',
+    IDENTITY_HMAC_PEPPER: 'p'.repeat(32),
     ...overrides,
   });
 

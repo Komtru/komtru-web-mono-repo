@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { AUDIT_ACTIONS, writeAudit } from '../../../../src/modules/identity/services/audit.service.js';
 import { infraEnabled } from '../../../support/db-urls.js';
 import { useTestDatabase } from '../../../support/db.js';
+import { sqlState } from '../../notify/support.js';
 import { seedUser } from '../support.js';
 
 interface AuditRow {
@@ -83,18 +84,27 @@ describe.runIf(infraEnabled)('the identity audit log', () => {
     expect((await rows())[0]?.actor_type).toBe('SYSTEM');
   });
 
-  it('cannot be updated or deleted afterwards (T-030 migration 0012, error KT001)', async () => {
+  it('cannot be rewritten, at either of the two layers that stop it', async () => {
     const { userId } = await seedUser(t.app());
     await t
       .db()
       .transaction((tx) =>
         writeAudit(tx, { action: AUDIT_ACTIONS.LOGIN, outcome: 'SUCCESS', subjectUserId: userId }),
       );
-    await expect(
-      t.app().query(`UPDATE identity.identity_audit_log SET outcome = 'FAILURE'`),
-    ).rejects.toMatchObject({ code: 'KT001' });
-    await expect(t.app().query(`DELETE FROM identity.identity_audit_log`)).rejects.toMatchObject({
-      code: 'KT001',
-    });
+
+    // The runtime role never reaches the trigger: `grantRuntimeAccess` REVOKEs UPDATE and DELETE on
+    // every append-only table, so Postgres refuses on privilege (42501) first. That is the stronger
+    // of the two guarantees, and it is the one the app actually runs into — this test used to
+    // assert KT001 here, which asked the weaker layer to answer for the stronger one.
+    expect(await sqlState(t.app().query(`UPDATE identity.identity_audit_log SET outcome = 'FAILURE'`))).toBe(
+      '42501',
+    );
+    expect(await sqlState(t.app().query(`DELETE FROM identity.identity_audit_log`))).toBe('42501');
+
+    // The OWNER has the privilege and is stopped by the trigger instead (T-030, migration 0012).
+    expect(
+      await sqlState(t.owner().query(`UPDATE identity.identity_audit_log SET outcome = 'FAILURE'`)),
+    ).toBe('KT001');
+    expect(await sqlState(t.owner().query(`DELETE FROM identity.identity_audit_log`))).toBe('KT001');
   });
 });

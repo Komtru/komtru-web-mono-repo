@@ -6,6 +6,7 @@
 // cannot recompute `email_normal`, so a caller that writes an unnormalised value silently defeats
 // `user_emails_verified_unique` — and two people then both "own" one inbox.
 import { and, eq, isNotNull, isNull, sql } from 'drizzle-orm';
+import { isUniqueViolation } from '../../../db/errors.js';
 import type { Tx } from '../../../platform/events/publish.js';
 import { publish } from '../../../platform/events/publish.js';
 import {
@@ -46,14 +47,6 @@ export class ContactInvalidError extends Error {
     this.name = 'ContactInvalidError';
   }
 }
-
-const UNIQUE_VIOLATION = '23505';
-
-const isUniqueViolation = (error: unknown, constraint: string): boolean =>
-  typeof error === 'object' &&
-  error !== null &&
-  (error as { code?: string }).code === UNIQUE_VIOLATION &&
-  String((error as { constraint?: string }).constraint ?? '').includes(constraint);
 
 export interface AttachedEmail {
   emailId: string;

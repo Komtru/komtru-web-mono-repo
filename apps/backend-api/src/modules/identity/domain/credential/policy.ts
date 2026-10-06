@@ -91,6 +91,17 @@ export const OFFLINE_WEAK_PASSWORDS: ReadonlySet<string> = new Set([
 const normalise = (value: string): string => value.trim().toLowerCase();
 
 /**
+ * Lower-cased and stripped of everything that is not a letter or a digit.
+ *
+ * The identifier check compares these rather than the raw strings, because the two sides are
+ * punctuated differently by nature: the phone is stored as `+2348023415567` and nobody types the
+ * `+` into a password, the email is stored with its `@` and dots, and a handle may be written with
+ * separators. Comparing raw strings meant `2348023415567abc` passed against `+2348023415567` — the
+ * check was close to useless for the identifier M1 D4 calls primary in this market.
+ */
+const alphanumeric = (value: string): string => value.toLowerCase().replace(/[^a-z0-9]/g, '');
+
+/**
  * Length, the offline list, and the identifier check. The breach corpus is NOT consulted here: it is
  * asynchronous and may be unavailable, so `credential.service.ts` runs it separately and maps a hit
  * onto `BREACHED` using this module's message table.
@@ -113,14 +124,14 @@ export const checkPasswordPolicy = (
   const folded = normalise(password);
   if (OFFLINE_WEAK_PASSWORDS.has(folded)) return reject('COMMON');
 
+  const stripped = alphanumeric(password);
   for (const identifier of context.identifiers ?? []) {
-    const candidate = normalise(identifier);
-    if (candidate.length < MIN_IDENTIFIER_FRAGMENT) continue;
-    if (folded.includes(candidate)) return reject('CONTAINS_IDENTIFIER');
-    // The local part on its own: `jane` out of `jane@example.com` is the half a user actually reuses.
-    const local = candidate.split('@')[0] ?? '';
-    if (local.length >= MIN_IDENTIFIER_FRAGMENT && folded.includes(local)) {
-      return reject('CONTAINS_IDENTIFIER');
+    // The local part on its own as well as the whole address: `jane` out of `jane@example.com` is
+    // the half a user actually reuses.
+    const local = normalise(identifier).split('@')[0] ?? '';
+    for (const candidate of [alphanumeric(identifier), alphanumeric(local)]) {
+      if (candidate.length < MIN_IDENTIFIER_FRAGMENT) continue;
+      if (stripped.includes(candidate)) return reject('CONTAINS_IDENTIFIER');
     }
   }
 

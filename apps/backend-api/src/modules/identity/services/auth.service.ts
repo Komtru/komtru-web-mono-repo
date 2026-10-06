@@ -5,6 +5,7 @@
 // contact row and no account, an account with no audit trail, an OTP whose event never went out.
 import { eq, sql } from 'drizzle-orm';
 import type { Db } from '../../../db/index.js';
+import { isUniqueViolation } from '../../../db/errors.js';
 import { publish, type Tx } from '../../../platform/events/publish.js';
 import {
   generatePublicId,
@@ -322,9 +323,9 @@ async function insertUser(tx: Tx, input: RegisterInput): Promise<{ id: string; p
         return row;
       });
     } catch (error) {
-      const code = (error as { code?: string }).code;
-      const constraint = String((error as { constraint?: string }).constraint ?? '');
-      if (code !== '23505' || !constraint.includes('public_id')) throw error;
+      // Through `pgErrorIn`, not off the top-level object: drizzle wraps the driver's error, so a
+      // direct `error.code` read here saw undefined and this retry never ran (db/errors.ts).
+      if (!isUniqueViolation(error, 'public_id')) throw error;
       // Six characters of Crockford base32 is ~30 bits, so birthday collisions start showing up in
       // the tens of thousands of accounts. T-030 left the retry to the first inserter; this is it.
     }

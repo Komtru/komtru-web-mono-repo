@@ -23,6 +23,9 @@ const base = {
   ...testRedisEnv(),
   IDENTITY_SIGNING_KEY: randomBytes(32).toString('hex'),
   IDENTITY_SIGNING_KEY_ID: 'test-key',
+  // T-032 made the identity module refuse to build without it: an HMAC under an empty key is
+  // not an HMAC, and no OTP could be issued.
+  IDENTITY_HMAC_PEPPER: 'p'.repeat(32),
 };
 
 describe.runIf(infraEnabled)('process wiring', () => {
