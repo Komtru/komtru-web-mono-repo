@@ -11,6 +11,7 @@ import {
 } from '../../../src/modules/identity/domain/credential/hashing.js';
 import { resolveTermsVersions } from '../../../src/modules/identity/domain/terms.js';
 import type { RegistrationControllerDeps } from '../../../src/modules/identity/http/controllers/registration.controller.js';
+import type { AccountDeps } from '../../../src/modules/identity/services/auth.service.js';
 import { createHmacHasher } from '../../../src/platform/crypto/hmac.js';
 import { createTokenSigner } from '../../../src/modules/identity/infrastructure/jwt/access-token.js';
 import { createEpochCache } from '../../../src/modules/identity/infrastructure/redis/epoch-cache.js';
@@ -128,15 +129,10 @@ export const countingHasher = (
   };
 };
 
-/**
- * `AccountDeps` for a test that only inspects route DECLARATIONS — the schemas, the scopes, the
- * rate-limit keys. Nothing here is ever called: `assertRouteInvariants` reads the definitions, it
- * does not run the handlers.
- */
-export const stubAccountDeps = (): RegistrationControllerDeps => {
+/** `AccountDeps` a service test can call for real, with argon2 unless a cheap hasher is supplied. */
+export const accountDeps = (overrides: Partial<AccountDeps> = {}): AccountDeps => {
   const config = testConfig();
   return {
-    db: null as unknown as Db,
     signer: createTokenSigner(config),
     epochs: {} as never,
     logger: testLogger,
@@ -145,5 +141,16 @@ export const stubAccountDeps = (): RegistrationControllerDeps => {
     breach: { enabled: false, logger: testLogger },
     terms: resolveTermsVersions(config.terms),
     mirrorPhoneOtpToEmail: false,
+    ...overrides,
   };
 };
+
+/**
+ * `AccountDeps` for a test that only inspects route DECLARATIONS — the schemas, the scopes, the
+ * rate-limit keys. Nothing here is ever called: `assertRouteInvariants` reads the definitions, it
+ * does not run the handlers.
+ */
+export const stubAccountDeps = (): RegistrationControllerDeps => ({
+  db: null as unknown as Db,
+  ...accountDeps(),
+});
