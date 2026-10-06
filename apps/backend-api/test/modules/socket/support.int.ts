@@ -1,7 +1,6 @@
 // Shared setup for T-027's integration tests: two real API processes against one Redis and one
 // database, and a real socket.io-client to connect to them. Imported only from *.int.test.ts, so
 // nothing here runs unless KOMTRU_INFRA_TESTS=1.
-import { randomBytes } from 'node:crypto';
 import type { AddressInfo } from 'node:net';
 import { io as connect, type Socket } from 'socket.io-client';
 import { createModules } from '../../../src/modules/index.js';
@@ -9,6 +8,7 @@ import { socketModuleOf, type SocketGateway } from '../../../src/modules/socket/
 import { startApi, type RunningApi } from '../../../src/server.js';
 import { pooledUrl, testRedisEnv, testRedisUrl } from '../../support/db-urls.js';
 import { workerDatabase } from '../../support/db.js';
+import { identityProcessEnv } from '../../support/identity-env.js';
 
 export interface ApiInstance {
   api: RunningApi;
@@ -27,11 +27,7 @@ export const sharedEnv = (overrides: Record<string, string> = {}): Record<string
   REDIS_URL: testRedisUrl(),
   ...testRedisEnv(),
   POSTGRES_URL: pooledUrl(workerDatabase()),
-  IDENTITY_SIGNING_KEY: randomBytes(32).toString('hex'),
-  IDENTITY_SIGNING_KEY_ID: 'test-key',
-  // T-032 made the identity module refuse to build without it: an HMAC under an empty key is
-  // not an HMAC, and no OTP could be issued.
-  IDENTITY_HMAC_PEPPER: 'p'.repeat(32),
+  ...identityProcessEnv(),
   ...overrides,
 });
 

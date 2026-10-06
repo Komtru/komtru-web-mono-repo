@@ -29,6 +29,9 @@ export const testConfig = (overrides: Record<string, string> = {}): AppConfig =>
     IDENTITY_SIGNING_KEY: randomBytes(32).toString('hex'),
     IDENTITY_SIGNING_KEY_ID: 'test-key',
     IDENTITY_HMAC_PEPPER: 'p'.repeat(32),
+    // T-035: identity refuses to build without it, because an invitation destination must be
+    // stored recoverably to be sent (§S9).
+    ENCRYPTION_KEY: randomBytes(32).toString('hex'),
     ...overrides,
   });
 

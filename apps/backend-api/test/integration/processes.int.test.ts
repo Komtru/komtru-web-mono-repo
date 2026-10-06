@@ -1,4 +1,3 @@
-import { randomBytes } from 'node:crypto';
 // Boots the real API and worker processes' wiring against the local Docker stack.
 // Skipped unless KOMTRU_INFRA_TESTS=1.
 import http from 'node:http';
@@ -12,6 +11,7 @@ import { startApi } from '../../src/server.js';
 import { startWorker } from '../../src/worker-process.js';
 import { directUrl, infraEnabled, pooledUrl, testRedisEnv, testRedisUrl } from '../support/db-urls.js';
 import { useTestDatabase, workerDatabase } from '../support/db.js';
+import { identityProcessEnv } from '../support/identity-env.js';
 
 // The real registry includes identity, which refuses to boot without a signing key — which is the
 // point of that refusal, so the test supplies a throwaway one rather than skipping the check.
@@ -21,11 +21,7 @@ const base = {
   PORT: '0',
   REDIS_URL: testRedisUrl(),
   ...testRedisEnv(),
-  IDENTITY_SIGNING_KEY: randomBytes(32).toString('hex'),
-  IDENTITY_SIGNING_KEY_ID: 'test-key',
-  // T-032 made the identity module refuse to build without it: an HMAC under an empty key is
-  // not an HMAC, and no OTP could be issued.
-  IDENTITY_HMAC_PEPPER: 'p'.repeat(32),
+  ...identityProcessEnv(),
 };
 
 describe.runIf(infraEnabled)('process wiring', () => {

@@ -8,7 +8,14 @@ import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 import { createApp } from '../../../src/app.js';
 import type { NotifyConfig } from '../../../src/config/env.js';
 import { DEFAULT_TERMS_VERSION } from '../../../src/modules/identity/domain/terms.js';
-import { createIdentityAuth } from '../../../src/modules/identity/index.js';
+import {
+  claimInvitationsForDestination,
+  createIdentityAuth,
+  createInvitation,
+  type CreateInvitationInput,
+} from '../../../src/modules/identity/index.js';
+import { createEncryption } from '../../../src/platform/crypto/encryption.js';
+import { createHmacHasher } from '../../../src/platform/crypto/hmac.js';
 import { BINDINGS } from '../../../src/modules/notify/domain/binding.js';
 import { CATALOGUE } from '../../../src/modules/notify/domain/catalogue.js';
 import { dispatchForEvent } from '../../../src/modules/notify/services/dispatch.service.js';
@@ -18,6 +25,7 @@ import { mountRoutes } from '../../../src/platform/http/mount.js';
 import { createRateLimitGate } from '../../../src/platform/http/rateLimit.js';
 import { infraEnabled } from '../../support/db-urls.js';
 import { useTestDatabase } from '../../support/db.js';
+import { insertUser } from './infrastructure/postgres/support.js';
 import { createTestRedis, redisReady, testConfig, testLogger } from './support.js';
 
 const bodyOf = <T>(response: { body: unknown }): T => response.body as T;
@@ -326,5 +334,201 @@ describe.runIf(infraEnabled)('the registration flow end to end (M1 §9.3)', () =
       .send({ channel: 'PHONE', phone: PHONE, acceptedTermsVersion: DEFAULT_TERMS_VERSION });
     expect(second.status).toBe(201);
     expect(bodyOf<Registered>(second).userId).not.toBe(bodyOf<Registered>(first).userId);
+  });
+});
+
+describe.runIf(infraEnabled)('registering from a party invitation (M1 §8.5, §10.1)', () => {
+  const t = useTestDatabase();
+  let redis: Redis;
+  let app: Express;
+  const config = testConfig();
+
+  beforeEach(async () => {
+    redis ??= createTestRedis();
+    await redisReady(redis);
+    const auth = createIdentityAuth({ db: t.db(), redis, config, logger: testLogger });
+    app = createApp({
+      config,
+      logger: testLogger,
+      mountV1: mountRoutes(auth.routes ?? [], {
+        logger: testLogger,
+        idempotency: createIdempotencyGate({ db: t.db(), redis, logger: testLogger }),
+        rateLimit: createRateLimitGate({ redis, logger: testLogger, keyPrefix: `rl-${randomUUID()}` }),
+        resolveActor: auth.resolveActor,
+      }),
+    });
+  });
+
+  afterAll(() => {
+    redis?.disconnect();
+  });
+
+  const INVITED = 'chidi@example.com';
+
+  /** An inviter with a live invitation to INVITED, created through the module's own service. */
+  const seedInvitation = async (overrides: Partial<CreateInvitationInput> = {}) => {
+    const inviterId = await insertUser(t.owner(), {
+      status: 'ACTIVE',
+      verification_level: 'CONTACT_VERIFIED',
+    });
+    const result = await createInvitation(
+      {
+        db: t.db(),
+        hasher: createHmacHasher(config.identity.hmacPepper ?? ''),
+        encryption: createEncryption(config),
+        logger: testLogger,
+      },
+      {
+        inviterUserId: inviterId,
+        channel: 'EMAIL',
+        destination: INVITED,
+        intendedRole: 'SELLER',
+        context: { type: 'TRADE', id: '11111111-1111-4111-8111-111111111111' },
+        ...overrides,
+      },
+    );
+    if (result.outcome !== 'CREATED') throw new Error(`seedInvitation: ${result.outcome}`);
+    return { inviterId, ...result };
+  };
+
+  const invitationRow = async (id: string) =>
+    (
+      await t
+        .owner()
+        .query<{ status: string; claimed_by_user_id: string | null }>(
+          `SELECT status, claimed_by_user_id FROM identity.party_invitations WHERE id = $1`,
+          [id],
+        )
+    ).rows[0];
+
+  const codeFor = async (challengeId: string): Promise<string> => {
+    const { rows } = await t
+      .app()
+      .query<{ payload: { challengeId: string; code: string } }>(
+        `SELECT payload FROM platform.outbox WHERE event_type = 'identity.otp.requested'`,
+      );
+    const match = rows.map((r) => r.payload).find((p) => p.challengeId === challengeId);
+    if (!match) throw new Error(`no identity.otp.requested for ${challengeId}`);
+    return match.code;
+  };
+
+  const registerWith = (body: Record<string, unknown>) =>
+    request(app)
+      .post('/v1/auth/register')
+      .send({ acceptedTermsVersion: DEFAULT_TERMS_VERSION, ...body });
+
+  it('refuses an expired invitation token, naming the field, and writes no account', async () => {
+    const { invitationId, token } = await seedInvitation();
+    await t
+      .owner()
+      .query(`UPDATE identity.party_invitations SET expires_at = now() - interval '1 day' WHERE id = $1`, [
+        invitationId,
+      ]);
+
+    const response = await registerWith({
+      channel: 'EMAIL',
+      email: INVITED,
+      password: PASSWORD,
+      invitationToken: token,
+    });
+
+    expect(response.status).toBe(422);
+    expect(bodyOf<{ errors: { path: string }[] }>(response).errors[0]?.path).toBe('invitationToken');
+    const { rows } = await t.app().query(`SELECT 1 FROM identity.users`);
+    // Only the inviter exists.
+    expect(rows).toHaveLength(1);
+  });
+
+  it('records the invitation on the registered event, and claims nothing until the channel is proven', async () => {
+    const { invitationId, token } = await seedInvitation();
+
+    const registered = bodyOf<Registered>(
+      await registerWith({ channel: 'EMAIL', email: INVITED, password: PASSWORD, invitationToken: token }),
+    );
+
+    const { rows } = await t
+      .app()
+      .query<{ payload: { invitationId: string | null } }>(
+        `SELECT payload FROM platform.outbox WHERE event_type = 'identity.user.registered'`,
+      );
+    expect(rows[0]?.payload.invitationId).toBe(invitationId);
+    expect((await invitationRow(invitationId))?.status).toBe('PENDING');
+
+    // And on verification it claims, with the event M7 binds the trade on.
+    await request(app)
+      .post('/v1/auth/verify-otp')
+      .send({ challengeId: registered.challengeId, code: await codeFor(registered.challengeId) });
+
+    expect(await invitationRow(invitationId)).toMatchObject({
+      status: 'CLAIMED',
+      claimed_by_user_id: registered.userId,
+    });
+    const claimed = await t
+      .app()
+      .query<{ payload: Record<string, unknown> }>(
+        `SELECT payload FROM platform.outbox WHERE event_type = 'identity.party_invitation.claimed'`,
+      );
+    expect(claimed.rows[0]?.payload).toMatchObject({
+      invitationId,
+      claimedByUserId: registered.userId,
+      contextType: 'TRADE',
+      contextId: '11111111-1111-4111-8111-111111111111',
+    });
+  });
+
+  it('leaves the invitation pending when a different channel is verified (§8.5 rule 6)', async () => {
+    // The link-forwarding attack: the token is valid, but the person registering proves a number we
+    // never invited, so the trade must not bind to them.
+    const { invitationId, token } = await seedInvitation();
+
+    const registered = bodyOf<Registered>(
+      await registerWith({ channel: 'PHONE', phone: PHONE, invitationToken: token }),
+    );
+    await request(app)
+      .post('/v1/auth/verify-otp')
+      .send({ challengeId: registered.challengeId, code: await codeFor(registered.challengeId) });
+
+    expect((await invitationRow(invitationId))?.status).toBe('PENDING');
+    const claimed = await t
+      .app()
+      .query(`SELECT 1 FROM platform.outbox WHERE event_type = 'identity.party_invitation.claimed'`);
+    expect(claimed.rows).toEqual([]);
+  });
+
+  it('claims an invitation nobody named a token for, because the destination is what binds', async () => {
+    // §8.5 step 5 is about verification, not about the link: somebody who signs up directly with the
+    // invited address still binds the trade.
+    const { invitationId } = await seedInvitation();
+
+    const registered = bodyOf<Registered>(
+      await registerWith({ channel: 'EMAIL', email: INVITED, password: PASSWORD }),
+    );
+    await request(app)
+      .post('/v1/auth/verify-otp')
+      .send({ challengeId: registered.challengeId, code: await codeFor(registered.challengeId) });
+
+    expect((await invitationRow(invitationId))?.status).toBe('CLAIMED');
+  });
+
+  it('never claims an invitation the registrant sent themselves (design C5)', async () => {
+    const { inviterId, invitationId } = await seedInvitation();
+    // The inviter adds and verifies the address they invited.
+    const { rows } = await t.owner().query<{ id: string }>(
+      `INSERT INTO identity.user_emails (user_id, email, email_normal, is_primary)
+       VALUES ($1, $2, $2, true) RETURNING id`,
+      [inviterId, INVITED],
+    );
+    await t
+      .db()
+      .transaction((tx) =>
+        claimInvitationsForDestination(
+          tx,
+          { hasher: createHmacHasher(config.identity.hmacPepper ?? '') },
+          { userId: inviterId, channel: 'EMAIL', canonical: INVITED },
+        ),
+      );
+
+    expect(rows).toHaveLength(1);
+    expect((await invitationRow(invitationId))?.status).toBe('PENDING');
   });
 });

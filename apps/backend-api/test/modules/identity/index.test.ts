@@ -3,6 +3,9 @@ import * as identity from '../../../src/modules/identity/index.js';
 import { ANONYMOUS_ACTOR } from '../../../src/platform/http/principal.js';
 import { assertRouteInvariants } from '../../../src/platform/http/route.js';
 import { registryConfig, stubProcessDeps, testModules } from '../../support/modules.js';
+import { loadConfig } from '../../../src/config/env.js';
+import { createLogger } from '../../../src/platform/logger.js';
+import { identityProcessEnv } from '../../support/identity-env.js';
 
 describe('identity module surface', () => {
   it('exports the catalogue and the username surface other modules need', () => {
@@ -139,5 +142,85 @@ describe('identity module wiring (T-032)', () => {
       'identityVerificationLevelChangedEvent',
     ])
       expect(identity).toHaveProperty(name);
+  });
+});
+
+describe('identity module wiring (T-035)', () => {
+  const auth = () => identity.createIdentityAuth(stubProcessDeps());
+
+  it('serves every route M1 §10.4 names', () => {
+    const paths = (auth().routes ?? []).map((r) => `${r.method.toUpperCase()} ${r.path}`);
+    expect(paths).toEqual(
+      expect.arrayContaining([
+        'GET /parties/lookup',
+        'POST /parties/lookup',
+        'GET /parties/suggest',
+        'POST /parties/invite',
+        'GET /parties/invitations/:token',
+      ]),
+    );
+  });
+
+  it('schedules the invitation expiry sweep, so M7 is never left waiting', () => {
+    expect(identity.identityModule(auth()).schedules?.map((job) => job.name)).toContain(
+      identity.PARTY_INVITATIONS_EXPIRE_SCHEDULE,
+    );
+  });
+
+  it('refuses to build without ENCRYPTION_KEY, naming the variable', () => {
+    // An invitation destination has to be stored recoverably to be sent. A process that cannot
+    // encrypt one should say so while it is starting, not on the first invitation.
+    const config = registryConfig();
+    const withoutKey = { ...config, crypto: {} };
+    expect(() => identity.createIdentityAuth({ ...stubProcessDeps(), config: withoutKey })).toThrow(
+      /ENCRYPTION_KEY/,
+    );
+  });
+
+  it('exports the party surface T-061 and the trades module need', () => {
+    for (const name of [
+      'canActAsBuyer',
+      'partyCard',
+      'badgesFor',
+      'lookupParty',
+      'suggestParties',
+      'createInvitation',
+      'claimInvitationsForDestination',
+      'expireInvitations',
+      'identityPartyLookupPerformedEvent',
+      'identityPartyInvitationClaimedEvent',
+      'identityPartyInvitationExpiredEvent',
+      'partyInvitations',
+    ])
+      expect(identity).toHaveProperty(name);
+  });
+
+  it('answers canActAsBuyer so trades can delegate rather than keep a second copy', () => {
+    expect(identity.canActAsBuyer('ACTIVE')).toBe(false);
+    expect(identity.canActAsBuyer('SUSPENDED')).toBe(true);
+    expect(identity.canActAsBuyer(null)).toBe(true);
+  });
+});
+
+describe('every env a real process is started from satisfies identity (T-035)', () => {
+  // `createIdentityAuth` throws when a key is missing, and the suites that boot real processes build
+  // their environment by hand. `identityProcessEnv()` is the one list they all spread, and this is
+  // the assertion that it is still sufficient — because nothing but an infra run would otherwise
+  // notice a fourth key added to the module and not added to that list.
+  it('builds the identity module from identityProcessEnv() alone', () => {
+    const config = loadConfig({
+      LOG_LEVEL: 'silent',
+      POSTGRES_URL: 'postgresql://x@localhost/x',
+      REDIS_URL: 'redis://localhost:6379',
+      ...identityProcessEnv(),
+    });
+    expect(() =>
+      identity.createIdentityAuth({
+        db: {} as never,
+        redis: {} as never,
+        config,
+        logger: createLogger(config),
+      }),
+    ).not.toThrow();
   });
 });

@@ -45,6 +45,7 @@ export async function registerUser(
     acceptedTermsVersion: body.acceptedTermsVersion,
     ...(body.acceptedPrivacyVersion ? { acceptedPrivacyVersion: body.acceptedPrivacyVersion } : {}),
     marketingOptIn: body.marketingOptIn,
+    ...(body.invitationToken ? { invitationToken: body.invitationToken } : {}),
     ...(body.deviceFingerprint ? { deviceFingerprint: body.deviceFingerprint } : {}),
     ip: callerIp(req),
     userAgent: callerAgent(req),
@@ -86,6 +87,13 @@ export async function registerUser(
     case 'REJECTED':
       throw new ApiError(422, 'VALIDATION_FAILED', 'That password cannot be used', undefined, [
         { path: 'password', message: result.message },
+      ]);
+    case 'INVALID_INVITATION':
+      throw new ApiError(422, 'VALIDATION_FAILED', 'That invitation is no longer valid', undefined, [
+        {
+          path: 'invitationToken',
+          message: 'This invitation has expired or has already been used. You can still sign up without it.',
+        },
       ]);
     case 'STALE_TERMS':
       throw new ApiError(
