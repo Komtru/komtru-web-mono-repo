@@ -322,6 +322,27 @@ export function expandDeclaration(property: string, rawValue: string): [string, 
       if (match[3] !== undefined) out.push(['line-height', match[3]]);
       return out;
     }
+    case 'flex': {
+      // `flex: 1` and `flex: 0 0 228px` — the shell's rails are pinned with the shorthand and the
+      // utilities that reproduce them (`grow-0 shrink-0 basis-[228px]`) are three longhands, so
+      // without this the two sides compare a shorthand against nothing.
+      const parts = value.split(/\s+/).filter(Boolean);
+      if (parts.length === 1 && /^[\d.]+$/.test(parts[0] ?? '')) {
+        return [
+          ['flex-grow', parts[0] ?? ''],
+          ['flex-shrink', '1'],
+          ['flex-basis', '0%'],
+        ];
+      }
+      if (parts.length === 3) {
+        return [
+          ['flex-grow', parts[0] ?? ''],
+          ['flex-shrink', parts[1] ?? ''],
+          ['flex-basis', parts[2] ?? ''],
+        ];
+      }
+      return [[property, value]];
+    }
     case 'inset': {
       const box = expandBox(value);
       return SIDES.map((side, i) => [side, box[i]] as [string, string]);

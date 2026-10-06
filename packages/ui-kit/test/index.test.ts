@@ -16,6 +16,7 @@ describe('@komtru/ui-kit', () => {
       'CONTROL_INVALID_CLASS',
       'Card',
       'Chip',
+      'ConsoleShell',
       'DesktopShell',
       'EmptyState',
       'FOCUS_RING',

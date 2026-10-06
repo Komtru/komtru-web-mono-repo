@@ -151,6 +151,39 @@ function mediaHolds(prelude: string, width: number): boolean {
   });
 }
 
+/** Tailwind's own screen names. A class prefixed with one of these is the only variant resolved here. */
+const SCREENS = ['sm', 'md', 'lg', 'xl', '2xl'];
+
+/** The variant segments of a class name, split on the colons outside its brackets. */
+function segments(className: string): string[] {
+  const out: string[] = [];
+  let depth = 0;
+  let current = '';
+  for (const char of className) {
+    if (char === '[' || char === '(') depth += 1;
+    else if (char === ']' || char === ')') depth -= 1;
+    if (char === ':' && depth === 0) {
+      out.push(current);
+      current = '';
+    } else {
+      current += char;
+    }
+  }
+  out.push(current);
+  return out;
+}
+
+/**
+ * A width decides whether `lg:block` applies; it decides nothing about `focus-visible:outline-none`
+ * or `motion-reduce:transition-none`. Those are left out exactly as `compiledDeclarations` leaves
+ * them out, and asserted by the component's own test, so a shell's class list can carry both.
+ */
+function isWidthResolvable(className: string): boolean {
+  const parts = segments(className);
+  if (parts.length === 1) return true;
+  return parts.length === 2 && SCREENS.includes(parts[0] ?? '');
+}
+
 /**
  * What a list of Tailwind classes computes to on one element at a given viewport width. Returns the
  * same shape `compiledDeclarations` does — shorthands expanded, tokens resolved, hex normalised —
@@ -160,7 +193,7 @@ export async function declarationsAtWidth(
   classNames: readonly string[],
   width: number,
 ): Promise<Map<string, string>> {
-  const candidates = [...new Set(classNames)].filter((name) => name !== '');
+  const candidates = [...new Set(classNames)].filter((name) => name !== '' && isWidthResolvable(name));
   const css = await compileUtilities(candidates);
   const rules = parseConditionalRules(css);
 

@@ -36,3 +36,19 @@ describe('declarationsAtWidth', () => {
     expect(at.get('display')).toBe('block');
   });
 });
+
+describe('variants a width cannot decide', () => {
+  it('leaves a pseudo-class variant out, as the width-blind reader does', async () => {
+    // A shell's class list carries the focus ring and `motion-reduce:`; neither is something a
+    // viewport width settles, and both are asserted by the component's own test.
+    const at = await declarationsAtWidth(['block', 'focus-visible:outline-[2.5px]'], 1440);
+    expect(at.has('outline-width')).toBe(false);
+    expect(at.get('display')).toBe('block');
+  });
+
+  it('still resolves a screen variant written alongside one', async () => {
+    const at = await declarationsAtWidth(['hidden', 'lg:block', 'hover:bg-surface-secondary'], 1440);
+    expect(at.get('display')).toBe('block');
+    expect(at.has('background-color')).toBe(false);
+  });
+});
