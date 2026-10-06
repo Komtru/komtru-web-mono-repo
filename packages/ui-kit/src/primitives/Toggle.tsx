@@ -34,8 +34,11 @@ export function Toggle({
       onClick={locked ? undefined : () => onChange?.(!checked)}
       className={cx(
         'relative h-[20px] w-[34px] shrink-0 rounded-full border-none',
-        checked ? 'bg-trust-emerald' : 'bg-stone-gray',
-        locked && 'bg-stone-gray opacity-[.6]',
+        // One branch, not two: class order in the attribute does not decide the cascade, stylesheet
+        // order does, and Tailwind emits `.bg-stone-gray` before `.bg-trust-emerald`. Listing both
+        // on a locked-and-on switch — which is the only locked switch the reference draws — would
+        // have rendered it emerald, the opposite of `.m-switch.locked`.
+        locked ? 'bg-stone-gray opacity-[.6]' : checked ? 'bg-trust-emerald' : 'bg-stone-gray',
         FOCUS_RING,
         className,
       )}

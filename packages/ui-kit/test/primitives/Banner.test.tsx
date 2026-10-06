@@ -44,6 +44,38 @@ describe('Banner', () => {
     expect(icon?.className).toContain('text-success-on-soft');
   });
 
+  it('reads the quiet info note at 11.5px and fully opaque, not the alert banner’s dimmed 11px', () => {
+    render(<Banner tone="info">Nothing is funded until both sides accept.</Banner>);
+    const body = screen.getByText('Nothing is funded until both sides accept.');
+    expect(body.className).toContain('text-[11.5px]');
+    expect(body.className).toContain('leading-[1.5]');
+    expect(body.className).not.toContain('opacity-[.8]');
+  });
+
+  it('dims the alert banners’ body the way the reference does', () => {
+    render(<Banner tone="warning">Attach a photo first.</Banner>);
+    const body = screen.getByText('Attach a photo first.');
+    expect(body.className).toContain('text-[11px]');
+    expect(body.className).toContain('opacity-[.8]');
+  });
+
+  it('draws the info note’s 15px icon and the alert banners’ 16px one', () => {
+    const icon = <svg viewBox="0 0 24 24" />;
+    const note = render(
+      <Banner tone="info" icon={icon}>
+        Compare before you release.
+      </Banner>,
+    );
+    expect(note.container.querySelector('[aria-hidden="true"]')?.className).toContain('h-[15px]');
+    note.unmount();
+    const alert = render(
+      <Banner tone="warning" icon={icon}>
+        Accept is locked.
+      </Banner>,
+    );
+    expect(alert.container.querySelector('[aria-hidden="true"]')?.className).toContain('h-[16px]');
+  });
+
   it('reads without a headline, which is how the scope notes are written', () => {
     render(<Banner tone="info">Nothing is funded until both sides accept the terms.</Banner>);
     expect(screen.getByText('Nothing is funded until both sides accept the terms.')).toBeDefined();

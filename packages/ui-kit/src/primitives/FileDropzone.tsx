@@ -22,8 +22,9 @@ export interface MediaGateProps {
 }
 
 /**
- * Hands a screen the one fact it is allowed to act on. The gate is computed here rather than passed
- * in, so no caller can hand itself an open gate by passing `disabled={false}`.
+ * Computes the gate once and hands the answer to a render prop, so a screen states the rule in one
+ * place instead of recomputing `media.length >= n` beside every action. It does not *enforce* the
+ * gate — a child is free to ignore the argument — it only makes the honest version the short one.
  */
 export function MediaGate({ media, requiredCount, children }: MediaGateProps): React.ReactNode {
   return children(isMediaGateSatisfied(media, requiredCount));
@@ -41,7 +42,11 @@ export interface FileDropzoneProps {
   /** The line under it, saying why it helps. */
   hint?: string;
   media: readonly MediaItem[];
-  /** Above zero, the gate banner states what is still missing and stays until it is not. */
+  /**
+   * How much proof the screen demands. Zero — the default — means the upload is optional evidence,
+   * which is what most of them are; above zero the gate banner states what is still missing and
+   * stays until it is not.
+   */
   requiredCount?: number;
   slots?: 2 | 3 | 4;
   accept?: string;
@@ -71,7 +76,9 @@ export function FileDropzone({
     <div className={cx('mb-[14px]', className)}>
       {!satisfied && (
         <Banner tone="warning" title="Accept is locked">
-          {`Attach ${String(missing)} more photo or video showing the item in your possession before you can accept.`}
+          {media.length === 0
+            ? 'Attach at least one photo or video showing the item in your possession before you can accept.'
+            : `Attach ${String(missing)} more showing the item in your possession before you can accept.`}
         </Banner>
       )}
       <ul className={cx('mb-[14px] grid gap-[8px]', SLOT_GRIDS[slots])}>
@@ -90,7 +97,10 @@ export function FileDropzone({
               {item === undefined ? (
                 <PlusIcon className="h-[18px] w-[18px] stroke-trust-gray" />
               ) : (
-                <span className="sr-only">{item.alt ?? `Attachment ${String(index + 1)}`}</span>
+                <>
+                  <span className="sr-only">{item.alt ?? `Attachment ${String(index + 1)}`}</span>
+                  {item.kind === 'video' && <PlayBadge />}
+                </>
               )}
             </li>
           );
@@ -117,6 +127,20 @@ export function FileDropzone({
         />
       </label>
     </div>
+  );
+}
+
+/** `.proof-thumb .play-badge` — the corner marker that tells a video thumbnail from a photo one. */
+function PlayBadge(): React.JSX.Element {
+  return (
+    <span
+      aria-hidden
+      className="absolute right-[6px] bottom-[6px] flex h-[20px] w-[20px] items-center justify-center rounded-[50%] bg-[rgba(13,20,32,.75)]"
+    >
+      <svg viewBox="0 0 24 24" className="h-[9px] w-[9px] fill-pure-white stroke-none">
+        <path d="M8 5v14l11-7z" />
+      </svg>
+    </span>
   );
 }
 

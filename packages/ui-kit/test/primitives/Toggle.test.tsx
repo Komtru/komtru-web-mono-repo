@@ -35,6 +35,15 @@ describe('Toggle', () => {
     expectFocusRing(toggle);
   });
 
+  it('greys a locked switch even when it is on, which is the only locked switch the reference draws', () => {
+    render(<Toggle label="Dispute & fraud alerts" checked locked />);
+    const toggle = screen.getByRole('switch');
+    expect(toggle.className).toContain('bg-stone-gray');
+    // Both classes on one element would leave the cascade, not the component, picking the colour.
+    expect(toggle.className).not.toContain('bg-trust-emerald');
+    expect(toggle.className).toContain('opacity-[.6]');
+  });
+
   it('shows a locked setting rather than hiding it, and refuses to change', () => {
     const onChange = vi.fn();
     render(<Toggle label="Dispute & fraud alerts" checked locked onChange={onChange} />);

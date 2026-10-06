@@ -77,6 +77,17 @@ const DEVIATIONS: Record<string, Record<string, string>> = {
       "compiles to `background-image` rather than the reference's `background` shorthand. The " +
       'gradient string is asserted in FileDropzone.test.tsx.',
   },
+  'proof-compare-note-icon': {
+    stroke:
+      'The reference strokes the icon with `var(--info-on-soft)` directly. The wrapper stroke is ' +
+      '`currentColor`, and the wrapper sets `color` to that same token, so the computed stroke is ' +
+      'identical — routing it through `color` is what lets a screen pass any icon it likes.',
+  },
+  'guard-lock-banner-icon': {
+    stroke:
+      'Same as proof-compare-note-icon: `currentColor` resolves to the `--warning-on-soft` the ' +
+      'wrapper sets, which is exactly what the reference strokes the icon with.',
+  },
   'sheet-scrim': {
     position:
       'The reference pins the scrim `absolute` inside the 340px phone frame it is drawn in. A real ' +
@@ -90,11 +101,48 @@ const DEVIATIONS: Record<string, Record<string, string>> = {
 /** A stand-in for whatever icon a screen gives an empty state; only its wrapper is under test. */
 const ICON = <svg aria-hidden viewBox="0 0 24 24" />;
 
+/**
+ * Every property a primitive applies that its reference rule does not declare, keyed by parity id.
+ * The reference stops at the rule; a component has to be a real element as well, and that costs a
+ * handful of declarations. Each one is listed so it is a decision rather than an accident.
+ */
+const ADDITIONS: Record<string, readonly string[]> = {
+  // The reference writes the column layout and 8px gap inline on every instance holding more than
+  // one button, and the fade is a Tailwind gradient, which compiles to `background-image`.
+  'btn-sticky': ['display', 'flex-direction', 'gap', 'background-image'],
+  // `.chip .dot` has no colour of its own; every instance sets it inline to the chip's `on-soft`.
+  'chip-dot': ['background-color'],
+  // The reference strokes the icon itself (`.state-panel.empty .icon-wrap svg{stroke:…}`); the
+  // wrapper carries the colour here so any icon a screen passes inherits it through `currentColor`.
+  'state-panel-icon': ['color'],
+  // The row is a `<button>` or an `<a>` as often as a `<div>`, and those do not fill or left-align
+  // on their own.
+  'trade-row': ['width', 'text-align'],
+  // The reference's cell is a `<div>` centred by flex; a real `<input>` also needs its text centred.
+  'otp-cell': ['text-align'],
+  'otp-cell-filled': ['text-align'],
+  // The shimmer gradient compiles to `background-image`; `width` is the `.skel-line` width variant.
+  skeleton: ['background-image', 'width'],
+  // The upload target is a `<label>` wrapping a hidden file input, so it has to be a clickable block.
+  'm-upload': ['display', 'cursor'],
+  // The filled thumbnail's gradient, same story as the skeleton's.
+  'proof-thumb': ['background-image'],
+  // The icon wrapper carries `color` so `stroke-current` resolves to the tone — see DEVIATIONS.
+  'proof-compare-note-icon': ['color'],
+  'guard-lock-banner-icon': ['color'],
+};
+
 interface ParityRow {
   /** Key into `DEVIATIONS`, and the name the failure is reported under. */
   id: string;
   /** The selector the reference HTML declares for this piece of markup. */
   selector: string;
+  /**
+   * The rules `selector` modifies. `.chip.protected` declares a colour pair and nothing else; the
+   * element carries `.chip` too, so the comparison has to be against both or every base declaration
+   * reads as something the component invented.
+   */
+  extends?: readonly string[];
   /** Rendered, then its class attributes harvested. */
   element?: React.ReactElement;
   /** Which element in the rendered markup carries the class under test. Defaults to the first. */
@@ -135,16 +183,31 @@ const ROWS: ParityRow[] = [
     ),
   },
 
-  { id: 'chip', selector: '.chip', element: <Chip tone="protected">Protected</Chip> },
-  { id: 'chip-protected', selector: '.chip.protected', element: <Chip tone="protected">Protected</Chip> },
+  {
+    id: 'chip-protected',
+    selector: '.chip.protected',
+    extends: ['.chip'],
+    element: <Chip tone="protected">Protected</Chip>,
+  },
   {
     id: 'chip-awaiting',
     selector: '.chip.awaiting',
+    extends: ['.chip'],
     element: <Chip tone="awaiting">Under Inspection</Chip>,
   },
-  { id: 'chip-risk', selector: '.chip.risk', element: <Chip tone="risk">At risk</Chip> },
-  { id: 'chip-resolved', selector: '.chip.resolved', element: <Chip tone="resolved">Resolved</Chip> },
-  { id: 'chip-verified', selector: '.chip.verified', element: <Chip tone="verified">Verified</Chip> },
+  { id: 'chip-risk', selector: '.chip.risk', extends: ['.chip'], element: <Chip tone="risk">At risk</Chip> },
+  {
+    id: 'chip-resolved',
+    selector: '.chip.resolved',
+    extends: ['.chip'],
+    element: <Chip tone="resolved">Resolved</Chip>,
+  },
+  {
+    id: 'chip-verified',
+    selector: '.chip.verified',
+    extends: ['.chip'],
+    element: <Chip tone="verified">Verified</Chip>,
+  },
   { id: 'chip-dot', selector: '.chip .dot', element: <Chip tone="protected">Protected</Chip>, node: 1 },
 
   { id: 'avatar', selector: '.avatar', element: <Avatar initials="TE" /> },
@@ -172,6 +235,21 @@ const ROWS: ParityRow[] = [
     selector: '.progress-5step-labels',
     element: <TradeProgress stage={3} />,
     node: 6,
+  },
+
+  {
+    id: 'p5-seg-done',
+    selector: '.progress-5step .p5-seg.done',
+    extends: ['.progress-5step .p5-seg'],
+    element: <TradeProgress stage={3} />,
+    node: 1,
+  },
+  {
+    id: 'p5-seg-active',
+    selector: '.progress-5step .p5-seg.active',
+    extends: ['.progress-5step .p5-seg'],
+    element: <TradeProgress stage={1} />,
+    node: 1,
   },
 
   // `komtru-refinement-v2` is the numbered inline rail; `komtru-nav-v2` restates `.ko-stepper` as a
@@ -213,11 +291,33 @@ const ROWS: ParityRow[] = [
   {
     id: 'otp-cell-filled',
     selector: '.otp-cell.filled',
+    extends: ['.otp-cell'],
     element: <OtpInput label="One-time code" value="4" />,
     node: 1,
   },
 
+  {
+    id: 'ko-step-line',
+    selector: '.ko-step-line',
+    styleId: 'komtru-refinement-v2',
+    element: <Stepper steps={['One', 'Two']} current={0} />,
+    node: 4,
+  },
+
   { id: 'm-switch', selector: '.m-switch', element: <Toggle label="Marketing" checked={false} /> },
+  {
+    id: 'm-switch-on',
+    selector: '.m-switch.on',
+    extends: ['.m-switch'],
+    element: <Toggle label="Shipment updates" checked />,
+  },
+  {
+    // Checked *and* locked: the only locked switch the reference draws, and the one that regressed.
+    id: 'm-switch-locked',
+    selector: '.m-switch.locked',
+    extends: ['.m-switch'],
+    element: <Toggle label="Dispute & fraud alerts" checked locked />,
+  },
 
   {
     id: 'sheet-scrim',
@@ -237,7 +337,9 @@ const ROWS: ParityRow[] = [
     node: 2,
   },
 
-  { id: 'skeleton', selector: '.skeleton', element: <Skeleton /> },
+  // `lines` is the `.skel-line` form, which is the only one the reference draws; the single-block
+  // form is the same rule without `.skel-line`'s 8px margin, since a lone skeleton owns no spacing.
+  { id: 'skeleton', selector: '.skel-line', extends: ['.skeleton'], element: <Skeleton lines={1} /> },
   { id: 'node-loader', selector: '.node-loader', element: <NodeLoader title="Verifying payment" /> },
   {
     id: 'node-loader-dot',
@@ -253,7 +355,8 @@ const ROWS: ParityRow[] = [
   },
   {
     id: 'state-panel-icon',
-    selector: '.state-panel .icon-wrap',
+    selector: '.state-panel.empty .icon-wrap',
+    extends: ['.state-panel .icon-wrap'],
     element: <EmptyState icon={ICON} title="No protected Trades yet" body="Start one." />,
     node: 1,
   },
@@ -274,6 +377,53 @@ const ROWS: ParityRow[] = [
   },
 
   {
+    id: 'proof-compare-note-icon',
+    selector: '.proof-compare-note svg',
+    element: (
+      <Banner tone="info" icon={ICON}>
+        Compare this against the proof.
+      </Banner>
+    ),
+    node: 1,
+  },
+  {
+    id: 'proof-compare-note-body',
+    selector: '.proof-compare-note span',
+    element: <Banner tone="info">Compare this against the proof.</Banner>,
+    node: 1,
+  },
+  {
+    id: 'guard-lock-banner-icon',
+    selector: '.guard-lock-banner svg',
+    element: (
+      <Banner tone="warning" icon={ICON} title="Accept is locked">
+        Attach a photo.
+      </Banner>
+    ),
+    node: 1,
+  },
+  {
+    id: 'guard-lock-banner-title',
+    selector: '.guard-lock-banner b',
+    element: (
+      <Banner tone="warning" title="Accept is locked">
+        Attach a photo.
+      </Banner>
+    ),
+    node: 1,
+  },
+  {
+    id: 'guard-lock-banner-body',
+    selector: '.guard-lock-banner span',
+    element: (
+      <Banner tone="warning" title="Accept is locked">
+        Attach a photo.
+      </Banner>
+    ),
+    node: 2,
+  },
+
+  {
     id: 'm-upload',
     selector: '.m-upload',
     element: (
@@ -290,6 +440,7 @@ const ROWS: ParityRow[] = [
   {
     id: 'proof-thumb-empty',
     selector: '.proof-thumb.empty',
+    extends: ['.proof-thumb'],
     element: <FileDropzone label="Proof of possession" media={[]} />,
     node: 2,
   },
@@ -298,6 +449,18 @@ const ROWS: ParityRow[] = [
     selector: '.proof-thumb',
     element: <FileDropzone label="Proof of possession" media={[{ id: 'a' }]} />,
     node: 2,
+  },
+  {
+    id: 'play-badge',
+    selector: '.proof-thumb .play-badge',
+    element: <FileDropzone label="Proof of possession" media={[{ id: 'a', kind: 'video' }]} />,
+    node: 4,
+  },
+  {
+    id: 'play-badge-icon',
+    selector: '.proof-thumb .play-badge svg',
+    element: <FileDropzone label="Proof of possession" media={[{ id: 'a', kind: 'video' }]} />,
+    node: 5,
   },
 ];
 
@@ -319,7 +482,10 @@ describe.each(ROWS)('$id', (row) => {
   const classes = [...(row.classes ?? (classAttributes(row.element!)[row.node ?? 0] ?? '').split(/\s+/))];
 
   it(`compiles to what the reference declares for ${row.selector}`, async () => {
-    const raw = referenceRule(html, row.selector, row.styleId);
+    const raw = new Map<string, string>();
+    for (const selector of [...(row.extends ?? []), row.selector]) {
+      for (const [property, value] of referenceRule(html, selector, row.styleId)) raw.set(property, value);
+    }
     const reference = canonicalise(raw);
     const compiled = await compiledDeclarations(classes);
     // A deviation is written against the property the reference declares; widen it to the longhands
@@ -349,6 +515,27 @@ describe.each(ROWS)('$id', (row) => {
       excusedButMatching,
       `${row.id} excuses properties it actually reproduces — delete the DEVIATIONS entry`,
     ).toEqual([]);
+
+    // The other direction. Without it the comparison is blind to anything a primitive *adds*: a
+    // `hidden` or `opacity-0` slipped into a class string reproduces every declared property
+    // perfectly and still renders nothing.
+    const declared = new Set(ADDITIONS[row.id] ?? []);
+    const undeclaredAdditions = [...compiled.keys()].filter(
+      (property) => !reference.has(property) && !declared.has(property),
+    );
+    const staleAdditions = [...declared].filter(
+      (property) => !compiled.has(property) || reference.has(property),
+    );
+    expect(
+      undeclaredAdditions,
+      `${row.id} applies properties the reference does not — name them in ADDITIONS or drop them`,
+    ).toEqual([]);
+    expect(staleAdditions, `${row.id} declares additions it no longer applies`).toEqual([]);
+
+    // A `var()` surviving canonicalisation on both sides would compare equal while meaning nothing.
+    for (const [property, value] of reference) {
+      expect(value, `${row.id} left ${property} unresolved`).not.toContain('var(');
+    }
   });
 });
 
@@ -364,5 +551,33 @@ describe('DEVIATIONS', () => {
         expect(reason.length, `${id}.${property} needs a real reason`).toBeGreaterThan(40);
       }
     }
+  });
+
+  // A misspelled property excuses nothing and is reported by nothing: the mismatch loop never looks
+  // it up, and the staleness check only sees properties the reference declares.
+  it('names properties the reference actually declares', () => {
+    for (const [id, properties] of Object.entries(DEVIATIONS)) {
+      const row = ROWS.find((candidate) => candidate.id === id);
+      if (row === undefined) continue;
+      const declared = new Map<string, string>();
+      for (const selector of [...(row.extends ?? []), row.selector]) {
+        for (const [property, value] of referenceRule(html, selector, row.styleId)) {
+          declared.set(property, value);
+        }
+      }
+      for (const property of Object.keys(properties)) {
+        expect(
+          declared.has(property),
+          `${id} excuses "${property}", which ${row.selector} never declares`,
+        ).toBe(true);
+      }
+    }
+  });
+});
+
+describe('ADDITIONS', () => {
+  it('names only primitives the suite actually checks', () => {
+    const ids = new Set(ROWS.map((row) => row.id));
+    expect(Object.keys(ADDITIONS).filter((id) => !ids.has(id))).toEqual([]);
   });
 });

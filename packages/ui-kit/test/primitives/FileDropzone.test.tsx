@@ -18,7 +18,7 @@ describe('isMediaGateSatisfied', () => {
 });
 
 describe('MediaGate', () => {
-  it('computes the gate itself, so a screen cannot hand itself an open one', () => {
+  it('hands its child the computed gate rather than making the screen recompute it', () => {
     render(
       <MediaGate media={[]} requiredCount={1}>
         {(satisfied) => <Button disabled={!satisfied}>Accept trade request</Button>}
@@ -42,10 +42,17 @@ describe('MediaGate', () => {
 });
 
 describe('FileDropzone', () => {
-  it('names what is still missing while the gate is shut', () => {
+  it('asks for proof in the reference’s own words while nothing is attached', () => {
     render(<FileDropzone label="Add proof of possession" media={[]} requiredCount={1} />);
     expect(screen.getByText('Accept is locked')).toBeDefined();
-    expect(screen.getByRole('status').textContent).toContain('Attach 1 more photo or video');
+    expect(screen.getByRole('status').textContent).toContain(
+      'Attach at least one photo or video showing the item in your possession before you can accept.',
+    );
+  });
+
+  it('counts down once some proof is attached, rather than repeating "at least one"', () => {
+    render(<FileDropzone label="Add proof" media={[{ id: 'a' }]} requiredCount={3} />);
+    expect(screen.getByRole('status').textContent).toContain('Attach 2 more');
   });
 
   it('drops the lock once the proof is attached', () => {
@@ -87,6 +94,21 @@ describe('FileDropzone', () => {
     const box = container.querySelector('label');
     expect(box?.className).toContain('focus-within:outline-[2.5px]');
     expect(box?.className).toContain('focus-within:outline-trust-indigo');
+  });
+
+  it('marks a video thumbnail with the reference’s play badge, and a photo with none', () => {
+    const { container } = render(
+      <FileDropzone
+        label="Proof"
+        media={[
+          { id: 'a', kind: 'video' },
+          { id: 'b', kind: 'photo' },
+        ]}
+      />,
+    );
+    const slots = container.querySelectorAll('li');
+    expect(slots[0]?.querySelector('svg')).not.toBeNull();
+    expect(slots[1]?.querySelector('svg')).toBeNull();
   });
 
   it('says what each attachment is, so the grid is not three anonymous squares', () => {

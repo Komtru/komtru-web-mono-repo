@@ -71,6 +71,42 @@ describe('Sheet', () => {
     expect(screen.getByRole('button', { name: 'Yes, cancel' })).toBeDefined();
   });
 
+  it('cycles Tab inside itself, which is what aria-modal promises', () => {
+    render(
+      <>
+        <Button>Behind the scrim</Button>
+        <Sheet
+          open
+          title="Cancel this Trade?"
+          footer={
+            <>
+              <Button variant="danger">Yes, cancel</Button>
+              <Button variant="secondary">Keep the Trade</Button>
+            </>
+          }
+        />
+      </>,
+    );
+    const dialog = screen.getByRole('dialog');
+    const yes = screen.getByRole('button', { name: 'Yes, cancel' });
+    const keep = screen.getByRole('button', { name: 'Keep the Trade' });
+
+    keep.focus();
+    fireEvent.keyDown(dialog, { key: 'Tab' });
+    expect(document.activeElement).toBe(yes);
+
+    yes.focus();
+    fireEvent.keyDown(dialog, { key: 'Tab', shiftKey: true });
+    expect(document.activeElement).toBe(keep);
+  });
+
+  it('keeps focus on itself when it holds nothing focusable', () => {
+    render(<Sheet open title="Cancel this Trade?" />);
+    const dialog = screen.getByRole('dialog');
+    fireEvent.keyDown(dialog, { key: 'Tab' });
+    expect(document.activeElement).toBe(dialog);
+  });
+
   it('rises on the reference’s raised shadow', () => {
     render(<Sheet open title="Cancel this Trade?" />);
     expect(screen.getByRole('dialog').className).toContain('shadow-raised');

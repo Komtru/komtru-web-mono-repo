@@ -388,7 +388,13 @@ export async function compiledDeclarations(classNames: string[]): Promise<Map<st
   }
   const merged = new Map<string, string>();
   for (const utility of utilities) {
-    for (const [property, value] of byUtility.get(`.${utility}`) ?? []) merged.set(property, value);
+    const rule = byUtility.get(`.${utility}`);
+    if (rule === undefined) {
+      // A class that compiles to nothing is invisible to the diff below, so a retired-palette
+      // utility (`bg-white`) or a typo would pass parity by producing no declarations at all.
+      throw new Error(`"${utility}" compiles to no rule — it is not a utility this preset publishes`);
+    }
+    for (const [property, value] of rule) merged.set(property, value);
   }
   // Tailwind defers the border style through a custom property so that `border` and `border-dashed`
   // compose; resolve it here so the comparison sees `dashed`, not the variable.

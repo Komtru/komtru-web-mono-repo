@@ -40,7 +40,7 @@ export function Stepper({ steps, current, label = 'Progress', className }: Stepp
             {step}
           </span>
           {index < steps.length - 1 && (
-            <span aria-hidden className="mx-[7px] h-[1px] w-[32px] bg-border-hairline" />
+            <span aria-hidden className="m-0 mx-[7px] h-[1px] w-[32px] bg-border-hairline" />
           )}
         </li>
       ))}
