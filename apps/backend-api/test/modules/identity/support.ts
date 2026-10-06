@@ -29,6 +29,9 @@ export const testConfig = (overrides: Record<string, string> = {}): AppConfig =>
     IDENTITY_SIGNING_KEY: randomBytes(32).toString('hex'),
     IDENTITY_SIGNING_KEY_ID: 'test-key',
     IDENTITY_HMAC_PEPPER: 'p'.repeat(32),
+    // T-036: TOTP seeds and the recovery-code blob are `*_enc` columns (§S9), so the module
+    // now refuses to build without a key, the way it already refuses without the pepper.
+    ENCRYPTION_KEY: randomBytes(32).toString('hex'),
     ...overrides,
   });
 

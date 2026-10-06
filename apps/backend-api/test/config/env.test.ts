@@ -92,6 +92,8 @@ describe('loadConfig', () => {
       epochCacheTtlSeconds: 10,
       breachCheckEnabled: false,
       mirrorPhoneOtpToEmail: false,
+      staffRequireMfa: true,
+      webauthn: { rpId: 'localhost', rpName: 'Komtru', origins: [] },
     });
   });
 
@@ -103,6 +105,8 @@ describe('loadConfig', () => {
       epochCacheTtlSeconds: 10,
       breachCheckEnabled: false,
       mirrorPhoneOtpToEmail: false,
+      staffRequireMfa: true,
+      webauthn: { rpId: 'localhost', rpName: 'Komtru', origins: [] },
     });
     expect(failure({ ...minimal, IDENTITY_SIGNING_KEY: 'nothex' }).invalid).toEqual(['IDENTITY_SIGNING_KEY']);
     expect(failure({ ...minimal, IDENTITY_ACCESS_TOKEN_TTL_SECONDS: '1' }).invalid).toEqual([
@@ -348,5 +352,40 @@ describe('the identity and terms variables T-032 adds', () => {
 
   it('treats an empty pepper as absent rather than as an empty key', () => {
     expect(loadConfig({ ...minimal, IDENTITY_HMAC_PEPPER: '' }).identity.hmacPepper).toBeUndefined();
+  });
+});
+
+describe('the identity variables T-036 adds', () => {
+  it('reads the WebAuthn relying party and the staff MFA switch', () => {
+    const config = loadConfig({
+      ...minimal,
+      WEBAUTHN_RP_ID: 'komtru.com',
+      WEBAUTHN_RP_NAME: 'Komtru',
+      WEBAUTHN_ORIGINS: 'https://app.komtru.com, https://staff.komtru.com',
+      IDENTITY_STAFF_REQUIRE_MFA: 'false',
+    });
+    expect(config.identity.webauthn).toEqual({
+      rpId: 'komtru.com',
+      rpName: 'Komtru',
+      origins: ['https://app.komtru.com', 'https://staff.komtru.com'],
+    });
+    expect(config.identity.staffRequireMfa).toBe(false);
+  });
+
+  it('defaults the relying party to localhost with no origin', () => {
+    expect(loadConfig(minimal).identity.webauthn).toEqual({
+      rpId: 'localhost',
+      rpName: 'Komtru',
+      origins: [],
+    });
+  });
+
+  /**
+   * M1 §S13 makes staff MFA mandatory, so the default has to be the safe one: the variable exists
+   * to turn the requirement OFF in a local sandbox, and an operator who forgets to set it must get
+   * the rule rather than the exception.
+   */
+  it('requires staff MFA when the switch is absent', () => {
+    expect(loadConfig(minimal).identity.staffRequireMfa).toBe(true);
   });
 });
