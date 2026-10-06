@@ -23,9 +23,19 @@ export interface RateLimitSpec {
   points: number;
   durationSeconds: number;
   /** Which keys the budget is counted against; every listed key is checked. */
-  by: ('ip' | 'user' | 'identifier')[];
+  by: ('ip' | 'user' | 'identifier' | 'device')[];
   /** For `identifier`: pulls the email, phone or PIN subject out of the request. */
   identifierFrom?: (input: { body: unknown; query: unknown; params: unknown }) => string | undefined;
+  /**
+   * For `device`: pulls the client's device fingerprint out of the request.
+   *
+   * Behind Nigerian carrier-grade NAT one IP is thousands of unrelated people and one identifier is
+   * one account, so neither key bounds the attacker who walks a list of identifiers from a single
+   * handset — M1 §17 asks for all three to trigger independently. The fingerprint is a SIGNAL and
+   * never an authenticator (§S15): it is spoofable, which costs an attacker one more thing to vary
+   * and costs an honest client nothing.
+   */
+  deviceFrom?: (input: { body: unknown; query: unknown; params: unknown }) => string | undefined;
 }
 
 export interface RouteSchemas {
@@ -175,6 +185,9 @@ export function assertRouteInvariants(routes: RouteDefinition[]): void {
     }
     if (route.rateLimit?.by.includes('identifier') && !route.rateLimit.identifierFrom) {
       problems.push(`${label}: rate limits by identifier but provides no identifierFrom`);
+    }
+    if (route.rateLimit?.by.includes('device') && !route.rateLimit.deviceFrom) {
+      problems.push(`${label}: rate limits by device but provides no deviceFrom`);
     }
     // A permission on a route anyone may call reads as protection and is never checked, which is
     // the worst of both: the same reasoning as the idempotency and rate-limit gates above.

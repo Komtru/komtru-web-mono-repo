@@ -3,6 +3,7 @@ import request from 'supertest';
 import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import { createApp } from '../../../src/app.js';
+import { ApiError } from '../../../src/platform/errors.js';
 import { loadConfig } from '../../../src/config/env.js';
 import { mountRoutes } from '../../../src/platform/http/mount.js';
 import {
@@ -381,5 +382,35 @@ describe('mountRoutes scope and permission enforcement', () => {
     });
     await request(app).get('/v1/thing').expect(401);
     expect(rateLimit).not.toHaveBeenCalled();
+  });
+});
+
+describe('problem extension members', () => {
+  it('carries an ApiError extension into the body without letting it overwrite the known fields', async () => {
+    const route = defineRoute({
+      method: 'post',
+      path: '/otp',
+      scope: 'PUBLIC',
+      summary: 'Verify',
+      retryable: false,
+      schema: { body: z.object({}), response: z.object({ ok: z.boolean() }) },
+      handler: () => {
+        throw new ApiError(422, 'OTP_INVALID', 'That code does not match', 'Check the SMS', undefined, {
+          attemptsRemaining: 2,
+          // An extension must never be able to rewrite what the client branches on.
+          code: 'INTERNAL',
+          status: 500,
+        });
+      },
+    });
+    const response = await request(appWith([route]))
+      .post('/v1/otp')
+      .send({});
+    expect(response.status).toBe(422);
+    expect(response.body).toMatchObject({
+      code: 'OTP_INVALID',
+      status: 422,
+      attemptsRemaining: 2,
+    });
   });
 });

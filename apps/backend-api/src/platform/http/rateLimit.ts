@@ -22,15 +22,21 @@ export interface RateLimitOptions {
   keyPrefix?: string;
 }
 
-/** `identifier` needs the parsed body, so it is charged after validation; the rest go before it. */
-const PHASE: Record<'ip' | 'user' | 'identifier', 'before-parse' | 'after-parse'> = {
+type RateLimitKey = RateLimitSpec['by'][number];
+
+/**
+ * `identifier` and `device` both come out of the parsed body, so they are charged after validation;
+ * the rest go before it.
+ */
+const PHASE: Record<RateLimitKey, 'before-parse' | 'after-parse'> = {
   ip: 'before-parse',
   user: 'before-parse',
   identifier: 'after-parse',
+  device: 'after-parse',
 };
 
 const subjectFor = (
-  kind: 'ip' | 'user' | 'identifier',
+  kind: RateLimitKey,
   spec: RateLimitSpec,
   req: Request,
   actor: string,
@@ -38,7 +44,9 @@ const subjectFor = (
 ): string | undefined => {
   if (kind === 'ip') return req.ip;
   if (kind === 'user') return actor === ANONYMOUS_ACTOR_KEY ? undefined : actor;
-  return parsed ? spec.identifierFrom?.(parsed)?.toLowerCase() : undefined;
+  if (!parsed) return undefined;
+  const extract = kind === 'device' ? spec.deviceFrom : spec.identifierFrom;
+  return extract?.(parsed)?.toLowerCase();
 };
 
 const retryAfterSeconds = (msBeforeNext: number): number => Math.max(1, Math.ceil(msBeforeNext / 1000));

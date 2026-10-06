@@ -12,6 +12,13 @@ export class ApiError extends Error {
     readonly title: string,
     readonly detail?: string,
     readonly fieldErrors?: { path: string; message: string }[],
+    /**
+     * RFC 9457 extension members: anything the client needs that is not one of the standard fields.
+     * `attemptsRemaining` on a wrong OTP is the first (T-032, screen E3b). They are spread BEFORE
+     * the known members below, so an extension can never rewrite `status`, `code` or `type` — the
+     * three fields every client branches on.
+     */
+    readonly extensions?: Record<string, unknown>,
   ) {
     super(title);
     this.name = 'ApiError';
@@ -23,6 +30,7 @@ export function sendProblem(res: Response, problem: ProblemDetails): void {
 }
 
 const toProblem = (error: ApiError): ProblemDetails => ({
+  ...error.extensions,
   type: problemTypeUri(error.code),
   title: error.title,
   status: error.status,

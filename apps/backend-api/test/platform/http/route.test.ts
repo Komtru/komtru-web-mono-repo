@@ -130,3 +130,33 @@ describe('assertRouteInvariants and PUBLIC routes', () => {
     ).toThrow(/can never be checked/);
   });
 });
+
+describe('the rate-limit keys a route may declare', () => {
+  const limited = (rateLimit: object) => postRoute({ retryable: false, rateLimit });
+
+  it('refuses a route that limits by identifier but cannot find one', () => {
+    expect(() =>
+      assertRouteInvariants([limited({ points: 1, durationSeconds: 60, by: ['identifier'] })]),
+    ).toThrow(/rate limits by identifier but provides no identifierFrom/);
+  });
+
+  it('refuses a route that limits by device but cannot find one', () => {
+    expect(() =>
+      assertRouteInvariants([limited({ points: 1, durationSeconds: 60, by: ['device'] })]),
+    ).toThrow(/rate limits by device but provides no deviceFrom/);
+  });
+
+  it('accepts a route that supplies deviceFrom', () => {
+    expect(() =>
+      assertRouteInvariants([
+        limited({ points: 1, durationSeconds: 60, by: ['device'], deviceFrom: () => 'fp' }),
+      ]),
+    ).not.toThrow();
+  });
+
+  it('accepts ip and user with no extractor, because the request already carries both', () => {
+    expect(() =>
+      assertRouteInvariants([limited({ points: 1, durationSeconds: 60, by: ['ip', 'user'] })]),
+    ).not.toThrow();
+  });
+});

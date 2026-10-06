@@ -80,6 +80,26 @@ const VARIABLES = {
   IDENTITY_TOKEN_ISSUER: { schema: z.url(), required: false },
   IDENTITY_TOKEN_AUDIENCE: { schema: z.string().min(1), required: false },
   IDENTITY_EPOCH_CACHE_TTL_SECONDS: { schema: int(1, 300), required: false },
+  /**
+   * The server-side key every low-entropy identifier is HMAC'd under: OTP codes, destination hashes,
+   * recovery claims. 32 characters is the floor because the values it protects are a six-digit code
+   * and a phone number — a short pepper is a rainbow table somebody builds in a second.
+   */
+  IDENTITY_HMAC_PEPPER: { schema: z.string().min(32), required: false },
+  IDENTITY_BREACH_CHECK_ENABLED: { schema: bool, required: false },
+  /**
+   * Local convenience, off everywhere else: SMS runs dry outside production, so a developer never
+   * sees a phone OTP. With this on, a phone OTP is also emailed to the user's address if they have
+   * one. It never replaces the SMS, and it never applies to a user with no email.
+   */
+  IDENTITY_MIRROR_PHONE_OTP_TO_EMAIL: { schema: bool, required: false },
+  /**
+   * The published version of each legal document (NDPA §15, screens TOS1/TOS2). NOT present in
+   * docs/specs/backend-apis.env, so `pnpm env:backend` does not write them and every environment
+   * gets domain/terms.ts's defaults until an operator sets them.
+   */
+  APP_TERMS_VERSION: { schema: z.string().min(1).max(32), required: false },
+  APP_PRIVACY_VERSION: { schema: z.string().min(1).max(32), required: false },
   // Not shape-checked: a test key and a live key differ only by prefix, so a regex here is a boot
   // failure waiting for the first legitimate key rotation, not a safety net.
   PAYSTACK_SECRET_KEY: { schema: z.string().min(1), required: false },
@@ -148,7 +168,22 @@ export interface AppConfig {
     tokenAudience: string;
     /** How long a user's `sessions_epoch` may be cached in Redis (M1 D5's worst-case exposure). */
     epochCacheTtlSeconds: number;
+    /**
+     * Optional like `signingKey`: a process with no identity module boots without it, and
+     * `createIdentityAuth` fails loudly naming the variable when a login would have needed it.
+     */
+    hmacPepper?: string;
+    /** §S2's k-anonymity check. Off by default so a local run never reaches out to HIBP. */
+    breachCheckEnabled: boolean;
+    mirrorPhoneOtpToEmail: boolean;
   };
+  /**
+   * An operator's override of the published legal copy (NDPA §15). Absent means "whatever this
+   * build ships": the version of a legal document is identity's fact, not the config loader's, so
+   * `resolveTermsVersions` in identity/domain/terms.ts applies the default rather than this file
+   * reaching into a module for a constant.
+   */
+  terms: { version?: string; privacyVersion?: string };
   /**
    * Optional, like `crypto`: both processes boot without Paystack. Absent means every adapter call
    * fails closed with a named error and webhook signatures never verify — never an empty-key HMAC.
@@ -243,6 +278,13 @@ export function loadConfig(env: NodeJS.ProcessEnv): AppConfig {
       tokenIssuer: v.IDENTITY_TOKEN_ISSUER ?? 'https://api.komtru.com',
       tokenAudience: v.IDENTITY_TOKEN_AUDIENCE ?? 'komtru',
       epochCacheTtlSeconds: v.IDENTITY_EPOCH_CACHE_TTL_SECONDS ?? 10,
+      ...(v.IDENTITY_HMAC_PEPPER ? { hmacPepper: v.IDENTITY_HMAC_PEPPER } : {}),
+      breachCheckEnabled: v.IDENTITY_BREACH_CHECK_ENABLED ?? false,
+      mirrorPhoneOtpToEmail: v.IDENTITY_MIRROR_PHONE_OTP_TO_EMAIL ?? false,
+    },
+    terms: {
+      ...(v.APP_TERMS_VERSION ? { version: v.APP_TERMS_VERSION } : {}),
+      ...(v.APP_PRIVACY_VERSION ? { privacyVersion: v.APP_PRIVACY_VERSION } : {}),
     },
     paystack: {
       ...(v.PAYSTACK_SECRET_KEY ? { secretKey: v.PAYSTACK_SECRET_KEY } : {}),

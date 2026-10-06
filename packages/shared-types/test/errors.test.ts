@@ -85,3 +85,28 @@ describe('isProblemDetails', () => {
     expect(isProblemDetails(null)).toBe(false);
   });
 });
+
+describe('the codes T-032 answers with', () => {
+  it('knows INVALID_CREDENTIALS and OTP_INVALID', () => {
+    expect(PROBLEM_CODES).toContain('INVALID_CREDENTIALS');
+    expect(PROBLEM_CODES).toContain('OTP_INVALID');
+  });
+
+  it('gives them the documented problem type uri', () => {
+    expect(problemTypeUri('INVALID_CREDENTIALS')).toBe(
+      'https://docs.komtru.com/problems/invalid-credentials',
+    );
+    expect(problemTypeUri('OTP_INVALID')).toBe('https://docs.komtru.com/problems/otp-invalid');
+  });
+
+  it('keeps an extension member a client does not know, as RFC 9457 allows', () => {
+    const parsed = problemDetailsSchema.parse({
+      type: 'https://docs.komtru.com/problems/otp-invalid',
+      title: 'That code does not match',
+      status: 422,
+      code: 'OTP_INVALID',
+      attemptsRemaining: 2,
+    });
+    expect(parsed).toMatchObject({ attemptsRemaining: 2 });
+  });
+});
