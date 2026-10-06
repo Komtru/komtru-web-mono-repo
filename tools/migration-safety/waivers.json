@@ -8,5 +8,8 @@
   "0015_identity_desc_indexes": {
     "drop-index-lock": "identity.identity_audit_log and identity.users are empty in every environment: the platform is pre-launch. Once they are not, these two tables are the ones that will be largest, and dropping an index on either has to happen outside the migrator - drizzle runs every migration in one transaction and Postgres refuses CONCURRENTLY there.",
     "index-lock": "identity.identity_audit_log and identity.users are empty in every environment: the platform is pre-launch, so each of these four indexes is built over zero rows. The same rebuild on a live append-only audit log would block every insert for the length of the whole migration run and belongs in an operations step instead."
+  },
+  "0025_trade_accepted_terms_fk": {
+    "constraint-scan": "trade.trades and trade.trade_terms_versions are created four migrations earlier in the same chain and have never held a row in any environment: the platform is pre-launch, so validating these two composite foreign keys scans nothing and blocks nobody. Added to a populated trades, a same-trade foreign key has to go in NOT VALID and be validated by a second migration \u2014 and the terms version a trade points at is the only record of what was agreed, so it is worth the second migration rather than a long lock."
   }
 }

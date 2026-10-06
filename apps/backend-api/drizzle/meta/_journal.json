@@ -148,6 +148,48 @@
       "when": 1791269057981,
       "tag": "0020_ledger_append_only",
       "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1791269257344,
+      "tag": "0021_trade_schema",
+      "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1791269258344,
+      "tag": "0022_trade_append_only",
+      "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1791269259344,
+      "tag": "0023_trade_state_machine",
+      "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1791269260344,
+      "tag": "0024_trade_immutable_columns",
+      "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1791269261344,
+      "tag": "0025_trade_accepted_terms_fk",
+      "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1791269262344,
+      "tag": "0026_trade_write_paths",
+      "breakpoints": true
     }
   ]
 }

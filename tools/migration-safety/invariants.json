@@ -40,6 +40,26 @@
       "table": "identity.user_phones",
       "name": "user_phones_verified_unique",
       "definition": "CREATE UNIQUE INDEX user_phones_verified_unique ON identity.user_phones USING btree (phone_e164) WHERE (verified_at IS NOT NULL)"
+    },
+    {
+      "table": "trade.delivery_signals",
+      "name": "delivery_signals_shipment_event",
+      "definition": "CREATE UNIQUE INDEX delivery_signals_shipment_event ON trade.delivery_signals USING btree (trade_id, source, shipment_event_id) WHERE (shipment_event_id IS NOT NULL)"
+    },
+    {
+      "table": "trade.escrow_action_requests",
+      "name": "escrow_requests_one_open",
+      "definition": "CREATE UNIQUE INDEX escrow_requests_one_open ON trade.escrow_action_requests USING btree (trade_id, action) WHERE (status = ANY (ARRAY['REQUESTED'::trade.escrow_action_status, 'ACKNOWLEDGED'::trade.escrow_action_status]))"
+    },
+    {
+      "table": "trade.trade_deadlines",
+      "name": "trade_deadlines_one_pending",
+      "definition": "CREATE UNIQUE INDEX trade_deadlines_one_pending ON trade.trade_deadlines USING btree (trade_id, kind) WHERE (status = 'PENDING'::trade.trade_deadline_status)"
+    },
+    {
+      "table": "trade.trade_holds",
+      "name": "trade_holds_one_active",
+      "definition": "CREATE UNIQUE INDEX trade_holds_one_active ON trade.trade_holds USING btree (trade_id, source) WHERE (released_at IS NULL)"
     }
   ],
   "checkConstraints": [
@@ -132,6 +152,101 @@
       "table": "notify.notifications",
       "name": "notifications_suppressed_has_reason",
       "definition": "CHECK (((status <> 'SUPPRESSED'::notify.notification_status) OR (failed_reason IS NOT NULL)))"
+    },
+    {
+      "table": "trade.escrow_action_requests",
+      "name": "escrow_requests_amount_positive",
+      "definition": "CHECK ((amount_minor > 0))"
+    },
+    {
+      "table": "trade.trade_deadlines",
+      "name": "trade_deadlines_extensions_non_negative",
+      "definition": "CHECK ((extension_count >= 0))"
+    },
+    {
+      "table": "trade.trade_deadlines",
+      "name": "trade_deadlines_never_shortened",
+      "definition": "CHECK ((due_at >= original_due_at))"
+    },
+    {
+      "table": "trade.trade_state_changes",
+      "name": "trade_state_changes_actor_identified",
+      "definition": "CHECK (((actor_id IS NOT NULL) OR (actor_type = ANY (ARRAY['SYSTEM'::trade.trade_actor_type, 'LEDGER'::trade.trade_actor_type]))))"
+    },
+    {
+      "table": "trade.trade_terms_versions",
+      "name": "trade_terms_amount_positive",
+      "definition": "CHECK ((item_amount_minor > 0))"
+    },
+    {
+      "table": "trade.trade_terms_versions",
+      "name": "trade_terms_currency",
+      "definition": "CHECK ((currency = 'NGN'::text))"
+    },
+    {
+      "table": "trade.trade_terms_versions",
+      "name": "trade_terms_delivery_address_shape",
+      "definition": "CHECK (((delivery_address ?& ARRAY['street'::text, 'landmark'::text, 'recipient'::text, 'state_id'::text, 'city_id'::text]) AND (length(COALESCE((delivery_address ->> 'street'::text), ''::text)) > 0) AND (length(COALESCE((delivery_address ->> 'recipient'::text), ''::text)) > 0) AND (length(COALESCE((delivery_address ->> 'state_id'::text), ''::text)) > 0) AND (length(COALESCE((delivery_address ->> 'city_id'::text), ''::text)) > 0)))"
+    },
+    {
+      "table": "trade.trade_terms_versions",
+      "name": "trade_terms_ships_from_address_shape",
+      "definition": "CHECK (((ships_from_address ?& ARRAY['street'::text, 'landmark'::text, 'recipient'::text, 'state_id'::text, 'city_id'::text]) AND (length(COALESCE((ships_from_address ->> 'street'::text), ''::text)) > 0) AND (length(COALESCE((ships_from_address ->> 'recipient'::text), ''::text)) > 0) AND (length(COALESCE((ships_from_address ->> 'state_id'::text), ''::text)) > 0) AND (length(COALESCE((ships_from_address ->> 'city_id'::text), ''::text)) > 0)))"
+    },
+    {
+      "table": "trade.trade_terms_versions",
+      "name": "trade_terms_window_positive",
+      "definition": "CHECK (((inspection_window_hours > 0) AND (delivery_grace_hours > 0)))"
+    },
+    {
+      "table": "trade.trades",
+      "name": "trades_code_format",
+      "definition": "CHECK ((trade_code ~ '^KMT-[0-9]{5,8}-NG$'::text))"
+    },
+    {
+      "table": "trade.trades",
+      "name": "trades_currency",
+      "definition": "CHECK ((currency = 'NGN'::text))"
+    },
+    {
+      "table": "trade.trades",
+      "name": "trades_fee_snapshot_arithmetic",
+      "definition": "CHECK (((fee_schedule_version IS NULL) OR ((item_amount_minor > 0) AND (buyer_protection_fee_minor >= 0) AND (commission_minor >= 0) AND (seller_proceeds_minor >= 0) AND (buyer_total_minor = (item_amount_minor + buyer_protection_fee_minor)) AND (seller_proceeds_minor = (item_amount_minor - commission_minor)) AND (platform_revenue_minor = (buyer_protection_fee_minor + commission_minor)))))"
+    },
+    {
+      "table": "trade.trades",
+      "name": "trades_fee_snapshot_complete",
+      "definition": "CHECK ((num_nonnulls(fee_schedule_version, item_amount_minor, buyer_protection_fee_minor, buyer_total_minor, commission_minor, seller_proceeds_minor, platform_revenue_minor, fee_snapshot, fees_snapshotted_at) = ANY (ARRAY[0, 9])))"
+    },
+    {
+      "table": "trade.trades",
+      "name": "trades_fees_before_payment",
+      "definition": "CHECK (((fee_schedule_version IS NOT NULL) OR (status = ANY (ARRAY['DRAFT'::trade.trade_status, 'PENDING_COUNTERPARTY'::trade.trade_status, 'UNDER_PROPOSAL_REVIEW'::trade.trade_status, 'AWAITING_ACCEPTANCE'::trade.trade_status, 'DECLINED'::trade.trade_status, 'REJECTED'::trade.trade_status, 'CANCELLED'::trade.trade_status, 'EXPIRED'::trade.trade_status]))))"
+    },
+    {
+      "table": "trade.trades",
+      "name": "trades_initiator_side",
+      "definition": "CHECK ((((initiator_role = 'BUYER'::trade.trade_initiator_role) AND (buyer_user_id = initiator_user_id)) OR ((initiator_role = 'SELLER'::trade.trade_initiator_role) AND (seller_user_id = initiator_user_id))))"
+    },
+    {
+      "table": "trade.trades",
+      "name": "trades_parties_bound",
+      "definition": "CHECK ((((buyer_user_id IS NOT NULL) AND (seller_user_id IS NOT NULL)) OR (status = ANY (ARRAY['DRAFT'::trade.trade_status, 'PENDING_COUNTERPARTY'::trade.trade_status, 'EXPIRED'::trade.trade_status, 'CANCELLED'::trade.trade_status]))))"
+    },
+    {
+      "table": "trade.trades",
+      "name": "trades_parties_distinct",
+      "definition": "CHECK (((buyer_user_id IS NULL) OR (seller_user_id IS NULL) OR (buyer_user_id <> seller_user_id)))"
+    },
+    {
+      "table": "trade.trades",
+      "name": "trades_terms_before_payment",
+      "definition": "CHECK (((accepted_terms_version_id IS NOT NULL) OR (status = ANY (ARRAY['DRAFT'::trade.trade_status, 'PENDING_COUNTERPARTY'::trade.trade_status, 'UNDER_PROPOSAL_REVIEW'::trade.trade_status, 'AWAITING_ACCEPTANCE'::trade.trade_status, 'DECLINED'::trade.trade_status, 'REJECTED'::trade.trade_status, 'CANCELLED'::trade.trade_status, 'EXPIRED'::trade.trade_status]))))"
+    },
+    {
+      "table": "trade.trades",
+      "name": "trades_window_positive",
+      "definition": "CHECK (((inspection_window_hours > 0) AND (delivery_grace_hours > 0)))"
     }
   ],
   "triggers": [
@@ -179,6 +294,51 @@
       "table": "notify.notification_delivery_attempts",
       "name": "komtru_append_only",
       "definition": "[O] CREATE TRIGGER komtru_append_only BEFORE DELETE OR UPDATE ON notify.notification_delivery_attempts FOR EACH ROW EXECUTE FUNCTION platform.reject_mutation()"
+    },
+    {
+      "table": "trade.trade_activity",
+      "name": "komtru_append_only",
+      "definition": "[O] CREATE TRIGGER komtru_append_only BEFORE DELETE OR UPDATE ON trade.trade_activity FOR EACH ROW EXECUTE FUNCTION platform.reject_mutation()"
+    },
+    {
+      "table": "trade.trade_state_changes",
+      "name": "komtru_append_only",
+      "definition": "[O] CREATE TRIGGER komtru_append_only BEFORE DELETE OR UPDATE ON trade.trade_state_changes FOR EACH ROW EXECUTE FUNCTION platform.reject_mutation()"
+    },
+    {
+      "table": "trade.trade_state_changes",
+      "name": "trade_state_changes_no_forgery",
+      "definition": "[O] CREATE TRIGGER trade_state_changes_no_forgery BEFORE INSERT ON trade.trade_state_changes FOR EACH ROW WHEN ((pg_trigger_depth() = 0)) EXECUTE FUNCTION trade.reject_forged_state_change()"
+    },
+    {
+      "table": "trade.trade_terms_versions",
+      "name": "trade_freeze_terms_version",
+      "definition": "[O] CREATE TRIGGER trade_freeze_terms_version BEFORE UPDATE ON trade.trade_terms_versions FOR EACH ROW EXECUTE FUNCTION trade.freeze_terms_version()"
+    },
+    {
+      "table": "trade.trades",
+      "name": "trade_freeze_immutable_columns",
+      "definition": "[O] CREATE TRIGGER trade_freeze_immutable_columns BEFORE UPDATE ON trade.trades FOR EACH ROW EXECUTE FUNCTION trade.freeze_immutable_columns()"
+    },
+    {
+      "table": "trade.trades",
+      "name": "trade_guard_initial_status",
+      "definition": "[O] CREATE TRIGGER trade_guard_initial_status BEFORE INSERT ON trade.trades FOR EACH ROW EXECUTE FUNCTION trade.guard_initial_status()"
+    },
+    {
+      "table": "trade.trades",
+      "name": "trade_guard_status_transition",
+      "definition": "[O] CREATE TRIGGER trade_guard_status_transition BEFORE UPDATE ON trade.trades FOR EACH ROW WHEN ((old.status_revision IS DISTINCT FROM new.status_revision)) EXECUTE FUNCTION trade.guard_status_transition()"
+    },
+    {
+      "table": "trade.trades",
+      "name": "trade_record_state_change",
+      "definition": "[O] CREATE TRIGGER trade_record_state_change AFTER UPDATE ON trade.trades FOR EACH ROW WHEN ((old.status_revision IS DISTINCT FROM new.status_revision)) EXECUTE FUNCTION trade.record_state_change()"
+    },
+    {
+      "table": "trade.trades",
+      "name": "trade_status_needs_revision",
+      "definition": "[O] CREATE TRIGGER trade_status_needs_revision BEFORE UPDATE ON trade.trades FOR EACH ROW WHEN (((old.status IS DISTINCT FROM new.status) AND (old.status_revision = new.status_revision))) EXECUTE FUNCTION trade.reject_unversioned_status()"
     }
   ]
 }

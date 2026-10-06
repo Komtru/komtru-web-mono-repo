@@ -6,6 +6,18 @@ State machine: design §6 (decision C1). Trades never touch money; they request 
 
 ### T-060 — Trade schema, state machine and audit
 
+- **Status:** Done (2026-10-05). Plan: `docs/superpowers/plans/2026-10-05-t-060-trades.md`
+- **Deferred:**
+  - `canActAsBuyer` lives in `trades/domain/eligibility.ts` against a `TradePrincipal` because identity has no service layer yet. Design §6.3 makes it one identity function: T-031 must lift it into identity's barrel and trades must delegate rather than keep a second copy.
+  - `TradeFeeSnapshot` in `trades/domain/feeSnapshot.ts` is a structural copy of `FeeSnapshot` from `@komtru/shared-types`, because T-047 landed on `main` after this branch was cut. It must become a re-export of that type, and `feeSnapshotColumns` must take `snapshotFees(...)`'s result directly, as soon as the two are in one tree; the shape test in `fee-snapshot.test.ts` is what fails if they drift. The trade's money columns use the calculator's vocabulary (`seller_proceeds_minor`, `platform_revenue_minor`) so the ledger reads one set of names.
+  - Delivery-signal trust weighting — which source moves a trade to `INSPECTION` rather than `UNCONFIRMED_DELIVERY`, and M7 §6's partner-history exception — is T-064. T-060 owns the table and the two reachable targets.
+  - Design §6.2 draws no `SHIPPED → CANCELLED_REFUNDED` edge, so DE3's overdue-delivery refund after dispatch has to go through `DISPUTED`. T-064/T-066 should confirm that with the owner, or the edge needs adding to §6.2.
+  - **Deliberate widening of §6.2:** `CANCEL` is drawn from `DRAFT`, `PENDING_COUNTERPARTY` and `UNDER_PROPOSAL_REVIEW` as well as the two states §6.2 draws it from, following M7 D3 and HTML CT1 — a draft that cannot be abandoned and an invitation that cannot be withdrawn would both be bugs. Flagged for the owner rather than left to be discovered.
+  - `fulfilment_substate` (`AWAITING_SHIPMENT`, m2 §7a's dormant value) is not modelled; T-064 adds it with the ship step.
+  - `TRADE_STATUSES`, `TRADE_ACTIONS` and the trade event payload schemas stay in the backend domain; T-061 should lift them into `@komtru/shared-types` when the HTTP contract needs them on the client.
+  - Trade-code collisions are handled by `withTradeCode(tx, insert)`, which retries a `trades_trade_code_unique` violation in a savepoint; T-061's creation path must go through it rather than inserting a bare `generateTradeCode()`.
+  - Q12 (relaxing the seller's level-2 gate for casual sellers) is still open; the gate is implemented as design §6.3 states it.
+
 - **Touches:** `src/modules/trades/{domain,infrastructure}/**`, migration `trade_*`
 - **Depends on:** T-024, T-025, T-030
 - **Acceptance criteria:**

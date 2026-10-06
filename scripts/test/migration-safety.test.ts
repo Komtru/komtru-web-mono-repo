@@ -15,10 +15,22 @@ import {
   checkLock,
   loadMigrations,
 } from '../../tools/migration-safety/migrations.mjs';
+import { readWaiverFile } from '../../tools/migration-safety/lint.mjs';
 import type { Finding } from '../../tools/migration-safety/migrations.mjs';
 
 const fixture = (name: string) => resolve(import.meta.dirname, 'fixtures/migration-safety', name);
 const rules = (findings: Finding[]) => findings.map((finding) => finding.rule);
+/**
+ * What `counts.waived` means, computed the way check.mjs computes it: one per (migration, rule)
+ * pair in waivers.json. Derived rather than a literal for the same reason the migration list is -
+ * every ticket that waives a statement would otherwise have to edit two assertions here, and the
+ * claim that matters is that the number the checker reports is the number of waivers on disk.
+ */
+const waivedStatements = () =>
+  Object.values(readWaiverFile()).reduce(
+    (total, waivers) => total + Object.keys(waivers as Record<string, string>).length,
+    0,
+  );
 
 const temporaries: string[] = [];
 /** A throwaway copy of the repository's own drizzle folder, for the "someone edited it" cases. */
@@ -204,8 +216,10 @@ describe('the command line', () => {
   it('passes the static checks and names each one it ran', () => {
     const { status, out } = run('--static');
     expect(out).toContain('ran journal, lock, lint');
-    // A check that did nothing must never read as a check that passed, so the waived count is here.
-    expect(out).toContain('4 waived statement(s)');
+    // A check that did nothing must never read as a check that passed, so the waived count is here,
+    // and it has to be a number someone would notice going to zero.
+    expect(waivedStatements()).toBeGreaterThan(0);
+    expect(out).toContain(`${waivedStatements()} waived statement(s)`);
     expect(status).toBe(0);
   });
 
@@ -226,8 +240,13 @@ describe('runChecks', () => {
   it('passes every check that needs no database', async () => {
     const { findings, counts, ran } = await runChecks({ staticOnly: true });
     expect(findings).toEqual([]);
-    // The count comes from the journal for the same reason the list above does.
-    expect(counts).toMatchObject({ migrations: loadMigrations().length, waived: 4, errors: 0, warnings: 0 });
+    // Both counts come from their own source of truth for the same reason the list above does.
+    expect(counts).toMatchObject({
+      migrations: loadMigrations().length,
+      waived: waivedStatements(),
+      errors: 0,
+      warnings: 0,
+    });
     expect(ran).toEqual(['journal', 'lock', 'lint']);
   });
 

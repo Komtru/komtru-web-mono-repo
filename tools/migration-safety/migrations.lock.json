@@ -104,6 +104,36 @@
       "tag": "0020_ledger_append_only",
       "when": 1791269057981,
       "sha256": "3e9fe6c5cf870191451cd4c353d7e7d6668844d1ab44fbd422fcfaf1bb7768c2"
+    },
+    {
+      "tag": "0021_trade_schema",
+      "when": 1791269257344,
+      "sha256": "9c368447702a9271303dfa5d2d54878b5547b568c992c2f4ed606e210cbb2727"
+    },
+    {
+      "tag": "0022_trade_append_only",
+      "when": 1791269258344,
+      "sha256": "b6c522600938bb11205d65204c14dd152f7bc2c6ba332e47c6d91201e6e54fb8"
+    },
+    {
+      "tag": "0023_trade_state_machine",
+      "when": 1791269259344,
+      "sha256": "596ac4c3340497fab4a508b8b9f6595d4144bc20be74a8779e9941c6c9cc0578"
+    },
+    {
+      "tag": "0024_trade_immutable_columns",
+      "when": 1791269260344,
+      "sha256": "44812b3ce82660ede9e108eec9c38ff1ca668f11555c7df872c3c38c5df9efc7"
+    },
+    {
+      "tag": "0025_trade_accepted_terms_fk",
+      "when": 1791269261344,
+      "sha256": "8a0c2b28f5480d8d15daae745658f2de6a8c3f6854c86fa2fdbd63671f92762e"
+    },
+    {
+      "tag": "0026_trade_write_paths",
+      "when": 1791269262344,
+      "sha256": "79d3cce8fcf0a1dd105fca3e0ab7100cadbcbafb07e658840eb9398b2cece750"
     }
   ]
 }
