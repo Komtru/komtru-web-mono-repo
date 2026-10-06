@@ -53,5 +53,7 @@ export const invitationDestinationHash = (hasher: HmacHasher, canonical: string)
  * verifies by SMS has proven the same number. The hash is what identifies the person; the channel
  * only separates a phone from an email, which cannot collide anyway.
  */
-export const invitationChannelsFor = (channel: 'EMAIL' | 'PHONE'): readonly string[] =>
+export type InvitationChannel = 'SMS' | 'EMAIL' | 'WHATSAPP' | 'VOICE';
+
+export const invitationChannelsFor = (channel: 'EMAIL' | 'PHONE'): readonly InvitationChannel[] =>
   channel === 'EMAIL' ? ['EMAIL'] : ['SMS', 'WHATSAPP', 'VOICE'];
