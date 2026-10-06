@@ -1,8 +1,9 @@
 // The ledger module's public surface (m8 §2). Other modules reach it only through this file.
 //
-// T-071 builds the provider layer: the adapter interface, the Paystack implementation, the registry and
-// the two jobs the adapter needs. The chart of accounts and the journal are T-070; funding, the webhook
-// route and the payout surfaces are T-072 and T-073.
+// Two halves meet here: T-070's chart of accounts, journal and balances — the ledger never transitions
+// a trade and never computes a fee, amounts arrive already computed from the trade's snapshot
+// (design §6.5) — and T-071's provider layer, the adapter interface, the Paystack implementation,
+// the registry and its jobs. Funding, the webhook route and the payouts are T-072 and T-073.
 import type { Redis } from 'ioredis';
 import type { AppConfig } from '../../config/env.js';
 import type { Logger } from '../../platform/logger.js';
@@ -17,6 +18,36 @@ import {
   type ResolveAccountNameJob,
 } from './jobs/resolve-account-name.job.js';
 
+// The chart of accounts, the posting function and the balance queries (T-070).
+export * from './domain/accounts.js';
+export * from './domain/journal.js';
+export * from './domain/events.js';
+export * from './infrastructure/postgres/schema/index.js';
+export {
+  findAccountId,
+  resolveAccountId,
+  type Reader,
+} from './infrastructure/postgres/accountsRepository.js';
+export {
+  claimJournalEntry,
+  findEntriesByJournal,
+  findJournalByKey,
+  insertEntries,
+  listAccountEntries,
+  type JournalEntryClaim,
+  type JournalEntryRow,
+  type LedgerEntryRow,
+} from './infrastructure/postgres/journalRepository.js';
+export {
+  accountBalance,
+  ownerBalances,
+  trialBalance,
+  type AccountBalance,
+  type TrialBalanceRow,
+} from './infrastructure/postgres/balancesRepository.js';
+export { postJournal, type PostedJournal } from './services/journal.service.js';
+
+// The provider layer (T-071).
 export type {
   Bank,
   InitializeChargeInput,

@@ -127,6 +127,27 @@
       "when": 1791237891386,
       "tag": "0017_notify_append_only",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1791269055981,
+      "tag": "0018_ledger_core",
+      "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1791269056981,
+      "tag": "0019_ledger_balance_invariant",
+      "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1791269057981,
+      "tag": "0020_ledger_append_only",
+      "breakpoints": true
     }
   ]
 }

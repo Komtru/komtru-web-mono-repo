@@ -159,8 +159,17 @@ describe('baseMigrations', () => {
     const base = baseMigrations('HEAD');
     if (base.ref === null) throw new Error(base.reason);
     expect(base.ref).toBe('HEAD');
+    // Compared against HEAD's own journal, not the working tree's: while a migration is being
+    // added (or renumbered during a merge) the two legitimately differ, and the claim this test
+    // makes is that `baseMigrations` reads from git — not that nothing is in flight.
+    const headJournal = JSON.parse(
+      execFileSync('git', ['show', 'HEAD:apps/backend-api/drizzle/meta/_journal.json'], {
+        cwd: repoRoot,
+        encoding: 'utf8',
+      }),
+    ) as { entries: { idx: number; tag: string }[] };
     expect(base.migrations.map((migration) => migration.tag)).toEqual(
-      loadMigrations().map((migration) => migration.tag),
+      [...headJournal.entries].sort((a, b) => a.idx - b.idx).map((entry) => entry.tag),
     );
     expect(status()).toBe(before);
   });

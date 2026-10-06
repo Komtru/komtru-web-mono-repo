@@ -94,6 +94,41 @@
       "definition": "CHECK ((((username IS NULL) AND (username_skeleton IS NULL)) OR ((username IS NOT NULL) AND (username_skeleton IS NOT NULL))))"
     },
     {
+      "table": "ledger.ledger_accounts",
+      "name": "ledger_accounts_currency",
+      "definition": "CHECK ((currency ~ '^[A-Z]{3}$'::text))"
+    },
+    {
+      "table": "ledger.ledger_accounts",
+      "name": "ledger_accounts_scope",
+      "definition": "CHECK (\nCASE account_type\n    WHEN 'USER_ESCROW_LIABILITY'::ledger.ledger_account_type THEN ((trade_id IS NOT NULL) AND (owner_user_id IS NULL) AND (payout_id IS NULL))\n    WHEN 'USER_PAYABLE'::ledger.ledger_account_type THEN ((owner_user_id IS NOT NULL) AND (trade_id IS NULL) AND (payout_id IS NULL))\n    WHEN 'SETTLEMENT_CLEARING'::ledger.ledger_account_type THEN ((payout_id IS NOT NULL) AND (owner_user_id IS NULL) AND (trade_id IS NULL))\n    ELSE ((owner_user_id IS NULL) AND (trade_id IS NULL) AND (payout_id IS NULL))\nEND)"
+    },
+    {
+      "table": "ledger.ledger_entries",
+      "name": "ledger_entries_amount_positive",
+      "definition": "CHECK ((amount_minor > 0))"
+    },
+    {
+      "table": "ledger.ledger_journal_entries",
+      "name": "ledger_journal_entries_currency",
+      "definition": "CHECK ((currency ~ '^[A-Z]{3}$'::text))"
+    },
+    {
+      "table": "ledger.ledger_journal_entries",
+      "name": "ledger_journal_entries_key_shape",
+      "definition": "CHECK ((idempotency_key ~ '^[a-z][a-z0-9_]*:[A-Za-z0-9:._-]+$'::text))"
+    },
+    {
+      "table": "ledger.ledger_journal_entries",
+      "name": "ledger_journal_entries_line_count",
+      "definition": "CHECK ((line_count >= 2))"
+    },
+    {
+      "table": "ledger.ledger_journal_entries",
+      "name": "ledger_journal_entries_provider_pair",
+      "definition": "CHECK (((provider IS NULL) = (provider_reference IS NULL)))"
+    },
+    {
       "table": "notify.notifications",
       "name": "notifications_suppressed_has_reason",
       "definition": "CHECK (((status <> 'SUPPRESSED'::notify.notification_status) OR (failed_reason IS NOT NULL)))"
@@ -114,6 +149,31 @@
       "table": "identity.roles",
       "name": "roles_dual_approval_backfill",
       "definition": "[O] CREATE TRIGGER roles_dual_approval_backfill BEFORE UPDATE ON identity.roles FOR EACH ROW EXECUTE FUNCTION identity.enforce_dual_approval_backfill()"
+    },
+    {
+      "table": "ledger.ledger_accounts",
+      "name": "komtru_append_only",
+      "definition": "[O] CREATE TRIGGER komtru_append_only BEFORE DELETE OR UPDATE ON ledger.ledger_accounts FOR EACH ROW EXECUTE FUNCTION platform.reject_mutation()"
+    },
+    {
+      "table": "ledger.ledger_entries",
+      "name": "komtru_append_only",
+      "definition": "[O] CREATE TRIGGER komtru_append_only BEFORE DELETE OR UPDATE ON ledger.ledger_entries FOR EACH ROW EXECUTE FUNCTION platform.reject_mutation()"
+    },
+    {
+      "table": "ledger.ledger_entries",
+      "name": "ledger_entry_balanced",
+      "definition": "[O] CREATE CONSTRAINT TRIGGER ledger_entry_balanced AFTER INSERT ON ledger.ledger_entries DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION ledger.ledger_entry_balanced()"
+    },
+    {
+      "table": "ledger.ledger_journal_entries",
+      "name": "komtru_append_only",
+      "definition": "[O] CREATE TRIGGER komtru_append_only BEFORE DELETE OR UPDATE ON ledger.ledger_journal_entries FOR EACH ROW EXECUTE FUNCTION platform.reject_mutation()"
+    },
+    {
+      "table": "ledger.ledger_journal_entries",
+      "name": "ledger_journal_entry_balanced",
+      "definition": "[O] CREATE CONSTRAINT TRIGGER ledger_journal_entry_balanced AFTER INSERT ON ledger.ledger_journal_entries DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION ledger.journal_entry_balanced()"
     },
     {
       "table": "notify.notification_delivery_attempts",

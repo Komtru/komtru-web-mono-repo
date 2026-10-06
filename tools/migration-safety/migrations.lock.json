@@ -89,6 +89,21 @@
       "tag": "0017_notify_append_only",
       "when": 1791237891386,
       "sha256": "d3caa262924fad11f5f8500e7011a4bb30f65043e4856c2f2a559c65c497b6f3"
+    },
+    {
+      "tag": "0018_ledger_core",
+      "when": 1791269055981,
+      "sha256": "60d6828279a93e755fee39ba438b5fa3e97a5e16915780f089316391824d1f24"
+    },
+    {
+      "tag": "0019_ledger_balance_invariant",
+      "when": 1791269056981,
+      "sha256": "8f1a7aefb7f6a6f54a147c7528ffd47aac21535efbd4155bd2002f3d7138d0fd"
+    },
+    {
+      "tag": "0020_ledger_append_only",
+      "when": 1791269057981,
+      "sha256": "3e9fe6c5cf870191451cd4c353d7e7d6668844d1ab44fbd422fcfaf1bb7768c2"
     }
   ]
 }
