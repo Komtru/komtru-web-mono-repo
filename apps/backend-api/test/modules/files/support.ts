@@ -4,6 +4,48 @@ import type pg from 'pg';
 
 type Queryable = Pick<pg.Pool, 'query'>;
 
+/** The SQLSTATE of a rejected query, so a test asserts which rule fired rather than that one did. */
+export const sqlState = async (query: Promise<unknown>): Promise<string> => {
+  try {
+    await query;
+  } catch (error) {
+    return (error as pg.DatabaseError).code ?? 'no code';
+  }
+  return 'no error';
+};
+
+/** The constraint a rejected query violated, for the rules that share a SQLSTATE. */
+export const constraintName = async (query: Promise<unknown>): Promise<string> => {
+  try {
+    await query;
+  } catch (error) {
+    return (error as pg.DatabaseError).constraint ?? 'no constraint';
+  }
+  return 'no error';
+};
+
+/**
+ * The labels of an enum in the `files` schema, in sort order.
+ *
+ * Scoped to this module's schema, like identity's, trades' and ledger's equivalents. The earlier
+ * version of this test imported ledger's, which pins `nspname = 'ledger'` and so returned an empty
+ * array for every files enum — a test that could only ever fail, and did, while the schema it was
+ * accusing was correct all along. Reaching into another module's test support is what made that
+ * possible, so this one lives here.
+ */
+export const enumLabels = async (owner: Queryable, name: string): Promise<string[]> => {
+  const { rows } = await owner.query<{ label: string }>(
+    `SELECT e.enumlabel AS label
+       FROM pg_enum e
+       JOIN pg_type t ON t.oid = e.enumtypid
+       JOIN pg_namespace n ON n.oid = t.typnamespace
+      WHERE n.nspname = 'files' AND t.typname = $1
+      ORDER BY e.enumsortorder`,
+    [name],
+  );
+  return rows.map((row) => row.label);
+};
+
 export interface SeedAccount {
   pool?: 'PROFILE' | 'CHAT_ATTACHMENT' | 'TRADE_ASSET';
   label?: string;

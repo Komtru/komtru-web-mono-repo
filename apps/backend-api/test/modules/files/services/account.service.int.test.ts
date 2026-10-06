@@ -5,6 +5,7 @@ import { describe, expect, it } from 'vitest';
 import type { FilesConfig } from '../../../../src/config/env.js';
 import { createDb } from '../../../../src/db/index.js';
 import { outbox } from '../../../../src/db/platform-schema.js';
+import { ApiError } from '../../../../src/platform/errors.js';
 import { createLogger } from '../../../../src/platform/logger.js';
 import {
   PoolExhaustedError,
@@ -160,21 +161,36 @@ describe.runIf(infraEnabled)('account.service', () => {
       ).rejects.toBeInstanceOf(StorageAccountUnconfiguredError);
     });
 
-    it('refuses a second account in a singleton pool with a message naming D5', async () => {
+    it('refuses a second account in a singleton pool, explaining D5 in the detail', async () => {
+      // Asserted field by field rather than with toThrow(/…/): ApiError does `super(title)`, so a
+      // regex on the message only ever sees the title — which is deliberately short human copy —
+      // while the D5 explanation an operator needs lives in `detail`, and the fields a client
+      // actually branches on are `status` and `code`. An earlier version of this test matched the
+      // message against the detail's wording and could only fail.
       await insertStorageAccount(t.app(), {
         pool: 'PROFILE',
         label: 'profile',
         prefix: 'CLOUDINARY_PROFILE',
         rotationOrder: null,
       });
-      await expect(
-        registerAccount(createDb(t.app()), ALL_FIVE, {
-          pool: 'PROFILE',
-          label: 'profile-2',
-          cloudName: 'c-profile-2',
-          credentialEnvPrefix: 'CLOUDINARY_CHAT',
-        }),
-      ).rejects.toThrow(/single-account pool/);
+
+      const refusal = await registerAccount(createDb(t.app()), ALL_FIVE, {
+        pool: 'PROFILE',
+        label: 'profile-2',
+        cloudName: 'c-profile-2',
+        credentialEnvPrefix: 'CLOUDINARY_CHAT',
+      }).then(
+        () => {
+          throw new Error('expected the second singleton-pool account to be refused');
+        },
+        (error: unknown) => error as ApiError,
+      );
+
+      expect(refusal).toBeInstanceOf(ApiError);
+      expect(refusal.status).toBe(409);
+      expect(refusal.code).toBe('CONFLICT');
+      expect(refusal.detail).toContain('single-account pool');
+      expect(refusal.detail).toContain('M20 D5');
     });
   });
 

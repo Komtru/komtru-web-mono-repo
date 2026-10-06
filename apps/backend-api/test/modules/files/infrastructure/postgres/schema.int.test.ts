@@ -4,16 +4,25 @@
 // log that can only grow. Skipped unless KOMTRU_INFRA_TESTS=1.
 import { randomUUID } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
+import { FILE_CATEGORIES } from '../../../../../src/modules/files/infrastructure/postgres/schema/enums.js';
 import { infraEnabled } from '../../../../support/db-urls.js';
 import { useTestDatabase } from '../../../../support/db.js';
-import { constraintName, enumLabels, sqlState } from '../../../ledger/support.js';
-import { insertFileRecord, insertStorageAccount } from '../../support.js';
+import {
+  constraintName,
+  enumLabels,
+  insertFileRecord,
+  insertStorageAccount,
+  sqlState,
+} from '../../support.js';
 
 describe.runIf(infraEnabled)('files schema', () => {
   const t = useTestDatabase();
 
-  it('carries CUSTODY_EVIDENCE in file_category, for Park custody photos', async () => {
-    expect(await enumLabels(t.owner(), 'file_category')).toContain('CUSTODY_EVIDENCE');
+  it('declares file_category exactly as the module expects, CUSTODY_EVIDENCE included', async () => {
+    // The whole list, in order, rather than one `toContain`: the enum is what T-092's custody photos
+    // and every other consumer's category will be checked against, and a value quietly missing from
+    // a migration is not something to discover from a foreign-key error months later.
+    expect(await enumLabels(t.owner(), 'file_category')).toEqual([...FILE_CATEGORIES]);
   });
 
   it('refuses a second live account in a singleton pool (D5)', async () => {
