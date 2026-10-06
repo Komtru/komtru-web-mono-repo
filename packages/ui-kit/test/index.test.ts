@@ -30,6 +30,7 @@ describe('@komtru/ui-kit', () => {
       'MobileShell',
       'NodeLoader',
       'OtpInput',
+      'PublicShell',
       'Select',
       'Sheet',
       'SideNav',
