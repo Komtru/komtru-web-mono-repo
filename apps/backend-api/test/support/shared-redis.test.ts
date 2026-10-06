@@ -75,6 +75,26 @@ describe('the shared test Redis database', () => {
     expect(offenders.map((path) => path.slice(TEST_ROOT.length))).toEqual([]);
   });
 
+  // T-032 made the identity module refuse to build without a pepper, and every process-starting
+  // test builds that module. A harness that sets a signing key but no pepper therefore fails at
+  // startApi, several frames from the env object that actually omitted it.
+  it('pairs a signing key with a pepper in every env that has one', () => {
+    const offenders = testFiles(TEST_ROOT)
+      .filter((path) => path !== SELF)
+      .filter((path) => {
+        const source = readFileSync(path, 'utf8');
+        // Minting a fresh key is the signature of building a whole app env, as opposed to
+        // overriding one field of a config a helper already built; and only a file that goes on to
+        // build the module registry can hit the refusal. A signer-only unit test needs no pepper.
+        return (
+          /IDENTITY_SIGNING_KEY: randomBytes\(/.test(source) &&
+          /startApi|startWorker|createModules|createIdentityAuth|createSocketModule/.test(source) &&
+          !source.includes('IDENTITY_HMAC_PEPPER')
+        );
+      });
+    expect(offenders.map((path) => path.slice(TEST_ROOT.length))).toEqual([]);
+  });
+
   it('is never flushed wholesale by a test', () => {
     const offenders = testFiles(TEST_ROOT)
       // This file names the call it bans, in the comment above and in the pattern below.
