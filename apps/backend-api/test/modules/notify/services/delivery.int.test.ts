@@ -12,12 +12,17 @@ import {
   markSent,
   releaseStuck,
 } from '../../../../src/modules/notify/services/delivery.service.js';
-import { infraEnabled, testRedisUrl } from '../../../support/db-urls.js';
+import { infraEnabled, testRedisEnv, testRedisUrl } from '../../../support/db-urls.js';
 import { useTestDatabase } from '../../../support/db.js';
 import { insertNotification } from '../support.js';
 
 const logger = createLogger(
-  loadConfig({ LOG_LEVEL: 'silent', POSTGRES_URL: 'postgresql://x@localhost/x', REDIS_URL: testRedisUrl() }),
+  loadConfig({
+    LOG_LEVEL: 'silent',
+    POSTGRES_URL: 'postgresql://x@localhost/x',
+    REDIS_URL: testRedisUrl(),
+    ...testRedisEnv(),
+  }),
 );
 
 describe.runIf(infraEnabled)('delivery service', () => {

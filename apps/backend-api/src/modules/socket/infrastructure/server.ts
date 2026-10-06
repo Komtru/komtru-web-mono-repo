@@ -13,13 +13,19 @@ import type { AdapterConnections } from './redis.js';
  * Every key and channel the adapter touches begins with this (it composes channel names as
  * `<key>#<namespace>#`), which is what keeps the socket layer's pub/sub off BullMQ's `komtru:bull`
  * keyspace on the shared instance.
+ *
+ * It is derived from the process's Redis namespace rather than fixed, because ioredis's `keyPrefix`
+ * does not apply to pub/sub channel names — so this is the one place a per-worker namespace cannot
+ * reach on its own, and a constant here would put every parallel test file's socket fan-out on the
+ * same channels.
  */
-export const SOCKET_ADAPTER_KEY = 'komtru:sock:';
+export const socketAdapterKey = (keyPrefix: string): string => `${keyPrefix}sock:`;
 
 export function createSocketServer(
   config: SocketConfig,
   connections: AdapterConnections,
   logger: Logger,
+  adapterKey: string,
 ): Server {
   if (config.corsOrigins.length === 0) {
     // Not fatal: a Node client (and every integration test) sends no Origin and connects fine. But
@@ -38,6 +44,6 @@ export function createSocketServer(
     serveClient: false,
   });
 
-  io.adapter(createAdapter(connections.pub, connections.sub, { key: SOCKET_ADAPTER_KEY }));
+  io.adapter(createAdapter(connections.pub, connections.sub, { key: adapterKey }));
   return io;
 }

@@ -27,9 +27,9 @@ import {
 } from './services/handlers.js';
 import { revalidateConnections } from './services/revalidate.js';
 import { createAdapterConnections } from './infrastructure/redis.js';
-import { createSocketServer, SOCKET_ADAPTER_KEY } from './infrastructure/server.js';
+import { createSocketServer, socketAdapterKey } from './infrastructure/server.js';
 
-export { SOCKET_ADAPTER_KEY } from './infrastructure/server.js';
+export { socketAdapterKey } from './infrastructure/server.js';
 export { RESERVED_ROOM_PREFIXES, personalRoom, scopeRoom } from './domain/rooms.js';
 export { CLIENT_EVENTS, SERVER_EVENTS } from './domain/protocol.js';
 export type { RoomAuthorizer, RoomAuthorizerInput } from './services/authorizers.js';
@@ -111,7 +111,8 @@ export function createSocketModule(deps: SocketModuleDeps): SocketModule {
   const connections = createConnectionTable();
   const authorizers = createAuthorizerRegistry(logger);
   const adapter = createAdapterConnections(config.redis.url);
-  const io = createSocketServer(config.socket, adapter, logger);
+  const adapterKey = socketAdapterKey(config.redis.keyPrefix);
+  const io = createSocketServer(config.socket, adapter, logger, adapterKey);
   const gateway = createGateway({ io, authorizers, connections, logger });
 
   const handlerDeps: HandlerDeps = {
@@ -181,7 +182,7 @@ export function createSocketModule(deps: SocketModuleDeps): SocketModule {
         logger.info(
           {
             path: config.socket.path,
-            adapterKey: SOCKET_ADAPTER_KEY,
+            adapterKey,
             revalidateIntervalSeconds: config.socket.revalidateIntervalSeconds,
           },
           'socket: gateway ready',

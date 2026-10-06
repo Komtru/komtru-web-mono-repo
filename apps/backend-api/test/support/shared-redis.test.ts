@@ -13,6 +13,8 @@ import { describe, expect, it } from 'vitest';
 
 const TEST_ROOT = fileURLToPath(new URL('..', import.meta.url));
 const SELF = fileURLToPath(import.meta.url);
+// The one file that must NOT carry a namespace: its job is asserting what loadConfig defaults to.
+const CONFIG_DEFAULTS_TEST = join(TEST_ROOT, 'config', 'env.test.ts');
 
 const testFiles = (dir: string): string[] =>
   readdirSync(dir).flatMap((entry) => {
@@ -57,6 +59,20 @@ describe('the shared test Redis database', () => {
           if (!call.includes(`${option}:`)) offenders.push(`${path.slice(TEST_ROOT.length)}: ${fn}`);
     }
     expect(offenders).toEqual([]);
+  });
+
+  // The constructors above are not the only way in: a test that hands an env to startApi, startWorker
+  // or loadConfig gets its namespace from that object, and omitting it silently falls back to the
+  // production one. That is how T-027's two socket files ended up fanning out to each other's
+  // sockets through one `komtru:sock:` channel set, which the constructor check could not see.
+  it('names the namespace in every env a test builds', () => {
+    const offenders = testFiles(TEST_ROOT)
+      .filter((path) => path !== SELF && path !== CONFIG_DEFAULTS_TEST)
+      .filter((path) => {
+        const source = readFileSync(path, 'utf8');
+        return source.includes('REDIS_URL: testRedisUrl()') && !source.includes('...testRedisEnv()');
+      });
+    expect(offenders.map((path) => path.slice(TEST_ROOT.length))).toEqual([]);
   });
 
   it('is never flushed wholesale by a test', () => {

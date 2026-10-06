@@ -9,13 +9,18 @@ import type { NotifyConfig } from '../../../../src/config/env.js';
 import { loadConfig } from '../../../../src/config/env.js';
 import { createLogger } from '../../../../src/platform/logger.js';
 import { DRY_RUN_REFERENCE, runSendJob } from '../../../../src/modules/notify/jobs/send.job.js';
-import { infraEnabled, testRedisUrl } from '../../../support/db-urls.js';
+import { infraEnabled, testRedisEnv, testRedisUrl } from '../../../support/db-urls.js';
 import { useTestDatabase } from '../../../support/db.js';
 import { startStubServer, type StubServer } from '../../../support/stub-server.js';
 import { insertNotification, insertUser, insertVerifiedPhone } from '../support.js';
 
 const logger = createLogger(
-  loadConfig({ LOG_LEVEL: 'silent', POSTGRES_URL: 'postgresql://x@localhost/x', REDIS_URL: testRedisUrl() }),
+  loadConfig({
+    LOG_LEVEL: 'silent',
+    POSTGRES_URL: 'postgresql://x@localhost/x',
+    REDIS_URL: testRedisUrl(),
+    ...testRedisEnv(),
+  }),
 );
 
 const json =

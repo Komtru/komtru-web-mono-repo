@@ -11,12 +11,17 @@ import {
   dispatchForEvent,
   type QueuedSend,
 } from '../../../../src/modules/notify/services/dispatch.service.js';
-import { infraEnabled, testRedisUrl } from '../../../support/db-urls.js';
+import { infraEnabled, testRedisEnv, testRedisUrl } from '../../../support/db-urls.js';
 import { useTestDatabase } from '../../../support/db.js';
 import { insertUser, insertVerifiedEmail, insertVerifiedPhone } from '../support.js';
 
 const logger = createLogger(
-  loadConfig({ LOG_LEVEL: 'silent', POSTGRES_URL: 'postgresql://x@localhost/x', REDIS_URL: testRedisUrl() }),
+  loadConfig({
+    LOG_LEVEL: 'silent',
+    POSTGRES_URL: 'postgresql://x@localhost/x',
+    REDIS_URL: testRedisUrl(),
+    ...testRedisEnv(),
+  }),
 );
 
 const notifyConfig = (overrides: Partial<NotifyConfig> = {}): NotifyConfig => ({
