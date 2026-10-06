@@ -5,7 +5,7 @@
 // one pure function to build the whole object from a named input type, so adding a field is a
 // deliberate act in this file rather than a column that rides along on a `SELECT *`. The card test
 // asserts the exact key set for the same reason.
-import { canActAsBuyer } from '../capability.js';
+import { canActAsBuyer, type CapabilityStatus } from '../capability.js';
 
 /**
  * The display vocabulary, which is NOT `verification_level` (§8.2 is explicit that they are two
@@ -49,7 +49,7 @@ export interface PartyFacts {
   createdAt: Date;
   emailVerified: boolean;
   phoneVerified: boolean;
-  merchantCapabilityStatus: string | null;
+  merchantCapabilityStatus: CapabilityStatus | null;
 }
 
 /** What identity cannot answer on its own: M7's trade count, M5's merchant name, M20's signed URL. */

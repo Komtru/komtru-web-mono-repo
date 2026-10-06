@@ -17,5 +17,5 @@ export type CapabilityStatus = 'PENDING' | 'ACTIVE' | 'SUSPENDED' | 'REVOKED';
  * still an ordinary buyer. SUSPENDED and REVOKED restore buying, which design §6.3 states outright —
  * losing certification is not a punishment that also stops you shopping.
  */
-export const canActAsBuyer = (merchantCapabilityStatus: CapabilityStatus | string | null): boolean =>
+export const canActAsBuyer = (merchantCapabilityStatus: CapabilityStatus | null): boolean =>
   merchantCapabilityStatus !== 'ACTIVE';
