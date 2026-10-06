@@ -15,6 +15,7 @@ import { createIdentityAuth, identityModule, identitySeed, resolvePrincipal } fr
 import { ledgerModule } from './ledger/index.js';
 import { notifyModule } from './notify/index.js';
 import { createSocketModule } from './socket/index.js';
+import { trustModule } from './trust/index.js';
 
 export interface ProcessDeps {
   db: Db;
@@ -29,6 +30,7 @@ export type ModuleBuilder = (deps: ProcessDeps) => KomtruModule[];
 // that posts money reads a snapshot taken from it. identity next, because its RBAC catalogue and
 // reserved namespace are what every other module's permissions are checked against. files after
 // identity, because every one of its routes is scope-checked against the actor identity resolves.
+// trust after files, because a liveness selfie is a file record it resolves through M20's barrel.
 // notify after those: it only subscribes to what the others publish.
 export const createModules: ModuleBuilder = (deps) => {
   const auth = createIdentityAuth(deps);
@@ -36,6 +38,7 @@ export const createModules: ModuleBuilder = (deps) => {
     configModule,
     identityModule(auth),
     filesModule,
+    trustModule,
     ledgerModule,
     notifyModule,
     // Last: it produces nothing of its own, it only pushes what the others produce. It takes

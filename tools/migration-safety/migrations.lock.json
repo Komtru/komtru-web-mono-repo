@@ -144,6 +144,16 @@
       "tag": "0028_files_access_log_append_only",
       "when": 1791282338433,
       "sha256": "64e071cdb024b93c093468b8a53865f855a083576a660f47fb06ad9e8283e34b"
+    },
+    {
+      "tag": "0029_trust_schema",
+      "when": 1791291349566,
+      "sha256": "c55be2890f7eaab10600c2c0bba88a9f04651c1bf2f51fd23ac99bf73038cbf1"
+    },
+    {
+      "tag": "0030_trust_level_changes_append_only",
+      "when": 1791291365808,
+      "sha256": "9be12311087223d9e8e2d6d35e41960fa0dfc278d72139d436398c6d8395858d"
     }
   ]
 }
