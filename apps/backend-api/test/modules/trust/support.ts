@@ -7,6 +7,7 @@ import { createHmacHasher, type HmacHasher } from '../../../src/platform/crypto/
 import { createLogger, type Logger } from '../../../src/platform/logger.js';
 import type { VerificationRequest } from '../../../src/modules/trust/index.js';
 import type {
+  DuplicateIdentityInput,
   ExpiredRequest,
   GrantInput,
   IdentityFactsRow,
@@ -51,6 +52,7 @@ export interface RecordedStore extends TrustStore {
   readonly requests: VerificationRequest[];
   readonly providerCalls: ProviderCallInput[];
   readonly identityOutcomes: IdentityOutcomeInput[];
+  readonly duplicates: DuplicateIdentityInput[];
   readonly livenessOutcomes: LivenessOutcomeInput[];
   readonly grants: GrantInput[];
   readonly revokes: RevokeInput[];
@@ -75,6 +77,7 @@ export function stubStore(options: StubStoreOptions = {}): RecordedStore {
   const requests: VerificationRequest[] = [];
   const providerCalls: ProviderCallInput[] = [];
   const identityOutcomes: IdentityOutcomeInput[] = [];
+  const duplicates: DuplicateIdentityInput[] = [];
   const livenessOutcomes: LivenessOutcomeInput[] = [];
   const grants: GrantInput[] = [];
   const revokes: RevokeInput[] = [];
@@ -84,6 +87,7 @@ export function stubStore(options: StubStoreOptions = {}): RecordedStore {
     requests,
     providerCalls,
     identityOutcomes,
+    duplicates,
     livenessOutcomes,
     grants,
     revokes,
@@ -113,7 +117,10 @@ export function stubStore(options: StubStoreOptions = {}): RecordedStore {
     findRequest: () => Promise.resolve(options.request),
     listOpenRequests: () => Promise.resolve(options.openRequests ?? []),
     markProviderPending: () => Promise.resolve(),
-    recordProviderCall: (input) => void providerCalls.push(input) ?? Promise.resolve(),
+    recordProviderCall: (input) => {
+      providerCalls.push(input);
+      return Promise.resolve();
+    },
 
     applyIdentityOutcome: (input) => {
       // Throws once, so a test can prove the retry-after-duplicate path rather than only the throw.
@@ -125,7 +132,15 @@ export function stubStore(options: StubStoreOptions = {}): RecordedStore {
       return Promise.resolve();
     },
 
-    applyLivenessOutcome: (input) => void livenessOutcomes.push(input) ?? Promise.resolve(),
+    applyLivenessOutcome: (input) => {
+      livenessOutcomes.push(input);
+      return Promise.resolve();
+    },
+
+    applyDuplicateIdentity: (input) => {
+      duplicates.push(input);
+      return Promise.resolve();
+    },
     findIdentifierOwner: () => Promise.resolve(options.identifierOwner),
 
     identityFacts: () =>

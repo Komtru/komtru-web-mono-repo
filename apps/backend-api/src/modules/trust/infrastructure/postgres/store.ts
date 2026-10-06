@@ -58,6 +58,18 @@ export interface IdentityOutcomeInput {
   rejectionReason?: string;
 }
 
+export interface DuplicateIdentityInput {
+  request: VerificationRequest;
+  type: IdentifierType;
+  masked: string;
+  hash: Buffer;
+  provider: KycProvider;
+  providerReference: string;
+  nameMatchScore?: number;
+  /** The account that verified it first. Null when the row has since been removed. */
+  firstUserId: string | null;
+}
+
 export interface LivenessOutcomeInput {
   request: VerificationRequest;
   matchedAgainst: IdentifierType;
@@ -125,6 +137,15 @@ export interface TrustStore {
    */
   applyIdentityOutcome(input: IdentityOutcomeInput): Promise<void>;
   applyLivenessOutcome(input: LivenessOutcomeInput): Promise<void>;
+  /**
+   * §7's branch: the identifier passed, but it is already verified on another account.
+   *
+   * Writes the outcome row WITHOUT a `verified_at` (so the index does not claim the number for an
+   * account nobody approved), parks the request in MANUAL_REVIEW, and publishes
+   * `verification.duplicate_identity_detected`. Neither approval nor rejection — a human decides,
+   * and T-052 builds the queue they decide in.
+   */
+  applyDuplicateIdentity(input: DuplicateIdentityInput): Promise<void>;
   /** Who verified this identifier first, for the duplicate event. Undefined if the row is gone. */
   findIdentifierOwner(type: IdentifierType, hash: Buffer): Promise<string | undefined>;
   identityFacts(userId: string): Promise<IdentityFactsRow>;

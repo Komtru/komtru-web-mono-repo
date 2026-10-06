@@ -37,6 +37,15 @@ export {
   type AuditOutcome,
 } from './services/audit.service.js';
 export * from './services/username.service.js';
+/**
+ * T-050's one new export: M6 decides a level, identity performs the write. See the file's header for
+ * why this is a call rather than M6 §3 D6's event subscription.
+ */
+export {
+  applyVerificationLevel,
+  type ApplyVerificationLevelInput,
+  type ApplyVerificationLevelResult,
+} from './services/user.service.js';
 export { seedIdentityCatalogue } from './infrastructure/postgres/seed.js';
 
 export { SESSION_TTLS, sessionExpiry, slidingIdleExpiry } from './domain/session/ttl.js';
