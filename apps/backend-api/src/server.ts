@@ -4,6 +4,7 @@ import { createApp } from './app.js';
 import { loadConfig } from './config/env.js';
 import { assertNotOwner, createDb } from './db/index.js';
 import { createModules, type ModuleBuilder } from './modules/index.js';
+import { socketModuleOf } from './modules/socket/index.js';
 import { createClients, postgresCheck, redisCheck } from './platform/clients.js';
 import { healthRoutes } from './platform/health.js';
 import { createLogger } from './platform/logger.js';
@@ -108,6 +109,9 @@ export async function startApi(
   server.keepAliveTimeout = 65_000;
   server.headersTimeout = 66_000;
   logger.info({ port: config.port }, 'api listening');
+  // Socket.IO shares this server (T-027). Attached after listen, so the module registry stays a
+  // pure function of the process's connections; `moduleClosers` already closes it on shutdown.
+  socketModuleOf(modules)?.attach(server);
 
   /**
    * Stop accepting connections and let in-flight requests finish. While draining, every response

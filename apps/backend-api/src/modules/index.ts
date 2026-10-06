@@ -10,9 +10,10 @@ import type { Db } from '../db/index.js';
 import type { Logger } from '../platform/logger.js';
 import type { KomtruModule, SeedableModule } from '../platform/module.js';
 import { configModule } from './config/index.js';
-import { createIdentityAuth, identityModule, identitySeed } from './identity/index.js';
+import { createIdentityAuth, identityModule, identitySeed, resolvePrincipal } from './identity/index.js';
 import { ledgerModule } from './ledger/index.js';
 import { notifyModule } from './notify/index.js';
+import { createSocketModule } from './socket/index.js';
 
 export interface ProcessDeps {
   db: Db;
@@ -27,12 +28,27 @@ export type ModuleBuilder = (deps: ProcessDeps) => KomtruModule[];
 // that posts money reads a snapshot taken from it. identity next, because its RBAC catalogue and
 // reserved namespace are what every other module's permissions are checked against. notify last:
 // it only subscribes to what the others publish.
-export const createModules: ModuleBuilder = (deps) => [
-  configModule,
-  identityModule(createIdentityAuth(deps)),
-  ledgerModule,
-  notifyModule,
-];
+export const createModules: ModuleBuilder = (deps) => {
+  const auth = createIdentityAuth(deps);
+  return [
+    configModule,
+    identityModule(auth),
+    ledgerModule,
+    notifyModule,
+    // Last: it produces nothing of its own, it only pushes what the others produce. It takes
+    // identity's own resolver so a socket's handshake and its re-validation sweep reach the same
+    // verdict, by the same query, as an HTTP request carrying the same token.
+    createSocketModule({
+      config: deps.config,
+      logger: deps.logger,
+      authenticate: (token) =>
+        resolvePrincipal(
+          { db: deps.db, signer: auth.signer, epochs: auth.epochs, logger: deps.logger },
+          token,
+        ),
+    }),
+  ];
+};
 
 // The same registry, in the same order, reduced to what `pnpm db:migrate` can supply: a database.
 // Seeding must not need Redis or a signing key, so this list holds the seed hooks rather than the
