@@ -1,40 +1,50 @@
-// The registry entry, and the one seam server.ts uses. Nothing here opens a socket or dials Redis:
-// a disabled gateway must build nothing at all, and an enabled one must be constructible before
-// the HTTP server exists — that is what lets server.ts contribute a single line.
-import { afterEach, describe, expect, it } from 'vitest';
+// The registry entry, and the two seams server.ts uses (`attach`, `socketDrain`).
+//
+// Building the module opens the adapter's two Redis connections, so the registry is built once per
+// case and always stopped: a file that calls `testModules()` per assertion leaves a dozen ioredis
+// clients reconnecting for the rest of the run.
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import * as adapterRedis from '../../../src/modules/socket/infrastructure/redis.js';
 import {
+  socketDrain,
   socketModuleOf,
   type AttachableServer,
   type SocketModule,
 } from '../../../src/modules/socket/index.js';
-import type { ModuleContext } from '../../../src/platform/module.js';
-import { testModule, testModules } from '../../support/modules.js';
+import type { KomtruModule, ModuleContext } from '../../../src/platform/module.js';
+import { testModules } from '../../support/modules.js';
 import { socketConfig, silentLogger } from './support.js';
 
 const stubContext = (overrides: Record<string, string> = {}): ModuleContext =>
   ({ config: socketConfig(overrides), logger: silentLogger }) as ModuleContext;
 
-const started: SocketModule[] = [];
+const built: KomtruModule[] = [];
 
-const build = async (overrides: Record<string, string> = {}): Promise<SocketModule> => {
-  const module = socketModuleOf(testModules(overrides));
-  if (!module) throw new Error('no socket module in the registry');
-  await module.start?.(stubContext(overrides));
-  started.push(module);
-  return module;
+/** One registry per case, remembered so `afterEach` can stop it. */
+const registry = (overrides: Record<string, string> = {}): KomtruModule[] => {
+  const modules = testModules(overrides);
+  built.push(...modules);
+  return modules;
+};
+
+const socket = (overrides: Record<string, string> = {}): SocketModule => {
+  const found = socketModuleOf(registry(overrides));
+  if (!found) throw new Error('no socket module in the registry');
+  return found;
 };
 
 afterEach(async () => {
-  while (started.length > 0) await started.pop()?.stop?.();
+  while (built.length > 0) await built.pop()?.stop?.();
+  vi.restoreAllMocks();
 });
 
 describe('the socket module', () => {
   it('is in the registry under the name socket', () => {
-    expect(testModules().map((m) => m.name)).toContain('socket');
+    expect(registry().map((m) => m.name)).toContain('socket');
   });
 
   it('declares no routes, no queues and no seed: it is not an HTTP surface', () => {
-    const module = testModule('socket');
+    const module = socket();
     expect(module.routes).toBeUndefined();
     expect(module.queues).toBeUndefined();
     expect(module.seed).toBeUndefined();
@@ -42,31 +52,71 @@ describe('the socket module', () => {
   });
 
   it('does not claim to resolve the actor — identity is the only module that may', () => {
-    expect(testModule('socket').resolveActor).toBeUndefined();
+    expect(socket().resolveActor).toBeUndefined();
   });
 
-  it('exposes the gateway and an attach hook through socketModuleOf', () => {
-    const found = socketModuleOf(testModules());
-    expect(typeof found?.attach).toBe('function');
-    expect(typeof found?.gateway.emitToUser).toBe('function');
-    expect(typeof found?.gateway.registerRoomAuthorizer).toBe('function');
+  it('exposes the gateway, attach and drain through socketModuleOf', () => {
+    const found = socket();
+    expect(typeof found.attach).toBe('function');
+    expect(typeof found.drain).toBe('function');
+    expect(typeof found.gateway.emitToUser).toBe('function');
+    expect(typeof found.gateway.registerRoomAuthorizer).toBe('function');
   });
 
   it('finds nothing in a registry with no socket module', () => {
-    expect(socketModuleOf(testModules().filter((m) => m.name !== 'socket'))).toBeUndefined();
+    expect(socketModuleOf(registry().filter((m) => m.name !== 'socket'))).toBeUndefined();
+  });
+
+  it('contributes one shutdown closer, which server.ts runs before the HTTP drain', () => {
+    expect(socketDrain(registry()).map((c) => c.name)).toEqual(['socket:drain']);
+    expect(socketDrain([])).toEqual([]);
   });
 
   it('starts and stops without an attached server', async () => {
-    const module = await build();
+    const module = socket();
+    await module.start?.(stubContext());
     await expect(module.stop?.()).resolves.toBeUndefined();
-    started.pop();
+    built.length = 0;
   });
 
-  it('is inert when SOCKET_ENABLED is false: no server, no Redis, no timer', async () => {
-    const module = await build({ SOCKET_ENABLED: 'false' });
+  it('drains without an attached server', () => {
+    expect(() => socket().drain()).not.toThrow();
+  });
+});
+
+describe('when SOCKET_ENABLED is false', () => {
+  it('opens no Redis connection at all', () => {
+    const open = vi.spyOn(adapterRedis, 'createAdapterConnections');
+    socket({ SOCKET_ENABLED: 'false' });
+    expect(open).not.toHaveBeenCalled();
+  });
+
+  it('opens exactly one pair of adapter connections when it is enabled', () => {
+    const open = vi.spyOn(adapterRedis, 'createAdapterConnections');
+    socket();
+    expect(open).toHaveBeenCalledTimes(1);
+  });
+
+  it('arms no re-validation timer', async () => {
+    const arm = vi.spyOn(globalThis, 'setInterval');
+    const module = socket({ SOCKET_ENABLED: 'false' });
+    await module.start?.(stubContext({ SOCKET_ENABLED: 'false' }));
+    expect(arm).not.toHaveBeenCalled();
+  });
+
+  it('arms one when it is enabled', async () => {
+    const arm = vi.spyOn(globalThis, 'setInterval');
+    const module = socket();
+    await module.start?.(stubContext());
+    expect(arm).toHaveBeenCalledTimes(1);
+  });
+
+  it('attaches and drains as no-ops, and still refuses a reserved room prefix', () => {
+    const module = socket({ SOCKET_ENABLED: 'false' });
     expect(() => module.attach({} as AttachableServer)).not.toThrow();
-    expect(module.gateway.connectionCount()).toBe(0);
-    // The no-op gateway must still be safe to call: a module that emits does not need to know.
+    expect(() => module.drain()).not.toThrow();
     expect(() => module.gateway.emitToUser('u1', 'x', {})).not.toThrow();
+    // A module claiming a personal-room prefix is a boot failure whether or not sockets are served.
+    expect(() => module.gateway.registerRoomAuthorizer('user', () => true)).toThrow(/reserved/);
   });
 });

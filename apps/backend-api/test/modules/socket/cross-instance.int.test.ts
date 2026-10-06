@@ -48,10 +48,14 @@ describe.runIf(infraEnabled)('socket fan-out across instances', () => {
     return { ...session, userId };
   };
 
+  // Vitest's defaults are 5s per test and 10s per hook; two API boots and a real handshake need
+  // more than that against a cold template database.
+  const BUDGET_MS = 30_000;
+
   beforeAll(async () => {
     a = await startInstance(env);
     b = await startInstance(env);
-  });
+  }, BUDGET_MS);
 
   afterEach(() => {
     while (sockets.length > 0) sockets.pop()?.close();
@@ -60,74 +64,122 @@ describe.runIf(infraEnabled)('socket fan-out across instances', () => {
   afterAll(async () => {
     await a.api.stop();
     await b.api.stop();
-  });
+  }, BUDGET_MS);
 
-  it('delivers an event emitted on instance A to a socket connected to instance B', async () => {
-    const session = await login();
-    const socket = client(b, { token: session.accessToken });
-    sockets.push(socket);
-    await connected(socket);
+  it(
+    'delivers an event emitted on instance A to a socket connected to instance B',
+    async () => {
+      const session = await login();
+      const socket = client(b, { token: session.accessToken });
+      sockets.push(socket);
+      await connected(socket);
 
-    const received = nextEvent<{ n: number }>(socket, 'test.ping');
-    a.gateway.emitToUser(session.userId, 'test.ping', { n: 1 });
-    await expect(received).resolves.toEqual({ n: 1 });
-  });
+      const received = nextEvent<{ n: number }>(socket, 'test.ping');
+      a.gateway.emitToUser(session.userId, 'test.ping', { n: 1 });
+      await expect(received).resolves.toEqual({ n: 1 });
+    },
+    BUDGET_MS,
+  );
 
-  it('delivers to a feature room across instances once the socket has joined it', async () => {
-    const session = await login();
-    // Both instances must know the prefix: the authorizer runs where the socket lives (B), and the
-    // emit happens on A, which only needs the room name.
-    for (const instance of [a, b]) instance.gateway.registerRoomAuthorizer('trade', () => true);
-    const socket = client(b, { token: session.accessToken });
-    sockets.push(socket);
-    await connected(socket);
+  it(
+    'delivers to a feature room across instances once the socket has joined it',
+    async () => {
+      const session = await login();
+      // Both instances must know the prefix: the authorizer runs where the socket lives (B), and the
+      // emit happens on A, which only needs the room name.
+      for (const instance of [a, b]) instance.gateway.registerRoomAuthorizer('trade', () => true);
+      const socket = client(b, { token: session.accessToken });
+      sockets.push(socket);
+      await connected(socket);
 
-    const joined: unknown = await socket.emitWithAck('room:join', { prefix: 'trade', id: 'trade-1' });
-    expect(joined).toEqual({ joined: true });
+      const joined: unknown = await socket.emitWithAck('room:join', { prefix: 'trade', id: 'trade-1' });
+      expect(joined).toEqual({ joined: true });
 
-    const received = nextEvent<{ ok: boolean }>(socket, 'trade.updated');
-    a.gateway.emitToRoom('trade', 'trade-1', 'trade.updated', { ok: true });
-    await expect(received).resolves.toEqual({ ok: true });
-  });
+      const received = nextEvent<{ ok: boolean }>(socket, 'trade.updated');
+      a.gateway.emitToRoom('trade', 'trade-1', 'trade.updated', { ok: true });
+      await expect(received).resolves.toEqual({ ok: true });
+    },
+    BUDGET_MS,
+  );
 
-  it('does not deliver a personal push to another user', async () => {
-    const mine = await login();
-    const theirs = await login();
-    const socket = client(b, { token: mine.accessToken });
-    sockets.push(socket);
-    await connected(socket);
+  it(
+    'does not deliver a personal push to another user',
+    async () => {
+      const mine = await login();
+      const theirs = await login();
+      const socket = client(b, { token: mine.accessToken });
+      sockets.push(socket);
+      await connected(socket);
 
-    let delivered = false;
-    socket.on('test.ping', () => void (delivered = true));
-    a.gateway.emitToUser(theirs.userId, 'test.ping', {});
-    // Give the adapter's round trip a generous window; the assertion is that nothing arrived.
-    await new Promise((resolve) => setTimeout(resolve, 500));
-    expect(delivered).toBe(false);
-  });
+      let delivered = false;
+      socket.on('test.ping', () => void (delivered = true));
+      a.gateway.emitToUser(theirs.userId, 'test.ping', {});
+      // Give the adapter's round trip a generous window; the assertion is that nothing arrived.
+      await new Promise((resolve) => setTimeout(resolve, 500));
+      expect(delivered).toBe(false);
+    },
+    BUDGET_MS,
+  );
 
-  it('refuses a handshake with no credential', async () => {
-    const socket = client(b, {});
-    sockets.push(socket);
-    await expect(rejection(socket)).resolves.toBe('TOKEN_MISSING');
-  });
+  it(
+    'refuses a handshake with no credential',
+    async () => {
+      const socket = client(b, {});
+      sockets.push(socket);
+      await expect(rejection(socket)).resolves.toBe('TOKEN_MISSING');
+    },
+    BUDGET_MS,
+  );
 
-  it('refuses a handshake whose credential is not a token this API signed', async () => {
-    const socket = client(b, { token: 'not.a.jwt' });
-    sockets.push(socket);
-    await expect(rejection(socket)).resolves.toBe('TOKEN_INVALID');
-  });
+  it(
+    'refuses a handshake whose credential is not a token this API signed',
+    async () => {
+      const socket = client(b, { token: 'not.a.jwt' });
+      sockets.push(socket);
+      await expect(rejection(socket)).resolves.toBe('TOKEN_INVALID');
+    },
+    BUDGET_MS,
+  );
 
-  it('never trusts a client-supplied user id for room membership', async () => {
-    const mine = await login();
-    const theirs = await login();
-    const socket = client(b, { token: mine.accessToken, userId: theirs.userId });
-    sockets.push(socket);
-    await connected(socket);
+  it(
+    'never trusts a client-supplied user id for room membership',
+    async () => {
+      const mine = await login();
+      const theirs = await login();
+      const socket = client(b, { token: mine.accessToken, userId: theirs.userId });
+      sockets.push(socket);
+      await connected(socket);
 
-    let delivered = false;
-    socket.on('test.ping', () => void (delivered = true));
-    a.gateway.emitToUser(theirs.userId, 'test.ping', {});
-    await new Promise((resolve) => setTimeout(resolve, 500));
-    expect(delivered).toBe(false);
-  });
+      let delivered = false;
+      socket.on('test.ping', () => void (delivered = true));
+      a.gateway.emitToUser(theirs.userId, 'test.ping', {});
+      await new Promise((resolve) => setTimeout(resolve, 500));
+      expect(delivered).toBe(false);
+    },
+    BUDGET_MS,
+  );
+
+  it(
+    'closes its sockets cleanly on shutdown instead of waiting out the HTTP drain',
+    async () => {
+      // A live websocket keeps server.close() from ever completing, so without a socket closer
+      // running BEFORE the drain every shutdown burns the full 5s timeout and then destroys the
+      // connection abruptly — which a reconnecting client answers by retrying against a dying
+      // instance. `socketDrain` is what makes this fast and graceful.
+      const session = await login();
+      const instance = await startInstance(env);
+      const socket = client(instance, { token: session.accessToken });
+      sockets.push(socket);
+      await connected(socket);
+
+      const closed = new Promise<void>((resolve) => socket.once('disconnect', () => resolve()));
+      const startedAt = Date.now();
+      const outcome = await instance.api.stop();
+      await closed;
+
+      expect(outcome.clean).toBe(true);
+      expect(Date.now() - startedAt).toBeLessThan(5_000);
+    },
+    BUDGET_MS,
+  );
 });

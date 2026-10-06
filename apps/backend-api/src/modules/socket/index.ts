@@ -15,10 +15,16 @@ import type { AppConfig } from '../../config/env.js';
 import type { Actor } from '../../platform/http/principal.js';
 import type { Logger } from '../../platform/logger.js';
 import { defineModule, type KomtruModule } from '../../platform/module.js';
+import type { Closer } from '../../platform/shutdown.js';
 import { createAuthorizerRegistry } from './services/authorizers.js';
 import { createConnectionTable } from './services/connections.js';
 import { createGateway, type SocketGateway } from './services/gateway.js';
-import { authenticateHandshake, type GatewaySocket, type HandlerDeps } from './services/handlers.js';
+import {
+  authenticateHandshake,
+  onConnection,
+  type GatewaySocket,
+  type HandlerDeps,
+} from './services/handlers.js';
 import { revalidateConnections } from './services/revalidate.js';
 import { createAdapterConnections } from './infrastructure/redis.js';
 import { createSocketServer, SOCKET_ADAPTER_KEY } from './infrastructure/server.js';
@@ -53,8 +59,22 @@ export interface SocketModuleDeps {
 export interface SocketModule extends KomtruModule {
   /** Called once by server.ts after listen(). A no-op when SOCKET_ENABLED is false. */
   attach: (server: AttachableServer) => void;
+  /** Closes every live socket. Runs before the HTTP drain; see `socketDrain`. */
+  drain: () => void;
   gateway: SocketGateway;
 }
+
+/**
+ * The closer that must run BEFORE the HTTP drain. `server.close()` never completes while a
+ * websocket is open and `closeIdleConnections()` does not touch an upgraded connection, so without
+ * this every shutdown waits out the full drain timeout and then destroys the sockets abruptly —
+ * which a reconnecting client answers by immediately retrying against a dying instance. Closing
+ * them first leaves the drain nothing to wait for, and the client sees a clean disconnect.
+ */
+export const socketDrain = (modules: KomtruModule[]): Closer[] => {
+  const module = socketModuleOf(modules);
+  return module ? [{ name: 'socket:drain', close: () => Promise.resolve(module.drain()) }] : [];
+};
 
 /** The registry's socket module, if this process has one. */
 export const socketModuleOf = (modules: KomtruModule[]): SocketModule | undefined =>
@@ -83,6 +103,7 @@ export function createSocketModule(deps: SocketModuleDeps): SocketModule {
   if (!config.socket.enabled) {
     return Object.assign(defineModule({ name: 'socket' }), {
       attach: () => {},
+      drain: () => {},
       gateway: inertGateway(logger),
     });
   }
@@ -112,10 +133,12 @@ export function createSocketModule(deps: SocketModuleDeps): SocketModule {
     );
   });
 
-  // Access-token TTL plus the grace: past this a socket that has not re-presented a live credential
-  // is disconnected however politely it has been asked.
-  const maxCredentialAgeMs =
-    (config.identity.accessTokenTtlSeconds + config.socket.credentialGraceSeconds) * 1000;
+  // Rooms and bookkeeping happen here rather than in the middleware: socket.io abandons a socket
+  // whose transport died mid-handshake without firing `disconnect`, so a table filled in there
+  // would leak an entry per aborted connection.
+  io.on('connection', (socket) => void onConnection(handlerDeps, socket as unknown as GatewaySocket));
+
+  const revalidateIntervalMs = config.socket.revalidateIntervalSeconds * 1000;
 
   let timer: NodeJS.Timeout | undefined;
   let sweeping = false;
@@ -133,7 +156,9 @@ export function createSocketModule(deps: SocketModuleDeps): SocketModule {
         authenticate: deps.authenticate,
         connections,
         logger,
-        maxCredentialAgeMs,
+        credentialGraceMs: config.socket.credentialGraceSeconds * 1000,
+        // A check that outlives the interval it was started in has already missed its sweep.
+        checkTimeoutMs: revalidateIntervalMs,
       });
       if (result.disconnected > 0 || result.refreshRequested > 0) {
         logger.info(result, 'socket: re-validated live connections');
@@ -151,7 +176,7 @@ export function createSocketModule(deps: SocketModuleDeps): SocketModule {
       start: () => {
         // `unref` so an idle timer never holds the process open — which is what makes a test's
         // `stop()` deterministic and a SIGTERM prompt.
-        timer = setInterval(() => void sweep(), config.socket.revalidateIntervalSeconds * 1000);
+        timer = setInterval(() => void sweep(), revalidateIntervalMs);
         timer.unref();
         logger.info(
           {
@@ -166,9 +191,8 @@ export function createSocketModule(deps: SocketModuleDeps): SocketModule {
       stop: async () => {
         if (timer) clearInterval(timer);
         timer = undefined;
-        // Closes every connection and stops the engine. It also calls close() on the shared HTTP
-        // server, which by this point server.ts has already drained and closed — a no-op there,
-        // and the reason this closer must never run before the HTTP drain.
+        // Closes the engine. It also calls close() on the shared HTTP server, which by this point
+        // server.ts has already drained — harmless, and the reason this runs after the drain.
         if (attached) await io.close();
         await adapter.close();
       },
@@ -177,6 +201,9 @@ export function createSocketModule(deps: SocketModuleDeps): SocketModule {
       attach: (server: AttachableServer) => {
         io.attach(server);
         attached = true;
+      },
+      drain: () => {
+        if (attached) io.disconnectSockets(true);
       },
       gateway,
     },

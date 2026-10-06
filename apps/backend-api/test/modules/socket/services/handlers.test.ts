@@ -4,6 +4,7 @@ import { createConnectionTable } from '../../../../src/modules/socket/services/c
 import {
   authenticateHandshake,
   credentialFrom,
+  onConnection,
   type GatewaySocket,
   type HandlerDeps,
 } from '../../../../src/modules/socket/services/handlers.js';
@@ -39,9 +40,17 @@ const fakeSocket = (auth: Record<string, unknown> = { token: 'tok' }): FakeSocke
 let deps: HandlerDeps;
 let socket: FakeSocket;
 
-const admit = (actor: Actor = testActor('u1')) => {
+/** The handshake only. Recording and listeners happen on `connection`, which is a separate step. */
+const handshake = (actor: Actor = testActor('u1')) => {
   deps.authenticate = () => Promise.resolve(actor);
   return authenticateHandshake(deps, socket);
+};
+
+/** Handshake then connection, as socket.io drives them when nothing goes wrong in between. */
+const admit = async (actor: Actor = testActor('u1')) => {
+  const error = await handshake(actor);
+  if (!error) onConnection(deps, socket);
+  return error;
 };
 
 /** Fires a client event through the listener `attachSocket` registered, returning its ack. */
@@ -86,6 +95,20 @@ describe('the handshake', () => {
     const error = await authenticateHandshake(deps, socket);
     expect(error?.message).toBe('TOKEN_MISSING');
     expect(deps.connections.size()).toBe(0);
+  });
+
+  it('records nothing until the connection is established', async () => {
+    // socket.io abandons a socket whose transport closed while the middleware was awaiting, and
+    // fires no `disconnect` for it. Anything recorded in the middleware would never be removed.
+    expect(await handshake()).toBeUndefined();
+    expect(deps.connections.size()).toBe(0);
+    expect(socket.join).not.toHaveBeenCalled();
+  });
+
+  it('does not admit a connection whose handshake never resolved a principal', () => {
+    onConnection(deps, socket);
+    expect(deps.connections.size()).toBe(0);
+    expect(socket.disconnect).toHaveBeenCalledWith(true);
   });
 
   it('rejects a credential identity refuses, naming the reason the client can act on', async () => {
@@ -157,6 +180,28 @@ describe('room membership', () => {
     });
   });
 
+  it('survives a client that sends a non-function where the ack belongs', async () => {
+    const listener = socket.listeners.get('room:join');
+    expect(() =>
+      (listener as unknown as (p: unknown, ack: unknown) => void)(
+        { prefix: 'trade', id: 't1' },
+        'not-a-function',
+      ),
+    ).not.toThrow();
+    // The async body must not reject either: run.ts turns an unhandled rejection into process exit.
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  });
+
+  it('survives a non-function ack on every client event', async () => {
+    for (const event of ['room:leave', 'auth:token']) {
+      const listener = socket.listeners.get(event);
+      expect(() =>
+        (listener as unknown as (p: unknown, ack: unknown) => void)({ prefix: 'trade', id: 't' }, 1),
+      ).not.toThrow();
+    }
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  });
+
   it('refuses a malformed join payload without throwing', async () => {
     await expect(fire('room:join', { prefix: 'trade' })).resolves.toEqual({
       joined: false,
@@ -200,6 +245,29 @@ describe('re-presenting a credential', () => {
     await fire('auth:token', { token: 'stale' });
     expect(socket.emit).toHaveBeenCalledWith('auth:revoked', { code: 'EPOCH_STALE' });
     expect(socket.disconnect).toHaveBeenCalledWith(true);
+  });
+
+  it('keeps the socket when the credential check itself fails, rather than crashing', async () => {
+    deps.authenticate = () => Promise.reject(new Error('postgres down'));
+    await expect(fire('auth:token', { token: 'fresh' })).resolves.toEqual({ accepted: false });
+    expect(socket.disconnect).not.toHaveBeenCalled();
+    expect(deps.connections.get('socket-1')?.token).toBe('tok');
+  });
+
+  it('refuses a token for the same user under a different scope', async () => {
+    // The socket joined `consumer:u1` at handshake and nothing re-joins rooms, so accepting a STAFF
+    // token here would leave a CONSUMER principal sitting in a staff room for the connection's life.
+    deps.authenticate = () => Promise.resolve(testActor('u1', { scope: 'STAFF' }));
+    await fire('auth:token', { token: 'other-scope' });
+    expect(socket.emit).toHaveBeenCalledWith('auth:revoked', { code: 'TOKEN_INVALID' });
+    expect(socket.disconnect).toHaveBeenCalledWith(true);
+  });
+
+  it('clears the grace clock when a fresh credential is accepted', async () => {
+    const connection = deps.connections.get('socket-1');
+    if (connection) connection.credentialExpiredAt = Date.now() - 1_000;
+    await fire('auth:token', { token: 'fresh' });
+    expect(deps.connections.get('socket-1')?.credentialExpiredAt).toBeNull();
   });
 
   it('keeps the old credential when the new payload is malformed', async () => {

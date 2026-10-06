@@ -61,6 +61,7 @@ const record = (
     sessionId: principal.sessionId,
     token,
     verifiedAt: Date.now(),
+    credentialExpiredAt: null,
     principal,
     emit: (event, payload) => void socket.emit(event, payload),
     disconnect: () => void socket.disconnect(true),
@@ -70,11 +71,41 @@ const record = (
 };
 
 /**
- * Admits or refuses a connection, and on admission joins the personal rooms, records the
- * connection and registers the listeners. Returns the Error socket.io's `io.use` expects, whose
- * `message` is the same `AuthFailure` code the HTTP 401 would carry — so a client can tell
- * "refresh and retry" (`TOKEN_EXPIRED`) from "you are signed out" (`SESSION_REVOKED`) without
- * parsing prose.
+ * A client may put anything in the ack slot — socket.io hands the listener whatever arrived. Calling
+ * a string is a TypeError inside an event handler, which `platform/run.ts` turns into a process
+ * exit: one crafted packet from any authenticated client would take the instance down.
+ */
+const ackOr =
+  <T>(ack: unknown): ((result: T) => void) =>
+  (result) => {
+    if (typeof ack === 'function') (ack as (r: T) => void)(result);
+  };
+
+/**
+ * Nothing a listener does may escape it, for the same reason. An await that rejects — Postgres away
+ * during an `auth:token`, a bug in a payload parser — becomes an unhandled rejection and the same
+ * process exit, so every listener body ends here.
+ */
+const contained = (deps: HandlerDeps, event: string, body: () => Promise<void> | void): void => {
+  void (async () => {
+    try {
+      await body();
+    } catch (error) {
+      deps.logger.error({ err: error, event }, 'socket: a client event handler failed');
+    }
+  })();
+};
+
+/**
+ * Admits or refuses a connection. Returns the Error socket.io's `io.use` expects, whose `message`
+ * is the same `AuthFailure` code the HTTP 401 would carry — so a client can tell "refresh and
+ * retry" (`TOKEN_EXPIRED`) from "you are signed out" (`SESSION_REVOKED`) without parsing prose.
+ *
+ * It deliberately records nothing. A socket whose transport dies while this middleware is awaiting
+ * is cleaned up by socket.io *without* firing `disconnect`, so anything added to the connection
+ * table here would never be removed — a connect-and-abort loop, or just a bad mobile network, would
+ * grow it without bound. The principal is parked on `socket.data` and promoted by `onConnection`,
+ * which socket.io only calls for a socket it has actually committed.
  */
 export async function authenticateHandshake(
   deps: HandlerDeps,
@@ -86,41 +117,58 @@ export async function authenticateHandshake(
   const actor = await deps.authenticate(token);
   if (actor.principal === null) return refusal(actor.failure ?? 'TOKEN_INVALID');
 
-  const connection = record(deps, socket, actor.principal, token);
-  for (const room of roomsForPrincipal(actor.principal)) socket.join(room);
-  // Diagnostics only. Nothing reads authorisation off `socket.data`; the connection table holds the
-  // principal, and the sweep keeps it current.
+  socket.data.principal = actor.principal;
+  socket.data.token = token;
+  // Diagnostics only. Nothing reads authorisation off `socket.data` afterwards; the connection
+  // table holds the principal, and the sweep keeps it current.
   socket.data.userId = actor.principal.userId;
   socket.data.scope = actor.principal.scope;
-  attachSocket(deps, socket, connection);
   return undefined;
+}
+
+/** Runs on `connection`: the socket is committed, so this is where it joins rooms and is recorded. */
+export function onConnection(deps: HandlerDeps, socket: GatewaySocket): void {
+  const principal = socket.data.principal as Principal | undefined;
+  const token = socket.data.token as string | undefined;
+  if (!principal || token === undefined) {
+    // Unreachable while `io.use` is the only way in, and a closed door if it ever stops being.
+    deps.logger.error({ socketId: socket.id }, 'socket: a connection arrived with no principal');
+    socket.disconnect(true);
+    return;
+  }
+  const connection = record(deps, socket, principal, token);
+  for (const room of roomsForPrincipal(principal)) socket.join(room);
+  attachSocket(deps, socket, connection);
 }
 
 export function attachSocket(deps: HandlerDeps, socket: GatewaySocket, connection: Connection): void {
   // Every listener answers its ack rather than throwing: an unparseable payload from a client is a
   // normal event on a public interface, not an exception for the server to fall over on.
-  socket.on(CLIENT_EVENTS.joinRoom, (payload: unknown, ack?: (result: JoinAck) => void) => {
-    void (async () => {
-      const answer = await joinRoom(deps, socket, connection, payload);
-      ack?.(answer);
-    })();
+  socket.on(CLIENT_EVENTS.joinRoom, (payload: unknown, ack: unknown) => {
+    const reply = ackOr<JoinAck>(ack);
+    contained(deps, CLIENT_EVENTS.joinRoom, async () => {
+      reply(await joinRoom(deps, socket, connection, payload));
+    });
   });
 
-  socket.on(CLIENT_EVENTS.leaveRoom, (payload: unknown, ack?: (result: JoinAck) => void) => {
-    const parsed = roomRequestSchema.safeParse(payload);
-    if (parsed.success && isJoinableRoom(parsed.data.prefix, parsed.data.id)) {
-      socket.leave(featureRoom(parsed.data.prefix, parsed.data.id));
-    }
-    // Leaving is idempotent and carries no authorisation: the only thing worth refusing is a name
-    // this gateway would never have let the socket join, which `isJoinableRoom` already covers.
-    ack?.({ joined: false });
+  socket.on(CLIENT_EVENTS.leaveRoom, (payload: unknown, ack: unknown) => {
+    const reply = ackOr<JoinAck>(ack);
+    contained(deps, CLIENT_EVENTS.leaveRoom, () => {
+      const parsed = roomRequestSchema.safeParse(payload);
+      if (parsed.success && isJoinableRoom(parsed.data.prefix, parsed.data.id)) {
+        socket.leave(featureRoom(parsed.data.prefix, parsed.data.id));
+      }
+      // Leaving is idempotent and carries no authorisation: the only thing worth refusing is a name
+      // this gateway would never have let the socket join, which `isJoinableRoom` already covers.
+      reply({ joined: false });
+    });
   });
 
-  socket.on(CLIENT_EVENTS.token, (payload: unknown, ack?: (result: { accepted: boolean }) => void) => {
-    void (async () => {
-      const accepted = await replaceCredential(deps, connection, payload);
-      ack?.({ accepted });
-    })();
+  socket.on(CLIENT_EVENTS.token, (payload: unknown, ack: unknown) => {
+    const reply = ackOr<{ accepted: boolean }>(ack);
+    contained(deps, CLIENT_EVENTS.token, async () => {
+      reply({ accepted: await replaceCredential(deps, connection, payload) });
+    });
   });
 
   socket.on('disconnect', () => deps.connections.remove(socket.id));
@@ -165,14 +213,29 @@ async function replaceCredential(
   const parsed = tokenRequestSchema.safeParse(payload);
   if (!parsed.success) return false;
 
-  const actor = await deps.authenticate(parsed.data.token);
+  let actor;
+  try {
+    actor = await deps.authenticate(parsed.data.token);
+  } catch (error) {
+    // Postgres or Redis away. Keep the socket on the credential it already has: an outage must not
+    // become a mass logout, and the sweep's grace window still bounds how long that can last.
+    deps.logger.warn({ err: error }, 'socket: could not verify a re-presented credential');
+    return false;
+  }
+
   if (actor.principal === null) {
     revoke(deps.connections, connection, actor.failure ?? 'TOKEN_INVALID');
     return false;
   }
   // A credential for somebody else is not an upgrade path. This socket already sits in the first
   // user's personal room; accepting would deliver their pushes to whoever sent this.
-  if (actor.principal.userId !== connection.userId) {
+  //
+  // Nor a credential for the same person under a *different scope*. The scope rooms are joined once,
+  // at connection, and nothing re-joins them — so accepting a STAFF token on a socket that joined
+  // `consumer:<id>` would leave a staff principal out of the staff room, or worse, leave a consumer
+  // principal in it after the staff session is revoked. Scope is an identity boundary in this
+  // design (T-031's isolation suite); crossing it costs a reconnect.
+  if (actor.principal.userId !== connection.userId || actor.principal.scope !== connection.principal.scope) {
     revoke(deps.connections, connection, 'TOKEN_INVALID');
     return false;
   }
@@ -180,5 +243,6 @@ async function replaceCredential(
   connection.token = parsed.data.token;
   connection.principal = actor.principal;
   connection.verifiedAt = Date.now();
+  connection.credentialExpiredAt = null;
   return true;
 }

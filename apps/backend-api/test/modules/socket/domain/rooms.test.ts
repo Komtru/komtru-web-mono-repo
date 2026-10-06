@@ -1,5 +1,7 @@
+import { SESSION_SCOPES } from '@komtru/shared-types';
 import { describe, expect, it } from 'vitest';
 import {
+  RESERVED_ROOM_PREFIXES,
   assertRegisterablePrefix,
   featureRoom,
   isJoinableRoom,
@@ -40,6 +42,12 @@ describe('room names', () => {
       expect(() => assertRegisterablePrefix(prefix)).toThrow();
     },
   );
+
+  it('reserves the prefix of every session scope, so a fourth one cannot open a hole', () => {
+    // scopeRoom() derives its name from the scope, and the reserved set must follow it. Hand-written
+    // they agree today; derived they cannot drift when a scope is added.
+    for (const scope of SESSION_SCOPES) expect(RESERVED_ROOM_PREFIXES.has(scope.toLowerCase())).toBe(true);
+  });
 
   it('accepts a well-formed feature prefix', () => {
     expect(() => assertRegisterablePrefix('dispute-chat')).not.toThrow();

@@ -9,7 +9,7 @@
 //
 // The id pattern does the same job one level down. `:` is the separator, so an id allowed to carry
 // one lets a client shape a room name of its choosing out of a prefix someone else registered.
-import type { SessionScope } from '@komtru/shared-types';
+import { SESSION_SCOPES, type SessionScope } from '@komtru/shared-types';
 
 /** A feature prefix: lower-case, starts with a letter, no separator, bounded. */
 export const ROOM_PREFIX_PATTERN = /^[a-z][a-z0-9-]{0,31}$/;
@@ -17,12 +17,15 @@ export const ROOM_PREFIX_PATTERN = /^[a-z][a-z0-9-]{0,31}$/;
 /** A room id: a uuid, a trade code, a public id. Never a `:`, never unbounded. */
 export const ROOM_ID_PATTERN = /^[A-Za-z0-9_-]{1,64}$/;
 
-/** `user` plus one per session scope — every prefix this module hands out by itself. */
+/**
+ * `user` plus one per session scope — every prefix this module hands out by itself. Derived from
+ * `SESSION_SCOPES` rather than written out, because `scopeRoom` derives its names the same way: a
+ * fourth scope would otherwise ship a personal-room prefix a feature module could claim, which is
+ * exactly the hole this file exists to close.
+ */
 export const RESERVED_ROOM_PREFIXES: ReadonlySet<string> = new Set([
   'user',
-  'consumer',
-  'staff',
-  'logistics',
+  ...SESSION_SCOPES.map((scope) => scope.toLowerCase()),
 ]);
 
 /** Where "notify this user" goes, whatever scope they signed in under. */

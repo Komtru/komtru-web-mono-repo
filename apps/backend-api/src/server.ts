@@ -4,7 +4,7 @@ import { createApp } from './app.js';
 import { loadConfig } from './config/env.js';
 import { assertNotOwner, createDb } from './db/index.js';
 import { createModules, type ModuleBuilder } from './modules/index.js';
-import { socketModuleOf } from './modules/socket/index.js';
+import { socketDrain, socketModuleOf } from './modules/socket/index.js';
 import { createClients, postgresCheck, redisCheck } from './platform/clients.js';
 import { healthRoutes } from './platform/health.js';
 import { createLogger } from './platform/logger.js';
@@ -143,6 +143,11 @@ export async function startApi(
     reportFatal,
     server,
     stop: () =>
-      gracefulShutdown({ closers: [drainHttp, ...releaseResources], timeoutMs: SHUTDOWN_TIMEOUT_MS, logger }),
+      gracefulShutdown({
+        // Sockets first: an open websocket keeps server.close() from ever completing.
+        closers: [...socketDrain(modules), drainHttp, ...releaseResources],
+        timeoutMs: SHUTDOWN_TIMEOUT_MS,
+        logger,
+      }),
   };
 }

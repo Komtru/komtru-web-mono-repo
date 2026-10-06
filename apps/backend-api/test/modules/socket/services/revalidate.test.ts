@@ -15,8 +15,8 @@ import { testActor, testPrincipal } from '../../../support/actors.js';
 import { silentLogger } from '../support.js';
 
 const NOW = 1_700_000_000_000;
-/** Ten-minute token plus a one-minute grace, as the default configuration composes it. */
-const MAX_AGE_MS = 660_000;
+/** The grace alone: it starts when a credential first fails, not at the last success. */
+const GRACE_MS = 60_000;
 
 let table: ConnectionTable;
 
@@ -28,6 +28,7 @@ const connection = (overrides: Partial<Connection> = {}): Connection => {
     sessionId: 'session-1',
     token: 'token-1',
     verifiedAt: NOW,
+    credentialExpiredAt: null,
     principal: testPrincipal(userId),
     emit: vi.fn(),
     disconnect: vi.fn(),
@@ -37,12 +38,17 @@ const connection = (overrides: Partial<Connection> = {}): Connection => {
   return c;
 };
 
-const deps = (authenticate: (token: string) => Promise<Actor>): RevalidateDeps => ({
+const deps = (
+  authenticate: (token: string) => Promise<Actor>,
+  overrides: Partial<RevalidateDeps> = {},
+): RevalidateDeps => ({
   authenticate,
   connections: table,
   logger: silentLogger,
-  maxCredentialAgeMs: MAX_AGE_MS,
+  credentialGraceMs: GRACE_MS,
+  checkTimeoutMs: 1_000,
   now: () => NOW,
+  ...overrides,
 });
 
 beforeEach(() => {
@@ -88,11 +94,60 @@ describe('re-validating live sockets', () => {
     expect(result).toMatchObject({ refreshRequested: 1, disconnected: 0 });
   });
 
-  it('drops a socket that has not re-presented a credential within the grace window', async () => {
-    const c = connection({ verifiedAt: NOW - MAX_AGE_MS - 1 });
+  it('starts the grace clock when the credential first fails, not at the last success', async () => {
+    // The hole this closes: `verifiedAt` can be an instant before the token's own `exp`, so a grace
+    // measured from it stacks on top of the whole token lifetime — eleven minutes in which
+    // `resolvePrincipal` short-circuits on `exp` and can learn nothing about the session at all.
+    const c = connection({ verifiedAt: NOW - 10_000_000 });
+    await revalidateConnections(deps(() => Promise.resolve(rejectedActor('TOKEN_EXPIRED'))));
+    expect(c.disconnect).not.toHaveBeenCalled();
+    expect(c.credentialExpiredAt).toBe(NOW);
+  });
+
+  it('keeps a socket inside the grace window', async () => {
+    const c = connection({ credentialExpiredAt: NOW - GRACE_MS });
+    await revalidateConnections(deps(() => Promise.resolve(rejectedActor('TOKEN_EXPIRED'))));
+    expect(c.disconnect).not.toHaveBeenCalled();
+  });
+
+  it('drops a socket one millisecond past the grace window', async () => {
+    const c = connection({ credentialExpiredAt: NOW - GRACE_MS - 1 });
     await revalidateConnections(deps(() => Promise.resolve(rejectedActor('TOKEN_EXPIRED'))));
     expect(c.emit).toHaveBeenCalledWith('auth:revoked', { code: 'TOKEN_EXPIRED' });
     expect(c.disconnect).toHaveBeenCalled();
+  });
+
+  it('asks for a fresh token once per expiry episode, not on every sweep', async () => {
+    const c = connection({ credentialExpiredAt: NOW - 1_000 });
+    await revalidateConnections(deps(() => Promise.resolve(rejectedActor('TOKEN_EXPIRED'))));
+    expect(c.emit).not.toHaveBeenCalled();
+  });
+
+  it('clears the grace clock when a credential verifies again', async () => {
+    const c = connection({ credentialExpiredAt: NOW - 1_000 });
+    await revalidateConnections(deps(() => Promise.resolve(testActor('u1'))));
+    expect(c.credentialExpiredAt).toBeNull();
+  });
+
+  it('keeps a socket, and the timer, when a credential check never settles', async () => {
+    const c = connection();
+    const result = await revalidateConnections(
+      deps(() => new Promise<never>(() => {}), { checkTimeoutMs: 10 }),
+    );
+    expect(c.disconnect).not.toHaveBeenCalled();
+    expect(result).toMatchObject({ checked: 1, kept: 0, disconnected: 0 });
+  });
+
+  it('ignores a verdict for a credential the socket has since replaced', async () => {
+    const c = connection({ token: 'old' });
+    await revalidateConnections(
+      deps(() => {
+        // Stands in for an `auth:token` that landed while the sweep was in flight.
+        c.token = 'fresh';
+        return Promise.resolve(rejectedActor('EPOCH_STALE'));
+      }),
+    );
+    expect(c.disconnect).not.toHaveBeenCalled();
   });
 
   it('authenticates each distinct credential once, however many sockets hold it', async () => {

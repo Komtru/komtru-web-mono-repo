@@ -1,11 +1,16 @@
 import { beforeEach, describe, expect, it, vi, type Mock } from 'vitest';
 import { createAuthorizerRegistry } from '../../../../src/modules/socket/services/authorizers.js';
-import { createConnectionTable } from '../../../../src/modules/socket/services/connections.js';
+import {
+  createConnectionTable,
+  type Connection,
+  type ConnectionTable,
+} from '../../../../src/modules/socket/services/connections.js';
 import {
   createGateway,
   type Broadcaster,
   type SocketGateway,
 } from '../../../../src/modules/socket/services/gateway.js';
+import { testPrincipal } from '../../../support/actors.js';
 import { silentLogger } from '../support.js';
 
 type Room = ReturnType<Broadcaster['to']>;
@@ -13,14 +18,16 @@ type Room = ReturnType<Broadcaster['to']>;
 let room: { emit: Mock<Room['emit']>; disconnectSockets: Mock<Room['disconnectSockets']> };
 let io: { to: Mock<Broadcaster['to']> };
 let gateway: SocketGateway;
+let connections: ConnectionTable;
 
 beforeEach(() => {
   room = { emit: vi.fn(), disconnectSockets: vi.fn() };
   io = { to: vi.fn(() => room) };
+  connections = createConnectionTable();
   gateway = createGateway({
     io,
     authorizers: createAuthorizerRegistry(silentLogger),
-    connections: createConnectionTable(),
+    connections,
     logger: silentLogger,
   });
 });
@@ -59,7 +66,21 @@ describe('the socket gateway', () => {
     expect(() => gateway.registerRoomAuthorizer('trade', () => true)).toThrow(/already/);
   });
 
-  it('counts only this instance’s connections', () => {
+  it('counts this instance’s connections, and only them', () => {
+    expect(gateway.connectionCount()).toBe(0);
+    connections.add({
+      id: 'socket-1',
+      userId: 'u1',
+      sessionId: 's1',
+      token: 't',
+      verifiedAt: 0,
+      credentialExpiredAt: null,
+      principal: testPrincipal('u1'),
+      emit: vi.fn(),
+      disconnect: vi.fn(),
+    } satisfies Connection);
+    expect(gateway.connectionCount()).toBe(1);
+    connections.remove('socket-1');
     expect(gateway.connectionCount()).toBe(0);
   });
 });

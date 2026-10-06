@@ -20,6 +20,14 @@ export interface Connection {
   token: string;
   /** When `authenticate` last returned a principal for this socket (epoch milliseconds). */
   verifiedAt: number;
+  /**
+   * When this socket's credential first failed to verify, or null while it verifies. The grace
+   * window is measured from here rather than from `verifiedAt`: a token can be refreshed an instant
+   * before it expires, so a grace measured from the last success would stack on top of the whole
+   * access-token lifetime, and during that stacked window `resolvePrincipal` short-circuits on
+   * `exp` and cannot see a revocation at all.
+   */
+  credentialExpiredAt: number | null;
   /** Re-read from Postgres at handshake and on every sweep; never decoded from the token. */
   principal: Principal;
   emit: (event: string, payload: unknown) => void;
