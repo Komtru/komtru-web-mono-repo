@@ -4,6 +4,7 @@ import { randomBytes } from 'node:crypto';
 import type pg from 'pg';
 import type { Redis } from 'ioredis';
 import { loadConfig, type AppConfig } from '../../../src/config/env.js';
+import type { PasswordHasher } from '../../../src/modules/identity/domain/credential/hashing.js';
 import { createTokenSigner } from '../../../src/modules/identity/infrastructure/jwt/access-token.js';
 import { createEpochCache } from '../../../src/modules/identity/infrastructure/redis/epoch-cache.js';
 import { createLogger } from '../../../src/platform/logger.js';
@@ -86,4 +87,35 @@ export const outboxEventTypes = async (pool: pg.Pool): Promise<string[]> => {
     `SELECT event_type FROM platform.outbox ORDER BY occurred_at`,
   );
   return rows.map((row) => row.event_type);
+};
+
+/**
+ * A `PasswordHasher` that counts its calls and costs nothing.
+ *
+ * Two jobs. One: proving §S3's structural claim — that `verifyAndRecord` performs exactly one
+ * password verification on every path, including the paths with no password to verify — which an
+ * argon2 hasher can only hint at through timing. Two: making the §17 enumeration timing suite
+ * runnable, by removing the ~50ms that is identical on both paths by construction and leaving the
+ * database work, which is where a real difference would hide.
+ */
+export const countingHasher = (
+  options: { matches?: boolean; needsRehash?: boolean } = {},
+): PasswordHasher & { calls: () => { hash: number; verify: number; decoy: number } } => {
+  const calls = { hash: 0, verify: 0, decoy: 0 };
+  return {
+    calls: () => ({ ...calls }),
+    hash: (plaintext) => {
+      calls.hash += 1;
+      return Promise.resolve(`$argon2id$v=19$m=19456,t=2,p=1$test$${plaintext}`);
+    },
+    verify: (plaintext, phcHash) => {
+      calls.verify += 1;
+      return Promise.resolve(options.matches ?? phcHash.endsWith(`$${plaintext}`));
+    },
+    needsRehash: () => options.needsRehash ?? false,
+    decoy: () => {
+      calls.decoy += 1;
+      return Promise.resolve(false as const);
+    },
+  };
 };
