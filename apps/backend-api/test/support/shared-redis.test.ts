@@ -10,6 +10,7 @@ import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
+import { testKeyPrefix, testQueuePrefix } from './db-urls.js';
 
 const TEST_ROOT = fileURLToPath(new URL('..', import.meta.url));
 const SELF = fileURLToPath(import.meta.url);
@@ -93,6 +94,15 @@ describe('the shared test Redis database', () => {
         );
       });
     expect(offenders.map((path) => path.slice(TEST_ROOT.length))).toEqual([]);
+  });
+
+  // The whole scheme rests on the global setup's run id reaching the worker processes. If it ever
+  // stops propagating, every namespace silently falls back to one shared name and the isolation is
+  // gone with no other symptom — so assert the mechanism, not just the intent.
+  it('carries a run id, so one run cannot inherit another run\u2019s queues', () => {
+    expect(process.env.KOMTRU_TEST_RUN_ID).toBeTruthy();
+    expect(testQueuePrefix()).not.toContain('norun');
+    expect(testKeyPrefix()).not.toContain('norun');
   });
 
   it('is never flushed wholesale by a test', () => {
