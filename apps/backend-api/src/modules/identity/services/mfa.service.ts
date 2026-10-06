@@ -24,7 +24,7 @@ import {
   MFA_MAX_ATTEMPTS,
   factorAmr,
   isSecondFactor,
-  mfaSubjectHash,
+  mfaEnrolmentHash,
   type MfaFactorType,
 } from '../domain/mfa/policy.js';
 import {
@@ -253,10 +253,16 @@ export async function listFactors(
 /**
  * The `otp_challenges` row an enrolment's attempts are counted against.
  *
- * `destination_hash` is the user id under `MFA_SUBJECT_DOMAIN`, not an address: this challenge is
- * bound to an ACCOUNT. The separate domain is what keeps it out of §S4's per-destination send
- * budget and out of `issueOtp`'s supersede, both of which key on that column — without it, enrolling
- * an authenticator app would spend the user's SMS allowance.
+ * `destination_hash` is the user id under `MFA_ENROLMENT_DOMAIN`, not an address: this challenge is
+ * bound to an ACCOUNT, and to the ENROLMENT half of that account's life. The separate domain keeps
+ * it out of §S4's per-destination send budget and out of `issueOtp`'s supersede, both of which key
+ * on that column — without it, enrolling an authenticator app would spend the user's SMS allowance.
+ *
+ * A domain distinct from the LOGIN `mfaToken`'s is the other half, and it is not cosmetic. Both are
+ * `MFA_CHALLENGE` rows scoped to a user, and `issueMfaToken` supersedes every live row matching its
+ * own `(user_id, purpose, destination_hash)`. Under one hash the two were one family: signing in on
+ * a second device consumed a half-finished enrolment — so the QR code the user had just scanned
+ * died with "start the setup again" — and finishing any enrolment consumed a live sign-in challenge.
  */
 async function openCeremony(
   tx: Tx,
@@ -267,12 +273,12 @@ async function openCeremony(
     userId: input.userId,
     purpose: 'MFA_CHALLENGE',
     channel: 'EMAIL',
-    destinationHash: mfaSubjectHash(deps.otpHasher, input.userId),
+    destinationHash: mfaEnrolmentHash(deps.otpHasher, input.userId),
     // The factor id IS the secret here: the holder already proved their session, and what this row
     // meters is attempts, not possession.
     codeHash: hashCode(deps.otpHasher, {
       purpose: 'MFA_CHALLENGE',
-      destinationHash: mfaSubjectHash(deps.otpHasher, input.userId),
+      destinationHash: mfaEnrolmentHash(deps.otpHasher, input.userId),
       code: input.factorId,
     }),
     maxAttempts: MFA_MAX_ATTEMPTS,
@@ -289,7 +295,7 @@ async function spendCeremonyAttempt(
   deps: MfaDeps,
   input: { userId: string; factorId: string },
 ): Promise<CeremonySpend> {
-  const destinationHash = mfaSubjectHash(deps.otpHasher, input.userId);
+  const destinationHash = mfaEnrolmentHash(deps.otpHasher, input.userId);
   const challenge = await findLiveChallengeFor(tx, {
     destinationHash,
     purpose: 'MFA_CHALLENGE',
@@ -321,7 +327,7 @@ const closeCeremony = async (tx: Tx, deps: MfaDeps, userId: string): Promise<voi
       and(
         eq(otpChallenges.userId, userId),
         eq(otpChallenges.purpose, 'MFA_CHALLENGE'),
-        eq(otpChallenges.destinationHash, mfaSubjectHash(deps.otpHasher, userId)),
+        eq(otpChallenges.destinationHash, mfaEnrolmentHash(deps.otpHasher, userId)),
         isNull(otpChallenges.consumedAt),
       ),
     );
@@ -747,25 +753,45 @@ export async function activateSmsFactor(
     )[0];
     if (!row) return { outcome: 'UNKNOWN' };
 
+    // The challenge is RESOLVED from the factor's own phone; the caller's id only has to AGREE.
+    //
+    // `consumeOtp` recomputes its HMAC from the row's own purpose and destination, so it verifies
+    // ANY live challenge belonging to that user. Passing the caller's `challengeId` straight
+    // through therefore meant a live EMAIL_VERIFICATION code could turn an SMS factor ACTIVE with
+    // nobody ever proving possession of the handset — and on a recycled Nigerian number (M1 D4)
+    // that is an account-takeover path, not a tidiness problem.
+    if (!row.phoneId) return { outcome: 'UNKNOWN' };
+    const phone = (
+      await tx
+        .select({ phoneE164: userPhones.phoneE164 })
+        .from(userPhones)
+        .where(eq(userPhones.id, row.phoneId))
+    )[0];
+    if (!phone) return { outcome: 'UNKNOWN' };
+
+    const challenge = await findLiveChallengeFor(tx, {
+      destinationHash: hashDestination(deps.otpHasher, phone.phoneE164),
+      purpose: 'MFA_CHALLENGE',
+      userId: input.userId,
+      forUpdate: true,
+    });
+    // The caller still names the challenge it believes it is answering. A mismatch means the code
+    // in their hand belongs to a superseded one, and saying so beats silently verifying a different
+    // row out from under whichever flow issued it.
+    if (!challenge || challenge.id !== input.challengeId) return { outcome: 'UNKNOWN' };
+
     // The OTP row carries its own attempt cap (§S4, five per challenge), so this ceremony is
     // metered by the code the user is typing rather than by a second counter beside it.
     const verdict = await consumeOtp(
       tx,
       { hasher: deps.otpHasher, logger: deps.logger },
-      {
-        challengeId: input.challengeId,
-        code: input.code,
-      },
+      { challengeId: challenge.id, code: input.code },
     );
 
     if (verdict.outcome === 'WRONG_CODE') {
       return { outcome: 'WRONG_CODE', attemptsRemaining: verdict.attemptsRemaining };
     }
     if (verdict.outcome !== 'VERIFIED') return { outcome: 'UNKNOWN' };
-    // The challenge must be the one this factor's phone was sent, not any live challenge the user
-    // happens to hold: without this, a registration code for a different purpose would activate a
-    // factor nobody proved possession of.
-    if (verdict.challenge.userId !== input.userId) return { outcome: 'UNKNOWN' };
 
     return completeEnrolment(tx, deps, {
       row,
@@ -979,7 +1005,25 @@ export async function verifyFactor(
 
     case 'TOTP': {
       if (input.proof.code === undefined) return false;
-      const payload = openBlob(deps, input.factor);
+
+      // `FOR UPDATE` on the row, not the caller's copy of it.
+      //
+      // The replay guard below is a read-modify-write of the step sealed into `secret_enc`, and
+      // `findOwnFactor` — which every caller uses — takes no lock. Two requests presenting one
+      // shoulder-surfed code at the same moment would each read the old step, each accept, and each
+      // write it back, so a single code is spent twice and the one-use property this guard exists
+      // for is gone. `/auth/mfa/verify` happens to serialise through the lock it already holds on
+      // the challenge row; `POST /me/step-up` has nothing at all.
+      const locked = (
+        await tx
+          .select(factorColumns)
+          .from(mfaFactors)
+          .where(eq(mfaFactors.id, input.factor.id))
+          .for('update')
+      )[0];
+      if (!locked || locked.status !== 'ACTIVE' || locked.userId !== input.userId) return false;
+
+      const payload = openBlob(deps, locked);
       const blob = payload === null ? null : parseTotpBlob(payload);
       if (!blob) return false;
 
@@ -997,7 +1041,7 @@ export async function verifyFactor(
           lastUsedAt: sql`now()`,
           secretEnc: deps.encryption.seal(JSON.stringify({ ...blob, lastStep: verdict.step })),
         })
-        .where(eq(mfaFactors.id, input.factor.id));
+        .where(eq(mfaFactors.id, locked.id));
       return true;
     }
 

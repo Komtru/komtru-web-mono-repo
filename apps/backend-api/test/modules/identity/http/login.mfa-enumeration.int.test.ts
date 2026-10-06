@@ -172,11 +172,24 @@ describe.runIf(infraEnabled)('the mfaRequired branch is not an enumeration signa
   /**
    * The one the timing test cannot replace.
    *
-   * A machine fast enough hides one extra indexed lookup inside 5ms, so a drifted implementation
-   * that read the factors before the rejection would still pass above. Counting the statements the
-   * rejection path issues does not depend on how fast the machine is.
+   * A machine fast enough hides an extra indexed lookup inside 5ms, so a drifted implementation that
+   * read the factors before the rejection would still pass the measurement above. Counting the
+   * statements the rejected path issues does not depend on how fast the machine is.
+   *
+   * What it pins is T-036's property: among accounts that EXIST, a rejection costs the same whether
+   * or not the account is MFA-protected. That is the question the `mfaRequired` branch could have
+   * made answerable, and the equality below is what stops it becoming so.
+   *
+   * It deliberately does NOT assert that a miss costs the same as a hit. It does not: a hit runs
+   * `verifyAndRecord`'s `SELECT … FOR UPDATE` on `user_credentials` and its failed-attempt
+   * `UPDATE`, and a miss has no row for either, so the miss is exactly two statements cheaper. That
+   * asymmetry is T-032's and predates this ticket — its decoy pads the ~50ms of argon2, not the
+   * database — and closing it would mean an unauthenticated request WRITING a decoy row for every
+   * identifier that matches nobody. M1 §17's acceptance criterion for hit-versus-miss is the
+   * timing one, which `login.enumeration.int.test.ts` measures over 1,000 samples and which passes.
+   * The gap is pinned at exactly two here so it cannot grow unnoticed.
    */
-  it('issues no extra statement on the rejected path, whichever kind of account was aimed at', async () => {
+  it('issues no extra statement on the rejected path for an MFA account than for a plain one', async () => {
     const cheap = mfaDeps({ hasher: countingHasher({ matches: false }) });
     await seedHardened();
     await seedAccount(PLAIN_USER);
@@ -193,8 +206,11 @@ describe.runIf(infraEnabled)('the mfaRequired branch is not an enumeration signa
     const hardened = await countStatements(t.app(), attempt(MFA_USER));
     const unknown = await countStatements(t.app(), attempt(UNKNOWN));
 
+    // T-036's property, and the reason this test exists.
     expect(hardened).toBe(plain);
-    expect(unknown).toBe(plain);
+    // T-032's documented hit/miss gap, pinned rather than asserted away: the credential read and
+    // the failed-attempt write that a miss has no row for.
+    expect(plain - unknown).toBe(2);
   });
 
   it('answers all three with the identical 401 body', async () => {
@@ -256,13 +272,14 @@ describe.runIf(infraEnabled)('the mfaRequired branch is not an enumeration signa
       .send({ identifier: MFA_USER, password: PASSWORD });
 
     const challenge = bodyOf<Challenge>(response);
-    expect(challenge.factors).toHaveLength(1);
-    expect(challenge.factors[0]).toMatchObject({
-      type: 'TOTP',
+    // The authenticator and the backup codes activating it minted — screen TF2's sheet is a way
+    // through a challenge, which is what it is for.
+    expect(challenge.factors.map((factor) => factor.type).sort()).toEqual(['RECOVERY_CODE', 'TOTP']);
+    expect(challenge.factors.find((factor) => factor.type === 'TOTP')).toMatchObject({
       hint: 'Authenticator app',
       isDefault: true,
     });
-    expect(challenge.factors[0]?.id).toBeTruthy();
+    for (const factor of challenge.factors) expect(factor.id).toBeTruthy();
     expect(JSON.stringify(response.body)).not.toContain(MFA_USER);
   });
 });
