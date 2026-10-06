@@ -21,6 +21,7 @@ import {
   type DestroyAssetJob,
   type FinalizeUploadJob,
 } from './domain/queues.js';
+import { fileTombstoned } from './domain/events.js';
 import { filesRoutes } from './http/routes.js';
 import type { FileJobDeps } from './jobs/deps.js';
 import { runDestroyAsset } from './jobs/destroy-asset.job.js';
@@ -99,6 +100,18 @@ export function createFilesModule(): KomtruModule {
       {
         name: FILES_QUEUES.FINALIZE,
         concurrency: JOB_CONCURRENCY,
+        /**
+         * Eight attempts from 15s exponential ≈ 32 minutes of real waiting, just past the
+         * upload-ticket TTL that bounds the whole exchange.
+         *
+         * The queue defaults (5 from 2s) are about thirty SECONDS, which is nowhere near what
+         * `runFinalizeUpload` is written for: it throws while Cloudinary cannot yet see the asset,
+         * on the reasoning that the client may still be pushing a large photo over a slow mobile
+         * connection — and Cloudinary's resource lookup is not read-after-write consistent either.
+         * Exhausting the budget dead-letters a file that did land.
+         */
+        attempts: 8,
+        backoffMs: 15_000,
         process: async (data: FinalizeUploadJob) => await runFinalizeUpload(need().jobs, data),
       },
       {
@@ -126,6 +139,41 @@ export function createFilesModule(): KomtruModule {
     start: (ctx: ModuleContext) => {
       const config = ctx.config.files;
       warnAboutMissingAccounts(config, ctx.logger);
+
+      /**
+       * The ONE place a destroy is enqueued (D4's second half).
+       *
+       * Every tombstone path — the admin endpoint, M15's data-subject sweep through
+       * `tombstoneByUploader`, the abandoned-ticket sweep, the rejection branch of reconciliation,
+       * and any future caller reaching `requestTombstone` through the barrel — publishes
+       * `files.file.tombstoned` in the same transaction as the row change. Subscribing here means
+       * the bytes follow the row by construction, rather than because each caller remembered to
+       * enqueue. An earlier version enqueued from the controller only, and three of the four paths
+       * silently left the asset on the account: for a KYC document under an NDPR deletion that is a
+       * compliance failure, and for the sweeps it is the free-tier ceiling the whole five-account
+       * pool exists to avoid.
+       */
+      ctx.events.subscribe({
+        name: 'files.on-file-tombstoned',
+        event: fileTombstoned,
+        handler: async (envelope) => {
+          try {
+            await ctx.queues
+              .producer<DestroyAssetJob>(FILES_QUEUES.DESTROY)
+              // The file id as the job id: a redelivered event must not queue a second destroy.
+              .add('destroy', { fileId: envelope.payload.fileId }, { jobId: envelope.payload.fileId });
+          } catch (error) {
+            // The tombstone row is already committed. Throwing would take this handler's
+            // processed_events marker down with it and redo a dispatch that has nothing left to do;
+            // an orphaned asset an operator can see in the log is the better failure.
+            ctx.logger.error(
+              { err: error, fileId: envelope.payload.fileId },
+              'files: could not enqueue the destroy job; the asset is orphaned',
+            );
+          }
+        },
+      });
+
       runtime = {
         db: ctx.db,
         queues: ctx.queues,

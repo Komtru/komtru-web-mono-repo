@@ -87,7 +87,15 @@ export const grantAccess = async (db: Db, input: GrantInput): Promise<FileAccess
   const existing = await findActiveGrant(db, input);
   if (existing) return existing;
 
-  return db.transaction(async (tx) => {
+  const outcome = await db.transaction(async (tx) => {
+    /**
+     * `ON CONFLICT DO NOTHING` against the live-grant partial unique indexes, not a bare insert.
+     *
+     * The select above loses the race it exists to win: two concurrent deliveries of the
+     * at-least-once `dispute.opened` both miss it, and the second insert would raise 23505 as a raw
+     * 500 — the exact "duplicate-key 500 leaves a dispute half-wired" this function is written to
+     * prevent. Nothing returned means somebody else won, and the caller gets their row.
+     */
     const [created] = await tx
       .insert(fileAccessGrants)
       .values({
@@ -96,9 +104,12 @@ export const grantAccess = async (db: Db, input: GrantInput): Promise<FileAccess
         granteeRole: input.granteeRole ?? null,
         grantedReason: input.reason,
       })
+      .onConflictDoNothing()
       .returning();
 
-    if (!created) throw new Error('files: grant insert returned no row');
+    // The publish lives inside the branch that actually inserted, so one grant is one event however
+    // many deliveries race for it.
+    if (!created) return undefined;
 
     await publish(tx, fileAccessGranted, {
       payload: {
@@ -113,6 +124,12 @@ export const grantAccess = async (db: Db, input: GrantInput): Promise<FileAccess
 
     return created;
   });
+
+  if (outcome) return outcome;
+
+  const winner = await findActiveGrant(db, input);
+  if (!winner) throw new Error('files: grant insert conflicted but no live grant exists');
+  return winner;
 };
 
 const findActiveGrant = async (db: Reader, input: GrantInput): Promise<FileAccessGrant | undefined> => {

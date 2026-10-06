@@ -61,6 +61,11 @@ describe.runIf(infraEnabled)('files routes', () => {
     mountRoutes(filesRoutes({ db, queues: () => enqueued, config: () => files, logger: () => logger }), {
       logger,
       resolveActor: () => Promise.resolve(actor),
+      // /files/upload-url declares a rate limit, and mountRoutes refuses to mount a route whose
+      // declared control has no gate behind it — a route that reads as protected and is not is worse
+      // than one that claims nothing. This stub admits everything; the limit itself is asserted as a
+      // declaration in routes.test.ts.
+      rateLimit: () => Promise.resolve(),
     })(router);
     app.use('/v1', router);
     app.use(notFound);

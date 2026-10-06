@@ -34,6 +34,17 @@ describe('the files module in the registry', () => {
     ]);
   });
 
+  it('gives finalize a retry budget that matches the wait its job promises', () => {
+    // runFinalizeUpload throws while Cloudinary cannot see the asset, on the stated reasoning that
+    // the client may still be uploading a large photo over a slow mobile connection. The queue
+    // defaults — 5 attempts from 2s exponential — are about thirty SECONDS, which is nowhere near
+    // that, and exhausting them dead-letters a file that did land. 8 attempts from 15s is ~32
+    // minutes of real waiting, just over the upload-ticket TTL that bounds the whole exchange.
+    const finalize = filesModule().queues?.find((queue) => queue.name === FILES_QUEUES.FINALIZE);
+    expect(finalize?.attempts).toBe(8);
+    expect(finalize?.backoffMs).toBe(15_000);
+  });
+
   it('declares the usage sweep and the abandoned-ticket sweep, with cron the registry accepts', () => {
     const schedules = filesModule().schedules ?? [];
     expect(schedules.map((schedule) => schedule.name)).toEqual([
@@ -46,7 +57,7 @@ describe('the files module in the registry', () => {
 
   it('declares the M20 §9 routes and passes the platform invariants', () => {
     const routes = filesModule().routes ?? [];
-    expect(routes).toHaveLength(10);
+    expect(routes).toHaveLength(11);
     expect(() => assertRouteInvariants(routes)).not.toThrow();
   });
 

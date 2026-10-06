@@ -73,6 +73,29 @@ export const translate = (logger: Logger, error: unknown): unknown => {
   return error;
 };
 
+/**
+ * The same errors, for the operator-facing runbook endpoint.
+ *
+ * `POST /internal/storage-accounts` is gated on `role.grant` — a SUPER_ADMIN executing D6's "provision
+ * a 6th account and rotation resumes, no deploy required". The privacy argument behind the generic
+ * 503 above is about a consumer who tried to upload a photo; it does not apply to the one caller
+ * whose whole purpose is to fix the configuration, and withholding the variable names from them
+ * leaves exactly the dead end `registerAccount`'s refusal exists to prevent: a registration that
+ * failed, uploads still failing, and nothing connecting the two.
+ */
+export const translateForOperator = (logger: Logger, error: unknown): unknown => {
+  if (error instanceof StorageAccountUnconfiguredError) {
+    return new ApiError(
+      400,
+      'VALIDATION_FAILED',
+      'That storage account has no credentials here',
+      `Set ${error.missingVariables.join(', ')} and restart, then register it again.`,
+    );
+  }
+
+  return translate(logger, error);
+};
+
 const guard = async <T>(deps: FilesHttpDeps, run: () => Promise<T>): Promise<T> => {
   try {
     return await run();
@@ -135,10 +158,26 @@ export const finalizeUpload = async (
     });
 
     if (record.uploadState !== 'READY') {
-      await deps
-        .queues()
-        .producer<FinalizeUploadJob>(FILES_QUEUES.FINALIZE)
-        .add('finalize', { fileId: record.id }, { jobId: record.id });
+      const queue = deps.queues().producer<FinalizeUploadJob>(FILES_QUEUES.FINALIZE);
+      try {
+        /**
+         * Clear any spent job FIRST.
+         *
+         * The job id is the file id, which is what stops a double-submit queueing two
+         * reconciliations — but BullMQ keeps a failed job for 30 days and `add` with an existing id
+         * is a silent no-op. Without this remove, a finalize that exhausted its attempts could
+         * never be retried: every later call would answer 202 and do nothing, until the abandoned
+         * sweep tombstoned a file that had actually landed.
+         *
+         * `remove` refuses a job that is actively being worked, and that is the benign case — the
+         * reconciliation the caller is asking for is already running — so the failure is logged at
+         * debug and the 202 stands.
+         */
+        await queue.remove(record.id);
+        await queue.add('finalize', { fileId: record.id }, { jobId: record.id });
+      } catch (error) {
+        deps.logger().debug({ err: error, fileId: record.id }, 'files: finalize job is already in flight');
+      }
     }
 
     return { fileId: record.id, uploadState: record.uploadState };
@@ -353,8 +392,8 @@ export const registerStorageAccount = async (
     credentialEnvPrefix: string;
     rotationOrder?: number;
   },
-) =>
-  guard(deps, async () => {
+) => {
+  try {
     const created = await registerAccount(deps.db(), deps.config(), {
       pool: input.pool as StoragePool,
       label: input.label,
@@ -369,6 +408,9 @@ export const registerStorageAccount = async (
       label: created.label,
       rotationOrder: created.rotationOrder,
     };
-  });
+  } catch (error) {
+    throw translateForOperator(deps.logger(), error);
+  }
+};
 
 export { subjectFrom };

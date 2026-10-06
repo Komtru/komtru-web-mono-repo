@@ -1,7 +1,6 @@
 // M20 §5 and D6: which of the five accounts a new upload goes to, how a sixth is registered, and the
 // one invariant that makes rotation mean anything under concurrency. Skipped unless
 // KOMTRU_INFRA_TESTS=1.
-import { randomUUID } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 import type { FilesConfig } from '../../../../src/config/env.js';
 import { createDb } from '../../../../src/db/index.js';
@@ -273,6 +272,7 @@ describe.runIf(infraEnabled)('account.service', () => {
     await insertStorageAccount(t.app(), { prefix: 'CLOUDINARY_TRADE_1', label: 'trade-1' });
     const [account] = await listAccounts(createDb(t.app()));
     expect(JSON.stringify(account)).not.toContain('not-a-real-secret');
-    expect(randomUUID()).toBeTruthy();
+    expect(account).not.toHaveProperty('apiSecret');
+    expect(account).not.toHaveProperty('apiKey');
   });
 });

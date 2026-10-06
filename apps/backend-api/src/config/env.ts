@@ -262,11 +262,13 @@ export function loadConfig(env: NodeJS.ProcessEnv): AppConfig {
   // Cross-field, so it cannot live on either variable's own schema: a NEAR_QUOTA threshold at or
   // above the DISABLED one takes an account straight from ACTIVE to DISABLED, and the early warning
   // that is the whole reason M20 §5 polls usage instead of waiting for a failed upload never fires.
-  const nearPct = parsed.FILES_QUOTA_NEAR_PCT;
-  const disabledPct = parsed.FILES_QUOTA_DISABLED_PCT;
-  if (typeof nearPct === 'number' && nearPct >= (typeof disabledPct === 'number' ? disabledPct : 97)) {
-    invalid.push('FILES_QUOTA_NEAR_PCT');
-  }
+  //
+  // Compared AFTER defaulting, not as the raw parsed pair: lowering only the disabled threshold
+  // leaves near at its default above it, which is the same broken ordering reached by a route the
+  // raw comparison cannot see.
+  const resolvedNearPct = (parsed.FILES_QUOTA_NEAR_PCT as number | undefined) ?? QUOTA_NEAR_PCT;
+  const resolvedDisabledPct = (parsed.FILES_QUOTA_DISABLED_PCT as number | undefined) ?? QUOTA_DISABLED_PCT;
+  if (resolvedNearPct >= resolvedDisabledPct) invalid.push('FILES_QUOTA_NEAR_PCT');
 
   if (missing.length || invalid.length) throw new ConfigError(missing, invalid);
 
@@ -318,6 +320,10 @@ export function loadConfig(env: NodeJS.ProcessEnv): AppConfig {
  * sixth account is deliberately not expressible here — that is the §5 runbook, through
  * `POST /internal/storage-accounts`, which D6 promises needs no deploy.
  */
+/** M20 §5's thresholds. Placeholders to tune once real volume exists, as the spec says. */
+const QUOTA_NEAR_PCT = 85;
+const QUOTA_DISABLED_PCT = 97;
+
 export const CLOUDINARY_PREFIXES = [
   'CLOUDINARY_PROFILE',
   'CLOUDINARY_CHAT',
@@ -344,8 +350,8 @@ function filesConfig(v: Parsed): FilesConfig {
     uploadTicketTtlMinutes: v.FILES_UPLOAD_TICKET_TTL_MINUTES ?? 30,
     signedUrlTtlSeconds: v.FILES_SIGNED_URL_TTL_SECONDS ?? 300,
     quota: {
-      nearPct: v.FILES_QUOTA_NEAR_PCT ?? 85,
-      disabledPct: v.FILES_QUOTA_DISABLED_PCT ?? 97,
+      nearPct: v.FILES_QUOTA_NEAR_PCT ?? QUOTA_NEAR_PCT,
+      disabledPct: v.FILES_QUOTA_DISABLED_PCT ?? QUOTA_DISABLED_PCT,
     },
   };
 }

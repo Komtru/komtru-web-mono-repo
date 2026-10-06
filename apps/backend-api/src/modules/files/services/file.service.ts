@@ -11,7 +11,7 @@
 // afterwards that the bytes landed. Reconciliation is where that claim is checked — against
 // Cloudinary, never against the client.
 import { randomUUID } from 'node:crypto';
-import { and, eq, inArray, lt } from 'drizzle-orm';
+import { and, eq, inArray, lt, sql } from 'drizzle-orm';
 import type { FilesConfig } from '../../../config/env.js';
 import type { Db } from '../../../db/index.js';
 import { ApiError } from '../../../platform/errors.js';
@@ -196,9 +196,16 @@ export const requestFinalize = async (
     .update(fileRecords)
     .set({
       uploadState: 'RECONCILING',
-      // The database clock, not the application's: one clock for every pod, and the one an auditor
-      // can line up against every other row in the system.
-      captureReceivedAt: record.captureReceivedAt ?? new Date(),
+      /**
+       * `now()` in SQL, not `new Date()`.
+       *
+       * The security property the ticket asks for — the client's clock is never trusted — holds
+       * either way, but the audit property does not: `created_at`, `granted_at` and `occurred_at`
+       * are all database `now()`, so taking this one from a pod's clock means a custody photo whose
+       * capture time does not line up with any other row an investigator reads beside it. `coalesce`
+       * keeps the first stamp if a retry arrives.
+       */
+      captureReceivedAt: sql`coalesce(${fileRecords.captureReceivedAt}, now())`,
     })
     .where(eq(fileRecords.id, record.id))
     .returning();

@@ -138,20 +138,46 @@ describe.runIf(infraEnabled)('file.service', () => {
   describe('requestFinalize', () => {
     it('moves the row to RECONCILING and stamps capture_received_at from the database clock', async () => {
       // The ticket's sixth bullet: the client's clock is never trusted, so the only timestamp stored
-      // is the one the server took when it was first told the bytes had landed.
+      // is the one the server took when it was first told the bytes had landed — and it comes from
+      // the DATABASE clock, so it lines up with created_at, granted_at and occurred_at for an
+      // investigator reading the rows side by side. Bracketing it between two `select now()` is what
+      // distinguishes that from a pod's own clock, which an `instanceof Date` check cannot.
       const issued = await ticket({
         category: 'CUSTODY_EVIDENCE',
         visibility: 'PRIVATE_CASE',
         contentType: 'image/jpeg',
       });
       const before = await row(issued.fileId);
+      const dbNow = async (): Promise<Date> => {
+        const { rows } = await t.app().query<{ now: Date }>('SELECT now() AS now');
+        if (!rows[0]) throw new Error('no now()');
+        return rows[0].now;
+      };
+
+      const openedAt = await dbNow();
       const updated = await requestFinalize(db(), {
         fileId: issued.fileId,
         uploaderUserId: before.uploaderUserId,
       });
+      const closedAt = await dbNow();
+
       expect(updated.uploadState).toBe('RECONCILING');
       expect(updated.captureReceivedAt).toBeInstanceOf(Date);
-      expect(updated.captureReceivedAt!.getTime()).toBeGreaterThanOrEqual(before.createdAt.getTime());
+      const stamped = updated.captureReceivedAt!.getTime();
+      expect(stamped).toBeGreaterThanOrEqual(openedAt.getTime());
+      expect(stamped).toBeLessThanOrEqual(closedAt.getTime());
+    });
+
+    it('keeps the first capture stamp when finalize is retried', async () => {
+      const issued = await ticket({
+        category: 'CUSTODY_EVIDENCE',
+        visibility: 'PRIVATE_CASE',
+        contentType: 'image/jpeg',
+      });
+      const { uploaderUserId } = await row(issued.fileId);
+      const first = await requestFinalize(db(), { fileId: issued.fileId, uploaderUserId });
+      const second = await requestFinalize(db(), { fileId: issued.fileId, uploaderUserId });
+      expect(second.captureReceivedAt?.getTime()).toBe(first.captureReceivedAt?.getTime());
     });
 
     it('refuses another user’s ticket with the same 404 as a file that does not exist', async () => {
@@ -297,6 +323,59 @@ describe.runIf(infraEnabled)('file.service', () => {
       await ticket();
       const acted = await tombstoneByUploader(db(), { uploaderUserId, reason: 'dsr delete' });
       expect(acted.sort()).toEqual([first.fileId, second.fileId].sort());
+    });
+  });
+
+  describe('every tombstone path publishes the event the destroy job hangs off', () => {
+    // This is the assertion whose absence let three of the four tombstone paths ship without ever
+    // destroying the Cloudinary asset. module.ts subscribes to files.file.tombstoned and enqueues
+    // the destroy from there, so "did this path publish" IS "will the bytes be destroyed".
+    const tombstoneEvents = async (): Promise<{ fileId: string }[]> =>
+      (await db().select().from(outbox))
+        .filter((event) => event.eventType === 'files.file.tombstoned')
+        .map((event) => event.payload as { fileId: string });
+
+    it('publishes for the admin tombstone', async () => {
+      const issued = await ticket();
+      await requestTombstone(db(), { fileId: issued.fileId, reason: 'admin removed it' });
+      expect((await tombstoneEvents()).map((p) => p.fileId)).toEqual([issued.fileId]);
+    });
+
+    it('publishes for a data-subject deletion', async () => {
+      // The NDPR path. Without the event the user's KYC document stays in Cloudinary after we have
+      // told them it was deleted.
+      const uploaderUserId = randomUUID();
+      const first = await ticket({ uploaderUserId });
+      const second = await ticket({ uploaderUserId });
+      await tombstoneByUploader(db(), { uploaderUserId, reason: 'dsr delete' });
+      expect((await tombstoneEvents()).map((p) => p.fileId).sort()).toEqual(
+        [first.fileId, second.fileId].sort(),
+      );
+    });
+
+    it('publishes for the abandoned-ticket sweep', async () => {
+      const issued = await ticket();
+      await db()
+        .update(fileRecords)
+        .set({ createdAt: new Date(Date.now() - 60 * 60_000) })
+        .where(eq(fileRecords.id, issued.fileId));
+      await purgeAbandonedUploads(db(), files.uploadTicketTtlMinutes);
+      expect((await tombstoneEvents()).map((p) => p.fileId)).toEqual([issued.fileId]);
+    });
+
+    it('publishes for a rejected reconciliation, where the bytes definitely exist', async () => {
+      const issued = await ticket();
+      await applyReconciliation(db(), {
+        fileId: issued.fileId,
+        maxUploadBytes: files.maxUploadBytes,
+        resource: {
+          publicId: 'x',
+          bytes: files.maxUploadBytes + 1,
+          format: 'pdf',
+          resourceType: 'image',
+        },
+      });
+      expect((await tombstoneEvents()).map((p) => p.fileId)).toEqual([issued.fileId]);
     });
   });
 

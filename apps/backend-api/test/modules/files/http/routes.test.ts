@@ -53,6 +53,7 @@ describe('files routes', () => {
       'POST /files/upload-url',
       'POST /files/:id/finalize',
       'GET /files/:id',
+      'GET /admin/files/:id',
       'POST /admin/files/:id/tombstone',
       'POST /admin/files/:id/grants',
       'GET /admin/files/:id/grants',
@@ -91,6 +92,26 @@ describe('files routes', () => {
     for (const route of routes) {
       if (route.permission) expect(PERMISSION_CODES).toContain(route.permission);
     }
+  });
+
+  it('gives staff a way to retrieve a file at all', () => {
+    // Without this route INTERNAL_ONLY — which D2 defines as staff-only — can never be served, a
+    // DISPUTE_REVIEWER role grant can never be exercised, and file_access_log.accessed_by_admin_id
+    // can never be filled by a real request. Three branches of decideAccess would be dead code.
+    const staffRead = find('get', '/admin/files/:id');
+    expect(staffRead.scope).toBe('STAFF');
+    expect(staffRead.permission).toBe('audit.view');
+    expect(staffRead.schema.response).toBe(find('get', '/files/:id').schema.response);
+  });
+
+  it('rate-limits the one endpoint that consumes storage quota', () => {
+    // Every call writes a row, advances the shared rotation cursor and mints a Cloudinary upload
+    // credential. Nothing else in the module bounds how many a single caller may take.
+    expect(find('post', '/files/upload-url').rateLimit).toEqual({
+      points: 30,
+      durationSeconds: 60,
+      by: ['ip', 'user'],
+    });
   });
 
   it('takes a destructive permission for tombstoning', () => {

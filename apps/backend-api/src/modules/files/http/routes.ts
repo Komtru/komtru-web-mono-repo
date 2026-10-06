@@ -87,6 +87,13 @@ export function filesRoutes(deps: FilesHttpDeps): RouteDefinition[] {
       // Issuing a second ticket wastes a row and a rotation slot, both of which the abandoned sweep
       // reclaims; making the caller carry an idempotency key for a cheap, harmless repeat is worse.
       retryable: false,
+      /**
+       * The only consumer endpoint that spends storage quota: each call writes a row, advances the
+       * shared rotation cursor, and mints a Cloudinary upload credential good for about an hour.
+       * 30/minute is far above any real picker-and-upload loop and far below what it takes to fill
+       * a free-tier account.
+       */
+      rateLimit: { points: 30, durationSeconds: 60, by: ['ip', 'user'] },
       status: 201,
       schema: { body: createUploadUrlBody, response: uploadTicketSchema },
       handler: ({ actor, body }) =>
@@ -130,6 +137,37 @@ export function filesRoutes(deps: FilesHttpDeps): RouteDefinition[] {
        */
       handler: ({ actor, params }) => {
         requireUserId(actor, SEE_A_FILE);
+        const principal = actor.principal;
+        if (!principal) throw new ApiError(401, 'UNAUTHENTICATED', SEE_A_FILE);
+        return controllers.retrieve(deps, {
+          fileId: params.id,
+          subject: controllers.subjectFrom(principal),
+        });
+      },
+    }),
+
+    /**
+     * The same retrieval, for a staff session.
+     *
+     * `RouteScope` is one scope per route and `assertRouteInvariants` rejects a duplicate
+     * method+path, so the consumer route above cannot simply widen. Without this one, three
+     * branches of `decideAccess` are unreachable over HTTP: `INTERNAL_ONLY`, which D2 defines as
+     * staff-only; a `DISPUTE_REVIEWER` role grant, which M20 §6 names as how a reviewer reaches
+     * case evidence; and `file_access_log.accessed_by_admin_id`, which no real request could fill.
+     *
+     * `audit.view` rather than a new permission: looking at a file as staff is a read of someone
+     * else's data, and it writes an audit row exactly as the compliance reads beside it do. The
+     * access decision is unchanged — `decideAccess` still refuses a PRIVATE_OWNER file to staff,
+     * so this is not a back door around D2, only a door that exists.
+     */
+    defineRoute({
+      method: 'get',
+      path: '/admin/files/:id',
+      scope: 'STAFF',
+      permission: 'audit.view',
+      summary: 'A short-lived signed URL for a file a staff session may see',
+      schema: { params: fileIdParams, response: retrievalSchema },
+      handler: ({ actor, params }) => {
         const principal = actor.principal;
         if (!principal) throw new ApiError(401, 'UNAUTHENTICATED', SEE_A_FILE);
         return controllers.retrieve(deps, {

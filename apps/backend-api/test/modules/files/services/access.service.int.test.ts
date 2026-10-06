@@ -98,6 +98,34 @@ describe.runIf(infraEnabled)('access.service', () => {
       expect(await listGrants(db(), fileId)).toHaveLength(1);
     });
 
+    it('is idempotent under two deliveries racing, which is the case it exists for', async () => {
+      // The sequential test above cannot fail the way this function used to: a read-then-insert
+      // loses exactly when both callers miss the select, and `dispute.opened` is at-least-once by
+      // contract, so that is the ordinary case rather than the exotic one. Without
+      // ON CONFLICT DO NOTHING the loser raises 23505 as a raw 500.
+      const { fileId } = await readyFile({ category: 'DISPUTE_EVIDENCE', visibility: 'PRIVATE_CASE' });
+      const granteeUserId = randomUUID();
+      const input = { fileId, granteeUserId, reason: 'party to the dispute' };
+
+      const [first, second] = await Promise.all([grantAccess(db(), input), grantAccess(db(), input)]);
+
+      expect(first.id).toBe(second.id);
+      expect(await listGrants(db(), fileId)).toHaveLength(1);
+      const published = (await db().select().from(outbox)).filter(
+        (event) => event.eventType === 'files.file.access_granted',
+      );
+      // One grant is one event, however many deliveries raced for it.
+      expect(published).toHaveLength(1);
+    });
+
+    it('is idempotent on a racing role grant too', async () => {
+      const { fileId } = await readyFile({ category: 'DISPUTE_EVIDENCE', visibility: 'PRIVATE_CASE' });
+      const input = { fileId, granteeRole: 'DISPUTE_REVIEWER', reason: 'assigned reviewer' };
+      const [first, second] = await Promise.all([grantAccess(db(), input), grantAccess(db(), input)]);
+      expect(first.id).toBe(second.id);
+      expect(await listGrants(db(), fileId)).toHaveLength(1);
+    });
+
     it('publishes files.file.access_granted once', async () => {
       const { fileId } = await readyFile({ category: 'DISPUTE_EVIDENCE', visibility: 'PRIVATE_CASE' });
       const granteeUserId = randomUUID();
@@ -315,11 +343,10 @@ describe.runIf(infraEnabled)('access.service', () => {
   });
 
   describe('subjectFrom', () => {
-    it('builds the subject from a resolved principal, never from an actor key', async () => {
+    it('builds the subject from a resolved principal, never from an actor key', () => {
       const userId = randomUUID();
       const principal = testPrincipal(userId, { scope: 'STAFF', roles: ['DISPUTE_REVIEWER'] });
       expect(subjectFrom(principal)).toEqual({ userId, scope: 'STAFF', roles: ['DISPUTE_REVIEWER'] });
-      await Promise.resolve();
     });
   });
 });

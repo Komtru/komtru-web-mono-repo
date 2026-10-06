@@ -274,4 +274,16 @@ describe('loadConfig: files', () => {
     // whole point of polling usage rather than waiting for a failed upload — never fires.
     expect(failure({ ...minimal, FILES_QUOTA_NEAR_PCT: '97' }).invalid).toContain('FILES_QUOTA_NEAR_PCT');
   });
+
+  it('compares the resolved thresholds, not only the ones that were set', () => {
+    // Lowering just the disabled threshold leaves near at its 85 default, above it, and NEAR_QUOTA
+    // becomes unreachable — the early warning silently off, which is the one failure mode the whole
+    // polling design exists to prevent.
+    expect(failure({ ...minimal, FILES_QUOTA_DISABLED_PCT: '50' }).invalid).toContain('FILES_QUOTA_NEAR_PCT');
+  });
+
+  it('accepts a pair an operator lowered together', () => {
+    const config = loadConfig({ ...minimal, FILES_QUOTA_NEAR_PCT: '40', FILES_QUOTA_DISABLED_PCT: '50' });
+    expect(config.files.quota).toEqual({ nearPct: 40, disabledPct: 50 });
+  });
 });
