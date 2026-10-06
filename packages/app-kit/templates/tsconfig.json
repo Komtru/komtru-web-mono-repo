@@ -1,0 +1,11 @@
+{
+  "$comment": "Copy to tsconfig.json at the app root. T-002 created the Next preset for exactly this.",
+  "extends": "@komtru/config/tsconfig/next.json",
+  "compilerOptions": {
+    "rootDir": ".",
+    "types": ["node"],
+    "paths": { "@/*": ["./src/*"] }
+  },
+  "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts"],
+  "exclude": ["node_modules"]
+}

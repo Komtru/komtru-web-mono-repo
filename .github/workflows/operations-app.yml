@@ -8,7 +8,11 @@ on:
     branches: [main]
     paths:
       - 'apps/operations-app/**'
+      - 'packages/api-client/**'
+      - 'packages/app-kit/**'
       - 'packages/config/**'
+      - 'packages/shared-types/**'
+      - 'packages/ui-kit/**'
       - 'package.json'
       - 'pnpm-lock.yaml'
       - '.npmrc'
@@ -19,7 +23,11 @@ on:
   pull_request:
     paths:
       - 'apps/operations-app/**'
+      - 'packages/api-client/**'
+      - 'packages/app-kit/**'
       - 'packages/config/**'
+      - 'packages/shared-types/**'
+      - 'packages/ui-kit/**'
       - 'package.json'
       - 'pnpm-lock.yaml'
       - '.npmrc'

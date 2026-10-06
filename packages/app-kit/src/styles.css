@@ -1,0 +1,116 @@
+/*
+ * The global stylesheet every Komtru Next app imports, and the only entry an app needs into the
+ * design system. An app's `app/globals.css` is one line:
+ *
+ *   @import '@komtru/app-kit/styles.css';
+ *
+ * `@komtru/ui-kit` deliberately ships no stylesheet beyond its tokens — a component library that
+ * sets global element styles fights every app that consumes it — so the three things T-011 listed
+ * as "owed to the app" live here, together with the body line-height T-013 and T-014 measured.
+ */
+@import '@komtru/config/tailwind/preset.css';
+
+/*
+ * Tailwind v4 does not scan `node_modules`, and from an app both of these packages are exactly
+ * that: the class names in `ui-kit`'s components and this package's screens would be absent from
+ * the build, and every one of their utilities would silently do nothing.
+ *
+ * `src`, not `dist`: both carry the same class-name strings, but `src` is where they are authored
+ * and it exists whether or not either package has been built — pointing at `dist` would make the
+ * stylesheet's correctness depend on build order. The stories are excluded because their class
+ * names are documentation, and every one of them would otherwise ship in every app's CSS.
+ */
+@source '../src';
+@source '../../ui-kit/src';
+@source not '../../ui-kit/src/**/*.stories.tsx';
+
+/*
+ * The two keyframes `ui-kit`'s `<Skeleton>` and `<NodeLoader>` name. Copied verbatim from the
+ * reference; without them both components render, and sit perfectly still.
+ */
+@keyframes shimmer {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
+}
+
+@keyframes nodePulse {
+  0%,
+  100% {
+    opacity: 0.25;
+    transform: scale(0.8);
+  }
+  40% {
+    opacity: 1;
+    transform: scale(1.15);
+  }
+}
+
+/*
+ * The reference HTML declares **no** global line-height: its `body` rule is `margin`,
+ * `font-family`, `background`, `color` and `-webkit-font-smoothing`, restated in five `<style>`
+ * blocks, and no `html` or `*` rule carries one either. Tailwind's preflight does — `html, :host {
+ * line-height: 1.5 }` — so every element that states no line-height of its own is font-metric
+ * `normal` (~1.21 for Inter) in all 210 reference screens and 1.5 in anything built on the preset.
+ * That is the 1-2px per paragraph T-013's visual check saw and the ~8px by the fourth evidence row
+ * T-014 saw, and it is why it accumulates down a screen rather than showing as one offset.
+ *
+ * Restoring `normal` does not leave body copy set tight: every long-form rule in the reference
+ * states its own 1.5 or 1.6 (`.page-header p.lede`, `.ai-note p`, `.p0-head p`, `.faq-item p`).
+ * What inherits this are headings, labels, table cells, chips and button text — the places the
+ * reference relies on the font's own metrics, and the places a 1.5 is visibly too loose.
+ *
+ * In `@layer base`, after the import, so it beats preflight's `html, :host { line-height: 1.5 }`
+ * on later-in-the-layer and nothing else. **Unlayered would be wrong**, and tempting: an unlayered
+ * declaration beats every layered one before specificity is consulted (CSS Cascade 5 §6.4.4), so
+ * an unlayered `p { margin: 0 }` would beat `mb-[14px]`, an unlayered `img, svg { display: block }`
+ * would beat `hidden`, and an unlayered `:focus-visible { border-radius: 4px }` would snap every
+ * button, input and chip to a 4px radius the moment it took focus — the exact opposite of what
+ * `ui-kit`'s `primitives/focus.ts` says this rule does.
+ */
+@layer base {
+  html {
+    line-height: normal;
+  }
+
+  /* The reference's own page defaults. */
+  body {
+    margin: 0;
+    font-family: var(--font-body);
+    background: var(--cloud-gray);
+    color: var(--midnight-text);
+    -webkit-font-smoothing: antialiased;
+  }
+
+  h1,
+  h2,
+  h3,
+  h4 {
+    font-family: var(--font-display);
+    margin: 0;
+    letter-spacing: -0.01em;
+  }
+
+  p {
+    margin: 0;
+  }
+
+  img,
+  svg {
+    display: block;
+  }
+
+  /*
+ * The primitives each carry the focus ring as a utility, but anything a *screen* makes focusable
+ * gets it only from this rule. Without it those elements have a ring in Storybook and none in the
+ * product, which is the worst of both: it looks accessible where it is checked.
+ */
+  :focus-visible {
+    outline: 2.5px solid var(--trust-indigo);
+    outline-offset: 2px;
+    border-radius: 4px;
+  }
+}

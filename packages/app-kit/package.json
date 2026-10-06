@@ -1,0 +1,79 @@
+{
+  "name": "@komtru/app-kit",
+  "version": "0.0.0",
+  "private": true,
+  "description": "The Next.js foundation every Komtru app composes: auth route handlers, scope middleware, Sentry, providers, the global stylesheet and the error screens.",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./next": {
+      "types": "./dist/next/index.d.ts",
+      "default": "./dist/next/index.js"
+    },
+    "./react": {
+      "types": "./dist/react/index.d.ts",
+      "default": "./dist/react/index.js"
+    },
+    "./sentry": {
+      "types": "./dist/sentry.d.ts",
+      "default": "./dist/sentry.js"
+    },
+    "./ui": {
+      "types": "./dist/ui/index.d.ts",
+      "default": "./dist/ui/index.js"
+    },
+    "./styles.css": "./src/styles.css",
+    "./templates/*": "./templates/*"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "lint": "eslint .",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@komtru/api-client": "workspace:*",
+    "@komtru/shared-types": "workspace:*",
+    "@komtru/ui-kit": "workspace:*",
+    "zod": "4.6.5"
+  },
+  "peerDependencies": {
+    "@sentry/nextjs": "11.4.0",
+    "@tanstack/react-query": "5.104.1",
+    "next": "15.5.27",
+    "react": "19.3.0",
+    "react-dom": "19.3.0"
+  },
+  "peerDependenciesMeta": {
+    "@sentry/nextjs": {
+      "optional": true
+    },
+    "@tanstack/react-query": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@komtru/config": "workspace:*",
+    "@sentry/nextjs": "11.4.0",
+    "@tanstack/react-query": "5.104.1",
+    "@testing-library/dom": "10.4.2",
+    "@testing-library/react": "16.3.3",
+    "@types/node": "22.20.5",
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
+    "axe-core": "4.14.0",
+    "eslint": "9.39.5",
+    "jsdom": "29.1.1",
+    "next": "15.5.27",
+    "react": "19.3.0",
+    "react-dom": "19.3.0",
+    "tailwindcss": "4.3.3",
+    "typescript": "6.0.3",
+    "vitest": "5.0.3"
+  }
+}
