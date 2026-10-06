@@ -47,6 +47,10 @@ describe('problemDetailsSchema', () => {
         'ADDRESS_REQUIRED',
         'PARK_NOT_AVAILABLE_IN_CITY',
         'IDEMPOTENCY_KEY_REUSED',
+        // T-040: a 410 for a file M20 D4 tombstoned must stay distinguishable from "not yours",
+        // which is a 404 by design, and a client branches on `code`.
+        'FILE_TOMBSTONED',
+        'FILE_STORAGE_UNAVAILABLE',
       ]),
     );
   });

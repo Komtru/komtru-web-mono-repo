@@ -10,6 +10,7 @@ import type { Db } from '../db/index.js';
 import type { Logger } from '../platform/logger.js';
 import type { KomtruModule, SeedableModule } from '../platform/module.js';
 import { configModule } from './config/index.js';
+import { filesModule, filesSeed } from './files/index.js';
 import { createIdentityAuth, identityModule, identitySeed, resolvePrincipal } from './identity/index.js';
 import { ledgerModule } from './ledger/index.js';
 import { notifyModule } from './notify/index.js';
@@ -26,13 +27,15 @@ export type ModuleBuilder = (deps: ProcessDeps) => KomtruModule[];
 
 // config first: it holds the fee schedule, which is read and validated at import, and everything
 // that posts money reads a snapshot taken from it. identity next, because its RBAC catalogue and
-// reserved namespace are what every other module's permissions are checked against. notify last:
-// it only subscribes to what the others publish.
+// reserved namespace are what every other module's permissions are checked against. files after
+// identity, because every one of its routes is scope-checked against the actor identity resolves.
+// notify after those: it only subscribes to what the others publish.
 export const createModules: ModuleBuilder = (deps) => {
   const auth = createIdentityAuth(deps);
   return [
     configModule,
     identityModule(auth),
+    filesModule,
     ledgerModule,
     notifyModule,
     // Last: it produces nothing of its own, it only pushes what the others produce. It takes
@@ -53,4 +56,10 @@ export const createModules: ModuleBuilder = (deps) => {
 // The same registry, in the same order, reduced to what `pnpm db:migrate` can supply: a database.
 // Seeding must not need Redis or a signing key, so this list holds the seed hooks rather than the
 // built modules.
-export const moduleSeeds: SeedableModule[] = [configModule, identitySeed, ledgerModule, notifyModule];
+export const moduleSeeds: SeedableModule[] = [
+  configModule,
+  identitySeed,
+  filesSeed,
+  ledgerModule,
+  notifyModule,
+];

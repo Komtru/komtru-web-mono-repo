@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ConfigError, loadConfig } from '../../src/config/env.js';
+import { CLOUDINARY_PREFIXES, ConfigError, loadConfig } from '../../src/config/env.js';
 import { testRedisUrl } from '../support/db-urls.js';
 
 const minimal = {
@@ -246,5 +246,69 @@ describe('loadConfig: notifications', () => {
     const { redis } = loadConfig({ ...minimal, REDIS_KEY_PREFIX: '', REDIS_QUEUE_PREFIX: '' });
     expect(redis.keyPrefix).toBe('komtru:');
     expect(redis.queuePrefix).toBe('komtru:bull');
+  });
+});
+
+describe('loadConfig: files', () => {
+  it('reads a Cloudinary account from its credential prefix', () => {
+    const config = loadConfig({
+      ...minimal,
+      CLOUDINARY_TRADE_1_CLOUD_NAME: 'komtru-trade-1',
+      CLOUDINARY_TRADE_1_API_KEY: '111111111111111',
+      CLOUDINARY_TRADE_1_API_SECRET: 'trade-one-placeholder',
+    });
+    expect(config.files.accounts.CLOUDINARY_TRADE_1).toEqual({
+      cloudName: 'komtru-trade-1',
+      apiKey: '111111111111111',
+      apiSecret: 'trade-one-placeholder',
+    });
+  });
+
+  it('omits a Cloudinary prefix that is missing any one of its three values', () => {
+    // A half-configured account would sign uploads with an empty secret, which Cloudinary rejects
+    // with a 401 that names nothing. Absent is the only honest answer.
+    const config = loadConfig({
+      ...minimal,
+      CLOUDINARY_CHAT_CLOUD_NAME: 'komtru-chat',
+      CLOUDINARY_CHAT_API_KEY: '222222222222222',
+    });
+    expect(config.files.accounts.CLOUDINARY_CHAT).toBeUndefined();
+  });
+
+  it('knows all five credential prefixes M20 D5 names', () => {
+    expect(CLOUDINARY_PREFIXES).toEqual([
+      'CLOUDINARY_PROFILE',
+      'CLOUDINARY_CHAT',
+      'CLOUDINARY_TRADE_1',
+      'CLOUDINARY_TRADE_2',
+      'CLOUDINARY_TRADE_3',
+    ]);
+  });
+
+  it('defaults the files tuning values to M20 §5', () => {
+    const config = loadConfig(minimal);
+    expect(config.files.accounts).toEqual({});
+    expect(config.files.quota).toEqual({ nearPct: 85, disabledPct: 97 });
+    expect(config.files.maxUploadBytes).toBe(10 * 1024 * 1024);
+    expect(config.files.uploadTicketTtlMinutes).toBe(30);
+    expect(config.files.signedUrlTtlSeconds).toBe(300);
+  });
+
+  it('refuses a near-quota threshold at or above the disabled one', () => {
+    // Otherwise an account goes straight from ACTIVE to DISABLED and the NEAR_QUOTA warning — the
+    // whole point of polling usage rather than waiting for a failed upload — never fires.
+    expect(failure({ ...minimal, FILES_QUOTA_NEAR_PCT: '97' }).invalid).toContain('FILES_QUOTA_NEAR_PCT');
+  });
+
+  it('compares the resolved thresholds, not only the ones that were set', () => {
+    // Lowering just the disabled threshold leaves near at its 85 default, above it, and NEAR_QUOTA
+    // becomes unreachable — the early warning silently off, which is the one failure mode the whole
+    // polling design exists to prevent.
+    expect(failure({ ...minimal, FILES_QUOTA_DISABLED_PCT: '50' }).invalid).toContain('FILES_QUOTA_NEAR_PCT');
+  });
+
+  it('accepts a pair an operator lowered together', () => {
+    const config = loadConfig({ ...minimal, FILES_QUOTA_NEAR_PCT: '40', FILES_QUOTA_DISABLED_PCT: '50' });
+    expect(config.files.quota).toEqual({ nearPct: 40, disabledPct: 50 });
   });
 });
