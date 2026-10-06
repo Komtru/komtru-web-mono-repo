@@ -59,6 +59,9 @@ export const identityUserRegisteredEvent = defineEvent(
     registeredVia: z.string().min(1),
     channel: z.enum(['EMAIL', 'PHONE']),
     ip: z.string().nullable().default(null),
+    /** The §10.1 `invitationToken` this account was opened from, if any (T-035). Referral attributes
+     * the signup on it; the TRADE still binds on claim-on-verify and never on this. */
+    invitationId: z.uuid().nullable().default(null),
   }),
 );
 
@@ -187,4 +190,88 @@ export const identityVerificationLevelChangedEvent = defineEvent(
   'identity.user.verification_level_changed',
   1,
   z.object({ userId: z.uuid(), from: z.string().min(1), to: z.string().min(1) }),
+);
+
+// ---------------------------------------------------------------------------
+// T-035: party lookup and invitations.
+// ---------------------------------------------------------------------------
+
+/**
+ * Every lookup, hit or miss (§8.3 control 6). Risk is meant to see that a user performed forty email
+ * lookups with thirty-eight misses, which is scraping.
+ *
+ * `subjectHash` and never the subject: §S12 forbids an address in anything we keep, and an outbox
+ * row is kept. A SHA-256 of the channel and the canonical value answers "were these forty lookups
+ * forty different people or one person forty times", which is the question M13 is asking. The schema
+ * is strict so a later call site cannot quietly add the address beside it.
+ */
+export const identityPartyLookupPerformedEvent = defineEvent(
+  'identity.party.lookup_performed',
+  1,
+  z.strictObject({
+    actorUserId: z.uuid(),
+    channel: z.enum(['USERNAME', 'EMAIL', 'PHONE']),
+    /** False for a genuine miss, a hidden user AND a suspended one — the service cannot tell them
+     * apart on purpose, and neither can this. */
+    found: z.boolean(),
+    subjectHash: z.string().min(1),
+  }),
+);
+
+/**
+ * A party was tagged who has no account (§8.5 step 2).
+ *
+ * The claim TOKEN is deliberately absent, and so is the destination. notify cannot address a
+ * non-user — `NotificationRecipient` is keyed on a `userId` — so a token here would be a bearer
+ * secret retained in `platform.outbox` indefinitely for a consumer that cannot use it, which is
+ * T-032's deferred retention problem repeated for no gain. The inviter receives the claim URL in the
+ * route's response and shares it themselves until a ticket teaches notify to send to a raw address.
+ */
+export const identityPartyInvitationCreatedEvent = defineEvent(
+  'identity.party_invitation.created',
+  1,
+  z.strictObject({
+    invitationId: z.uuid(),
+    inviterUserId: z.uuid(),
+    channel: z.enum(['EMAIL', 'PHONE']),
+    /** `j•••@example.com`: enough for the inviter to confirm they typed the right address. */
+    maskedDestination: z.string().min(1),
+    intendedRole: z.enum(['BUYER', 'SELLER']),
+    contextType: z.string().min(1).nullable().default(null),
+    contextId: z.uuid().nullable().default(null),
+    expiresAt: z.iso.datetime(),
+  }),
+);
+
+/**
+ * The invited channel was verified by the person who now holds it (§8.5 step 5). **Trades** binds the
+ * trade on this; Referral attributes the signup.
+ */
+export const identityPartyInvitationClaimedEvent = defineEvent(
+  'identity.party_invitation.claimed',
+  1,
+  z.strictObject({
+    invitationId: z.uuid(),
+    inviterUserId: z.uuid(),
+    claimedByUserId: z.uuid(),
+    intendedRole: z.enum(['BUYER', 'SELLER']),
+    contextType: z.string().min(1).nullable().default(null),
+    contextId: z.uuid().nullable().default(null),
+  }),
+);
+
+/**
+ * Unclaimed after fourteen days (§8.5 step 7). **Not optional:** without it M7 has no trigger and the
+ * trade hangs in PENDING_COUNTERPARTY forever.
+ */
+export const identityPartyInvitationExpiredEvent = defineEvent(
+  'identity.party_invitation.expired',
+  1,
+  z.strictObject({
+    invitationId: z.uuid(),
+    inviterUserId: z.uuid(),
+    intendedRole: z.enum(['BUYER', 'SELLER']),
+    contextType: z.string().min(1).nullable().default(null),
+    contextId: z.uuid().nullable().default(null),
+  }),
 );
