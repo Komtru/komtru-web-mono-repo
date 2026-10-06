@@ -90,6 +90,8 @@ describe('loadConfig', () => {
       tokenIssuer: 'https://api.komtru.com',
       tokenAudience: 'komtru',
       epochCacheTtlSeconds: 10,
+      breachCheckEnabled: false,
+      mirrorPhoneOtpToEmail: false,
     });
   });
 
@@ -99,6 +101,8 @@ describe('loadConfig', () => {
       tokenIssuer: 'https://api.komtru.com',
       tokenAudience: 'komtru',
       epochCacheTtlSeconds: 10,
+      breachCheckEnabled: false,
+      mirrorPhoneOtpToEmail: false,
     });
     expect(failure({ ...minimal, IDENTITY_SIGNING_KEY: 'nothex' }).invalid).toEqual(['IDENTITY_SIGNING_KEY']);
     expect(failure({ ...minimal, IDENTITY_ACCESS_TOKEN_TTL_SECONDS: '1' }).invalid).toEqual([
@@ -310,5 +314,39 @@ describe('loadConfig: files', () => {
   it('accepts a pair an operator lowered together', () => {
     const config = loadConfig({ ...minimal, FILES_QUOTA_NEAR_PCT: '40', FILES_QUOTA_DISABLED_PCT: '50' });
     expect(config.files.quota).toEqual({ nearPct: 40, disabledPct: 50 });
+  });
+});
+
+describe('the identity and terms variables T-032 adds', () => {
+  it('reads them when they are set', () => {
+    const config = loadConfig({
+      ...minimal,
+      IDENTITY_HMAC_PEPPER: 'p'.repeat(32),
+      IDENTITY_BREACH_CHECK_ENABLED: 'true',
+      IDENTITY_MIRROR_PHONE_OTP_TO_EMAIL: 'true',
+      APP_TERMS_VERSION: '2026-09-01',
+      APP_PRIVACY_VERSION: '2026-09-02',
+    });
+    expect(config.identity.hmacPepper).toBe('p'.repeat(32));
+    expect(config.identity.breachCheckEnabled).toBe(true);
+    expect(config.identity.mirrorPhoneOtpToEmail).toBe(true);
+    expect(config.terms).toEqual({ version: '2026-09-01', privacyVersion: '2026-09-02' });
+  });
+
+  it('defaults the two flags off and leaves the terms override empty', () => {
+    const config = loadConfig(minimal);
+    expect(config.identity.hmacPepper).toBeUndefined();
+    expect(config.identity.breachCheckEnabled).toBe(false);
+    expect(config.identity.mirrorPhoneOtpToEmail).toBe(false);
+    // Empty, not defaulted: identity's resolveTermsVersions owns the shipped version.
+    expect(config.terms).toEqual({});
+  });
+
+  it('refuses a pepper short enough to be brute-forced, naming the variable', () => {
+    expect(failure({ ...minimal, IDENTITY_HMAC_PEPPER: 'short' }).message).toContain('IDENTITY_HMAC_PEPPER');
+  });
+
+  it('treats an empty pepper as absent rather than as an empty key', () => {
+    expect(loadConfig({ ...minimal, IDENTITY_HMAC_PEPPER: '' }).identity.hmacPepper).toBeUndefined();
   });
 });

@@ -8,8 +8,14 @@ import type { Logger } from '../../platform/logger.js';
 import { defineModule, type KomtruModule, type SeedableModule } from '../../platform/module.js';
 import type { Actor, CompanyMembership } from '../../platform/http/principal.js';
 import type { Request } from 'express';
+import { createHmacHasher } from '../../platform/crypto/hmac.js';
+import { argon2Hasher } from './domain/credential/hashing.js';
+import { resolveTermsVersions } from './domain/terms.js';
 import { createActorResolver } from './http/middleware.js';
 import { authRoutes } from './http/routes/auth.routes.js';
+import { passwordRoutes } from './http/routes/password.routes.js';
+import { registrationRoutes } from './http/routes/registration.routes.js';
+import type { AccountDeps } from './services/auth.service.js';
 import { usernameRoutes } from './http/username.controller.js';
 import { createTokenSigner, type TokenSigner } from './infrastructure/jwt/access-token.js';
 import { createEpochCache, type EpochCache } from './infrastructure/redis/epoch-cache.js';
@@ -22,6 +28,14 @@ export * from './domain/username/policy.js';
 export * from './domain/username/reserved.js';
 export * from './domain/username/skeleton.js';
 export * from './domain/username/suggest.js';
+export * from './domain/terms.js';
+export {
+  AUDIT_ACTIONS,
+  writeAudit,
+  type AuditActorType,
+  type AuditInput,
+  type AuditOutcome,
+} from './services/audit.service.js';
 export * from './services/username.service.js';
 export { seedIdentityCatalogue } from './infrastructure/postgres/seed.js';
 
@@ -34,6 +48,12 @@ export {
   type TokenSigner,
 } from './infrastructure/jwt/access-token.js';
 export { createEpochCache, type EpochCache } from './infrastructure/redis/epoch-cache.js';
+export * from './domain/credential/hashing.js';
+export * from './domain/credential/policy.js';
+export * from './domain/credential/lockout.js';
+export { checkPasswordBreached, type BreachDeps, type BreachResult } from './domain/credential/breach.js';
+export * from './domain/otp/challenge.js';
+export * from './domain/registration.js';
 export { resolvePrincipal, type PrincipalDeps } from './services/principal.service.js';
 export { bearerToken, createActorResolver } from './http/middleware.js';
 export {
@@ -88,11 +108,35 @@ export function createIdentityAuth(options: IdentityAuthOptions): IdentityAuth {
     ...(options.companyMembership ? { companyMembership: options.companyMembership } : {}),
   };
 
+  // §S6 and §S9's pepper. Fails here, naming the variable, rather than at the first registration:
+  // an HMAC under an empty key is not an HMAC, and a process that boots without this one cannot
+  // issue a single OTP.
+  if (!config.identity.hmacPepper) {
+    throw new Error('IDENTITY_HMAC_PEPPER is required to build the identity module');
+  }
+
+  const account: AccountDeps & { db: Db } = {
+    db,
+    signer,
+    epochs,
+    logger,
+    hasher: argon2Hasher,
+    otpHasher: createHmacHasher(config.identity.hmacPepper),
+    breach: { enabled: config.identity.breachCheckEnabled, logger },
+    terms: resolveTermsVersions(config.terms),
+    mirrorPhoneOtpToEmail: config.identity.mirrorPhoneOtpToEmail,
+  };
+
   return {
     signer,
     epochs,
     resolveActor: createActorResolver(principalDeps),
-    routes: [...authRoutes({ db, signer, epochs, logger }), ...usernameRoutes({ db })],
+    routes: [
+      ...authRoutes({ db, signer, epochs, logger }),
+      ...registrationRoutes(account),
+      ...passwordRoutes(account),
+      ...usernameRoutes({ db }),
+    ],
   };
 }
 

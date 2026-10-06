@@ -12,6 +12,13 @@ export class ApiError extends Error {
     readonly title: string,
     readonly detail?: string,
     readonly fieldErrors?: { path: string; message: string }[],
+    /**
+     * RFC 9457 extension members: anything the client needs that is not one of the standard fields.
+     * `attemptsRemaining` on a wrong OTP is the first (T-032, screen E3b). They are spread BEFORE
+     * the known members below, so an extension can never rewrite `status`, `code` or `type` — the
+     * three fields every client branches on.
+     */
+    readonly extensions?: Record<string, unknown>,
   ) {
     super(title);
     this.name = 'ApiError';
@@ -22,7 +29,23 @@ export function sendProblem(res: Response, problem: ProblemDetails): void {
   res.status(problem.status).type('application/problem+json').json(problem);
 }
 
+/**
+ * The members an extension may never supply. `type`, `title`, `status` and `code` are written
+ * unconditionally below and so are safe by construction; `detail`, `errors` and `instance` are
+ * written CONDITIONALLY or not at all, so without this an extension named `detail` would survive on
+ * an error that omitted one, and `instance` could be forged outright.
+ */
+const RESERVED_PROBLEM_MEMBERS = ['type', 'title', 'status', 'code', 'detail', 'errors', 'instance'];
+
+const safeExtensions = (extensions?: Record<string, unknown>): Record<string, unknown> =>
+  extensions
+    ? Object.fromEntries(
+        Object.entries(extensions).filter(([key]) => !RESERVED_PROBLEM_MEMBERS.includes(key)),
+      )
+    : {};
+
 const toProblem = (error: ApiError): ProblemDetails => ({
+  ...safeExtensions(error.extensions),
   type: problemTypeUri(error.code),
   title: error.title,
   status: error.status,

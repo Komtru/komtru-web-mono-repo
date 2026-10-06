@@ -130,3 +130,64 @@ describe('assertRouteInvariants and PUBLIC routes', () => {
     ).toThrow(/can never be checked/);
   });
 });
+
+describe('the rate-limit keys a route may declare', () => {
+  const limited = (rateLimit: object) => postRoute({ retryable: false, rateLimit });
+
+  it('refuses a route that limits by identifier but cannot find one', () => {
+    expect(() =>
+      assertRouteInvariants([limited({ points: 1, durationSeconds: 60, by: ['identifier'] })]),
+    ).toThrow(/rate limits by identifier but provides no identifierFrom/);
+  });
+
+  it('refuses a route that limits by device but cannot find one', () => {
+    expect(() =>
+      assertRouteInvariants([limited({ points: 1, durationSeconds: 60, by: ['device'] })]),
+    ).toThrow(/rate limits by device but provides no deviceFrom/);
+  });
+
+  it('accepts a route that supplies deviceFrom', () => {
+    expect(() =>
+      assertRouteInvariants([
+        limited({ points: 1, durationSeconds: 60, by: ['device'], deviceFrom: () => 'fp' }),
+      ]),
+    ).not.toThrow();
+  });
+
+  it('accepts ip and user with no extractor, because the request already carries both', () => {
+    expect(() =>
+      assertRouteInvariants([limited({ points: 1, durationSeconds: 60, by: ['ip', 'user'] })]),
+    ).not.toThrow();
+  });
+});
+
+describe('per-key rate-limit windows', () => {
+  const limited = (rateLimit: object) => postRoute({ retryable: false, rateLimit });
+
+  it('lets a route give one key a looser budget than another (S4: 5/min/identifier + 20/min/IP)', () => {
+    expect(() =>
+      assertRouteInvariants([
+        limited({
+          points: 5,
+          durationSeconds: 60,
+          by: ['identifier', 'ip'],
+          identifierFrom: () => 'x',
+          perKey: { ip: { points: 20, durationSeconds: 60 } },
+        }),
+      ]),
+    ).not.toThrow();
+  });
+
+  it('refuses an override for a key the route does not count', () => {
+    expect(() =>
+      assertRouteInvariants([
+        limited({
+          points: 5,
+          durationSeconds: 60,
+          by: ['ip'],
+          perKey: { device: { points: 20, durationSeconds: 60 } },
+        }),
+      ]),
+    ).toThrow(/overrides the budget for "device", which it does not count/);
+  });
+});

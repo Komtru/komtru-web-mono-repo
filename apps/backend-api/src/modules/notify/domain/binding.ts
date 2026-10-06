@@ -8,13 +8,29 @@
 // Bindings live here rather than in the publishing module so there is one file that answers "which
 // event sends what". Every later module ticket adds its own entries to BINDINGS, importing its
 // event definition through that module's index.ts barrel.
-import type { EventDefinition } from '@komtru/shared-types';
+import type { EventDefinition, NotificationChannel } from '@komtru/shared-types';
 import type { z } from 'zod';
+import {
+  identityDeviceSignedInEvent,
+  identityOtpRequestedEvent,
+  identityPasswordChangedEvent,
+  otpPurposeLabel,
+} from '../../identity/index.js';
+import { identitySessionReuseDetectedEvent } from '@komtru/shared-types';
 
 export interface NotificationRecipient {
   userId: string;
   /** Exactly the variables the bound template declares. A missing one fails the handler, loudly. */
   variables: Record<string, string>;
+  /**
+   * Restrict the fan-out to these channels. Absent means every channel the template declares.
+   *
+   * It exists because one template key can carry several channels — `identity.otp.requested` ships
+   * an SMS body and an email body — while the EVENT knows which one the code was actually meant
+   * for. Without it a phone registration code would also be emailed, to an address the account does
+   * not have yet, dead-lettering a security-critical row on every single signup.
+   */
+  channels?: NotificationChannel[];
 }
 
 export interface NotificationBinding<S extends z.ZodType = z.ZodType> {
@@ -30,7 +46,89 @@ export const defineBinding = <S extends z.ZodType>(binding: NotificationBinding<
   binding;
 
 /**
- * Empty at T-045: no module publishes a user-facing event yet. T-031 and T-034 add the identity
- * bindings for the templates already seeded in catalogue.ts; T-068 adds the trade ones.
+ * Template keys whose whole job is to PROVE control of an address, so the address cannot already be
+ * proven.
+ *
+ * `resolveDestination` otherwise treats an unverified contact as absent, and it is right to: sending
+ * a password-reset link to an address nobody owns is how one reaches the wrong person. A
+ * registration OTP is the exception that defines the rule — it is the thing that MAKES an address
+ * verified, so demanding verification first is a cycle no user can break.
+ *
+ * It is a set here rather than a column on `notification_templates` because that table is data an
+ * operator may edit at runtime (M11 D5), and "may this message go to an unproven address" is a
+ * security decision that should need a deploy and a review, not an UPDATE.
  */
-export const BINDINGS: NotificationBinding[] = [];
+export const UNVERIFIED_DESTINATION_TEMPLATES: ReadonlySet<string> = new Set(['identity.otp.requested']);
+
+export const allowsUnverifiedDestination = (templateKey: string): boolean =>
+  UNVERIFIED_DESTINATION_TEMPLATES.has(templateKey);
+
+/** Africa/Lagos, because that is where the person reading the message is (M1 locale defaults). */
+const whenFor = (iso: string): string =>
+  new Intl.DateTimeFormat('en-NG', {
+    dateStyle: 'medium',
+    timeStyle: 'short',
+    timeZone: 'Africa/Lagos',
+  }).format(new Date(iso));
+
+export const BINDINGS: NotificationBinding[] = [
+  defineBinding({
+    subscriber: 'notify.on-otp-requested',
+    event: identityOtpRequestedEvent,
+    templateKey: 'identity.otp.requested',
+    recipients: (payload) =>
+      // A challenge with no user is `/auth/password/forgot`'s decoy, written so a miss and a hit
+      // leave the same trace. It is never delivered, so this is belt and braces — but a binding
+      // that threw on a null user would turn that safety measure into a dead-lettered handler.
+      payload.userId === null
+        ? []
+        : [
+            {
+              userId: payload.userId,
+              channels: payload.channels,
+              variables: {
+                code: payload.code,
+                purpose: otpPurposeLabel(payload.purpose),
+                expiresInMinutes: String(payload.expiresInMinutes),
+              },
+            },
+          ],
+  }),
+
+  defineBinding({
+    subscriber: 'notify.on-device-signed-in',
+    event: identityDeviceSignedInEvent,
+    templateKey: 'identity.device.new_sign_in',
+    recipients: (payload) => [
+      {
+        userId: payload.userId,
+        variables: {
+          deviceLabel: payload.deviceLabel,
+          location: payload.location,
+          signedInAt: whenFor(payload.signedInAt),
+        },
+      },
+    ],
+  }),
+
+  defineBinding({
+    subscriber: 'notify.on-password-changed',
+    event: identityPasswordChangedEvent,
+    templateKey: 'identity.password.changed',
+    recipients: (payload) => [
+      { userId: payload.userId, variables: { changedAt: whenFor(payload.changedAt) } },
+    ],
+  }),
+
+  defineBinding({
+    subscriber: 'notify.on-session-reuse-detected',
+    event: identitySessionReuseDetectedEvent,
+    templateKey: 'identity.session.reuse_detected',
+    recipients: (payload) => [
+      // The event carries no timestamp of its own: it is published the instant the replay is
+      // detected, so the envelope's `occurredAt` and "now" differ by the relay's latency. Close
+      // enough for copy that says "we signed you out at".
+      { userId: payload.userId, variables: { detectedAt: whenFor(new Date().toISOString()) } },
+    ],
+  }),
+];

@@ -1,7 +1,7 @@
 // The subscriber's half of the pipeline: one row per send, charged once, suppressed with a reason,
 // and never silent about a security message. Skipped unless KOMTRU_INFRA_TESTS=1.
 import { randomUUID } from 'node:crypto';
-import type { EventEnvelope } from '@komtru/shared-types';
+import type { EventEnvelope, NotificationChannel } from '@komtru/shared-types';
 import { beforeEach, describe, expect, it } from 'vitest';
 import type { NotifyConfig } from '../../../../src/config/env.js';
 import { createLogger } from '../../../../src/platform/logger.js';
@@ -82,12 +82,21 @@ describe.runIf(infraEnabled)('dispatchForEvent', () => {
     envelope?: EventEnvelope<unknown>;
     variables?: Record<string, string>;
     config?: NotifyConfig;
+    channels?: NotificationChannel[];
+    templateKey?: string;
+    recipientId?: string;
   }) =>
     t.db().transaction((tx) =>
       dispatchForEvent({ config: input.config ?? notifyConfig(), logger }, tx, {
         envelope: input.envelope ?? envelope(),
-        templateKey: TEMPLATE_KEY,
-        recipients: [{ userId, variables: input.variables ?? { name: 'Ada' } }],
+        templateKey: input.templateKey ?? TEMPLATE_KEY,
+        recipients: [
+          {
+            userId: input.recipientId ?? userId,
+            variables: input.variables ?? { name: 'Ada' },
+            ...(input.channels ? { channels: input.channels } : {}),
+          },
+        ],
       }),
     );
 
@@ -405,5 +414,167 @@ describe.runIf(infraEnabled)('dispatchForEvent', () => {
 
     expect(queued).toEqual([]);
     expect(await rows()).toEqual([]);
+  });
+});
+
+describe.runIf(infraEnabled)('channel targeting and unverified destinations (T-032)', () => {
+  const t = useTestDatabase();
+
+  const seedTemplate = async (overrides: Record<string, unknown> = {}) => {
+    const values: Record<string, unknown> = {
+      template_key: 'identity.otp.requested',
+      channel: 'SMS',
+      category: 'SECURITY',
+      body: 'code {{code}}',
+      variables: ['code'],
+      is_security_critical: true,
+      ...overrides,
+    };
+    const columns = Object.keys(values);
+    await t.app().query(
+      `INSERT INTO notify.notification_templates (${columns.join(', ')})
+         VALUES (${columns.map((_, i) => `$${String(i + 1)}`).join(', ')})`,
+      Object.values(values),
+    );
+  };
+
+  const seedMapping = async (templateKey: string, eventName: string) => {
+    await t.app().query(
+      `INSERT INTO notify.notification_event_mappings (event_name, template_key, enabled)
+           VALUES ($1, $2, true)`,
+      [eventName, templateKey],
+    );
+  };
+
+  const dispatchOtp = (userId: string, channels?: NotificationChannel[]) =>
+    t.db().transaction((tx) =>
+      dispatchForEvent({ config: notifyConfig(), logger }, tx, {
+        envelope: envelope({ eventType: 'identity.otp.requested' }),
+        templateKey: 'identity.otp.requested',
+        recipients: [{ userId, variables: { code: '482913' }, ...(channels ? { channels } : {}) }],
+      }),
+    );
+
+  const rows = async () =>
+    (
+      await t
+        .app()
+        .query<{ channel: string; status: string; failed_reason: string | null }>(
+          `SELECT channel, status, failed_reason FROM notify.notifications ORDER BY channel`,
+        )
+    ).rows;
+
+  beforeEach(async () => {
+    await seedTemplate();
+    await seedTemplate({ channel: 'EMAIL', subject: 'Your code', body: 'code {{code}}' });
+    await seedMapping('identity.otp.requested', 'identity.otp.requested');
+  });
+
+  it('sends only the channels the recipient names', async () => {
+    const userId = await insertUser(t.app());
+    await insertVerifiedPhone(t.app(), userId, '+2348012345678');
+    await insertVerifiedEmail(t.app(), userId, 'ada@example.com');
+
+    await dispatchOtp(userId, ['SMS']);
+    expect(await rows()).toMatchObject([{ channel: 'SMS', status: 'QUEUED' }]);
+  });
+
+  it('fans out to every channel when the recipient names none', async () => {
+    const userId = await insertUser(t.app());
+    await insertVerifiedPhone(t.app(), userId, '+2348012345678');
+    await insertVerifiedEmail(t.app(), userId, 'ada@example.com');
+
+    await dispatchOtp(userId);
+    expect((await rows()).map((r) => r.channel)).toEqual(['EMAIL', 'SMS']);
+  });
+
+  it('throws when a recipient names a channel the template does not have', async () => {
+    const userId = await insertUser(t.app());
+    await insertVerifiedPhone(t.app(), userId, '+2348012345678');
+    // Silence here would be a security-critical message nobody sent and nobody logged.
+    await expect(dispatchOtp(userId, ['PUSH'])).rejects.toThrow(/no template for the requested channel/);
+  });
+
+  it('addresses an OTP to an UNVERIFIED primary phone', async () => {
+    const userId = await insertUser(t.app(), { status: 'PENDING_VERIFICATION' });
+    await t.app().query(
+      `INSERT INTO identity.user_phones (user_id, phone_e164, country_code, is_primary)
+           VALUES ($1, '+2348012345678', 'NG', true)`,
+      [userId],
+    );
+
+    await dispatchOtp(userId, ['SMS']);
+    // Without the allowance this row is DEAD_LETTERED and no registration SMS ever leaves.
+    expect(await rows()).toMatchObject([{ channel: 'SMS', status: 'QUEUED' }]);
+  });
+
+  it('still refuses an unverified address for every other template', async () => {
+    await seedTemplate({
+      template_key: 'identity.password.changed',
+      channel: 'EMAIL',
+      subject: 'Changed',
+      body: 'changed at {{changedAt}}',
+      variables: ['changedAt'],
+    });
+    await seedMapping('identity.password.changed', 'identity.password.changed');
+
+    const userId = await insertUser(t.app());
+    await t.app().query(
+      `INSERT INTO identity.user_emails (user_id, email, email_normal, is_primary)
+           VALUES ($1, 'ada@example.com', 'ada@example.com', true)`,
+      [userId],
+    );
+
+    await t.db().transaction((tx) =>
+      dispatchForEvent({ config: notifyConfig(), logger }, tx, {
+        envelope: envelope({ eventType: 'identity.password.changed' }),
+        templateKey: 'identity.password.changed',
+        recipients: [{ userId, variables: { changedAt: 'today' }, channels: ['EMAIL'] }],
+      }),
+    );
+
+    expect(await rows()).toMatchObject([
+      { channel: 'EMAIL', status: 'DEAD_LETTERED', failed_reason: 'no_destination' },
+    ]);
+  });
+
+  it('sends a reset code to the VERIFIED address even when an unverified one is primary', async () => {
+    // The allowance is a FALLBACK for an account with nothing proven, not a preference. Preferring
+    // the primary would send a recovery code to an address the account holder never confirmed —
+    // exactly what the verified-only filter exists to stop.
+    const userId = await insertUser(t.app());
+    await t.app().query(
+      `INSERT INTO identity.user_emails (user_id, email, email_normal, is_primary, verified_at)
+           VALUES ($1, 'proven@example.com', 'proven@example.com', false, now())`,
+      [userId],
+    );
+    await t.app().query(
+      `INSERT INTO identity.user_emails (user_id, email, email_normal, is_primary)
+           VALUES ($1, 'unproven@example.com', 'unproven@example.com', true)`,
+      [userId],
+    );
+
+    await dispatchOtp(userId, ['EMAIL']);
+    const { rows: found } = await t
+      .app()
+      .query<{ recipient_masked: string }>(`SELECT recipient_masked FROM notify.notifications`);
+    expect(found[0]?.recipient_masked).toBe('p•••@example.com');
+  });
+
+  it('prefers the verified contact when both a verified and an unverified one exist', async () => {
+    const userId = await insertUser(t.app());
+    await insertVerifiedPhone(t.app(), userId, '+2348012345678');
+    // A second, unverified number that is NOT primary: the primary verified one must win.
+    await t.app().query(
+      `INSERT INTO identity.user_phones (user_id, phone_e164, country_code, is_primary)
+           VALUES ($1, '+2348099999999', 'NG', false)`,
+      [userId],
+    );
+
+    await dispatchOtp(userId, ['SMS']);
+    const { rows: found } = await t
+      .app()
+      .query<{ recipient_masked: string }>(`SELECT recipient_masked FROM notify.notifications`);
+    expect(found[0]?.recipient_masked).toBe('+23480•••5678');
   });
 });

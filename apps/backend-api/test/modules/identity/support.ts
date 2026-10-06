@@ -4,6 +4,15 @@ import { randomBytes } from 'node:crypto';
 import type pg from 'pg';
 import type { Redis } from 'ioredis';
 import { loadConfig, type AppConfig } from '../../../src/config/env.js';
+import type { Db } from '../../../src/db/index.js';
+import {
+  argon2Hasher,
+  type PasswordHasher,
+} from '../../../src/modules/identity/domain/credential/hashing.js';
+import { resolveTermsVersions } from '../../../src/modules/identity/domain/terms.js';
+import type { RegistrationControllerDeps } from '../../../src/modules/identity/http/controllers/registration.controller.js';
+import type { AccountDeps } from '../../../src/modules/identity/services/auth.service.js';
+import { createHmacHasher } from '../../../src/platform/crypto/hmac.js';
 import { createTokenSigner } from '../../../src/modules/identity/infrastructure/jwt/access-token.js';
 import { createEpochCache } from '../../../src/modules/identity/infrastructure/redis/epoch-cache.js';
 import { createLogger } from '../../../src/platform/logger.js';
@@ -19,6 +28,7 @@ export const testConfig = (overrides: Record<string, string> = {}): AppConfig =>
     ...testRedisEnv(),
     IDENTITY_SIGNING_KEY: randomBytes(32).toString('hex'),
     IDENTITY_SIGNING_KEY_ID: 'test-key',
+    IDENTITY_HMAC_PEPPER: 'p'.repeat(32),
     ...overrides,
   });
 
@@ -88,3 +98,60 @@ export const outboxEventTypes = async (pool: pg.Pool): Promise<string[]> => {
   );
   return rows.map((row) => row.event_type);
 };
+
+/**
+ * A `PasswordHasher` that counts its calls and costs nothing.
+ *
+ * Two jobs. One: proving §S3's structural claim — that `verifyAndRecord` performs exactly one
+ * password verification on every path, including the paths with no password to verify — which an
+ * argon2 hasher can only hint at through timing. Two: making the §17 enumeration timing suite
+ * runnable, by removing the ~50ms that is identical on both paths by construction and leaving the
+ * database work, which is where a real difference would hide.
+ */
+export const countingHasher = (
+  options: { matches?: boolean; needsRehash?: boolean } = {},
+): PasswordHasher & { calls: () => { hash: number; verify: number; decoy: number } } => {
+  const calls = { hash: 0, verify: 0, decoy: 0 };
+  return {
+    calls: () => ({ ...calls }),
+    hash: (plaintext) => {
+      calls.hash += 1;
+      return Promise.resolve(`$argon2id$v=19$m=19456,t=2,p=1$test$${plaintext}`);
+    },
+    verify: (plaintext, phcHash) => {
+      calls.verify += 1;
+      return Promise.resolve(options.matches ?? phcHash.endsWith(`$${plaintext}`));
+    },
+    needsRehash: () => options.needsRehash ?? false,
+    decoy: () => {
+      calls.decoy += 1;
+      return Promise.resolve(false as const);
+    },
+  };
+};
+
+/** `AccountDeps` a service test can call for real, with argon2 unless a cheap hasher is supplied. */
+export const accountDeps = (overrides: Partial<AccountDeps> = {}): AccountDeps => {
+  const config = testConfig();
+  return {
+    signer: createTokenSigner(config),
+    epochs: {} as never,
+    logger: testLogger,
+    hasher: argon2Hasher,
+    otpHasher: createHmacHasher('pepper-for-tests-0123456789abcdef'),
+    breach: { enabled: false, logger: testLogger },
+    terms: resolveTermsVersions(config.terms),
+    mirrorPhoneOtpToEmail: false,
+    ...overrides,
+  };
+};
+
+/**
+ * `AccountDeps` for a test that only inspects route DECLARATIONS — the schemas, the scopes, the
+ * rate-limit keys. Nothing here is ever called: `assertRouteInvariants` reads the definitions, it
+ * does not run the handlers.
+ */
+export const stubAccountDeps = (): RegistrationControllerDeps => ({
+  db: null as unknown as Db,
+  ...accountDeps(),
+});

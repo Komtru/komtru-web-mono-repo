@@ -17,6 +17,13 @@ export const PROBLEM_CODES = [
   'IDEMPOTENCY_KEY_REUSED',
   'INTERNAL',
   // Domain (each named in a ticket)
+  // One code for every §S3 authentication failure — nonexistent user, wrong password, social-only
+  // account, throttled account, suspended account. A second code for any of them would be the
+  // enumeration oracle the uniform response exists to close (T-032).
+  'INVALID_CREDENTIALS',
+  // A wrong, expired or exhausted OTP challenge. Carries `attemptsRemaining` as an RFC 9457
+  // extension member when there are attempts left, which is what screen E3b renders (T-032).
+  'OTP_INVALID',
   'INVALID_TRANSITION',
   'NO_LOGISTICS_ACCESS',
   'LAST_ADMIN',

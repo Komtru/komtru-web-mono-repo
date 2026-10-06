@@ -44,7 +44,10 @@ const loginRoute = (rateLimit: RateLimitSpec, handler = () => Promise.resolve({ 
     summary: 'Log in',
     retryable: false,
     rateLimit,
-    schema: { body: z.object({ email: z.string().optional() }), response: z.object({ ok: z.boolean() }) },
+    schema: {
+      body: z.object({ email: z.string().optional(), deviceFingerprint: z.string().optional() }),
+      response: z.object({ ok: z.boolean() }),
+    },
     handler,
   });
 
@@ -177,5 +180,45 @@ describe.runIf(infraEnabled)('rate limiting', () => {
 
     for (let i = 0; i < 5; i += 1) await request(app).get('/v1/health-ish').expect(200);
     expect(handler).toHaveBeenCalledTimes(5);
+  });
+});
+
+describe.runIf(infraEnabled)('the per-device budget (M1 §17)', () => {
+  const spec: RateLimitSpec = {
+    points: 1,
+    durationSeconds: 60,
+    by: ['device'],
+    deviceFrom: ({ body }) => (body as { deviceFingerprint?: string }).deviceFingerprint,
+  };
+
+  it('counts one fingerprint across different IPs and different identifiers', async () => {
+    const app = appWith(spec);
+    const send = (ip: string, email: string) =>
+      request(app)
+        .post('/v1/auth/login')
+        .set('X-Forwarded-For', ip)
+        .send({ email, deviceFingerprint: 'fp-one' });
+
+    expect((await send('203.0.113.1', 'a@example.com')).status).toBe(200);
+    // A second IP and a second identifier: neither of the other two keys would have stopped this.
+    expect((await send('203.0.113.2', 'b@example.com')).status).toBe(429);
+  });
+
+  it('leaves a different fingerprint its own budget', async () => {
+    const app = appWith(spec);
+    const send = (fingerprint: string) =>
+      request(app).post('/v1/auth/login').send({ deviceFingerprint: fingerprint });
+    expect((await send('fp-a')).status).toBe(200);
+    expect((await send('fp-b')).status).toBe(200);
+    expect((await send('fp-a')).status).toBe(429);
+  });
+
+  it('skips the key rather than sharing one bucket when the body carries no fingerprint', async () => {
+    const app = appWith(spec);
+    const send = () => request(app).post('/v1/auth/login').send({});
+    expect((await send()).status).toBe(200);
+    // An unmetered caller is the deliberate choice: collapsing every fingerprint-less client into
+    // one bucket would let any one of them lock out all the others.
+    expect((await send()).status).toBe(200);
   });
 });

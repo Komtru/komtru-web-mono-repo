@@ -222,3 +222,50 @@ describe.runIf(infraEnabled)('runSendJob', () => {
     expect(await row(id)).toMatchObject({ status: 'DEAD_LETTERED' });
   });
 });
+
+describe.runIf(infraEnabled)('an OTP to an unverified address (T-032)', () => {
+  const t = useTestDatabase();
+
+  it('re-resolves it with the same allowance dispatch used', async () => {
+    const userId = await insertUser(t.app(), { status: 'PENDING_VERIFICATION' });
+    await t.app().query(
+      `INSERT INTO identity.user_phones (user_id, phone_e164, country_code, is_primary)
+           VALUES ($1, '+2348012345678', 'NG', true)`,
+      [userId],
+    );
+    const notificationId = await insertNotification(t.app(), {
+      user_id: userId,
+      channel: 'SMS',
+      category: 'SECURITY',
+      template_key: 'identity.otp.requested',
+      rendered_body: 'Komtru: 482913 is your verification code.',
+    });
+
+    // A row QUEUED at dispatch and dead-lettered here would be worse than either answer taken
+    // consistently: the user waits for an SMS that the pipeline already decided it could send.
+    await expect(
+      runSendJob(
+        {
+          db: t.db(),
+          config: {
+            defaultLocale: 'en-NG',
+            maxAttempts: 5,
+            retryBaseDelayMs: 10,
+            rateLimitWindowMinutes: 60,
+            rateLimitMaxPerWindow: 20,
+            smsDryRun: true,
+            pushDryRun: true,
+            termii: { apiKey: 'key', senderId: 'Komtru', baseUrl: 'http://127.0.0.1:1' },
+          },
+          logger,
+        },
+        { notificationId },
+      ),
+    ).resolves.toBeUndefined();
+
+    const { rows } = await t
+      .app()
+      .query<{ status: string }>(`SELECT status FROM notify.notifications WHERE id = $1`, [notificationId]);
+    expect(rows[0]?.status).toBe('SENT');
+  });
+});
