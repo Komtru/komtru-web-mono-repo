@@ -166,6 +166,27 @@ const VARIABLES = {
   FILES_SIGNED_URL_TTL_SECONDS: { schema: int(30, 3600), required: false },
   FILES_QUOTA_NEAR_PCT: { schema: int(1, 100), required: false },
   FILES_QUOTA_DISABLED_PCT: { schema: int(1, 100), required: false },
+
+  // --- Trust and verification (M6) ------------------------------------------
+  /**
+   * Who attests an identity. Only the two values with an adapter behind them are accepted — the
+   * other five members of the `kyc_provider` enum exist for rows a future adapter will write, and a
+   * flag that can name a provider nobody implemented is a flag that cannot be turned on.
+   *
+   * The default is FAKE, and `loadConfig` refuses that default in production: see the cross-field
+   * check below.
+   */
+  TRUST_KYC_PROVIDER: { schema: z.enum(['FAKE', 'DOJAH']), required: false },
+  /** How long an unanswered verification stays open before the sweep expires it (M6 §6.2). */
+  TRUST_REQUEST_TTL_MINUTES: { schema: int(5, 10_080), required: false },
+  /**
+   * Optional, like every other provider credential here: both processes boot without Dojah, and
+   * selecting it without all three fails at start naming the ones that are missing rather than at
+   * the first verification.
+   */
+  DOJAH_APP_ID: { schema: z.string().min(1), required: false },
+  DOJAH_SECRET_KEY: { schema: z.string().min(1), required: false },
+  DOJAH_BASE_URL: { schema: z.url(), required: false },
 } satisfies Record<string, { schema: z.ZodType; required: boolean }>;
 
 type VariableName = keyof typeof VARIABLES;
@@ -238,6 +259,27 @@ export interface AppConfig {
   notify: NotifyConfig;
   socket: SocketConfig;
   files: FilesConfig;
+  trust: TrustConfig;
+}
+
+/** The adapters M6 D3 has an implementation for. The schema's `kyc_provider` enum is wider. */
+export type KycProviderFlag = 'FAKE' | 'DOJAH';
+
+export interface DojahCredentials {
+  appId: string;
+  secretKey: string;
+  baseUrl: string;
+}
+
+export interface TrustConfig {
+  /**
+   * Which `KycProviderAdapter` the trust module builds at start. `FAKE` is a deterministic stub and
+   * every row it writes says so (owner's decision Q7); production cannot select it.
+   */
+  provider: KycProviderFlag;
+  requestTtlMinutes: number;
+  /** All three or none, for the reason `filesConfig` gives: two out of three is a 401 nobody can act on. */
+  dojah?: DojahCredentials;
 }
 
 /** T-027's gateway. A process with `enabled: false` builds no Socket.IO server and no connections. */
@@ -348,6 +390,16 @@ export function loadConfig(env: NodeJS.ProcessEnv): AppConfig {
   const resolvedDisabledPct = (parsed.FILES_QUOTA_DISABLED_PCT as number | undefined) ?? QUOTA_DISABLED_PCT;
   if (resolvedNearPct >= resolvedDisabledPct) invalid.push('FILES_QUOTA_NEAR_PCT');
 
+  // Cross-field for the same reason: the default is fine everywhere except the one place it is a
+  // compliance incident. The fake KYC adapter grants IDENTITY_VERIFIED on the strength of a trailing
+  // digit, and a production box that falls back to it quietly is a platform whose verified sellers
+  // were verified by nobody. Naming a real provider is a deliberate act; so is this refusal.
+  const nodeEnvForTrust = (parsed.NODE_ENV as (typeof NODE_ENVS)[number] | undefined) ?? 'development';
+  const resolvedKycProvider = (parsed.TRUST_KYC_PROVIDER as KycProviderFlag | undefined) ?? 'FAKE';
+  if (nodeEnvForTrust === 'production' && resolvedKycProvider === 'FAKE') {
+    invalid.push('TRUST_KYC_PROVIDER');
+  }
+
   if (missing.length || invalid.length) throw new ConfigError(missing, invalid);
 
   const v = parsed as Parsed;
@@ -406,8 +458,25 @@ export function loadConfig(env: NodeJS.ProcessEnv): AppConfig {
       credentialGraceSeconds: v.SOCKET_CREDENTIAL_GRACE_SECONDS ?? 60,
     },
     files: filesConfig(v),
+    trust: trustConfig(v),
   };
 }
+
+/** M6's slice. The production guard on `provider` is in `loadConfig`, where the cross-field checks live. */
+function trustConfig(v: Parsed): TrustConfig {
+  const { DOJAH_APP_ID: appId, DOJAH_SECRET_KEY: secretKey, DOJAH_BASE_URL: baseUrl } = v;
+  return {
+    provider: v.TRUST_KYC_PROVIDER ?? 'FAKE',
+    requestTtlMinutes: v.TRUST_REQUEST_TTL_MINUTES ?? TRUST_REQUEST_TTL_MINUTES,
+    ...(appId && secretKey && baseUrl ? { dojah: { appId, secretKey, baseUrl } } : {}),
+  };
+}
+
+/**
+ * A day. Long enough for a provider that queues a liveness check for human review on its own side
+ * (D4), short enough that a stalled request does not hold the user's one in-flight slot for a week.
+ */
+const TRUST_REQUEST_TTL_MINUTES = 1440;
 
 /**
  * The five Cloudinary accounts M20 D5 names, in rotation order for the trade-asset pool.

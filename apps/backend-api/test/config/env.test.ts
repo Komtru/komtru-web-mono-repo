@@ -7,6 +7,16 @@ const minimal = {
   REDIS_URL: testRedisUrl(),
 };
 
+/**
+ * The smallest environment a production process boots in.
+ *
+ * It is not `{ ...minimal, NODE_ENV: 'production' }` any more: T-050 made the KYC provider flag a
+ * deliberate choice in production, because its default is a deterministic fake that would otherwise
+ * grant identity levels nobody attested. Every production assertion below goes through this, so the
+ * reason is written once rather than repeated at each call site.
+ */
+const production = { ...minimal, NODE_ENV: 'production', TRUST_KYC_PROVIDER: 'DOJAH' };
+
 const failure = (env: Record<string, string>): ConfigError => {
   try {
     loadConfig(env);
@@ -111,7 +121,7 @@ describe('loadConfig', () => {
   });
 
   it('logs JSON in production by default', () => {
-    expect(loadConfig({ ...minimal, NODE_ENV: 'production' }).log.format).toBe('json');
+    expect(loadConfig(production).log.format).toBe('json');
   });
 
   it('splits and trims the allowed origins', () => {
@@ -166,14 +176,14 @@ describe('loadConfig: notifications', () => {
   });
 
   it('sends for real in production unless told otherwise', () => {
-    expect(loadConfig({ ...minimal, NODE_ENV: 'production' }).notify).toMatchObject({
+    expect(loadConfig(production).notify).toMatchObject({
       smsDryRun: false,
       pushDryRun: false,
     });
   });
 
   it('lets production keep a channel in dry run', () => {
-    const config = loadConfig({ ...minimal, NODE_ENV: 'production', NOTIFY_SMS_DRY_RUN: 'true' });
+    const config = loadConfig({ ...production, NOTIFY_SMS_DRY_RUN: 'true' });
     expect(config.notify).toMatchObject({ smsDryRun: true, pushDryRun: false });
   });
 
