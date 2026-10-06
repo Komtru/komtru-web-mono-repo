@@ -134,6 +134,16 @@
       "tag": "0026_trade_write_paths",
       "when": 1791269262344,
       "sha256": "79d3cce8fcf0a1dd105fca3e0ab7100cadbcbafb07e658840eb9398b2cece750"
+    },
+    {
+      "tag": "0027_files_schema",
+      "when": 1791282327159,
+      "sha256": "b523c60ef989002e4672f55ab9b4048e05d360bb38878fdfa7f3173f9b868976"
+    },
+    {
+      "tag": "0028_files_access_log_append_only",
+      "when": 1791282338433,
+      "sha256": "64e071cdb024b93c093468b8a53865f855a083576a660f47fb06ad9e8283e34b"
     }
   ]
 }
