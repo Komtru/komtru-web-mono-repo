@@ -106,6 +106,33 @@ const VARIABLES = {
   TERMII_BASE_URL: { schema: z.url(), required: false },
   FCM_PROJECT_ID: { schema: z.string().min(1), required: false },
   FCM_SERVICE_ACCOUNT_JSON: { schema: serviceAccount, required: false },
+
+  // --- Files and evidence (M20) --------------------------------------------
+  // Five independent Cloudinary accounts, three per account, all optional for the same reason the
+  // notify block gives: `pnpm env:backend` writes .env from the old backend's live file, so a
+  // required variable here stops every developer's API booting. An account with no credentials in
+  // this environment is simply skipped by rotation (M20 §5) and its pool fails closed.
+  CLOUDINARY_PROFILE_CLOUD_NAME: { schema: z.string().min(1), required: false },
+  CLOUDINARY_PROFILE_API_KEY: { schema: z.string().min(1), required: false },
+  CLOUDINARY_PROFILE_API_SECRET: { schema: z.string().min(1), required: false },
+  CLOUDINARY_CHAT_CLOUD_NAME: { schema: z.string().min(1), required: false },
+  CLOUDINARY_CHAT_API_KEY: { schema: z.string().min(1), required: false },
+  CLOUDINARY_CHAT_API_SECRET: { schema: z.string().min(1), required: false },
+  CLOUDINARY_TRADE_1_CLOUD_NAME: { schema: z.string().min(1), required: false },
+  CLOUDINARY_TRADE_1_API_KEY: { schema: z.string().min(1), required: false },
+  CLOUDINARY_TRADE_1_API_SECRET: { schema: z.string().min(1), required: false },
+  CLOUDINARY_TRADE_2_CLOUD_NAME: { schema: z.string().min(1), required: false },
+  CLOUDINARY_TRADE_2_API_KEY: { schema: z.string().min(1), required: false },
+  CLOUDINARY_TRADE_2_API_SECRET: { schema: z.string().min(1), required: false },
+  CLOUDINARY_TRADE_3_CLOUD_NAME: { schema: z.string().min(1), required: false },
+  CLOUDINARY_TRADE_3_API_KEY: { schema: z.string().min(1), required: false },
+  CLOUDINARY_TRADE_3_API_SECRET: { schema: z.string().min(1), required: false },
+  /** Enforced at finalize, after the bytes have landed: Cloudinary's upload API has no size gate. */
+  FILES_MAX_UPLOAD_BYTES: { schema: int(1024, 100 * 1024 * 1024), required: false },
+  FILES_UPLOAD_TICKET_TTL_MINUTES: { schema: int(1, 1440), required: false },
+  FILES_SIGNED_URL_TTL_SECONDS: { schema: int(30, 3600), required: false },
+  FILES_QUOTA_NEAR_PCT: { schema: int(1, 100), required: false },
+  FILES_QUOTA_DISABLED_PCT: { schema: int(1, 100), required: false },
 } satisfies Record<string, { schema: z.ZodType; required: boolean }>;
 
 type VariableName = keyof typeof VARIABLES;
@@ -155,9 +182,27 @@ export interface AppConfig {
    */
   paystack: { secretKey?: string; publicKey?: string };
   notify: NotifyConfig;
+  files: FilesConfig;
 }
 
 /** M11's tuning, and one block per provider. A block is absent until its credentials are complete. */
+/** One Cloudinary account's credentials (M20 D7): five independent sets, no shared namespace. */
+export interface CloudinaryCredentials {
+  cloudName: string;
+  apiKey: string;
+  apiSecret: string;
+}
+
+export interface FilesConfig {
+  /** Keyed by `storage_accounts.credential_env_prefix`. A half-configured prefix is absent. */
+  accounts: Readonly<Record<string, CloudinaryCredentials>>;
+  maxUploadBytes: number;
+  uploadTicketTtlMinutes: number;
+  signedUrlTtlSeconds: number;
+  /** M20 §5's thresholds. Placeholders to tune once real volume exists, as the spec says. */
+  quota: { nearPct: number; disabledPct: number };
+}
+
 export interface NotifyConfig {
   defaultLocale: string;
   /** How many send attempts a notification gets before it is dead-lettered (M11 D3). */
@@ -214,6 +259,15 @@ export function loadConfig(env: NodeJS.ProcessEnv): AppConfig {
     else invalid.push(name);
   }
 
+  // Cross-field, so it cannot live on either variable's own schema: a NEAR_QUOTA threshold at or
+  // above the DISABLED one takes an account straight from ACTIVE to DISABLED, and the early warning
+  // that is the whole reason M20 §5 polls usage instead of waiting for a failed upload never fires.
+  const nearPct = parsed.FILES_QUOTA_NEAR_PCT;
+  const disabledPct = parsed.FILES_QUOTA_DISABLED_PCT;
+  if (typeof nearPct === 'number' && nearPct >= (typeof disabledPct === 'number' ? disabledPct : 97)) {
+    invalid.push('FILES_QUOTA_NEAR_PCT');
+  }
+
   if (missing.length || invalid.length) throw new ConfigError(missing, invalid);
 
   const v = parsed as Parsed;
@@ -253,6 +307,46 @@ export function loadConfig(env: NodeJS.ProcessEnv): AppConfig {
       environment: v.SENTRY_ENVIRONMENT ?? nodeEnv,
     },
     notify: notifyConfig(v, nodeEnv),
+    files: filesConfig(v),
+  };
+}
+
+/**
+ * The five Cloudinary accounts M20 D5 names, in rotation order for the trade-asset pool.
+ *
+ * Exported because the module's seed reconciles `storage_accounts` against exactly this list, and a
+ * sixth account is deliberately not expressible here — that is the §5 runbook, through
+ * `POST /internal/storage-accounts`, which D6 promises needs no deploy.
+ */
+export const CLOUDINARY_PREFIXES = [
+  'CLOUDINARY_PROFILE',
+  'CLOUDINARY_CHAT',
+  'CLOUDINARY_TRADE_1',
+  'CLOUDINARY_TRADE_2',
+  'CLOUDINARY_TRADE_3',
+] as const;
+
+export type CloudinaryPrefix = (typeof CLOUDINARY_PREFIXES)[number];
+
+function filesConfig(v: Parsed): FilesConfig {
+  const accounts: Record<string, CloudinaryCredentials> = {};
+  for (const prefix of CLOUDINARY_PREFIXES) {
+    const cloudName = v[`${prefix}_CLOUD_NAME`];
+    const apiKey = v[`${prefix}_API_KEY`];
+    const apiSecret = v[`${prefix}_API_SECRET`];
+    // All three or none. Two out of three signs uploads with an empty secret, which Cloudinary
+    // answers with a 401 that names nothing the operator can act on.
+    if (cloudName && apiKey && apiSecret) accounts[prefix] = { cloudName, apiKey, apiSecret };
+  }
+  return {
+    accounts,
+    maxUploadBytes: v.FILES_MAX_UPLOAD_BYTES ?? 10 * 1024 * 1024,
+    uploadTicketTtlMinutes: v.FILES_UPLOAD_TICKET_TTL_MINUTES ?? 30,
+    signedUrlTtlSeconds: v.FILES_SIGNED_URL_TTL_SECONDS ?? 300,
+    quota: {
+      nearPct: v.FILES_QUOTA_NEAR_PCT ?? 85,
+      disabledPct: v.FILES_QUOTA_DISABLED_PCT ?? 97,
+    },
   };
 }
 
