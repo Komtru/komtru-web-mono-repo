@@ -342,3 +342,40 @@ export async function findLiveChallenge(tx: Tx, challengeId: string): Promise<Ot
   )[0];
   return row && row.expiresAt.getTime() > Date.now() ? row : null;
 }
+
+/**
+ * The newest LIVE challenge for a destination, purpose and owner (T-036).
+ *
+ * `newestOwnChallenge` above answers the same question for `issueOtp`'s own bookkeeping and returns
+ * a row whatever its state, because a spent challenge is still the one to hand back under a throttle.
+ * This one is for a caller about to VERIFY against it, so an expired or consumed row is a miss.
+ *
+ * `forUpdate` is for a caller that will charge an attempt against the row it gets back: without the
+ * lock, two requests read the same `attempts` and one of them is free.
+ */
+export async function findLiveChallengeFor(
+  tx: Tx,
+  input: {
+    destinationHash: Buffer;
+    purpose: OtpPurpose;
+    userId: string | null;
+    forUpdate?: boolean;
+  },
+): Promise<OtpRow | null> {
+  const query = tx
+    .select()
+    .from(otpChallenges)
+    .where(
+      and(
+        eq(otpChallenges.destinationHash, input.destinationHash),
+        eq(otpChallenges.purpose, input.purpose),
+        isNull(otpChallenges.consumedAt),
+        input.userId === null ? isNull(otpChallenges.userId) : eq(otpChallenges.userId, input.userId),
+      ),
+    )
+    .orderBy(desc(otpChallenges.createdAt))
+    .limit(1);
+
+  const row = (await (input.forUpdate === true ? query.for('update') : query))[0];
+  return row && row.expiresAt.getTime() > Date.now() ? row : null;
+}

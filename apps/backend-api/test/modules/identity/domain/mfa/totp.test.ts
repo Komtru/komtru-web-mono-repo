@@ -5,6 +5,8 @@ import { describe, expect, it } from 'vitest';
 import {
   TOTP_STEP_SECONDS,
   base32Decode,
+  buildTotpBlob,
+  parseTotpBlob,
   base32Encode,
   generateTotpSecret,
   otpauthUri,
@@ -130,5 +132,36 @@ describe('otpauthUri', () => {
     expect(otpauthUri({ secretBase32: 'JBSW', accountName: 'a:b', issuer: 'Komtru' })).toContain(
       '/Komtru:a%3Ab?',
     );
+  });
+});
+
+describe('the sealed TOTP record', () => {
+  it('round-trips the secret and the last spent step', () => {
+    const blob = buildTotpBlob('JBSWY3DPEHPK3PXP');
+    expect(blob).toEqual({ v: 1, secret: 'JBSWY3DPEHPK3PXP', lastStep: null });
+    expect(parseTotpBlob(JSON.stringify({ ...blob, lastStep: 42 }))).toEqual({
+      v: 1,
+      secret: 'JBSWY3DPEHPK3PXP',
+      lastStep: 42,
+    });
+  });
+
+  /**
+   * `mfa_factors.secret_enc` is an opaque encrypted payload, so its shape is this module's to
+   * choose — but a payload written before the shape existed is a bare base32 secret, and a parser
+   * that threw on one would lock its owner out of their own account.
+   */
+  it('reads a bare base32 payload as a secret with no step spent', () => {
+    expect(parseTotpBlob('JBSWY3DPEHPK3PXP')).toEqual({
+      v: 1,
+      secret: 'JBSWY3DPEHPK3PXP',
+      lastStep: null,
+    });
+  });
+
+  it('answers null for a payload that is neither', () => {
+    for (const payload of ['', '   ', '{"v":2}', '{"v":1,"secret":"!!!"}', '[]']) {
+      expect(parseTotpBlob(payload)).toBeNull();
+    }
   });
 });

@@ -13,6 +13,10 @@ import { resolveTermsVersions } from '../../../src/modules/identity/domain/terms
 import type { RegistrationControllerDeps } from '../../../src/modules/identity/http/controllers/registration.controller.js';
 import type { AccountDeps } from '../../../src/modules/identity/services/auth.service.js';
 import { createHmacHasher } from '../../../src/platform/crypto/hmac.js';
+import { createEncryption } from '../../../src/platform/crypto/encryption.js';
+import type { MfaDeps } from '../../../src/modules/identity/services/mfa.service.js';
+import type { RelyingParty } from '../../../src/modules/identity/infrastructure/webauthn/relying-party.js';
+import type { WebauthnChallengeStore } from '../../../src/modules/identity/infrastructure/redis/webauthn-challenge.js';
 import { createTokenSigner } from '../../../src/modules/identity/infrastructure/jwt/access-token.js';
 import { createEpochCache } from '../../../src/modules/identity/infrastructure/redis/epoch-cache.js';
 import { createLogger } from '../../../src/platform/logger.js';
@@ -176,3 +180,78 @@ export const stubAccountDeps = (): RegistrationControllerDeps => ({
   db: null as unknown as Db,
   ...accountDeps(),
 });
+
+// ---------------------------------------------------------------------------
+// T-036
+// ---------------------------------------------------------------------------
+
+/**
+ * A `RelyingParty` that verifies whatever it is handed.
+ *
+ * WebAuthn assertions cannot be produced without an authenticator, and a test that built one by
+ * hand would be testing `@simplewebauthn/server` rather than this module. What the integration
+ * tests here are actually about is the ROW work around a verdict — the credential, the factor, the
+ * sign counter — so the verdict is supplied and the rest is real.
+ */
+export const stubRelyingParty = (
+  overrides: Partial<RelyingParty> = {},
+): RelyingParty & { challenges: string[] } => {
+  const challenges: string[] = [];
+  let counter = 0;
+  return {
+    challenges,
+    rpName: 'Komtru',
+    registrationOptions: (input) => {
+      const challenge = `challenge-${challenges.length}`;
+      challenges.push(challenge);
+      return Promise.resolve({ challenge, excludeCredentials: input.exclude });
+    },
+    verifyRegistration: () =>
+      Promise.resolve({
+        credentialId: randomBytes(16),
+        publicKey: randomBytes(64),
+        counter: 0,
+        aaguid: null,
+        transports: ['internal'],
+        backedUp: true,
+      }),
+    authenticationOptions: () => {
+      const challenge = `challenge-${challenges.length}`;
+      challenges.push(challenge);
+      return Promise.resolve({ challenge });
+    },
+    verifyAuthentication: () => {
+      counter += 1;
+      return Promise.resolve({ verified: true, newCounter: counter });
+    },
+    ...overrides,
+  };
+};
+
+/** An in-memory `WebauthnChallengeStore` with the same single-use contract as the Redis one. */
+export const memoryChallengeStore = (): WebauthnChallengeStore => {
+  const store = new Map<string, string>();
+  return {
+    put: (key, challenge) => {
+      store.set(key, challenge);
+      return Promise.resolve();
+    },
+    take: (key) => {
+      const value = store.get(key) ?? null;
+      store.delete(key);
+      return Promise.resolve(value);
+    },
+  };
+};
+
+export const mfaDeps = (overrides: Partial<MfaDeps> = {}): MfaDeps => {
+  const config = testConfig();
+  return {
+    ...accountDeps(),
+    encryption: createEncryption(config),
+    webauthn: stubRelyingParty(),
+    webauthnChallenges: memoryChallengeStore(),
+    staffRequireMfa: true,
+    ...overrides,
+  };
+};

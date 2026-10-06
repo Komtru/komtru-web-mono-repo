@@ -5,6 +5,7 @@
 // login where the answer can drift; a function with no database in it can be tested against D2 C4
 // and §S13 directly, which is what `policy.test.ts` does.
 import type { SessionScope } from '@komtru/shared-types';
+import type { HmacHasher } from '../../../../platform/crypto/hmac.js';
 
 /**
  * Five minutes for the `mfaToken`, the same as an OTP (§S6).
@@ -33,6 +34,10 @@ export const STEP_UP_TTL_SECONDS = 300;
  * budget and out of `issueOtp`'s supersede, both of which key on that column.
  */
 export const MFA_SUBJECT_DOMAIN = 'identity.mfa.subject';
+
+/** `otp_challenges.destination_hash` for a challenge bound to an account rather than an address. */
+export const mfaSubjectHash = (hasher: HmacHasher, userId: string): Buffer =>
+  hasher.hmac(MFA_SUBJECT_DOMAIN, userId);
 
 export type MfaFactorType = 'TOTP' | 'SMS_OTP' | 'EMAIL_OTP' | 'PASSKEY' | 'RECOVERY_CODE';
 

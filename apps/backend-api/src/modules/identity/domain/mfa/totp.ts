@@ -157,3 +157,51 @@ export function otpauthUri(input: { secretBase32: string; accountName: string; i
   });
   return `otpauth://totp/${label}?${query.toString()}`;
 }
+
+/**
+ * What `mfa_factors.secret_enc` holds for a TOTP factor.
+ *
+ * Not the bare base32 secret, because the replay guard above needs the last step this factor SPENT
+ * and `mfa_factors` has only `last_used_at` — a timestamp, from which the spent step cannot be
+ * recovered when the user's authenticator runs a few seconds ahead of the server. The column is an
+ * opaque encrypted payload, so its shape is this module's to choose, exactly as the recovery-code
+ * blob's is, and that costs no migration.
+ */
+export interface TotpSecretBlob {
+  v: 1;
+  secret: string;
+  /** The highest step already accepted, or null while the factor has never been used. */
+  lastStep: number | null;
+}
+
+export const buildTotpBlob = (secret: string): TotpSecretBlob => ({ v: 1, secret, lastStep: null });
+
+/**
+ * Total: `null` for anything unusable, and a bare base32 string read as a secret with no step spent.
+ *
+ * The fallback is not decoration. A payload written before this shape existed is a bare secret, and
+ * a parser that threw on one would lock its owner out of their own account on the next sign-in.
+ */
+export function parseTotpBlob(payload: string): TotpSecretBlob | null {
+  const trimmed = payload.trim();
+  if (trimmed.length === 0) return null;
+
+  if (!trimmed.startsWith('{')) {
+    return base32Decode(trimmed) === null ? null : { v: 1, secret: trimmed, lastStep: null };
+  }
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(trimmed);
+  } catch {
+    return null;
+  }
+  if (typeof parsed !== 'object' || parsed === null) return null;
+
+  const blob = parsed as Record<string, unknown>;
+  if (blob.v !== 1 || typeof blob.secret !== 'string' || base32Decode(blob.secret) === null) return null;
+  const lastStep = blob.lastStep;
+  if (lastStep !== null && (typeof lastStep !== 'number' || !Number.isInteger(lastStep))) return null;
+
+  return { v: 1, secret: blob.secret, lastStep };
+}
