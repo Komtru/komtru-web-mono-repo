@@ -16,7 +16,7 @@ import type { Actor } from '../../../src/platform/http/principal.js';
 import { defineRoute } from '../../../src/platform/http/route.js';
 import { createLogger } from '../../../src/platform/logger.js';
 import { createRedis } from '../../../src/platform/redis/connections.js';
-import { infraEnabled, testRedisUrl } from '../../support/db-urls.js';
+import { infraEnabled, testKeyPrefix, testRedisUrl } from '../../support/db-urls.js';
 import { useTestDatabase } from '../../support/db.js';
 
 const signedIn: Actor = {
@@ -43,7 +43,7 @@ const config = loadConfig({
   REDIS_URL,
 });
 const logger = createLogger(config);
-const redis = createRedis(REDIS_URL);
+const redis = createRedis(REDIS_URL, { keyPrefix: testKeyPrefix() });
 
 afterAll(async () => void (await redis.quit().catch(() => redis.disconnect())));
 

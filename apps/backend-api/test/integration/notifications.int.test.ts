@@ -15,7 +15,7 @@ import { defineBinding } from '../../src/modules/notify/domain/binding.js';
 import { templateSchema } from '../../src/modules/notify/domain/template.js';
 import { startApi } from '../../src/server.js';
 import { startWorker } from '../../src/worker-process.js';
-import { infraEnabled, pooledUrl, testRedisUrl } from '../support/db-urls.js';
+import { infraEnabled, pooledUrl, testQueuePrefix, testRedisEnv, testRedisUrl } from '../support/db-urls.js';
 import { useTestDatabase, workerDatabase } from '../support/db.js';
 import { eventually } from '../support/eventually.js';
 import { startStubServer, type StubServer } from '../support/stub-server.js';
@@ -64,6 +64,7 @@ describe.runIf(infraEnabled)('notifications end to end', () => {
     LOG_LEVEL: 'silent',
     PORT: '0',
     REDIS_URL: testRedisUrl(),
+    ...testRedisEnv(),
     POSTGRES_URL: pooledUrl(workerDatabase()),
     // Live SMS, against the stub: the dry-run default would hide the very call this proves.
     NOTIFY_SMS_DRY_RUN: 'false',
@@ -129,8 +130,13 @@ describe.runIf(infraEnabled)('notifications end to end', () => {
       LOG_LEVEL: 'silent',
       POSTGRES_URL: pooledUrl(workerDatabase()),
       REDIS_URL: testRedisUrl(),
+      ...testRedisEnv(),
     });
-    const factory = createQueueFactory({ redisUrl: appConfig.redis.url, logger: createLogger(appConfig) });
+    const factory = createQueueFactory({
+      redisUrl: appConfig.redis.url,
+      logger: createLogger(appConfig),
+      prefix: testQueuePrefix(),
+    });
     try {
       await factory.producer('events.notify.on-notice-raised').add('redelivery', {
         eventId,
@@ -152,7 +158,7 @@ describe.runIf(infraEnabled)('notifications end to end', () => {
   const smsQueueState = async (): Promise<string> => {
     const redis = new Redis(testRedisUrl(), { maxRetriesPerRequest: null });
     try {
-      const key = (part: string) => `komtru:bull:notify.send-sms:${part}`;
+      const key = (part: string) => `${testQueuePrefix()}:notify.send-sms:${part}`;
       const [wait, active, delayed, failed, completed] = await Promise.all([
         redis.llen(key('wait')),
         redis.llen(key('active')),
@@ -160,7 +166,11 @@ describe.runIf(infraEnabled)('notifications end to end', () => {
         redis.zcard(key('failed')),
         redis.zcard(key('completed')),
       ]);
-      return `wait=${String(wait)} active=${String(active)} delayed=${String(delayed)} failed=${String(failed)} completed=${String(completed)}`;
+      // Why the failures failed, not just how many: "stalled" and "provider said 500" are the same
+      // count and completely different bugs.
+      const ids = await redis.zrevrange(key('failed'), 0, 2);
+      const reasons = await Promise.all(ids.map((id) => redis.hget(key(id), 'failedReason')));
+      return `wait=${String(wait)} active=${String(active)} delayed=${String(delayed)} failed=${String(failed)} completed=${String(completed)} reasons=${JSON.stringify(reasons)}`;
     } finally {
       await redis.quit().catch(() => redis.disconnect());
     }

@@ -9,13 +9,14 @@ import { createEpochCache } from '../../../src/modules/identity/infrastructure/r
 import { createLogger } from '../../../src/platform/logger.js';
 import { createRedis } from '../../../src/platform/redis/connections.js';
 import { generatePublicId } from '../../../src/platform/identifiers.js';
-import { testRedisUrl } from '../../support/db-urls.js';
+import { testKeyPrefix, testRedisEnv, testRedisUrl } from '../../support/db-urls.js';
 
 export const testConfig = (overrides: Record<string, string> = {}): AppConfig =>
   loadConfig({
     LOG_LEVEL: 'silent',
     POSTGRES_URL: 'postgresql://komtru:komtru@localhost:56432/komtru_v2_dev',
     REDIS_URL: testRedisUrl(),
+    ...testRedisEnv(),
     IDENTITY_SIGNING_KEY: randomBytes(32).toString('hex'),
     IDENTITY_SIGNING_KEY_ID: 'test-key',
     ...overrides,
@@ -24,7 +25,7 @@ export const testConfig = (overrides: Record<string, string> = {}): AppConfig =>
 export const testLogger = createLogger(testConfig());
 
 /** The same client the app gets, so keys carry the `komtru:` prefix they will carry in production. */
-export const createTestRedis = (): Redis => createRedis(testRedisUrl());
+export const createTestRedis = (): Redis => createRedis(testRedisUrl(), { keyPrefix: testKeyPrefix() });
 
 export const identityInfrastructure = (config: AppConfig, redis: Redis) => ({
   signer: createTokenSigner(config),

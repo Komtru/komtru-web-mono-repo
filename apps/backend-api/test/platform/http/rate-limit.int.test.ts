@@ -10,7 +10,7 @@ import { createRateLimitGate } from '../../../src/platform/http/rateLimit.js';
 import { defineRoute, type RateLimitSpec } from '../../../src/platform/http/route.js';
 import { createLogger } from '../../../src/platform/logger.js';
 import { createRedis } from '../../../src/platform/redis/connections.js';
-import { infraEnabled, testRedisUrl } from '../../support/db-urls.js';
+import { infraEnabled, testKeyPrefix, testRedisUrl } from '../../support/db-urls.js';
 
 const REDIS_URL = testRedisUrl();
 const config = loadConfig({
@@ -19,7 +19,10 @@ const config = loadConfig({
   REDIS_URL,
 });
 const logger = createLogger(config);
-const clients = [createRedis(REDIS_URL), createRedis(REDIS_URL)];
+const clients = [
+  createRedis(REDIS_URL, { keyPrefix: testKeyPrefix() }),
+  createRedis(REDIS_URL, { keyPrefix: testKeyPrefix() }),
+];
 
 // The app client has no offline queue (T-023), so a command sent while it is still connecting fails
 // outright — the same reason health readiness waits for `ready` before an instance takes traffic.
@@ -136,7 +139,7 @@ describe.runIf(infraEnabled)('rate limiting', () => {
   });
 
   it('refuses the request when Redis cannot answer, rather than letting it through', async () => {
-    const broken = createRedis('redis://localhost:1');
+    const broken = createRedis('redis://localhost:1', { keyPrefix: testKeyPrefix() });
     const app = createApp({
       config,
       logger,

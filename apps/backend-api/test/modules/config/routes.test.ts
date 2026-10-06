@@ -7,12 +7,13 @@ import { testModules } from '../../support/modules.js';
 import { mountRoutes } from '../../../src/platform/http/mount.js';
 import { assertRouteInvariants } from '../../../src/platform/http/route.js';
 import { createLogger } from '../../../src/platform/logger.js';
-import { testRedisUrl } from '../../support/db-urls.js';
+import { testRedisEnv, testRedisUrl } from '../../support/db-urls.js';
 
 const config = loadConfig({
   LOG_LEVEL: 'silent',
   POSTGRES_URL: 'postgresql://x@localhost/x',
   REDIS_URL: testRedisUrl(),
+  ...testRedisEnv(),
 });
 const logger = createLogger(config);
 const app = createApp({

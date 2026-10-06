@@ -6,11 +6,12 @@ import {
   createTokenSigner,
   type AccessTokenClaims,
 } from '../../../../src/modules/identity/infrastructure/jwt/access-token.js';
-import { testRedisUrl } from '../../../support/db-urls.js';
+import { testRedisEnv, testRedisUrl } from '../../../support/db-urls.js';
 
 const minimal = {
   POSTGRES_URL: 'postgresql://komtru:komtru@localhost:56432/komtru_v2_dev',
   REDIS_URL: testRedisUrl(),
+  ...testRedisEnv(),
 };
 
 const configWith = (overrides: Record<string, string> = {}) =>

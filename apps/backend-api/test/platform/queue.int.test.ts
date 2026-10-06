@@ -6,8 +6,8 @@ import { loadConfig } from '../../src/config/env.js';
 import { createLogger } from '../../src/platform/logger.js';
 import { createQueueFactory, type QueueFactory } from '../../src/platform/queue/factory.js';
 import { deadLetterCounter } from '../../src/platform/queue/metrics.js';
-import { BULL_PREFIX, createRedis } from '../../src/platform/redis/connections.js';
-import { infraEnabled, testRedisUrl } from '../support/db-urls.js';
+import { KEY_PREFIX, createRedis } from '../../src/platform/redis/connections.js';
+import { infraEnabled, testQueuePrefix, testRedisUrl } from '../support/db-urls.js';
 import { eventually } from '../support/eventually.js';
 
 const redisUrl = testRedisUrl();
@@ -25,7 +25,7 @@ describe.runIf(infraEnabled)('queue factory', () => {
   afterEach(async () => factory?.close());
 
   it('prefixes app keys with komtru:', async () => {
-    const redis = await ready(createRedis(redisUrl));
+    const redis = await ready(createRedis(redisUrl, { keyPrefix: KEY_PREFIX }));
     const key = `probe-${randomUUID()}`;
     try {
       await redis.set(key, '1', 'EX', 30);
@@ -87,7 +87,7 @@ describe.runIf(infraEnabled)('queue factory', () => {
   });
 
   it('processes a job once, under the komtru:bull prefix', async () => {
-    factory = createQueueFactory({ redisUrl, logger });
+    factory = createQueueFactory({ redisUrl, logger, prefix: testQueuePrefix() });
     const name = unique('ok');
     const seen: number[] = [];
     factory.consume<{ n: number }>({ name, process: ({ n }) => Promise.resolve(void seen.push(n)) });
@@ -97,7 +97,7 @@ describe.runIf(infraEnabled)('queue factory', () => {
     expect(seen).toEqual([7]);
     const raw = await ready(createRedis(redisUrl, { keyPrefix: false }));
     try {
-      expect(await raw.keys(`${BULL_PREFIX}:${name}:*`)).not.toEqual([]);
+      expect(await raw.keys(`${testQueuePrefix()}:${name}:*`)).not.toEqual([]);
     } finally {
       raw.disconnect();
     }
@@ -105,7 +105,7 @@ describe.runIf(infraEnabled)('queue factory', () => {
 
   it('retries with backoff, then dead-letters once on the last attempt', async () => {
     const onDeadLetter = vi.fn();
-    factory = createQueueFactory({ redisUrl, logger, onDeadLetter });
+    factory = createQueueFactory({ redisUrl, logger, prefix: testQueuePrefix(), onDeadLetter });
     const name = unique('fails');
     let attempts = 0;
     factory.consume({
@@ -139,7 +139,7 @@ describe.runIf(infraEnabled)('queue factory', () => {
 
   it('does not dead-letter a job that succeeds on a retry', async () => {
     const onDeadLetter = vi.fn();
-    factory = createQueueFactory({ redisUrl, logger, onDeadLetter });
+    factory = createQueueFactory({ redisUrl, logger, prefix: testQueuePrefix(), onDeadLetter });
     const name = unique('flaky');
     let attempts = 0;
     factory.consume({
@@ -161,7 +161,7 @@ describe.runIf(infraEnabled)('queue factory', () => {
 
   it('dead-letters an UnrecoverableError on its first attempt', async () => {
     const onDeadLetter = vi.fn();
-    factory = createQueueFactory({ redisUrl, logger, onDeadLetter });
+    factory = createQueueFactory({ redisUrl, logger, prefix: testQueuePrefix(), onDeadLetter });
     const name = unique('unrecoverable');
     factory.consume({
       name,
@@ -182,7 +182,7 @@ describe.runIf(infraEnabled)('queue factory', () => {
       const onDeadLetter = vi.fn(() => {
         throw new Error('bus down');
       });
-      factory = createQueueFactory({ redisUrl, logger, onDeadLetter });
+      factory = createQueueFactory({ redisUrl, logger, prefix: testQueuePrefix(), onDeadLetter });
       const name = unique('hook-throws');
       factory.consume({ name, attempts: 1, process: () => Promise.reject(new Error('x')) });
       factory.run();
@@ -196,7 +196,7 @@ describe.runIf(infraEnabled)('queue factory', () => {
   });
 
   it('fails an enqueue fast instead of hanging while Redis is unreachable', async () => {
-    factory = createQueueFactory({ redisUrl: 'redis://127.0.0.1:1', logger });
+    factory = createQueueFactory({ redisUrl: 'redis://127.0.0.1:1', logger, prefix: testQueuePrefix() });
     const started = Date.now();
     await expect(factory.producer(unique('down')).add('run', {})).rejects.toThrow();
     expect(Date.now() - started).toBeLessThan(3000);

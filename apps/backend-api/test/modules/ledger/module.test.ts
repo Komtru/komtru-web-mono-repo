@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import type { Redis } from 'ioredis';
 import { loadConfig } from '../../../src/config/env.js';
 import type { ModuleContext } from '../../../src/platform/module.js';
-import { testRedisUrl } from '../../support/db-urls.js';
+import { testRedisEnv, testRedisUrl } from '../../support/db-urls.js';
 import { ledgerModule, RESOLVE_ACCOUNT_NAME_QUEUE } from '../../../src/modules/ledger/index.js';
 import { testModules } from '../../support/modules.js';
 import { createScheduleRegistry } from '../../../src/platform/scheduler/registry.js';
@@ -36,6 +36,7 @@ describe('the ledger module', () => {
       LOG_LEVEL: 'silent',
       POSTGRES_URL: 'postgresql://komtru:komtru@localhost:56432/komtru_v2_dev',
       REDIS_URL: testRedisUrl(),
+      ...testRedisEnv(),
     });
     const warn = vi.fn();
     const logger = { warn, info: vi.fn(), error: vi.fn() } as unknown as ModuleContext['logger'];

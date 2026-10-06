@@ -11,7 +11,14 @@ import type { ModuleContext } from '../../../src/platform/module.js';
 import { createNotifyModule } from '../../../src/modules/notify/index.js';
 import { CATALOGUE } from '../../../src/modules/notify/domain/catalogue.js';
 import { templateSchema } from '../../../src/modules/notify/domain/template.js';
-import { infraEnabled, pooledUrl, testRedisUrl } from '../../support/db-urls.js';
+import {
+  infraEnabled,
+  pooledUrl,
+  testKeyPrefix,
+  testQueuePrefix,
+  testRedisEnv,
+  testRedisUrl,
+} from '../../support/db-urls.js';
 import { useTestDatabase, workerDatabase } from '../../support/db.js';
 
 describe.runIf(infraEnabled)('notify module', () => {
@@ -25,17 +32,18 @@ describe.runIf(infraEnabled)('notify module', () => {
       LOG_LEVEL: 'silent',
       POSTGRES_URL: pooledUrl(workerDatabase()),
       REDIS_URL: testRedisUrl(),
+      ...testRedisEnv(),
       ...overrides,
     });
 
   const context = (overrides: Record<string, string> = {}): ModuleContext => {
     const appConfig = config(overrides);
     const logger = createLogger(appConfig);
-    factory = createQueueFactory({ redisUrl: appConfig.redis.url, logger });
+    factory = createQueueFactory({ redisUrl: appConfig.redis.url, logger, prefix: testQueuePrefix() });
     const db = t.db();
     // T-071 put the app's Redis client on ModuleContext for a module's own caches; notify does not
     // use it, but the shape is the shape.
-    redis ??= createRedis(appConfig.redis.url);
+    redis ??= createRedis(appConfig.redis.url, { keyPrefix: testKeyPrefix() });
     return {
       db,
       config: appConfig,
