@@ -4,7 +4,14 @@ import { randomBytes } from 'node:crypto';
 import type pg from 'pg';
 import type { Redis } from 'ioredis';
 import { loadConfig, type AppConfig } from '../../../src/config/env.js';
-import type { PasswordHasher } from '../../../src/modules/identity/domain/credential/hashing.js';
+import type { Db } from '../../../src/db/index.js';
+import {
+  argon2Hasher,
+  type PasswordHasher,
+} from '../../../src/modules/identity/domain/credential/hashing.js';
+import { resolveTermsVersions } from '../../../src/modules/identity/domain/terms.js';
+import type { RegistrationControllerDeps } from '../../../src/modules/identity/http/controllers/registration.controller.js';
+import { createHmacHasher } from '../../../src/platform/crypto/hmac.js';
 import { createTokenSigner } from '../../../src/modules/identity/infrastructure/jwt/access-token.js';
 import { createEpochCache } from '../../../src/modules/identity/infrastructure/redis/epoch-cache.js';
 import { createLogger } from '../../../src/platform/logger.js';
@@ -19,6 +26,7 @@ export const testConfig = (overrides: Record<string, string> = {}): AppConfig =>
     REDIS_URL: testRedisUrl(),
     IDENTITY_SIGNING_KEY: randomBytes(32).toString('hex'),
     IDENTITY_SIGNING_KEY_ID: 'test-key',
+    IDENTITY_HMAC_PEPPER: 'p'.repeat(32),
     ...overrides,
   });
 
@@ -117,5 +125,25 @@ export const countingHasher = (
       calls.decoy += 1;
       return Promise.resolve(false as const);
     },
+  };
+};
+
+/**
+ * `AccountDeps` for a test that only inspects route DECLARATIONS — the schemas, the scopes, the
+ * rate-limit keys. Nothing here is ever called: `assertRouteInvariants` reads the definitions, it
+ * does not run the handlers.
+ */
+export const stubAccountDeps = (): RegistrationControllerDeps => {
+  const config = testConfig();
+  return {
+    db: null as unknown as Db,
+    signer: createTokenSigner(config),
+    epochs: {} as never,
+    logger: testLogger,
+    hasher: argon2Hasher,
+    otpHasher: createHmacHasher('pepper-for-tests-0123456789abcdef'),
+    breach: { enabled: false, logger: testLogger },
+    terms: resolveTermsVersions(config.terms),
+    mirrorPhoneOtpToEmail: false,
   };
 };

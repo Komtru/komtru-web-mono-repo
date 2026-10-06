@@ -29,8 +29,44 @@ export interface CredentialDeps {
   logger: Logger;
 }
 
-export type SetPasswordResult =
-  { ok: true; breached: boolean } | { ok: false; rejection: PasswordRejection; message: string };
+export type PasswordRefused = { ok: false; rejection: PasswordRejection; message: string };
+export type SetPasswordResult = { ok: true } | PasswordRefused;
+
+const refuse = (rejection: PasswordRejection): PasswordRefused => ({
+  ok: false,
+  rejection,
+  message: PASSWORD_REJECTION_MESSAGE[rejection],
+});
+
+/**
+ * §S2's gate, with no database and no transaction.
+ *
+ * Separate from `setPassword` for one reason that matters operationally: the breach check is an
+ * HTTP call with a three-second timeout, and holding a Postgres transaction open across it would
+ * park a connection — and whatever row locks it has taken — on a third party's availability. Every
+ * caller runs this first, outside its transaction, and `setPassword` then only does the work that
+ * genuinely needs the database.
+ *
+ * `identifiers` is whatever this account is known by — the email, the phone, the handle — so a
+ * password that contains one is refused. No corpus catches `janedoe2026`; it is only weak for Jane.
+ */
+export async function validatePassword(
+  deps: CredentialDeps,
+  password: string,
+  identifiers?: readonly string[],
+): Promise<SetPasswordResult> {
+  const verdict = checkPasswordPolicy(password, { ...(identifiers ? { identifiers } : {}) });
+  if (!verdict.ok) return refuse(verdict.rejection ?? 'COMMON');
+
+  const breach = await checkPasswordBreached(deps.breach, password);
+  if (breach.breached) return refuse('BREACHED');
+  if (breach.checkUnavailable) {
+    // Not an error: breach.ts fails open on purpose, because an HIBP outage must not stop every
+    // registration on the platform. The offline list in policy.ts is what is still in force.
+    deps.logger.debug({}, 'identity: password accepted without a breach check; the corpus was unavailable');
+  }
+  return { ok: true };
+}
 
 export async function hasCredential(tx: Tx, userId: string): Promise<boolean> {
   const rows = await tx
@@ -42,10 +78,9 @@ export async function hasCredential(tx: Tx, userId: string): Promise<boolean> {
 }
 
 /**
- * Writes a password after the §S2 policy and the breach corpus have both had a say.
- *
- * `identifiers` is whatever this account is known by — the email, the phone, the handle — so a
- * password that contains one is refused. No corpus catches `janedoe2026`; it is only weak for Jane.
+ * Writes the password. Only the checks that need the database are here — `validatePassword` above
+ * has already run the policy and the breach corpus, and the synchronous half of it runs again as a
+ * backstop so a caller who forgot cannot write a three-character password.
  */
 export async function setPassword(
   tx: Tx,
@@ -55,18 +90,7 @@ export async function setPassword(
   const verdict = checkPasswordPolicy(input.password, {
     ...(input.identifiers ? { identifiers: input.identifiers } : {}),
   });
-  if (!verdict.ok) {
-    return {
-      ok: false,
-      rejection: verdict.rejection ?? 'COMMON',
-      message: verdict.message ?? PASSWORD_REJECTION_MESSAGE.COMMON,
-    };
-  }
-
-  const breach = await checkPasswordBreached(deps.breach, input.password);
-  if (breach.breached) {
-    return { ok: false, rejection: 'BREACHED', message: PASSWORD_REJECTION_MESSAGE.BREACHED };
-  }
+  if (!verdict.ok) return refuse(verdict.rejection ?? 'COMMON');
 
   const existing = (
     await tx
@@ -76,49 +100,39 @@ export async function setPassword(
       .for('update')
   )[0];
 
-  if (existing) {
-    // The current hash counts as history: "do not reuse the last five" has to include the one in
-    // force, or the most obvious reuse of all is the one that is allowed.
-    const history = [existing.passwordHash, ...existing.previousHashes].slice(0, PASSWORD_HISTORY);
-    for (const old of history) {
-      if (await deps.hasher.verify(input.password, old)) {
-        return { ok: false, rejection: 'REUSED', message: PASSWORD_REJECTION_MESSAGE.REUSED };
-      }
-    }
-
-    await tx
-      .update(userCredentials)
-      .set({
-        passwordHash: await deps.hasher.hash(input.password),
-        algorithm: PASSWORD_ALGORITHM,
-        previousHashes: history.slice(0, PASSWORD_HISTORY - 1),
-        mustChange: false,
-        // A new password clears the throttle: the holder has just proven something, and leaving a
-        // lock in place after a successful reset is how a recovery flow strands its own user.
-        failedAttempts: 0,
-        lockedUntil: null,
-        passwordSetAt: sql`now()`,
-        updatedAt: sql`now()`,
-      })
-      .where(eq(userCredentials.userId, input.userId));
-  } else {
+  if (!existing) {
     await tx.insert(userCredentials).values({
       userId: input.userId,
       passwordHash: await deps.hasher.hash(input.password),
       algorithm: PASSWORD_ALGORITHM,
     });
+    return { ok: true };
   }
 
-  // The corpus being unreachable is not a reason to refuse a registration (breach.ts fails open),
-  // but it is worth knowing it was never checked.
-  if (breach.checkUnavailable) {
-    deps.logger.debug(
-      { userId: input.userId },
-      'identity: password set without a breach check; the corpus was unavailable',
-    );
+  // The current hash counts as history: "do not reuse the last five" has to include the one in
+  // force, or the most obvious reuse of all is the one that is allowed.
+  const history = [existing.passwordHash, ...existing.previousHashes].slice(0, PASSWORD_HISTORY);
+  for (const old of history) {
+    if (await deps.hasher.verify(input.password, old)) return refuse('REUSED');
   }
 
-  return { ok: true, breached: false };
+  await tx
+    .update(userCredentials)
+    .set({
+      passwordHash: await deps.hasher.hash(input.password),
+      algorithm: PASSWORD_ALGORITHM,
+      previousHashes: history.slice(0, PASSWORD_HISTORY - 1),
+      mustChange: false,
+      // A new password clears the throttle: the holder has just proven something, and leaving a
+      // lock in place after a successful reset is how a recovery flow strands its own user.
+      failedAttempts: 0,
+      lockedUntil: null,
+      passwordSetAt: sql`now()`,
+      updatedAt: sql`now()`,
+    })
+    .where(eq(userCredentials.userId, input.userId));
+
+  return { ok: true };
 }
 
 export type PasswordVerdict =

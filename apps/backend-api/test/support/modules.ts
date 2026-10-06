@@ -20,6 +20,8 @@ export const registryConfig = (overrides: Record<string, string> = {}): AppConfi
     REDIS_URL: testRedisUrl(),
     IDENTITY_SIGNING_KEY: randomBytes(32).toString('hex'),
     IDENTITY_SIGNING_KEY_ID: 'test-key',
+    // Identity refuses to build without it (T-032): an HMAC under an empty key is not an HMAC.
+    IDENTITY_HMAC_PEPPER: 'p'.repeat(32),
     ...overrides,
   });
 
