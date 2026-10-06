@@ -141,3 +141,60 @@ describe('identity module wiring (T-032)', () => {
       expect(identity).toHaveProperty(name);
   });
 });
+
+describe('identity module wiring (T-035)', () => {
+  const auth = () => identity.createIdentityAuth(stubProcessDeps());
+
+  it('serves every route M1 §10.4 names', () => {
+    const paths = (auth().routes ?? []).map((r) => `${r.method.toUpperCase()} ${r.path}`);
+    expect(paths).toEqual(
+      expect.arrayContaining([
+        'GET /parties/lookup',
+        'POST /parties/lookup',
+        'GET /parties/suggest',
+        'POST /parties/invite',
+        'GET /parties/invitations/:token',
+      ]),
+    );
+  });
+
+  it('schedules the invitation expiry sweep, so M7 is never left waiting', () => {
+    expect(identity.identityModule(auth()).schedules?.map((job) => job.name)).toContain(
+      identity.PARTY_INVITATIONS_EXPIRE_SCHEDULE,
+    );
+  });
+
+  it('refuses to build without ENCRYPTION_KEY, naming the variable', () => {
+    // An invitation destination has to be stored recoverably to be sent. A process that cannot
+    // encrypt one should say so while it is starting, not on the first invitation.
+    const config = registryConfig();
+    const withoutKey = { ...config, crypto: {} };
+    expect(() => identity.createIdentityAuth({ ...stubProcessDeps(), config: withoutKey })).toThrow(
+      /ENCRYPTION_KEY/,
+    );
+  });
+
+  it('exports the party surface T-061 and the trades module need', () => {
+    for (const name of [
+      'canActAsBuyer',
+      'partyCard',
+      'badgesFor',
+      'lookupParty',
+      'suggestParties',
+      'createInvitation',
+      'claimInvitationsForDestination',
+      'expireInvitations',
+      'identityPartyLookupPerformedEvent',
+      'identityPartyInvitationClaimedEvent',
+      'identityPartyInvitationExpiredEvent',
+      'partyInvitations',
+    ])
+      expect(identity).toHaveProperty(name);
+  });
+
+  it('answers canActAsBuyer so trades can delegate rather than keep a second copy', () => {
+    expect(identity.canActAsBuyer('ACTIVE')).toBe(false);
+    expect(identity.canActAsBuyer('SUSPENDED')).toBe(true);
+    expect(identity.canActAsBuyer(null)).toBe(true);
+  });
+});

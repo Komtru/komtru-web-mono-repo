@@ -23,6 +23,9 @@ export const registryConfig = (overrides: Record<string, string> = {}): AppConfi
     IDENTITY_SIGNING_KEY_ID: 'test-key',
     // Identity refuses to build without it (T-032): an HMAC under an empty key is not an HMAC.
     IDENTITY_HMAC_PEPPER: 'p'.repeat(32),
+    // T-035: identity refuses to build without it, because an invitation destination must be
+    // stored recoverably to be sent (§S9).
+    ENCRYPTION_KEY: randomBytes(32).toString('hex'),
     ...overrides,
   });
 

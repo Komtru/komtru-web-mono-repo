@@ -6,9 +6,11 @@ import type { AppConfig } from '../../config/env.js';
 import type { Db } from '../../db/index.js';
 import type { Logger } from '../../platform/logger.js';
 import { defineModule, type KomtruModule, type SeedableModule } from '../../platform/module.js';
+import type { ScheduledJob } from '../../platform/scheduler/registry.js';
 import type { Actor, CompanyMembership } from '../../platform/http/principal.js';
 import type { Request } from 'express';
 import { createHmacHasher } from '../../platform/crypto/hmac.js';
+import { createEncryption } from '../../platform/crypto/encryption.js';
 import { argon2Hasher } from './domain/credential/hashing.js';
 import { resolveTermsVersions } from './domain/terms.js';
 import { createActorResolver } from './http/middleware.js';
@@ -17,6 +19,10 @@ import { passwordRoutes } from './http/routes/password.routes.js';
 import { registrationRoutes } from './http/routes/registration.routes.js';
 import type { AccountDeps } from './services/auth.service.js';
 import { usernameRoutes } from './http/username.controller.js';
+import { partyRoutes } from './http/routes/party.routes.js';
+import type { PartyControllerDeps } from './http/controllers/party.controller.js';
+import { expireInvitations } from './services/invitation.service.js';
+import { createLookupBudget } from './infrastructure/redis/lookup-budget.js';
 import { createTokenSigner, type TokenSigner } from './infrastructure/jwt/access-token.js';
 import { createEpochCache, type EpochCache } from './infrastructure/redis/epoch-cache.js';
 import { seedIdentityCatalogue } from './infrastructure/postgres/seed.js';
@@ -69,6 +75,43 @@ export {
   type SessionDeps,
 } from './services/session.service.js';
 
+// T-035. Appended at the end of the block so a parallel ticket's additions do not collide with it.
+export * from './domain/capability.js';
+export * from './domain/party/card.js';
+export * from './domain/party/lookup.js';
+export * from './domain/invitation.js';
+export {
+  LOOKUP_WINDOWS,
+  NO_LOOKUP_BUDGET,
+  createLookupBudget,
+  type LookupBudget,
+} from './infrastructure/redis/lookup-budget.js';
+export {
+  assertLookupEligible,
+  lookupParty,
+  suggestParties,
+  type LookupInput,
+  type LookupResult,
+  type PartyDeps,
+  type PartyPorts,
+} from './services/party.service.js';
+export {
+  claimInvitationsForDestination,
+  createInvitation,
+  expireInvitations,
+  previewInvitation,
+  resolveInvitationToken,
+  type CreateInvitationInput,
+  type CreateInvitationResult,
+  type InvitationDeps,
+  type InvitationPreview,
+} from './services/invitation.service.js';
+
+/** 02:05 Africa/Lagos: off-peak, and a trade stuck in PENDING_COUNTERPARTY is freed before the
+ * working day starts rather than at the end of it. */
+export const PARTY_INVITATIONS_EXPIRE_CRON = '5 2 * * *';
+export const PARTY_INVITATIONS_EXPIRE_SCHEDULE = 'identity.party-invitations-expire';
+
 export interface IdentityAuthOptions {
   db: Db;
   redis: Redis;
@@ -84,6 +127,7 @@ export interface IdentityAuth {
   signer: TokenSigner;
   epochs: EpochCache;
   routes: KomtruModule['routes'];
+  schedules: ScheduledJob[];
 }
 
 /**
@@ -115,6 +159,13 @@ export function createIdentityAuth(options: IdentityAuthOptions): IdentityAuth {
     throw new Error('IDENTITY_HMAC_PEPPER is required to build the identity module');
   }
 
+  // §S9's envelope encryption, for `party_invitations.destination_enc`. Built here rather than on
+  // first use for the same reason as the pepper above: an invitation has to be stored recoverably to
+  // be sent, and a process that cannot encrypt one should say so while it is starting, naming the
+  // variable, rather than on somebody's first invitation. `createEncryption` throws naming
+  // ENCRYPTION_KEY.
+  const encryption = createEncryption(config);
+
   const account: AccountDeps & { db: Db } = {
     db,
     signer,
@@ -127,6 +178,18 @@ export function createIdentityAuth(options: IdentityAuthOptions): IdentityAuth {
     mirrorPhoneOtpToEmail: config.identity.mirrorPhoneOtpToEmail,
   };
 
+  // T-035. `enrich` is deliberately absent: M7's completed-trade count, M5's merchant name and
+  // M20's signed avatar URL have no module to come from yet, so every PartyCard carries zero trades,
+  // no merchant name and no avatar. See `PartyPorts.enrich` for the rule whoever supplies it must
+  // keep.
+  const party: PartyControllerDeps = {
+    db,
+    budget: createLookupBudget(redis, logger),
+    hasher: account.otpHasher,
+    encryption,
+    logger,
+  };
+
   return {
     signer,
     epochs,
@@ -136,6 +199,15 @@ export function createIdentityAuth(options: IdentityAuthOptions): IdentityAuth {
       ...registrationRoutes(account),
       ...passwordRoutes(account),
       ...usernameRoutes({ db }),
+      ...partyRoutes(party),
+    ],
+    schedules: [
+      {
+        name: PARTY_INVITATIONS_EXPIRE_SCHEDULE,
+        cron: PARTY_INVITATIONS_EXPIRE_CRON,
+        description: 'Expires party invitations unclaimed after 14 days (M1 §8.5 step 7).',
+        handler: () => expireInvitations(db),
+      },
     ],
   };
 }
@@ -161,5 +233,6 @@ export const identityModule = (auth: IdentityAuth): KomtruModule =>
   defineModule({
     ...identitySeed,
     routes: auth.routes,
+    schedules: auth.schedules,
     resolveActor: auth.resolveActor,
   });
