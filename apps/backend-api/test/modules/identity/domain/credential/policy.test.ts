@@ -34,6 +34,28 @@ describe('password policy (S2)', () => {
     );
   });
 
+  it('sees through the punctuation in either the password or the identifier', () => {
+    // The stored phone is E.164; nobody types the '+' into a password. Comparing the raw strings
+    // meant `2348023415567abc` sailed past `+2348023415567`, which made the check useless for the
+    // identifier M1 D4 calls primary in this market.
+    expect(checkPasswordPolicy('2348023415567abc', { identifiers: ['+2348023415567'] }).rejection).toBe(
+      'CONTAINS_IDENTIFIER',
+    );
+    expect(checkPasswordPolicy('my 234 802 3415567!', { identifiers: ['+2348023415567'] }).rejection).toBe(
+      'CONTAINS_IDENTIFIER',
+    );
+    expect(checkPasswordPolicy('jane.doe.2026', { identifiers: ['janedoe'] }).rejection).toBe(
+      'CONTAINS_IDENTIFIER',
+    );
+  });
+
+  it('still accepts a password that merely shares a few characters with an identifier', () => {
+    expect(checkPasswordPolicy('correct horse battery staple', { identifiers: ['+2348023415567'] }).ok).toBe(
+      true,
+    );
+    expect(checkPasswordPolicy('a quiet afternoon', { identifiers: ['jane@example.com'] }).ok).toBe(true);
+  });
+
   it('ignores an identifier too short to be a meaningful substring', () => {
     // '+234' is in half the phone numbers in the country; refusing every password containing it
     // would reject passwords for no reason.

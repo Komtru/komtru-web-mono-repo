@@ -37,6 +37,24 @@ export const testLogger = createLogger(testConfig());
 /** The same client the app gets, so keys carry the `komtru:` prefix they will carry in production. */
 export const createTestRedis = (): Redis => createRedis(testRedisUrl(), { keyPrefix: testKeyPrefix() });
 
+/**
+ * Waits for the client to finish connecting.
+ *
+ * The app's client sets `enableOfflineQueue: false` (T-023), so a command issued while it is still
+ * connecting fails outright rather than waiting — which is the same reason health readiness holds an
+ * instance out of rotation until `ready`. A test that builds the client and immediately fires a
+ * request at a rate-limited route gets one 503 on its FIRST case and passes from then on, which
+ * reads as a flaky suite and is actually the harness skipping a step production does not.
+ */
+export const redisReady = async (redis: Redis): Promise<void> => {
+  if (redis.status === 'ready') return;
+  await new Promise<void>((resolve) =>
+    redis.once('ready', () => {
+      resolve();
+    }),
+  );
+};
+
 export const identityInfrastructure = (config: AppConfig, redis: Redis) => ({
   signer: createTokenSigner(config),
   epochs: createEpochCache(redis, config.identity.epochCacheTtlSeconds, testLogger),

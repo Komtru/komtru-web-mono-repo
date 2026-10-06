@@ -24,6 +24,7 @@ import {
   accountDeps,
   countingHasher,
   createTestRedis,
+  redisReady,
   seedUser,
   testConfig,
   testLogger,
@@ -46,8 +47,9 @@ describe.runIf(infraEnabled)('enumeration (M1 §17)', () => {
   let redis: Redis;
   let app: Express;
 
-  beforeEach(() => {
+  beforeEach(async () => {
     redis ??= createTestRedis();
+    await redisReady(redis);
     const auth = createIdentityAuth({ db: t.db(), redis, config, logger: testLogger });
     app = createApp({
       config,
@@ -75,38 +77,44 @@ describe.runIf(infraEnabled)('enumeration (M1 §17)', () => {
     return userId;
   };
 
-  it(`takes the same time for an existing and a nonexistent user: < 5ms over ${String(SAMPLES)} samples`, async () => {
-    await seedKnownUser();
-    // A CONSTANT-COST hasher, injected. The argon2 work is identical on both paths by construction
-    // — credential.service's own suite proves exactly one verification happens either way — and
-    // measuring it here would spend two minutes of CPU confirming that. What this measures instead
-    // is the DATABASE work, which is where a real difference would hide: an extra credential
-    // lookup on the hit path and none on the miss path is precisely the oracle §S3 is about.
-    const deps = accountDeps({ hasher: countingHasher({ matches: false }) });
-    const attempt = (identifier: string) =>
-      login(t.db(), deps, { identifier, password: 'not the password', ip: null, userAgent: null });
+  // 2 x SAMPLES real transactions against Postgres. The default 5s budget is for a unit test; this
+  // one is a measurement, and cutting it short would turn a timing assertion into a timeout.
+  it(
+    `takes the same time for an existing and a nonexistent user: < 5ms over ${String(SAMPLES)} samples`,
+    { timeout: 120_000 },
+    async () => {
+      await seedKnownUser();
+      // A CONSTANT-COST hasher, injected. The argon2 work is identical on both paths by construction
+      // — credential.service's own suite proves exactly one verification happens either way — and
+      // measuring it here would spend two minutes of CPU confirming that. What this measures instead
+      // is the DATABASE work, which is where a real difference would hide: an extra credential
+      // lookup on the hit path and none on the miss path is precisely the oracle §S3 is about.
+      const deps = accountDeps({ hasher: countingHasher({ matches: false }) });
+      const attempt = (identifier: string) =>
+        login(t.db(), deps, { identifier, password: 'not the password', ip: null, userAgent: null });
 
-    // Warm the pool and the plan cache; the first few calls of either path are not comparable.
-    for (let i = 0; i < 20; i += 1) {
-      await attempt(KNOWN);
-      await attempt(UNKNOWN);
-    }
+      // Warm the pool and the plan cache; the first few calls of either path are not comparable.
+      for (let i = 0; i < 20; i += 1) {
+        await attempt(KNOWN);
+        await attempt(UNKNOWN);
+      }
 
-    const hits: number[] = [];
-    const misses: number[] = [];
-    for (let i = 0; i < SAMPLES; i += 1) {
-      // Interleaved, so a drifting machine load affects both series equally.
-      let start = performance.now();
-      await attempt(KNOWN);
-      hits.push(performance.now() - start);
+      const hits: number[] = [];
+      const misses: number[] = [];
+      for (let i = 0; i < SAMPLES; i += 1) {
+        // Interleaved, so a drifting machine load affects both series equally.
+        let start = performance.now();
+        await attempt(KNOWN);
+        hits.push(performance.now() - start);
 
-      start = performance.now();
-      await attempt(UNKNOWN);
-      misses.push(performance.now() - start);
-    }
+        start = performance.now();
+        await attempt(UNKNOWN);
+        misses.push(performance.now() - start);
+      }
 
-    expect(Math.abs(median(hits) - median(misses))).toBeLessThan(5);
-  });
+      expect(Math.abs(median(hits) - median(misses))).toBeLessThan(5);
+    },
+  );
 
   it('answers a wrong password and an unknown identifier with exactly the same body and status', async () => {
     await seedKnownUser();
@@ -143,13 +151,43 @@ describe.runIf(infraEnabled)('enumeration (M1 §17)', () => {
 
     expect(known.status).toBe(202);
     expect(unknown.status).toBe(202);
-    // Everything but the challenge id and its expiry, which differ between any two calls.
-    const shape = (body: Record<string, unknown>) => ({ ...body, challengeId: '', expiresAt: 0 });
+
+    // The property M1 §17 asks for is that nothing in the response depends on whether the account
+    // EXISTS. `challengeId` and `expiresAt` differ between any two calls, and `maskedDestination`
+    // is a mask of what the CALLER TYPED — `j•••@example.com` against `n•••@example.com` — so it
+    // differs because the inputs did, not because one matched. Comparing the whole body asserted
+    // something stronger than the guarantee and stronger than is achievable.
+    const shape = (body: Record<string, unknown>) => ({
+      ...body,
+      challengeId: '',
+      expiresAt: 0,
+      maskedDestination: '',
+    });
     expect(shape(unknown.body as Record<string, unknown>)).toEqual(
       shape(known.body as Record<string, unknown>),
     );
+    expect(Object.keys(unknown.body as object).sort()).toEqual(Object.keys(known.body as object).sort());
     expect((known.body as { challengeId: string }).challengeId).toBeTruthy();
     expect((unknown.body as { challengeId: string }).challengeId).toBeTruthy();
+
+    // And the mask really is of the input, not of anything the account holds.
+    expect((known.body as { maskedDestination: string }).maskedDestination).toBe('j•••@example.com');
+    expect((unknown.body as { maskedDestination: string }).maskedDestination).toBe('n•••@example.com');
+  });
+
+  it('answers the same way for two identifiers that differ only in whether they exist', async () => {
+    // The sharpest form of §17: same shape, same length, one real and one not — so the only thing
+    // that could differ is existence, and nothing does.
+    await seedKnownUser();
+    const a = await request(app).post('/v1/auth/password/forgot').send({ identifier: KNOWN });
+    const b = await request(app)
+      .post('/v1/auth/password/forgot')
+      .send({ identifier: KNOWN.replace('jane', 'jak3') });
+
+    expect(b.status).toBe(a.status);
+    const shape = (body: Record<string, unknown>) => ({ ...body, challengeId: '', expiresAt: 0 });
+    // Same local-part length, so even the mask matches.
+    expect(shape(b.body as Record<string, unknown>)).toEqual(shape(a.body as Record<string, unknown>));
   });
 
   it('writes a real challenge row for the unknown identifier, so verifying it is indistinguishable', async () => {

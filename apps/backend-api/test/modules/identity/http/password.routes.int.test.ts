@@ -13,7 +13,7 @@ import { mountRoutes } from '../../../../src/platform/http/mount.js';
 import { createRateLimitGate } from '../../../../src/platform/http/rateLimit.js';
 import { infraEnabled } from '../../../support/db-urls.js';
 import { useTestDatabase } from '../../../support/db.js';
-import { createTestRedis, testConfig, testLogger } from '../support.js';
+import { createTestRedis, redisReady, testConfig, testLogger } from '../support.js';
 
 const bodyOf = <T>(response: { body: unknown }): T => response.body as T;
 
@@ -56,8 +56,9 @@ describe.runIf(infraEnabled)('login and the password routes over HTTP', () => {
   let redis: Redis;
   let app: Express;
 
-  beforeEach(() => {
+  beforeEach(async () => {
     redis ??= createTestRedis();
+    await redisReady(redis);
     const auth = createIdentityAuth({ db: t.db(), redis, config, logger: testLogger });
     app = createApp({
       config,

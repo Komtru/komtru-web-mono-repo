@@ -39,8 +39,12 @@ describe.runIf(infraEnabled)('password login', () => {
     return userId;
   };
 
+  /** A real Chrome-on-Android string, so `deviceLabel` has both halves to find. */
+  const USER_AGENT =
+    'Mozilla/5.0 (Linux; Android 14; Infinix X6831) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36';
+
   const attempt = (identifier: string, password = PASSWORD, d = deps) =>
-    login(t.db(), d, { identifier, password, ip: '203.0.113.7', userAgent: 'Mozilla/5.0 (Android)' });
+    login(t.db(), d, { identifier, password, ip: '203.0.113.7', userAgent: USER_AGENT });
 
   it('signs in by verified email, by verified phone and by username (screen E4, M1 §10.1)', async () => {
     const userId = await seedSignedUp();
@@ -202,7 +206,7 @@ describe.runIf(infraEnabled)('password login', () => {
         password: PASSWORD,
         deviceFingerprint: fingerprint,
         ip: '203.0.113.7',
-        userAgent: 'Mozilla/5.0 (Android)',
+        userAgent: USER_AGENT,
       });
 
     await withDevice('fingerprint-one');

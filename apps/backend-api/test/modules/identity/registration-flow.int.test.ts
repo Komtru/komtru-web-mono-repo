@@ -18,7 +18,7 @@ import { mountRoutes } from '../../../src/platform/http/mount.js';
 import { createRateLimitGate } from '../../../src/platform/http/rateLimit.js';
 import { infraEnabled } from '../../support/db-urls.js';
 import { useTestDatabase } from '../../support/db.js';
-import { createTestRedis, testConfig, testLogger } from './support.js';
+import { createTestRedis, redisReady, testConfig, testLogger } from './support.js';
 
 const bodyOf = <T>(response: { body: unknown }): T => response.body as T;
 
@@ -71,6 +71,7 @@ describe.runIf(infraEnabled)('the registration flow end to end (M1 §9.3)', () =
 
   beforeEach(async () => {
     redis ??= createTestRedis();
+    await redisReady(redis);
     app = build(false);
     // The templates the identity bindings render from. In a running process `notify`'s start() does
     // this; here only the identity routes are mounted, so the catalogue is synced by hand.
@@ -158,7 +159,8 @@ describe.runIf(infraEnabled)('the registration flow end to end (M1 §9.3)', () =
       ).status,
     ).toBe(200);
 
-    // CHOOSE_USERNAME is next, and it is T-033's route.
+    // CHOOSE_USERNAME is next, and it is T-033's route — which declares 201, because claiming a
+    // handle creates one.
     expect(
       (
         await request(app)
@@ -166,7 +168,7 @@ describe.runIf(infraEnabled)('the registration flow end to end (M1 §9.3)', () =
           .set('Authorization', bearer())
           .send({ username: 'janedoe' })
       ).status,
-    ).toBe(200);
+    ).toBe(201);
 
     // E4: the password works.
     session = bodyOf<Session>(
@@ -249,12 +251,14 @@ describe.runIf(infraEnabled)('the registration flow end to end (M1 §9.3)', () =
     );
     expect(await channelsOf(resent.challengeId)).toEqual(['SMS', 'EMAIL']);
 
-    // And the binding turns that into two notification rows carrying the same code.
+    // And the binding turns that into two notification rows carrying the same code. `runOtpBinding`
+    // replays EVERY identity.otp.requested in the outbox, which includes the registration SMS, so
+    // the rows are selected by the resent code rather than by status.
     await runOtpBinding();
-    const rows = (await notifications()).filter((r) => r.status === 'QUEUED');
-    expect(rows.map((r) => r.channel).sort()).toEqual(['EMAIL', 'SMS']);
     const code = await codeFor(resent.challengeId);
-    for (const row of rows) expect(row.rendered_body).toContain(code);
+    const rows = (await notifications()).filter((r) => r.rendered_body.includes(code));
+    expect(rows.map((r) => r.channel).sort()).toEqual(['EMAIL', 'SMS']);
+    for (const row of rows) expect(row.status).toBe('QUEUED');
   });
 
   it('does not mirror when the flag is off, even for a user who has an email', async () => {

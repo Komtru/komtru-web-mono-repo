@@ -14,7 +14,7 @@ import { mountRoutes } from '../../../../src/platform/http/mount.js';
 import { createRateLimitGate } from '../../../../src/platform/http/rateLimit.js';
 import { infraEnabled } from '../../../support/db-urls.js';
 import { useTestDatabase } from '../../../support/db.js';
-import { createTestRedis, testConfig, testLogger } from '../support.js';
+import { createTestRedis, redisReady, testConfig, testLogger } from '../support.js';
 
 /** supertest types `response.body` as `any`; every read in this file goes through `bodyOf`. */
 const bodyOf = <T>(response: { body: unknown }): T => response.body as T;
@@ -73,8 +73,9 @@ describe.runIf(infraEnabled)('registration over HTTP', () => {
     });
   };
 
-  beforeEach(() => {
+  beforeEach(async () => {
     redis ??= createTestRedis();
+    await redisReady(redis);
     app = buildApp(config);
   });
 
