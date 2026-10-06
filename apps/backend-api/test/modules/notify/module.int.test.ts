@@ -20,6 +20,7 @@ import {
   testRedisUrl,
 } from '../../support/db-urls.js';
 import { useTestDatabase, workerDatabase } from '../../support/db.js';
+import { productionProcessEnv } from '../../support/production-env.js';
 
 describe.runIf(infraEnabled)('notify module', () => {
   const t = useTestDatabase();
@@ -171,7 +172,7 @@ describe.runIf(infraEnabled)('notify module', () => {
     // night. Named at boot instead.
     const module = createNotifyModule();
 
-    await expect(module.start?.(context({ NODE_ENV: 'production' }))).rejects.toThrow(/TERMII/);
+    await expect(module.start?.(context(productionProcessEnv()))).rejects.toThrow(/TERMII/);
   });
 
   it('starts outside production with no provider credentials at all', async () => {

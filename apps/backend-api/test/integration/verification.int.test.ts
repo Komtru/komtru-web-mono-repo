@@ -23,7 +23,7 @@ import {
 import type { VerificationDeps } from '../../src/modules/trust/services/verification.service.js';
 import { infraEnabled } from '../support/db-urls.js';
 import { useTestDatabase } from '../support/db.js';
-import { insertUser } from '../modules/notify/support.js';
+import { insertUser, sqlState } from '../modules/notify/support.js';
 
 /** Ends in 4, so the fake passes it. The whole point is that this string never reaches a column. */
 const RAW_NIN = '22222222224';
@@ -332,17 +332,30 @@ describe.runIf(infraEnabled)('trust against a real database', () => {
     ).rejects.toMatchObject({ status: 409, code: 'CONFLICT' });
   });
 
-  it('refuses an UPDATE or DELETE of verification_level_changes as komtru_app', async () => {
+  it('cannot be rewritten, at either of the two layers that stop it', async () => {
     const userId = await verifiedContactUser();
     await runNin(userId);
     await runLiveness(userId);
 
-    await expect(
-      database.app().query(`UPDATE trust.verification_level_changes SET reason = 'x'`),
-    ).rejects.toMatchObject({ code: 'KT001' });
-    await expect(database.app().query(`DELETE FROM trust.verification_level_changes`)).rejects.toMatchObject({
-      code: 'KT001',
-    });
+    // The runtime role never reaches the trigger: `grantRuntimeAccess` REVOKEs UPDATE and DELETE on
+    // every append-only table, so Postgres refuses on privilege (42501) first. That is the stronger
+    // of the two guarantees, and it is the one the app actually runs into — this test used to assert
+    // KT001 here, which asked the weaker layer to answer for the stronger one. T-032 made and fixed
+    // the identical mistake against identity_audit_log; this is its resolution.
+    expect(
+      await sqlState(database.app().query(`UPDATE trust.verification_level_changes SET reason = 'x'`)),
+    ).toBe('42501');
+    expect(await sqlState(database.app().query(`DELETE FROM trust.verification_level_changes`))).toBe(
+      '42501',
+    );
+
+    // The OWNER has the privilege and is stopped by the trigger instead (migration 0030).
+    expect(
+      await sqlState(database.owner().query(`UPDATE trust.verification_level_changes SET reason = 'x'`)),
+    ).toBe('KT001');
+    expect(await sqlState(database.owner().query(`DELETE FROM trust.verification_level_changes`))).toBe(
+      'KT001',
+    );
   });
 
   it('expires a request the provider never answered, and grants nothing', async () => {

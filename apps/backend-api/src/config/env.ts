@@ -395,6 +395,35 @@ export class ConfigError extends Error {
   }
 }
 
+/**
+ * Variables whose DEFAULT is acceptable in development and not in production.
+ *
+ * They are a table rather than a sequence of `if`s because the set has to be READABLE from outside:
+ * a test that builds a production config needs to know what a production process must state, and
+ * before this existed there was no way to find out except by booting one. T-050 added the first
+ * rule and broke notify's production integration test at setup, in a suite that had no reason to
+ * know the trust module existed.
+ *
+ * `test/support/production-env.ts` supplies a value for every name here, and
+ * `test/config/production-env.test.ts` fails when a new rule arrives without one — so the next rule
+ * costs its author one line in the fixture instead of costing somebody else an afternoon.
+ */
+const PRODUCTION_RULES: { name: VariableName; rejects: (parsed: Record<string, unknown>) => boolean }[] = [
+  {
+    // The fake KYC adapter grants IDENTITY_VERIFIED on the strength of a trailing digit. A
+    // production box that falls back to it quietly is a platform whose verified sellers were
+    // verified by nobody. Naming a real provider is a deliberate act; so is this refusal.
+    name: 'TRUST_KYC_PROVIDER',
+    rejects: (parsed) => ((parsed.TRUST_KYC_PROVIDER as KycProviderFlag | undefined) ?? 'FAKE') === 'FAKE',
+  },
+];
+
+/**
+ * The names of those rules, for the shared production test fixture. Derived, never retyped: a list
+ * somebody has to remember to update is the same failure one level up.
+ */
+export const PRODUCTION_ONLY_VARIABLES: readonly string[] = PRODUCTION_RULES.map((rule) => rule.name);
+
 export function loadConfig(env: NodeJS.ProcessEnv): AppConfig {
   const parsed: Record<string, unknown> = {};
   const missing: string[] = [];
@@ -423,14 +452,13 @@ export function loadConfig(env: NodeJS.ProcessEnv): AppConfig {
   const resolvedDisabledPct = (parsed.FILES_QUOTA_DISABLED_PCT as number | undefined) ?? QUOTA_DISABLED_PCT;
   if (resolvedNearPct >= resolvedDisabledPct) invalid.push('FILES_QUOTA_NEAR_PCT');
 
-  // Cross-field for the same reason: the default is fine everywhere except the one place it is a
-  // compliance incident. The fake KYC adapter grants IDENTITY_VERIFIED on the strength of a trailing
-  // digit, and a production box that falls back to it quietly is a platform whose verified sellers
-  // were verified by nobody. Naming a real provider is a deliberate act; so is this refusal.
-  const nodeEnvForTrust = (parsed.NODE_ENV as (typeof NODE_ENVS)[number] | undefined) ?? 'development';
-  const resolvedKycProvider = (parsed.TRUST_KYC_PROVIDER as KycProviderFlag | undefined) ?? 'FAKE';
-  if (nodeEnvForTrust === 'production' && resolvedKycProvider === 'FAKE') {
-    invalid.push('TRUST_KYC_PROVIDER');
+  // The production-only rules (see PRODUCTION_RULES): variables whose default is fine everywhere
+  // except the one place it is a compliance incident.
+  const nodeEnvForRules = (parsed.NODE_ENV as (typeof NODE_ENVS)[number] | undefined) ?? 'development';
+  if (nodeEnvForRules === 'production') {
+    for (const rule of PRODUCTION_RULES) {
+      if (rule.rejects(parsed)) invalid.push(rule.name);
+    }
   }
 
   if (missing.length || invalid.length) throw new ConfigError(missing, invalid);
