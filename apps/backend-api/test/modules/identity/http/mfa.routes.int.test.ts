@@ -138,10 +138,15 @@ describe.runIf(infraEnabled)('the two-factor journey (screens TF1, TF2)', () => 
     expect(bodyOf<Problem>(missed).attemptsRemaining).toBe(4);
 
     // TF1 — "Verify & enable" — and TF2, which is the same response.
+    //
+    // The PREVIOUS step, deliberately. Every presentation below has to be strictly newer than the
+    // last one spent (the replay guard) AND inside `verifyTotp`'s ±1 window, so this journey walks
+    // step-1 → step → step+1. Activating on the current step leaves only step+1 for the two
+    // presentations that follow, and step+2 is outside the window.
     const activated = await auth(
       request(app)
         .post('/v1/me/mfa/totp/activate')
-        .send({ factorId: enrolled.factorId, code: codeNow(secret) }),
+        .send({ factorId: enrolled.factorId, code: totpCodeAt(secret, totpStep(Date.now()) - 1) }),
     );
     expect(activated.status).toBe(200);
     expect(bodyOf<Activated>(activated).recoveryCodes).toHaveLength(RECOVERY_CODE_COUNT);
@@ -158,12 +163,15 @@ describe.runIf(infraEnabled)('the two-factor journey (screens TF1, TF2)', () => 
     expect(challenged.mfaRequired).toBe(true);
     expect(challenged.accessToken).toBeUndefined();
 
+    // Named explicitly: the challenge offers the backup-code sheet alongside the authenticator, and
+    // which one comes first is `activeFactors`' ordering, not something this test should rely on.
+    const totpFactor = challenged.factors.find((factor) => factor.type === 'TOTP');
     const completed = await request(app)
       .post('/v1/auth/mfa/verify')
       .send({
         mfaToken: challenged.mfaToken,
-        factorId: challenged.factors[0]?.id,
-        code: totpCodeAt(secret, totpStep(Date.now()) + 1),
+        factorId: totpFactor?.id,
+        code: codeNow(secret),
       });
     expect(completed.status).toBe(200);
     expect(bodyOf<Session>(completed).accessToken).toBeTruthy();
@@ -178,7 +186,7 @@ describe.runIf(infraEnabled)('the two-factor journey (screens TF1, TF2)', () => 
     const proved = await auth(
       request(app)
         .post('/v1/me/step-up')
-        .send({ factorId: enrolled.factorId, code: totpCodeAt(secret, totpStep(Date.now()) + 2) }),
+        .send({ factorId: enrolled.factorId, code: totpCodeAt(secret, totpStep(Date.now()) + 1) }),
     );
     expect(proved.status).toBe(200);
 

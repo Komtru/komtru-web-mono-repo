@@ -115,12 +115,18 @@ describe.runIf(infraEnabled)('the mfaRequired login branch (M1 §10.1)', () => {
 
   it('writes one MFA_CHALLENGE row with five attempts and a five-minute life', async () => {
     const { userId, deps: d } = await seedAccount();
-    await signIn(d);
+    const result = await signIn(d);
+    if (result.outcome !== 'MFA_REQUIRED') throw new Error('expected MFA_REQUIRED');
 
+    // LIVE rows only. An enrolment ceremony is also a MFA_CHALLENGE row scoped to this user, and
+    // activating the factor leaves it behind CONSUMED — counting every row of that purpose would
+    // count the spent ceremony too, which says nothing about what the sign-in just wrote.
     const rows = (await t.db().select().from(otpChallenges)).filter(
-      (row) => row.purpose === 'MFA_CHALLENGE' && row.userId === userId,
+      (row) => row.purpose === 'MFA_CHALLENGE' && row.userId === userId && row.consumedAt === null,
     );
     expect(rows).toHaveLength(1);
+    // And it is the row the token names, not merely a row of the right shape.
+    expect(rows[0]?.id).toBe(result.mfaToken.split('.')[0]);
     expect(rows[0]?.maxAttempts).toBe(5);
     expect((rows[0]?.expiresAt.getTime() ?? 0) - Date.now()).toBeLessThanOrEqual(
       MFA_TOKEN_TTL_SECONDS * 1000,
@@ -136,17 +142,25 @@ describe.runIf(infraEnabled)('the mfaRequired login branch (M1 §10.1)', () => {
   });
 
   it('describes the factors without a secret, an address or a seed', async () => {
-    const { deps: d } = await seedAccount();
+    const { deps: d, secret } = await seedAccount();
+    if (secret === null) throw new Error('expected a TOTP secret');
     const result = await signIn(d);
     if (result.outcome !== 'MFA_REQUIRED') throw new Error('expected MFA_REQUIRED');
 
-    expect(result.factors).toHaveLength(1);
-    expect(result.factors[0]).toMatchObject({
-      type: 'TOTP',
+    // TWO: the authenticator, and the backup codes activating it minted. Offering the sheet here is
+    // the whole promise of screen TF2 — "each works once if you ever lose access to your
+    // authenticator app" — and `verifyFactor` accepts one. They do not make an account two-factor
+    // (domain/mfa/policy.ts), but once a real factor has demanded a challenge they are a way
+    // through it.
+    expect(result.factors.map((factor) => factor.type).sort()).toEqual(['RECOVERY_CODE', 'TOTP']);
+    expect(result.factors.find((factor) => factor.type === 'TOTP')).toMatchObject({
       hint: 'Authenticator app',
       isDefault: true,
     });
+    expect(result.factors.find((factor) => factor.type === 'RECOVERY_CODE')?.hint).toBe('Backup codes');
+    // Nothing presentable leaks: no seed, no sheet, no address.
     expect(JSON.stringify(result.factors)).not.toContain(EMAIL);
+    expect(JSON.stringify(result.factors)).not.toContain(secret);
   });
 
   /** Ten printed codes are not a second factor; an account holding only those just signs in. */
