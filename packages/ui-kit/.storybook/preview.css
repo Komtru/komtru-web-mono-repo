@@ -26,7 +26,12 @@
   }
 }
 
-/* The reference's own page defaults, so a story reads the way a screen does. */
+/*
+ * The reference's own page defaults, so a story reads the way a screen does. These are the app's
+ * job, not ui-kit's — T-017 owns the global stylesheet. The `:focus-visible` rule below especially:
+ * primitives carry the ring as a utility, but any focusable element a *screen* adds gets it only
+ * from this global rule, so without it in the app those elements have a ring here and none there.
+ */
 body {
   margin: 0;
   font-family: var(--font-body);

@@ -1,5 +1,3 @@
-'use client';
-
 import { cx } from './cx.js';
 import { FOCUS_RING } from './focus.js';
 

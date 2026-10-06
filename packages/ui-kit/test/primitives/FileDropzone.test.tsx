@@ -12,7 +12,7 @@ describe('isMediaGateSatisfied', () => {
     expect(isMediaGateSatisfied([{ id: 'a' }, { id: 'b' }], 2)).toBe(true);
   });
 
-  it('is open by default, because most uploads are optional evidence', () => {
+  it('is open at zero, which a screen has to ask for rather than inherit', () => {
     expect(isMediaGateSatisfied([], 0)).toBe(true);
   });
 });
@@ -61,12 +61,14 @@ describe('FileDropzone', () => {
   });
 
   it('never locks an optional upload', () => {
-    render(<FileDropzone label="Add evidence photos" media={[]} />);
+    render(<FileDropzone label="Add evidence photos" media={[]} requiredCount={0} />);
     expect(screen.queryByText('Accept is locked')).toBeNull();
   });
 
   it('draws a slot per place the proof could go, dashed while empty', () => {
-    const { container } = render(<FileDropzone label="Proof of possession" media={[{ id: 'a' }]} />);
+    const { container } = render(
+      <FileDropzone label="Proof of possession" media={[{ id: 'a' }]} requiredCount={0} />,
+    );
     const slots = container.querySelectorAll('li');
     expect(slots).toHaveLength(3);
     expect(slots[0]?.className).toContain('bg-[linear-gradient(135deg,var(--stone-gray),var(--cloud-gray))]');
@@ -75,22 +77,69 @@ describe('FileDropzone', () => {
 
   it('grows past its slots rather than hiding what was attached', () => {
     const { container } = render(
-      <FileDropzone label="Proof" media={[{ id: 'a' }, { id: 'b' }, { id: 'c' }, { id: 'd' }]} />,
+      <FileDropzone
+        label="Proof"
+        media={[{ id: 'a' }, { id: 'b' }, { id: 'c' }, { id: 'd' }]}
+        requiredCount={0}
+      />,
     );
     expect(container.querySelectorAll('li')).toHaveLength(4);
   });
 
   it('takes a file through the control and hands it back', () => {
     const onAdd = vi.fn();
-    const { container } = render(<FileDropzone label="Add evidence photos" media={[]} onAdd={onAdd} />);
+    const { container } = render(
+      <FileDropzone label="Add evidence photos" media={[]} onAdd={onAdd} requiredCount={0} />,
+    );
     const input = container.querySelector('input[type="file"]');
     const file = new File(['x'], 'receipt.jpg', { type: 'image/jpeg' });
     fireEvent.change(input!, { target: { files: [file] } });
     expect(onAdd).toHaveBeenCalledWith([file]);
   });
 
+  it('takes a dropped file, which is the whole promise of the name', () => {
+    const onAdd = vi.fn();
+    const { container } = render(
+      <FileDropzone label="Add evidence photos" media={[]} requiredCount={0} onAdd={onAdd} />,
+    );
+    const box = container.querySelector('label');
+    const file = new File(['x'], 'receipt.jpg', { type: 'image/jpeg' });
+    fireEvent.dragOver(box!);
+    expect(box?.className).toContain('border-trust-indigo');
+    fireEvent.drop(box!, { dataTransfer: { files: [file] } });
+    expect(onAdd).toHaveBeenCalledWith([file]);
+    expect(box?.className).toContain('border-border-hairline');
+  });
+
+  it('lets go of the drag state when the file is taken elsewhere', () => {
+    const { container } = render(<FileDropzone label="Add evidence" media={[]} requiredCount={0} />);
+    const box = container.querySelector('label');
+    fireEvent.dragOver(box!);
+    fireEvent.dragLeave(box!);
+    expect(box?.className).toContain('border-border-hairline');
+  });
+
+  it('takes a wrong photo back off, when the screen says it can', () => {
+    const onRemove = vi.fn();
+    render(
+      <FileDropzone
+        label="Proof"
+        media={[{ id: 'a', alt: 'Receipt' }]}
+        requiredCount={1}
+        onRemove={onRemove}
+      />,
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Remove Receipt' }));
+    expect(onRemove).toHaveBeenCalledWith('a');
+  });
+
+  it('offers no way to remove when the screen gives none', () => {
+    render(<FileDropzone label="Proof" media={[{ id: 'a' }]} requiredCount={1} />);
+    expect(screen.queryByRole('button', { name: /^Remove/ })).toBeNull();
+  });
+
   it('shows the keyboard ring on the box when the hidden control takes focus', () => {
-    const { container } = render(<FileDropzone label="Add evidence photos" media={[]} />);
+    const { container } = render(<FileDropzone label="Add evidence photos" media={[]} requiredCount={0} />);
     const box = container.querySelector('label');
     expect(box?.className).toContain('focus-within:outline-[2.5px]');
     expect(box?.className).toContain('focus-within:outline-trust-indigo');
@@ -104,6 +153,7 @@ describe('FileDropzone', () => {
           { id: 'a', kind: 'video' },
           { id: 'b', kind: 'photo' },
         ]}
+        requiredCount={0}
       />,
     );
     const slots = container.querySelectorAll('li');
@@ -112,7 +162,9 @@ describe('FileDropzone', () => {
   });
 
   it('says what each attachment is, so the grid is not three anonymous squares', () => {
-    render(<FileDropzone label="Proof" media={[{ id: 'a', alt: 'MacBook Air, lid open' }]} />);
+    render(
+      <FileDropzone label="Proof" media={[{ id: 'a', alt: 'MacBook Air, lid open' }]} requiredCount={0} />,
+    );
     expect(screen.getByText('MacBook Air, lid open')).toBeDefined();
   });
 });

@@ -36,7 +36,13 @@ import {
   TradeRow,
 } from '../src/index.js';
 import { REFERENCE_FILE } from '../scripts/extract-tokens.js';
-import { canonicalise, compiledDeclarations, expandDeclaration, referenceRule } from './reference-css.js';
+import {
+  canonicalise,
+  compiledDeclarations,
+  expandDeclaration,
+  referenceInlineStyle,
+  referenceRule,
+} from './reference-css.js';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const html = readFileSync(path.join(here, '../../../docs/design-reference', REFERENCE_FILE), 'utf8');
@@ -121,6 +127,7 @@ const ADDITIONS: Record<string, readonly string[]> = {
   // The reference's cell is a `<div>` centred by flex; a real `<input>` also needs its text centred.
   'otp-cell': ['text-align'],
   'otp-cell-filled': ['text-align'],
+  'otp-cell-invalid': ['text-align'],
   // The shimmer gradient compiles to `background-image`; `width` is the `.skel-line` width variant.
   skeleton: ['background-image', 'width'],
   // The upload target is a `<label>` wrapping a hidden file input, so it has to be a clickable block.
@@ -151,6 +158,11 @@ interface ParityRow {
   classes?: readonly string[];
   /** Set where the reference carries two designs under one class name. */
   styleId?: string;
+  /**
+   * A `class="…"` whose element carries the state inline. The reference states some states in the
+   * markup rather than in a rule, and those are the only statement of them there is.
+   */
+  inline?: string;
 }
 
 /** The `class` attribute of every element in the rendered markup, in document order. */
@@ -297,11 +309,38 @@ const ROWS: ParityRow[] = [
   },
 
   {
+    // The active step is where the ternary lives, so it is the one worth pinning.
+    id: 'ko-step-active',
+    selector: '.ko-step.active',
+    extends: ['.ko-step'],
+    styleId: 'komtru-refinement-v2',
+    element: <Stepper steps={['One', 'Two']} current={0} />,
+    node: 2,
+  },
+  {
+    id: 'ko-step-dot-active',
+    selector: '.ko-step.active .dot',
+    extends: ['.ko-step .dot'],
+    styleId: 'komtru-refinement-v2',
+    element: <Stepper steps={['One', 'Two']} current={0} />,
+    node: 3,
+  },
+  {
     id: 'ko-step-line',
     selector: '.ko-step-line',
     styleId: 'komtru-refinement-v2',
     element: <Stepper steps={['One', 'Two']} current={0} />,
     node: 4,
+  },
+
+  {
+    // E3b marks the whole code wrong, not one digit, and says so inline rather than in a rule.
+    id: 'otp-cell-invalid',
+    selector: '.otp-cell.filled',
+    extends: ['.otp-cell'],
+    inline: 'otp-cell filled',
+    element: <OtpInput label="One-time code" value="481902" invalid />,
+    node: 1,
   },
 
   { id: 'm-switch', selector: '.m-switch', element: <Toggle label="Marketing" checked={false} /> },
@@ -426,40 +465,42 @@ const ROWS: ParityRow[] = [
   {
     id: 'm-upload',
     selector: '.m-upload',
-    element: (
-      <FileDropzone label="Add evidence photos" hint="Helps TrustOps resolve this faster" media={[]} />
-    ),
+    element: <FileDropzone label="Add evidence photos" hint="Helps TrustOps…" media={[]} requiredCount={0} />,
     node: 8,
   },
   {
     id: 'proof-media-grid',
     selector: '.proof-media-grid',
-    element: <FileDropzone label="Proof of possession" media={[]} />,
+    element: <FileDropzone label="Proof of possession" media={[]} requiredCount={0} />,
     node: 1,
   },
   {
     id: 'proof-thumb-empty',
     selector: '.proof-thumb.empty',
     extends: ['.proof-thumb'],
-    element: <FileDropzone label="Proof of possession" media={[]} />,
+    element: <FileDropzone label="Proof of possession" media={[]} requiredCount={0} />,
     node: 2,
   },
   {
     id: 'proof-thumb',
     selector: '.proof-thumb',
-    element: <FileDropzone label="Proof of possession" media={[{ id: 'a' }]} />,
+    element: <FileDropzone label="Proof of possession" media={[{ id: 'a' }]} requiredCount={0} />,
     node: 2,
   },
   {
     id: 'play-badge',
     selector: '.proof-thumb .play-badge',
-    element: <FileDropzone label="Proof of possession" media={[{ id: 'a', kind: 'video' }]} />,
+    element: (
+      <FileDropzone label="Proof of possession" media={[{ id: 'a', kind: 'video' }]} requiredCount={0} />
+    ),
     node: 4,
   },
   {
     id: 'play-badge-icon',
     selector: '.proof-thumb .play-badge svg',
-    element: <FileDropzone label="Proof of possession" media={[{ id: 'a', kind: 'video' }]} />,
+    element: (
+      <FileDropzone label="Proof of possession" media={[{ id: 'a', kind: 'video' }]} requiredCount={0} />
+    ),
     node: 5,
   },
 ];
@@ -485,6 +526,9 @@ describe.each(ROWS)('$id', (row) => {
     const raw = new Map<string, string>();
     for (const selector of [...(row.extends ?? []), row.selector]) {
       for (const [property, value] of referenceRule(html, selector, row.styleId)) raw.set(property, value);
+    }
+    if (row.inline !== undefined) {
+      for (const [property, value] of referenceInlineStyle(html, row.inline)) raw.set(property, value);
     }
     const reference = canonicalise(raw);
     const compiled = await compiledDeclarations(classes);
@@ -572,6 +616,49 @@ describe('DEVIATIONS', () => {
         ).toBe(true);
       }
     }
+  });
+});
+
+/**
+ * Two utilities setting the same property on one element do not layer in the order they are written
+ * — the stylesheet decides — so a base and a state branch that both set a background render
+ * whichever Tailwind happened to emit last. That is invisible in a class-name assertion and, until
+ * the harness learned emission order, invisible in parity too. These are the properties where a
+ * second claimant is always a bug rather than Tailwind composing (`border` + `border-dashed` and
+ * `m-0` + `mx-[7px]` layer by design, so widths, styles and spacing are deliberately not listed).
+ */
+const SINGLE_CLAIMANT = [
+  'background-color',
+  'background-image',
+  'color',
+  'border-top-color',
+  'outline-color',
+  'fill',
+  'stroke',
+  'display',
+] as const;
+
+describe.each(ROWS)('$id', (row) => {
+  const classes = [...(row.classes ?? (classAttributes(row.element!)[row.node ?? 0] ?? '').split(/\s+/))];
+
+  it('claims each decisive property exactly once', async () => {
+    const claimants = new Map<string, string[]>();
+    for (const utility of classes.filter((name) => name !== '')) {
+      let declarations: Map<string, string>;
+      try {
+        declarations = await compiledDeclarations([utility]);
+      } catch {
+        continue; // A variant class; `compiledDeclarations` skips those and compiles nothing.
+      }
+      for (const property of SINGLE_CLAIMANT) {
+        if (!declarations.has(property)) continue;
+        claimants.set(property, [...(claimants.get(property) ?? []), utility]);
+      }
+    }
+    const contested = [...claimants]
+      .filter(([, utilities]) => utilities.length > 1)
+      .map(([property, utilities]) => `${property}: ${utilities.join(' and ')}`);
+    expect(contested, `${row.id} lets the stylesheet pick, rather than picking`).toEqual([]);
   });
 });
 

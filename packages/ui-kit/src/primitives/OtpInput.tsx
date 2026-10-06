@@ -18,9 +18,13 @@ export interface OtpInputProps {
   className?: string;
 }
 
+// No background here: the state branch below supplies the only one. Two background utilities on one
+// element are resolved by stylesheet order, not by the order they are written, and Tailwind emits
+// `.bg-surface-primary` and `.bg-risk-soft` *before* `.bg-surface-secondary` — so a base background
+// silently beat both the filled and the invalid treatment, and the whole wrong-code state with it.
 const CELL =
   'flex h-[52px] w-[42px] items-center justify-center rounded-sm border-[1.5px] border-solid ' +
-  'bg-surface-secondary text-center font-mono text-[20px] font-semibold';
+  'text-center font-mono text-[20px] font-semibold';
 
 /** `.otp-cell` — one box per digit, the filled ones outlined indigo, the caret's box ringed. */
 export function OtpInput({
@@ -117,7 +121,7 @@ export function OtpInput({
               invalid
                 ? 'border-risk bg-risk-soft'
                 : digit === ''
-                  ? 'border-border-hairline'
+                  ? 'border-border-hairline bg-surface-secondary'
                   : 'border-trust-indigo bg-surface-primary',
               'focus-visible:border-trust-indigo focus-visible:shadow-[0_0_0_3px_var(--trust-indigo-soft)]',
               'focus-visible:outline-none',

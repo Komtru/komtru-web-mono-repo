@@ -7,14 +7,38 @@ import { StickyFooter } from './StickyFooter.js';
 const meta = {
   title: 'Primitives/FileDropzone',
   component: FileDropzone,
-  args: { label: 'Add evidence photos', hint: 'Helps TrustOps resolve this faster', media: [] },
+  args: {
+    label: 'Add evidence photos',
+    hint: 'Helps TrustOps resolve this faster',
+    media: [],
+    requiredCount: 0,
+  },
 } satisfies Meta<typeof FileDropzone>;
 
 export default meta;
 type Story = StoryObj<typeof meta>;
 
-/** C7: evidence is welcome but not required, so nothing is locked. */
+/** C7: evidence is welcome but not required, so `requiredCount` is an explicit zero. */
 export const Optional: Story = {};
+
+/** A wrong photo has to be removable, or the only way back is abandoning the screen. */
+export const Removable: Story = {
+  render: function Removable(args) {
+    const [media, setMedia] = useState<MediaItem[]>([
+      { id: 'a', alt: 'Receipt' },
+      { id: 'b', kind: 'video' },
+    ]);
+    return (
+      <FileDropzone
+        {...args}
+        media={media}
+        onRemove={(id) => {
+          setMedia((current) => current.filter((item) => item.id !== id));
+        }}
+      />
+    );
+  },
+};
 
 /** W1: the gate. Accept stays locked until real media is attached. */
 export const GateClosed: Story = {

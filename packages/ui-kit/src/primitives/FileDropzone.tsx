@@ -1,7 +1,9 @@
 'use client';
 
+import { useState } from 'react';
 import { Banner } from './Banner.js';
 import { cx } from './cx.js';
+import { FOCUS_RING } from './focus.js';
 
 export interface MediaItem {
   id: string;
@@ -43,14 +45,16 @@ export interface FileDropzoneProps {
   hint?: string;
   media: readonly MediaItem[];
   /**
-   * How much proof the screen demands. Zero — the default — means the upload is optional evidence,
-   * which is what most of them are; above zero the gate banner states what is still missing and
-   * stays until it is not.
+   * How much proof the screen demands. There is no default: a gate that defaults open is a gate
+   * nobody set, and "the seller cannot accept sight-unseen" is too important to inherit by omission.
+   * Pass `0` for the optional-evidence uploads (C7's "Add evidence photos"), which is most of them.
    */
-  requiredCount?: number;
+  requiredCount: number;
   slots?: 2 | 3 | 4;
   accept?: string;
   onAdd?: (files: File[]) => void;
+  /** Takes an attachment back off. Without it a wrong photo is permanent. */
+  onRemove?: (id: string) => void;
   className?: string;
 }
 
@@ -63,12 +67,14 @@ export function FileDropzone({
   label,
   hint,
   media,
-  requiredCount = 0,
+  requiredCount,
   slots = 3,
   accept = 'image/*,video/*',
   onAdd,
+  onRemove,
   className,
 }: FileDropzoneProps): React.JSX.Element {
+  const [dragging, setDragging] = useState(false);
   const satisfied = isMediaGateSatisfied(media, requiredCount);
   const missing = Math.max(requiredCount - media.length, 0);
 
@@ -100,6 +106,23 @@ export function FileDropzone({
                 <>
                   <span className="sr-only">{item.alt ?? `Attachment ${String(index + 1)}`}</span>
                   {item.kind === 'video' && <PlayBadge />}
+                  {onRemove !== undefined && (
+                    <button
+                      type="button"
+                      aria-label={`Remove ${item.alt ?? `attachment ${String(index + 1)}`}`}
+                      onClick={() => {
+                        onRemove(item.id);
+                      }}
+                      className={cx(
+                        'absolute top-[6px] right-[6px] flex h-[20px] w-[20px] items-center',
+                        'justify-center rounded-[50%] border-none bg-[rgba(13,20,32,.75)] text-pure-white',
+                        'text-[11px] leading-none',
+                        FOCUS_RING,
+                      )}
+                    >
+                      &times;
+                    </button>
+                  )}
                 </>
               )}
             </li>
@@ -107,9 +130,24 @@ export function FileDropzone({
         })}
       </ul>
       <label
+        onDragOver={(event) => {
+          event.preventDefault();
+          setDragging(true);
+        }}
+        onDragLeave={() => {
+          setDragging(false);
+        }}
+        onDrop={(event) => {
+          event.preventDefault();
+          setDragging(false);
+          const dropped = [...event.dataTransfer.files];
+          if (dropped.length > 0) onAdd?.(dropped);
+        }}
         className={cx(
-          'block cursor-pointer rounded-md border-[1.5px] border-dashed border-border-hairline',
-          'bg-surface-primary p-[16px] text-center',
+          'block cursor-pointer rounded-md border-[1.5px] border-dashed p-[16px] text-center',
+          // The reference draws no drag state — it has no working dropzone — so this borrows the
+          // focused-input treatment it does draw, rather than inventing a third look.
+          dragging ? 'border-trust-indigo bg-trust-indigo-soft' : 'border-border-hairline bg-surface-primary',
           'focus-within:outline-[2.5px] focus-within:outline-trust-indigo focus-within:outline-offset-[2px]',
         )}
       >

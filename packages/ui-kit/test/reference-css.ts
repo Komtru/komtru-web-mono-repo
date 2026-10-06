@@ -165,13 +165,36 @@ export function referenceRule(
   return merged;
 }
 
+/**
+ * The declarations the reference writes inline on an element rather than in a rule. E3b paints the
+ * wrong-code cells with `style="border-color:var(--risk); background:var(--risk-soft)"` — there is
+ * no `.otp-cell.error` to compare against, so the markup is the only statement of that state.
+ */
+export function referenceInlineStyle(html: string, classAttribute: string): Map<string, string> {
+  const pattern = new RegExp(`class="${classAttribute}" style="([^"]*)"`);
+  const found = pattern.exec(html);
+  if (found?.[1] === undefined) {
+    throw new Error(`The reference has no inline-styled element with class="${classAttribute}"`);
+  }
+  return parseDeclarations(found[1]);
+}
+
 const HEX = /^#([0-9a-fA-F]{3,8})$/;
 
 /** `0px` and `0` are the same length; Tailwind writes one and the reference the other. */
 const normaliseLength = (value: string): string => (/^0(px|%|em|rem)$/.test(value) ? '0' : value);
 
-/** `#fff` and `#FFFFFF` are the same colour; the reference writes both. */
+/**
+ * The CSS colour keywords the reference writes where it could have written a hex. These two literals
+ * are the keywords' own definitions, so naming a design token instead would be circular.
+ */
+// eslint-disable-next-line komtru-design/no-raw-hex -- see above.
+const COLOUR_KEYWORD_HEX: Record<string, string> = { white: '#FFFFFF', black: '#000000' };
+
+/** `#fff`, `#FFFFFF` and `white` are the same colour; the reference writes all three. */
 function normaliseHex(value: string): string {
+  const keyword = COLOUR_KEYWORD_HEX[value.trim().toLowerCase()];
+  if (keyword !== undefined) return keyword;
   const match = HEX.exec(value.trim());
   if (match === null) return value;
   const digits = match[1] ?? '';
@@ -386,15 +409,23 @@ export async function compiledDeclarations(classNames: string[]): Promise<Map<st
       byUtility.set(key, existing);
     }
   }
-  const merged = new Map<string, string>();
   for (const utility of utilities) {
-    const rule = byUtility.get(`.${utility}`);
-    if (rule === undefined) {
-      // A class that compiles to nothing is invisible to the diff below, so a retired-palette
-      // utility (`bg-white`) or a typo would pass parity by producing no declarations at all.
-      throw new Error(`"${utility}" compiles to no rule — it is not a utility this preset publishes`);
-    }
-    for (const [property, value] of rule) merged.set(property, value);
+    if (byUtility.has(`.${utility}`)) continue;
+    // A class that compiles to nothing is invisible to the diff below, so a retired-palette
+    // utility (`bg-white`) or a typo would pass parity by producing no declarations at all.
+    throw new Error(`"${utility}" compiles to no rule — it is not a utility this preset publishes`);
+  }
+
+  // Emission order, not the order the classes happen to sit in the `class` attribute. Two utilities
+  // setting the same property are resolved by where their rules land in the stylesheet — Tailwind
+  // sorts them internally — so `cx('bg-stone-gray', 'bg-trust-emerald')` and the reverse render
+  // identically. Merging in attribute order modelled a cascade no browser has, and let a component
+  // that emits two backgrounds for one element look correct while rendering the other one.
+  const wanted = new Set(utilities.map((utility) => `.${utility}`));
+  const merged = new Map<string, string>();
+  for (const [selector, declarations] of byUtility) {
+    if (!wanted.has(selector)) continue;
+    for (const [property, value] of declarations) merged.set(property, value);
   }
   // Tailwind defers the border style through a custom property so that `border` and `border-dashed`
   // compose; resolve it here so the comparison sees `dashed`, not the variable.
