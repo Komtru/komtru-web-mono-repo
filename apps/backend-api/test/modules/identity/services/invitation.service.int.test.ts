@@ -117,6 +117,24 @@ describe.runIf(infraEnabled)('party invitations (M1 §8.5)', () => {
       ).toEqual({ outcome: 'SELF' });
     });
 
+    it('refuses an inviter below CONTACT_VERIFIED (§8.3 control 2)', async () => {
+      // §8.1 draws invite as the continuation of a lookup miss, so it carries the same caller gate.
+      // Without it a fresh unverified account — one every lookup route refuses — could write a
+      // third party's contact into our table ten times a minute.
+      const fresh = await insertUser(t.owner(), { status: 'ACTIVE', verification_level: 'UNVERIFIED' });
+
+      await expect(
+        createInvitation(deps(), {
+          inviterUserId: fresh,
+          channel: 'EMAIL',
+          destination: 'chidi@example.com',
+          intendedRole: 'SELLER',
+        }),
+      ).rejects.toMatchObject({ status: 403 });
+      const { rows } = await t.owner().query(`SELECT 1 FROM identity.party_invitations`);
+      expect(rows).toEqual([]);
+    });
+
     it('rejects a destination that cannot be canonicalised', async () => {
       const inviter = await seedUserRow();
       expect(

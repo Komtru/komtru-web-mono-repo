@@ -102,8 +102,18 @@ export function partyRoutes(deps: PartyControllerDeps): RouteDefinition[] {
       scope: 'CONSUMER',
       summary: 'Tag a party who has no account yet',
       status: 201,
-      /** A repeat would create a SECOND live invitation to the same person for the same trade. */
-      retryable: true,
+      /**
+       * False, and the reasoning is T-031's on `/auth/refresh` and T-032's on `/auth/register`: the
+       * response carries a live secret — the claim token — and the idempotency gate stores a
+       * completed response as plaintext jsonb for twenty-four hours. Keeping the token out of
+       * `platform.outbox` and then putting it in `platform.idempotency_keys` would be the same
+       * mistake in a different table.
+       *
+       * The cost is a genuine one: a client that retries a timeout creates a second PENDING
+       * invitation to the same address. That is bounded — both claim on the same verification, and
+       * an unclaimed one expires in fourteen days — and is the smaller harm.
+       */
+      retryable: false,
       rateLimit: { ...CONTACT_LIMIT, by: [...CONTACT_LIMIT.by] },
       schema: { body: inviteBodySchema, response: inviteResponseSchema },
       handler: ({ actor, body }) => postPartyInvite(deps, actor, body),

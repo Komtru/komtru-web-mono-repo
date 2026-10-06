@@ -9,9 +9,13 @@
 // false` and a suspended user all take that identical path and leave with the identical body, which
 // is the property M1 §17 names for this endpoint.
 //
-// The residual asymmetry is the one SQL cannot remove: a query that finds a row fetches a heap tuple
-// and one that does not, does not. `login.service.ts` accepted the same residue and bounded it by
-// measurement rather than by argument; `party.enumeration.int.test.ts` is that measurement here.
+// The residual asymmetry is the one SQL cannot remove, and it is bigger than one heap fetch: on a
+// hit the single statement also probes `user_profiles` and `user_capabilities` and evaluates two
+// correlated EXISTS subqueries, none of which execute when the join tree yields no rows. That is
+// about four extra index probes on the found path. `login.service.ts` accepted the same kind of
+// residue and bounded it by MEASUREMENT rather than by argument, and so does this:
+// `party.enumeration.int.test.ts` compares medians over 300 interleaved samples against §17's 5ms.
+// Anyone adding a fifth join here is adding to that residue and owes the measurement a second look.
 import { and, eq, isNotNull, or, sql } from 'drizzle-orm';
 import type { Db } from '../../../db/index.js';
 import { sha256 } from '../../../platform/crypto/hmac.js';
@@ -26,6 +30,7 @@ import {
   partyVisible,
   typeaheadPrefix,
   type Discoverability,
+  type LookupChannel,
   type LookupKey,
 } from '../domain/party/lookup.js';
 import type { LookupBudget } from '../infrastructure/redis/lookup-budget.js';
@@ -184,10 +189,31 @@ async function resolveParty(tx: Tx, key: LookupKey): Promise<PartyRow | null> {
   return row ?? null;
 }
 
+/**
+ * §8.3 control 6, written on the miss path too — forty lookups with thirty-eight misses is the
+ * pattern M13 is looking for, and it is invisible if only the hits are recorded.
+ */
+const publishLookup = (
+  tx: Tx,
+  actorUserId: string,
+  what: { channel: LookupChannel; canonical: string; found: boolean },
+): Promise<unknown> =>
+  publish(tx, identityPartyLookupPerformedEvent, {
+    payload: {
+      actorUserId,
+      channel: what.channel,
+      found: what.found,
+      subjectHash: subjectDigest({ channel: what.channel, canonical: what.canonical }),
+    },
+    aggregateType: 'identity.user',
+    aggregateId: actorUserId,
+    actor: { type: 'CONSUMER', id: actorUserId },
+  });
+
 export async function lookupParty(deps: PartyDeps, input: LookupInput): Promise<LookupResult> {
   // Before anything is read, and on every path: a budget charged only on a hit, or only on a miss,
   // tells the caller the answer through their own remaining quota.
-  await deps.budget.charge(input.key.channel, [input.actorUserId, input.ip ?? '']);
+  await deps.budget.charge(input.key.channel, input.actorUserId);
 
   return deps.db.transaction(async (tx): Promise<LookupResult> => {
     await assertLookupEligible(tx, input.actorUserId);
@@ -196,21 +222,9 @@ export async function lookupParty(deps: PartyDeps, input: LookupInput): Promise<
     const enrichment = await enrich(deps, tx, row ? [row.userId] : []);
     const visible = row !== null && partyVisible(row, input.key.channel);
 
-    // §8.3 control 6, written on the miss path too — forty lookups with thirty-eight misses is the
-    // pattern M13 is looking for, and it is invisible if only the hits are recorded.
-    await publish(tx, identityPartyLookupPerformedEvent, {
-      payload: {
-        actorUserId: input.actorUserId,
-        channel: input.key.channel,
-        // `visible`, not `row !== null`: a hidden user is a miss as far as every observer is
-        // concerned, including Risk, and recording otherwise would put the oracle in the outbox.
-        found: visible,
-        subjectHash: subjectDigest(input.key),
-      },
-      aggregateType: 'identity.user',
-      aggregateId: input.actorUserId,
-      actor: { type: 'CONSUMER', id: input.actorUserId },
-    });
+    // `visible`, not `row !== null`: a hidden user is a miss as far as every observer is concerned,
+    // including Risk, and recording otherwise would put the oracle in the outbox.
+    await publishLookup(tx, input.actorUserId, { ...input.key, found: visible });
 
     if (!visible || !row) {
       return { found: false, canInvite: canInviteOn(input.key.channel), maskedHint: null };
@@ -241,58 +255,75 @@ const enrich = async (
  *
  * There is no `users_username_prefix_idx` — §8.4 specifies one and it is a migration this ticket may
  * not write — so this is a sequential scan bounded by LIMIT 8. See the ticket's deferred note.
+ *
+ * It charges the USERNAME budget and publishes the §8.3 control 6 event exactly as the exact lookup
+ * does, because it is the same channel and the cheaper route to a card: thirty requests a minute
+ * returning eight complete PartyCards each, with no day horizon and nothing reaching Risk, would be
+ * a directory walk the prefix rule only changes the SHAPE of. The budget is charged even for a
+ * prefix too short to search, because refusing to charge for "ja" and charging for "jan" is a free
+ * probe for where the threshold is.
  */
 export async function suggestParties(
   deps: PartyDeps,
   input: { actorUserId: string; prefix: string },
 ): Promise<{ parties: PartyCard[] }> {
   const prefix = typeaheadPrefix(input.prefix);
+  await deps.budget.charge('USERNAME', input.actorUserId);
 
   return deps.db.transaction(async (tx): Promise<{ parties: PartyCard[] }> => {
     await assertLookupEligible(tx, input.actorUserId);
-    if (prefix === null) return { parties: [] };
 
-    const rows = await tx
-      .select({
-        userId: users.id,
-        publicId: users.publicId,
-        username: users.username,
-        displayName: userProfiles.displayName,
-        avatarFileId: userProfiles.avatarFileId,
-        verificationLevel: users.verificationLevel,
-        createdAt: users.createdAt,
-        merchantCapabilityStatus: userCapabilities.status,
-        emailVerified: sql<boolean>`EXISTS (
+    const rows =
+      prefix === null
+        ? []
+        : await tx
+            .select({
+              userId: users.id,
+              publicId: users.publicId,
+              username: users.username,
+              displayName: userProfiles.displayName,
+              avatarFileId: userProfiles.avatarFileId,
+              verificationLevel: users.verificationLevel,
+              createdAt: users.createdAt,
+              merchantCapabilityStatus: userCapabilities.status,
+              emailVerified: sql<boolean>`EXISTS (
           SELECT 1 FROM identity.user_emails ev
            WHERE ev.user_id = ${users.id} AND ev.verified_at IS NOT NULL)`,
-        phoneVerified: sql<boolean>`EXISTS (
+              phoneVerified: sql<boolean>`EXISTS (
           SELECT 1 FROM identity.user_phones pv
            WHERE pv.user_id = ${users.id} AND pv.verified_at IS NOT NULL)`,
-      })
-      .from(users)
-      .leftJoin(userProfiles, eq(userProfiles.userId, users.id))
-      .leftJoin(
-        userCapabilities,
-        and(eq(userCapabilities.userId, users.id), eq(userCapabilities.capability, 'MERCHANT')),
-      )
-      .where(
-        and(
-          // §8.4's own query shape: `lower(username::text)`, because text_pattern_ops has no citext
-          // operator class and ILIKE on the citext column would not use the index §8.4 specifies.
-          sql`lower(${users.username}::text) LIKE ${`${escapeLikePrefix(prefix)}%`} ESCAPE '\\'`,
-          eq(users.status, 'ACTIVE'),
-          eq(users.discoverableByUsername, true),
-          sql`${users.verificationLevel} <> 'UNVERIFIED'`,
-        ),
-      )
-      .orderBy(users.username)
-      .limit(MAX_TYPEAHEAD_RESULTS);
+            })
+            .from(users)
+            .leftJoin(userProfiles, eq(userProfiles.userId, users.id))
+            .leftJoin(
+              userCapabilities,
+              and(eq(userCapabilities.userId, users.id), eq(userCapabilities.capability, 'MERCHANT')),
+            )
+            .where(
+              and(
+                // §8.4's own query shape: `lower(username::text)`, because text_pattern_ops has no citext
+                // operator class and ILIKE on the citext column would not use the index §8.4 specifies.
+                sql`lower(${users.username}::text) LIKE ${`${escapeLikePrefix(prefix ?? '')}%`} ESCAPE '\\'`,
+                eq(users.status, 'ACTIVE'),
+                eq(users.discoverableByUsername, true),
+                sql`${users.verificationLevel} <> 'UNVERIFIED'`,
+              ),
+            )
+            .orderBy(users.username)
+            .limit(MAX_TYPEAHEAD_RESULTS);
 
     const enrichment = await enrich(
       deps,
       tx,
       rows.map((row) => row.userId),
     );
+
+    await publishLookup(tx, input.actorUserId, {
+      channel: 'USERNAME',
+      canonical: prefix ?? '',
+      found: rows.length > 0,
+    });
+
     return {
       parties: rows.map((row) => partyCard(row, enrichment.get(row.userId) ?? NO_ENRICHMENT)),
     };

@@ -21,7 +21,11 @@ import { createIdempotencyGate } from '../../../../src/platform/http/idempotency
 import { mountRoutes } from '../../../../src/platform/http/mount.js';
 import { createRateLimitGate } from '../../../../src/platform/http/rateLimit.js';
 import { createTokenSigner } from '../../../../src/modules/identity/infrastructure/jwt/access-token.js';
-import { createLookupBudget } from '../../../../src/modules/identity/infrastructure/redis/lookup-budget.js';
+import {
+  NO_LOOKUP_BUDGET,
+  createLookupBudget,
+} from '../../../../src/modules/identity/infrastructure/redis/lookup-budget.js';
+import { lookupParty, type PartyDeps } from '../../../../src/modules/identity/services/party.service.js';
 import { infraEnabled } from '../../../support/db-urls.js';
 import { useTestDatabase } from '../../../support/db.js';
 import { insertUser } from '../infrastructure/postgres/support.js';
@@ -37,7 +41,9 @@ const median = (values: number[]): number => {
 
 describe.runIf(infraEnabled)('party lookup enumeration (M1 §17)', () => {
   const t = useTestDatabase();
-  const config = testConfig();
+  // Without this express ignores `X-Forwarded-For` entirely (TRUST_PROXY_HOPS defaults to 0), so
+  // the per-IP cases below would all share the loopback address and pass for the wrong reason.
+  const config = testConfig({ TRUST_PROXY_HOPS: '1' });
   let redis: Redis;
   let app: Express;
 
@@ -129,35 +135,53 @@ describe.runIf(infraEnabled)('party lookup enumeration (M1 §17)', () => {
     expect(suspended.body).toEqual(missing.body);
   });
 
+  // The two timing cases measure `lookupParty` DIRECTLY and not over HTTP, which is what
+  // `login.enumeration.int.test.ts` does for the same property and for the same reason: the route's
+  // own §8.3 control 3 window is ten a minute, so six hundred samples through HTTP would be five
+  // hundred and ninety 429s and the comparison would be between two error responses. What has to be
+  // flat is the DATABASE work, and that is what these measure.
+  const serviceDeps = (): PartyDeps => ({ db: t.db(), budget: NO_LOOKUP_BUDGET });
+
+  const measure = async (caller: string, a: string, b: string): Promise<number> => {
+    const call = (email: string) =>
+      lookupParty(serviceDeps(), {
+        actorUserId: caller,
+        ip: '198.51.100.1',
+        key: { channel: 'EMAIL', canonical: email },
+      });
+
+    // Warm the pool and the plan cache; the first few calls of either path are not comparable.
+    for (let i = 0; i < 20; i += 1) {
+      await call(a);
+      await call(b);
+    }
+
+    const first: number[] = [];
+    const second: number[] = [];
+    for (let i = 0; i < SAMPLES; i += 1) {
+      // Interleaved, so a drifting machine load affects both series equally.
+      let start = performance.now();
+      await call(a);
+      first.push(performance.now() - start);
+
+      start = performance.now();
+      await call(b);
+      second.push(performance.now() - start);
+    }
+    return Math.abs(median(first) - median(second));
+  };
+
   it(
     `takes the same time for a hidden user and for a miss: < 5ms over ${String(SAMPLES)} samples`,
     { timeout: 180_000 },
     async () => {
-      // The pair M1 §17 names for this endpoint. The two paths do IDENTICAL database work by
-      // construction — one statement, the enrichment port either way, one outbox row either way —
-      // and differ only in a `partyVisible` call on a row both of them fetched. This is the
-      // measurement that says so rather than the argument.
-      const token = await seedCaller();
+      // The pair M1 §17 names for this endpoint.
+      const callerId = await insertUser(t.owner(), {
+        status: 'ACTIVE',
+        verification_level: 'CONTACT_VERIFIED',
+      });
       await seedThree();
-
-      for (let i = 0; i < 20; i += 1) {
-        await lookupEmail(token, HIDDEN);
-        await lookupEmail(token, MISSING);
-      }
-
-      const hidden: number[] = [];
-      const missing: number[] = [];
-      for (let i = 0; i < SAMPLES; i += 1) {
-        let start = performance.now();
-        await lookupEmail(token, HIDDEN);
-        hidden.push(performance.now() - start);
-
-        start = performance.now();
-        await lookupEmail(token, MISSING);
-        missing.push(performance.now() - start);
-      }
-
-      expect(Math.abs(median(hidden) - median(missing))).toBeLessThan(5);
+      expect(await measure(callerId, HIDDEN, MISSING)).toBeLessThan(5);
     },
   );
 
@@ -167,27 +191,12 @@ describe.runIf(infraEnabled)('party lookup enumeration (M1 §17)', () => {
     async () => {
       // Not named by §17, but the same oracle one step further out: if finding somebody were
       // measurably slower than not finding them, the uniform body would buy nothing.
-      const token = await seedCaller();
+      const callerId = await insertUser(t.owner(), {
+        status: 'ACTIVE',
+        verification_level: 'CONTACT_VERIFIED',
+      });
       await seedThree();
-
-      for (let i = 0; i < 20; i += 1) {
-        await lookupEmail(token, FOUND);
-        await lookupEmail(token, MISSING);
-      }
-
-      const found: number[] = [];
-      const missing: number[] = [];
-      for (let i = 0; i < SAMPLES; i += 1) {
-        let start = performance.now();
-        await lookupEmail(token, FOUND);
-        found.push(performance.now() - start);
-
-        start = performance.now();
-        await lookupEmail(token, MISSING);
-        missing.push(performance.now() - start);
-      }
-
-      expect(Math.abs(median(found) - median(missing))).toBeLessThan(5);
+      expect(await measure(callerId, FOUND, MISSING)).toBeLessThan(5);
     },
   );
 
@@ -273,18 +282,18 @@ describe.runIf(infraEnabled)('party lookup enumeration (M1 §17)', () => {
     // bounds an attacker willing to wait between bursts. Exercised directly against Redis, because
     // reaching it through HTTP means first defeating the route's own ten-a-minute window, and a test
     // that deletes the route's keys to get past it would be testing the deletion.
-    const budget = createLookupBudget(redis, testLogger);
+    const budget = createLookupBudget({ redis, logger: testLogger, keyPrefix: `lb-${randomUUID()}` });
     const subject = `user:${randomUUID()}`;
 
-    for (let i = 0; i < 50; i += 1) await budget.charge('EMAIL', [subject]);
-    await expect(budget.charge('EMAIL', [subject])).rejects.toMatchObject({
+    for (let i = 0; i < 50; i += 1) await budget.charge('EMAIL', subject);
+    await expect(budget.charge('EMAIL', subject)).rejects.toMatchObject({
       status: 429,
       code: 'RATE_LIMITED',
     });
 
     // A handle is public by design, so its budget is ten times looser on the same horizon.
     const handles = `user:${randomUUID()}`;
-    for (let i = 0; i < 51; i += 1) await budget.charge('USERNAME', [handles]);
+    for (let i = 0; i < 51; i += 1) await budget.charge('USERNAME', handles);
   });
 
   it('answers a handle typeahead with at most eight, and nothing for two characters', async () => {

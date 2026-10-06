@@ -93,7 +93,12 @@ describe('party routes (M1 §10.4)', () => {
 
   it('does not make a lookup replayable, so every probe reaches Risk (§8.3 control 6)', () => {
     expect(route('POST /parties/lookup')?.retryable).toBe(false);
-    expect(route('POST /parties/invite')?.retryable).toBe(true);
+  });
+
+  it('does not make an invite replayable, so the claim token never reaches the idempotency table', () => {
+    // The gate stores a completed response as plaintext jsonb for 24 hours, and this response
+    // carries a live secret.
+    expect(route('POST /parties/invite')?.retryable).toBe(false);
   });
 });
 

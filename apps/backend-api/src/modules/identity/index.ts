@@ -184,7 +184,7 @@ export function createIdentityAuth(options: IdentityAuthOptions): IdentityAuth {
   // keep.
   const party: PartyControllerDeps = {
     db,
-    budget: createLookupBudget(redis, logger),
+    budget: createLookupBudget({ redis, logger }),
     hasher: account.otpHasher,
     encryption,
     logger,

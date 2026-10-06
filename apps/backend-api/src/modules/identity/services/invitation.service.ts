@@ -31,6 +31,7 @@ import { partyInvitations } from '../infrastructure/postgres/schema/invitations.
 import { userCapabilities } from '../infrastructure/postgres/schema/rbac.js';
 import { userProfiles, users } from '../infrastructure/postgres/schema/users.js';
 import { findUserByVerifiedEmail, findUserByVerifiedPhone } from './contact.service.js';
+import { assertLookupEligible } from './party.service.js';
 
 export interface InvitationDeps {
   db: Db;
@@ -64,6 +65,12 @@ export type CreateInvitationResult =
 /**
  * §8.5 step 2.
  *
+ * The caller is held to §8.3 control 2, exactly as on the lookup this endpoint follows (§8.1 draws
+ * invite as the continuation of a lookup miss). Without that gate a brand-new unverified account —
+ * one every lookup route refuses — could post ten invitations a minute to arbitrary addresses, each
+ * writing a third party's contact into our table, and would become an outbound relay the moment a
+ * later ticket teaches notify to address a raw destination.
+ *
  * **It deliberately does NOT check whether the destination already belongs to somebody else, and it
  * never claims on creation.** A lookup miss can be a live account with `discoverable_by_email =
  * false`, and binding that person to a trade on the strength of an address they asked not to be
@@ -85,6 +92,8 @@ export async function createInvitation(
   const masked = input.channel === 'EMAIL' ? maskEmail(input.destination) : maskPhone(key.canonical);
 
   return deps.db.transaction(async (tx): Promise<CreateInvitationResult> => {
+    await assertLookupEligible(tx, input.inviterUserId);
+
     // The one existence check that leaks nothing, because it is about the caller: inviting yourself
     // would create a counterparty that is you, which is design C5's self-dealing block at the
     // cheapest possible layer.

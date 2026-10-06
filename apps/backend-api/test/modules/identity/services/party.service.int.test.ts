@@ -344,6 +344,42 @@ describe.runIf(infraEnabled)('party service (M1 §8)', () => {
       await expect(suggest(caller, 'jan')).rejects.toBeInstanceOf(ApiError);
     });
 
+    it('charges the USERNAME budget and records the lookup, exactly as an exact lookup does', async () => {
+      // §8.3 controls 3 and 6. The typeahead is the username channel's cheapest route to a card, so
+      // leaving it outside both would be 43,200 card-returning requests a day that Risk never sees.
+      const caller = await seedCaller();
+      await seedParty({ username: 'janedoe' });
+      const charged: [string, string][] = [];
+      const budget = {
+        charge: (channel: string, userId: string) => {
+          charged.push([channel, userId]);
+          return Promise.resolve();
+        },
+      };
+
+      await suggest(caller, 'jan', { budget });
+      expect(charged).toEqual([['USERNAME', caller]]);
+      const rows = await events(t.app());
+      expect(rows.map((row) => row.event_type)).toEqual(['identity.party.lookup_performed']);
+      expect(rows[0]?.payload).toMatchObject({ channel: 'USERNAME', found: true });
+      expect(JSON.stringify(rows)).not.toContain('janedoe');
+    });
+
+    it('charges and records a prefix too short to search, so the threshold is not a free probe', async () => {
+      const caller = await seedCaller();
+      const charged: string[] = [];
+      const budget = {
+        charge: (channel: string) => {
+          charged.push(channel);
+          return Promise.resolve();
+        },
+      };
+
+      expect((await suggest(caller, 'ja', { budget })).parties).toEqual([]);
+      expect(charged).toEqual(['USERNAME']);
+      expect((await events(t.app()))[0]?.payload).toMatchObject({ found: false });
+    });
+
     it('returns PartyCards and nothing else', async () => {
       const caller = await seedCaller();
       await seedParty({ username: 'janedoe', email: 'jane@example.com' });

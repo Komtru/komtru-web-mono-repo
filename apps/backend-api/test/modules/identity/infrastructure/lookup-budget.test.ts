@@ -2,7 +2,9 @@ import { describe, expect, it } from 'vitest';
 import {
   LOOKUP_WINDOWS,
   NO_LOOKUP_BUDGET,
+  createLookupBudget,
 } from '../../../../src/modules/identity/infrastructure/redis/lookup-budget.js';
+import { testLogger } from '../support.js';
 
 describe('the party lookup budget (M1 §8.3 control 3)', () => {
   it('bounds a username lookup at 300 a day', () => {
@@ -25,6 +27,16 @@ describe('the party lookup budget (M1 §8.3 control 3)', () => {
   });
 
   it('charges nothing and never throws for the null budget', async () => {
-    await expect(NO_LOOKUP_BUDGET.charge('EMAIL', ['user:1', '198.51.100.7'])).resolves.toBeUndefined();
+    await expect(NO_LOOKUP_BUDGET.charge('EMAIL', 'user:1')).resolves.toBeUndefined();
+  });
+
+  it('namespaces its keys, so two test runs in one day do not share a budget', () => {
+    // The windows are 24 hours and 30 days long and the keys outlive a test run by design. Without
+    // a prefix the suite's second run inside a day starts where the first left off, which is a
+    // false failure that looks exactly like a real one. `createRateLimitGate` takes one for the
+    // same reason.
+    expect(() =>
+      createLookupBudget({ redis: {} as never, logger: testLogger, keyPrefix: 'test-run-1' }),
+    ).not.toThrow();
   });
 });

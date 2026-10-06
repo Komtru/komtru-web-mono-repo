@@ -3,6 +3,9 @@ import * as identity from '../../../src/modules/identity/index.js';
 import { ANONYMOUS_ACTOR } from '../../../src/platform/http/principal.js';
 import { assertRouteInvariants } from '../../../src/platform/http/route.js';
 import { registryConfig, stubProcessDeps, testModules } from '../../support/modules.js';
+import { loadConfig } from '../../../src/config/env.js';
+import { createLogger } from '../../../src/platform/logger.js';
+import { identityProcessEnv } from '../../support/identity-env.js';
 
 describe('identity module surface', () => {
   it('exports the catalogue and the username surface other modules need', () => {
@@ -196,5 +199,28 @@ describe('identity module wiring (T-035)', () => {
     expect(identity.canActAsBuyer('ACTIVE')).toBe(false);
     expect(identity.canActAsBuyer('SUSPENDED')).toBe(true);
     expect(identity.canActAsBuyer(null)).toBe(true);
+  });
+});
+
+describe('every env a real process is started from satisfies identity (T-035)', () => {
+  // `createIdentityAuth` throws when a key is missing, and the suites that boot real processes build
+  // their environment by hand. `identityProcessEnv()` is the one list they all spread, and this is
+  // the assertion that it is still sufficient — because nothing but an infra run would otherwise
+  // notice a fourth key added to the module and not added to that list.
+  it('builds the identity module from identityProcessEnv() alone', () => {
+    const config = loadConfig({
+      LOG_LEVEL: 'silent',
+      POSTGRES_URL: 'postgresql://x@localhost/x',
+      REDIS_URL: 'redis://localhost:6379',
+      ...identityProcessEnv(),
+    });
+    expect(() =>
+      identity.createIdentityAuth({
+        db: {} as never,
+        redis: {} as never,
+        config,
+        logger: createLogger(config),
+      }),
+    ).not.toThrow();
   });
 });
