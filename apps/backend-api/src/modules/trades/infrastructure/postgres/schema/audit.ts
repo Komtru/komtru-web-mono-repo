@@ -3,18 +3,21 @@
 // nowhere to put (conflict C6).
 //
 // No foreign key to identity: an actor id is a soft reference across schemas. The foreign key to
-// `trades` is real and cascades, because a trade row is never deleted in production — the cascade
-// exists so a test fixture can clean up without leaving orphans.
-import { bigserial, index, jsonb, text, timestamp, uuid } from 'drizzle-orm/pg-core';
+// `trades` is real and cascades — but a cascaded DELETE fires the append-only trigger, so once a
+// trade has any history it cannot be deleted by anyone, the owner included. That is the intended
+// outcome: the evidence outlives the row it describes.
+import { sql } from 'drizzle-orm';
+import { bigserial, check, index, jsonb, text, timestamp, uuid } from 'drizzle-orm/pg-core';
 import { trade } from './columns.js';
 import { tradeAction, tradeActivityType, tradeActorType, tradeStatus } from './enums.js';
 import { trades } from './trades.js';
 
 /**
- * Written by the `trade_record_state_change` trigger (migration 0018), never by a service: an audit
- * trail that depends on every caller remembering to write it is decorative. A counter-proposal is
- * the one transition that does not land here, because it leaves the status where it was; it is
- * recorded in `trade_activity` as COUNTER_PROPOSED.
+ * Written by the `trade_record_state_change` trigger (migration 0018) and by nothing else: a direct
+ * INSERT is refused in migration 0021, because an audit trail anyone can write to is one anyone can
+ * forge. Every transition lands here, the counter-proposal included — the triggers key on
+ * `status_revision`, not on `status`, so the one transition that leaves the status where it was is
+ * still recorded (with `from_status` = `to_status`).
  */
 export const tradeStateChanges = trade.table(
   'trade_state_changes',
@@ -32,7 +35,15 @@ export const tradeStateChanges = trade.table(
     reason: text('reason'),
     metadata: jsonb('metadata'),
   },
-  (table) => [index('trade_state_changes_trade_idx').on(table.tradeId, table.occurredAt.desc().nullsFirst())],
+  (table) => [
+    // A human actor without an id is an audit row that lies by omission: only the system and the
+    // ledger act without one.
+    check(
+      'trade_state_changes_actor_identified',
+      sql`${table.actorId} IS NOT NULL OR ${table.actorType} IN ('SYSTEM', 'LEDGER')`,
+    ),
+    index('trade_state_changes_trade_idx').on(table.tradeId, table.occurredAt.desc().nullsFirst()),
+  ],
 );
 
 export const tradeActivity = trade.table(

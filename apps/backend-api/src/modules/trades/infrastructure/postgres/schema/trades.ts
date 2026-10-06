@@ -45,6 +45,15 @@ export const trades = trade.table(
     tradeStandardVersion: integer('trade_standard_version'),
 
     status: tradeStatus('status').notNull().default('DRAFT'),
+    /** Bumped by every transition, including the counter-proposal that leaves `status` where it
+     * is. The triggers in migration 0018 key on this rather than on `status`, so a self-transition
+     * is guarded and audited like any other, and a status written without a bump is refused. It is
+     * also the optimistic-concurrency token a self-transition needs: `status` alone cannot tell two
+     * simultaneous counter-proposals apart. */
+    statusRevision: integer('status_revision').notNull().default(0),
+    /** Stamped by the guard trigger, so a caller learns what the trade left without reading the
+     * audit log back — and cannot be told something the UPDATE did not do. */
+    previousStatus: tradeStatus('previous_status'),
     /** The action that produced `status`; NULL only for a trade that has never moved. */
     statusAction: tradeAction('status_action'),
     statusActorType: tradeActorType('status_actor_type'),
@@ -65,15 +74,19 @@ export const trades = trade.table(
     currentTermsVersionId: uuid('current_terms_version_id'),
     acceptedTermsVersionId: uuid('accepted_terms_version_id'),
 
-    /** The fee snapshot (§6.5). All eight columns are written together, at acceptance, and frozen
+    /** The fee snapshot (§6.5). All nine columns are written together, at acceptance, and frozen
      * afterwards by the trigger in migration 0019. Values come from the fee module's
-     * snapshotFees(...) (T-047); this module computes no fee of its own. */
+     * `snapshotFees(...)` (T-047); this module computes no fee of its own. The columns carry the
+     * same names as the calculator's, so the ledger reads one vocabulary; `fee_snapshot` holds the
+     * whole `FeeSnapshot` verbatim, amounts as digit strings, because a JSON number loses kobo
+     * past 2^53. */
     feeScheduleVersion: text('fee_schedule_version'),
     itemAmountMinor: bigint('item_amount_minor', { mode: 'bigint' }),
     buyerProtectionFeeMinor: bigint('buyer_protection_fee_minor', { mode: 'bigint' }),
     buyerTotalMinor: bigint('buyer_total_minor', { mode: 'bigint' }),
     commissionMinor: bigint('commission_minor', { mode: 'bigint' }),
-    sellerPayoutMinor: bigint('seller_payout_minor', { mode: 'bigint' }),
+    sellerProceedsMinor: bigint('seller_proceeds_minor', { mode: 'bigint' }),
+    platformRevenueMinor: bigint('platform_revenue_minor', { mode: 'bigint' }),
     feeSnapshot: jsonb('fee_snapshot'),
     feesSnapshottedAt: timestamp('fees_snapshotted_at', { withTimezone: true }),
 
@@ -126,8 +139,9 @@ export const trades = trade.table(
     check(
       'trades_fee_snapshot_complete',
       sql`num_nonnulls(${table.feeScheduleVersion}, ${table.itemAmountMinor}, ${table.buyerProtectionFeeMinor},
-                      ${table.buyerTotalMinor}, ${table.commissionMinor}, ${table.sellerPayoutMinor},
-                      ${table.feeSnapshot}, ${table.feesSnapshottedAt}) IN (0, 8)`,
+                      ${table.buyerTotalMinor}, ${table.commissionMinor}, ${table.sellerProceedsMinor},
+                      ${table.platformRevenueMinor}, ${table.feeSnapshot}, ${table.feesSnapshottedAt})
+           IN (0, 9)`,
     ),
     // §6.4's arithmetic, re-checked by the database: the buyer funds the item plus the protection
     // fee, the seller is credited the item minus the commission.
@@ -137,15 +151,22 @@ export const trades = trade.table(
           OR (${table.itemAmountMinor} > 0
               AND ${table.buyerProtectionFeeMinor} >= 0
               AND ${table.commissionMinor} >= 0
-              AND ${table.sellerPayoutMinor} >= 0
+              AND ${table.sellerProceedsMinor} >= 0
               AND ${table.buyerTotalMinor} = ${table.itemAmountMinor} + ${table.buyerProtectionFeeMinor}
-              AND ${table.sellerPayoutMinor} = ${table.itemAmountMinor} - ${table.commissionMinor})`,
+              AND ${table.sellerProceedsMinor} = ${table.itemAmountMinor} - ${table.commissionMinor}
+              AND ${table.platformRevenueMinor} = ${table.buyerProtectionFeeMinor} + ${table.commissionMinor})`,
     ),
     // A buyer never sees a total that can still change: no trade reaches PENDING_PAYMENT, and so
     // none is ever funded, without its fees frozen (§6.5).
     check(
       'trades_fees_before_payment',
       sql`${table.feeScheduleVersion} IS NOT NULL OR ${table.status} IN ${BEFORE_ACCEPTANCE}`,
+    ),
+    // Fees frozen against no agreed price would be a total nobody signed: the pinned terms version
+    // is the only record of what the two parties actually agreed to.
+    check(
+      'trades_terms_before_payment',
+      sql`${table.acceptedTermsVersionId} IS NOT NULL OR ${table.status} IN ${BEFORE_ACCEPTANCE}`,
     ),
     // One trades list across both sides (design C22), newest first.
     index('trades_buyer_idx').on(table.buyerUserId, table.createdAt.desc().nullsFirst()),

@@ -3,12 +3,18 @@
 -- is its copy, so a service that forgets canTransition, a job that updates status directly and a
 -- psql session are refused the same jumps. A unit test fails if the two ever diverge.
 --
--- Two triggers hang off it. The guard refuses an invalid jump with SQLSTATE KT010 and stamps the
--- clock itself, so a caller cannot backdate a transition. The recorder writes trade_state_changes,
--- because an audit trail that depends on every caller remembering to write it is decorative; the
--- log is append-only (migration 0017), so the row it writes can never be edited afterwards.
--- A counter-proposal leaves the status where it is and so writes no state change: it is recorded in
--- trade_activity as COUNTER_PROPOSED (conflict C6).
+-- The triggers key on `status_revision`, not on `status`. Keying on the status would skip the one
+-- transition that leaves it where it is — the counter-proposal, which is also the transition that
+-- changes the price — leaving the most consequential step unguarded and unaudited. Bumping a
+-- revision instead means every transition is validated, stamped and recorded, and a status written
+-- without a bump is refused outright (trade_status_needs_revision).
+--
+-- The guard refuses an invalid jump with SQLSTATE KT010, insists the change names its action and an
+-- identified actor, and stamps the clock and the previous status itself, so a caller can neither
+-- backdate a transition nor be told it left a status it did not. The recorder writes
+-- trade_state_changes, because an audit trail that depends on every caller remembering to write it
+-- is decorative; that log is append-only (0017) and refuses direct inserts (0021), so the row it
+-- writes can be neither edited nor forged.
 CREATE OR REPLACE FUNCTION trade.is_valid_transition(
   action trade.trade_action, from_status trade.trade_status, to_status trade.trade_status
 ) RETURNS boolean LANGUAGE sql IMMUTABLE PARALLEL SAFE AS $$
@@ -49,25 +55,42 @@ CREATE OR REPLACE FUNCTION trade.is_valid_transition(
 $$;
 --> statement-breakpoint
 CREATE FUNCTION trade.guard_status_transition() RETURNS trigger
-  LANGUAGE plpgsql AS $$
+  LANGUAGE plpgsql SET search_path = pg_catalog, trade AS $$
 BEGIN
+  IF NEW.status_revision <> OLD.status_revision + 1 THEN
+    RAISE EXCEPTION 'komtru: a trade transition bumps status_revision by exactly one'
+      USING ERRCODE = 'KT010';
+  END IF;
   IF NEW.status_action IS NULL OR NEW.status_actor_type IS NULL THEN
     RAISE EXCEPTION 'komtru: a trade status change must name its action and its actor'
       USING ERRCODE = 'KT010';
+  END IF;
+  IF NEW.status_actor_id IS NULL AND NEW.status_actor_type NOT IN ('SYSTEM', 'LEDGER') THEN
+    RAISE EXCEPTION 'komtru: a % transition must name which % acted',
+      NEW.status_actor_type, NEW.status_actor_type USING ERRCODE = 'KT010';
   END IF;
   IF NOT trade.is_valid_transition(NEW.status_action, OLD.status, NEW.status) THEN
     RAISE EXCEPTION 'komtru: % cannot move trade % from % to %',
       NEW.status_action, OLD.trade_code, OLD.status, NEW.status
       USING ERRCODE = 'KT010';
   END IF;
+  NEW.previous_status := OLD.status;
   NEW.status_changed_at := now();
   NEW.updated_at := now();
   RETURN NEW;
 END
 $$;
 --> statement-breakpoint
+CREATE FUNCTION trade.reject_unversioned_status() RETURNS trigger
+  LANGUAGE plpgsql SET search_path = pg_catalog, trade AS $$
+BEGIN
+  RAISE EXCEPTION 'komtru: trade % cannot change status without bumping status_revision', OLD.trade_code
+    USING ERRCODE = 'KT010';
+END
+$$;
+--> statement-breakpoint
 CREATE FUNCTION trade.record_state_change() RETURNS trigger
-  LANGUAGE plpgsql AS $$
+  LANGUAGE plpgsql SET search_path = pg_catalog, trade AS $$
 BEGIN
   INSERT INTO trade.trade_state_changes
     (occurred_at, trade_id, from_status, to_status, action, actor_type, actor_id, reason, metadata)
@@ -79,9 +102,13 @@ END
 $$;
 --> statement-breakpoint
 CREATE TRIGGER trade_guard_status_transition BEFORE UPDATE ON trade.trades
-  FOR EACH ROW WHEN (OLD.status IS DISTINCT FROM NEW.status)
+  FOR EACH ROW WHEN (OLD.status_revision IS DISTINCT FROM NEW.status_revision)
   EXECUTE FUNCTION trade.guard_status_transition();
 --> statement-breakpoint
+CREATE TRIGGER trade_status_needs_revision BEFORE UPDATE ON trade.trades
+  FOR EACH ROW WHEN (OLD.status IS DISTINCT FROM NEW.status AND OLD.status_revision = NEW.status_revision)
+  EXECUTE FUNCTION trade.reject_unversioned_status();
+--> statement-breakpoint
 CREATE TRIGGER trade_record_state_change AFTER UPDATE ON trade.trades
-  FOR EACH ROW WHEN (OLD.status IS DISTINCT FROM NEW.status)
+  FOR EACH ROW WHEN (OLD.status_revision IS DISTINCT FROM NEW.status_revision)
   EXECUTE FUNCTION trade.record_state_change();

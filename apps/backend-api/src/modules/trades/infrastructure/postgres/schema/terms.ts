@@ -1,7 +1,8 @@
 // Every proposal and counter-proposal is a new immutable version (HTML W2, BR1). Nothing here is
 // ever updated except `superseded_at`: a trade's history of what was offered is the evidence a
 // dispute is decided on, so a counter-proposal adds a row rather than editing one.
-import { sql } from 'drizzle-orm';
+import { sql, type SQL } from 'drizzle-orm';
+import type { PgColumn } from 'drizzle-orm/pg-core';
 import {
   bigint,
   check,
@@ -17,8 +18,18 @@ import { trade } from './columns.js';
 import { tradeInitiatorRole } from './enums.js';
 import { trades } from './trades.js';
 
-/** Design §7.8: an address snapshot carries everything a courier and a Park hub need. */
-const ADDRESS_KEYS = sql`?& array['street', 'landmark', 'recipient', 'state_id', 'city_id']`;
+/**
+ * Design §7.8: an address snapshot carries everything a courier and a Park hub need. Key presence
+ * alone would accept `{"street": null}`, so the four fields a parcel cannot move without are also
+ * required to be non-empty strings. `landmark` must be present but may be empty — plenty of Lagos
+ * addresses have no landmark worth writing, and an empty one is honest where a made-up one is not.
+ */
+const addressShape = (column: PgColumn): SQL =>
+  sql`${column} ?& array['street', 'landmark', 'recipient', 'state_id', 'city_id']
+      AND length(coalesce(${column} ->> 'street', '')) > 0
+      AND length(coalesce(${column} ->> 'recipient', '')) > 0
+      AND length(coalesce(${column} ->> 'state_id', '')) > 0
+      AND length(coalesce(${column} ->> 'city_id', '')) > 0`;
 
 export const tradeTermsVersions = trade.table(
   'trade_terms_versions',
@@ -55,8 +66,8 @@ export const tradeTermsVersions = trade.table(
       'trade_terms_window_positive',
       sql`${table.inspectionWindowHours} > 0 AND ${table.deliveryGraceHours} > 0`,
     ),
-    check('trade_terms_delivery_address_shape', sql`${table.deliveryAddress} ${ADDRESS_KEYS}`),
-    check('trade_terms_ships_from_address_shape', sql`${table.shipsFromAddress} ${ADDRESS_KEYS}`),
+    check('trade_terms_delivery_address_shape', addressShape(table.deliveryAddress)),
+    check('trade_terms_ships_from_address_shape', addressShape(table.shipsFromAddress)),
     // The turn-flipping guard: two counter-proposals racing cannot both become version N, so the
     // loser retries against the version it has actually seen rather than silently overwriting.
     uniqueIndex('trade_terms_versions_trade_version').on(table.tradeId, table.versionNumber),

@@ -6,11 +6,13 @@ import { useTestDatabase } from '../../../support/db.js';
 import {
   ADDRESS,
   constraintName,
+  driveTo,
   feeSnapshotColumnValues,
   insertRow,
   insertTrade,
   insertUser,
   testTradeCode,
+  transition,
 } from '../support.js';
 
 describe.runIf(infraEnabled)('trade.trades', () => {
@@ -78,56 +80,83 @@ describe.runIf(infraEnabled)('trade.trades', () => {
     const { buyer, seller } = await parties();
     const fees = {
       ...feeSnapshotColumnValues(45_000_000n, 675_000n, 100_000n),
-      seller_payout_minor: '45000000',
+      seller_proceeds_minor: '45000000',
     };
     expect(await constraintName(insertTrade(t.app(), { buyer, seller }, fees))).toBe(
       'trades_fee_snapshot_arithmetic',
     );
   });
 
-  it('rejects PENDING_PAYMENT without a fee snapshot', async () => {
+  it('rejects platform revenue that is not the fee plus the commission', async () => {
     const { buyer, seller } = await parties();
-    expect(await constraintName(insertTrade(t.app(), { buyer, seller }, { status: 'PENDING_PAYMENT' }))).toBe(
+    const fees = { ...feeSnapshotColumnValues(), platform_revenue_minor: '1' };
+    expect(await constraintName(insertTrade(t.app(), { buyer, seller }, fees))).toBe(
+      'trades_fee_snapshot_arithmetic',
+    );
+  });
+
+  it('refuses to accept a trade without pinning the terms that were agreed', async () => {
+    const { buyer, seller } = await parties();
+    const id = await insertTrade(t.app(), { buyer, seller });
+    await driveTo(t.app(), id, 'AWAITING_ACCEPTANCE');
+    expect(
+      await constraintName(transition(t.app(), id, { action: 'ACCEPT', to: 'PENDING_PAYMENT', fees: true })),
+    ).toBe('trades_terms_before_payment');
+  });
+
+  it('rejects accepting a trade without snapshotting its fees', async () => {
+    const { buyer, seller } = await parties();
+    const id = await insertTrade(t.app(), { buyer, seller });
+    await driveTo(t.app(), id, 'AWAITING_ACCEPTANCE');
+    expect(await constraintName(transition(t.app(), id, { action: 'ACCEPT', to: 'PENDING_PAYMENT' }))).toBe(
       'trades_fees_before_payment',
     );
   });
 
   it('accepts PENDING_PAYMENT once the fees are frozen', async () => {
     const { buyer, seller } = await parties();
-    await expect(
-      insertTrade(t.app(), { buyer, seller }, { status: 'PENDING_PAYMENT', ...feeSnapshotColumnValues() }),
-    ).resolves.toBeTypeOf('string');
+    const id = await insertTrade(t.app(), { buyer, seller });
+    await driveTo(t.app(), id, 'PENDING_PAYMENT');
+    const { rows } = await t
+      .app()
+      .query<{ status: string }>('SELECT status FROM trade.trades WHERE id = $1', [id]);
+    expect(rows[0]?.status).toBe('PENDING_PAYMENT');
   });
 
-  it('rejects FUNDED with an unbound counterparty', async () => {
+  it('refuses to leave PENDING_COUNTERPARTY until the counterparty is a real user', async () => {
     const seller = await insertUser(t.app());
+    const id = await insertTrade(
+      t.app(),
+      { seller, buyer: null, initiator: seller, role: 'SELLER' },
+      { counterparty_invitation_id: '0199a2b3-c4d5-7e6f-8a9b-0c1d2e3f4a03' },
+    );
+    await transition(t.app(), id, { action: 'SEND', to: 'PENDING_COUNTERPARTY' });
     expect(
       await constraintName(
-        insertTrade(
-          t.app(),
-          { seller, buyer: null, initiator: seller, role: 'SELLER' },
-          {
-            status: 'FUNDED',
-            counterparty_invitation_id: '0199a2b3-c4d5-7e6f-8a9b-0c1d2e3f4a03',
-            ...feeSnapshotColumnValues(),
-          },
-        ),
+        transition(t.app(), id, { action: 'CLAIM_INVITATION', to: 'AWAITING_ACCEPTANCE' }),
       ),
     ).toBe('trades_parties_bound');
+
+    // With the claimer bound in the same statement, the same transition is allowed.
+    const buyer = await insertUser(t.app());
+    await expect(
+      transition(
+        t.app(),
+        id,
+        { action: 'CLAIM_INVITATION', to: 'AWAITING_ACCEPTANCE' },
+        { buyer_user_id: buyer },
+      ),
+    ).resolves.toBeTruthy();
   });
 
   it('accepts a PENDING_COUNTERPARTY trade whose buyer is only an invitation', async () => {
     const seller = await insertUser(t.app());
-    await expect(
-      insertTrade(
-        t.app(),
-        { seller, buyer: null, initiator: seller, role: 'SELLER' },
-        {
-          status: 'PENDING_COUNTERPARTY',
-          counterparty_invitation_id: '0199a2b3-c4d5-7e6f-8a9b-0c1d2e3f4a03',
-        },
-      ),
-    ).resolves.toBeTypeOf('string');
+    const id = await insertTrade(
+      t.app(),
+      { seller, buyer: null, initiator: seller, role: 'SELLER' },
+      { counterparty_invitation_id: '0199a2b3-c4d5-7e6f-8a9b-0c1d2e3f4a03' },
+    );
+    await expect(driveTo(t.app(), id, 'PENDING_COUNTERPARTY')).resolves.toBeUndefined();
   });
 });
 

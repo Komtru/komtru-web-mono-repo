@@ -84,7 +84,10 @@ describe('canTransition', () => {
     expect(isTransitionAllowed(action, from, to)).toBe(false);
   });
 
-  it('draws exactly the edges design §6.2 draws, and no others', () => {
+  // "§6.2 plus M7 D3's pre-funding cancels": the three CANCEL edges from DRAFT,
+  // PENDING_COUNTERPARTY and UNDER_PROPOSAL_REVIEW are the documented widening, and this is the
+  // assertion that would catch any other edge creeping in.
+  it('draws exactly the reconciled edge set, and no others', () => {
     const drawn = TRADE_ACTIONS.flatMap((action) =>
       TRADE_STATUSES.flatMap((from) => canTransition(action, from).map((to) => [action, from, to])),
     );

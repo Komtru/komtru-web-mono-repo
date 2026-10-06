@@ -9,7 +9,7 @@ import {
 } from '../../../../src/modules/trades/domain/stateMachine.js';
 import { infraEnabled } from '../../../support/db-urls.js';
 import { useTestDatabase } from '../../../support/db.js';
-import { errorMessage, insertTrade, insertUser, sqlState } from '../support.js';
+import { driveTo, errorMessage, insertTrade, insertUser, sqlState, transition } from '../support.js';
 
 describe.runIf(infraEnabled)('trade.is_valid_transition', () => {
   const t = useTestDatabase();
@@ -42,23 +42,26 @@ describe.runIf(infraEnabled)('trade.is_valid_transition', () => {
 describe.runIf(infraEnabled)('the trades status guard', () => {
   const t = useTestDatabase();
 
-  const aTrade = async (overrides: Record<string, unknown> = {}) => {
+  const aTrade = async (status = 'DRAFT') => {
     const buyer = await insertUser(t.app());
     const seller = await insertUser(t.app());
-    return insertTrade(t.app(), { buyer, seller }, overrides);
+    const id = await insertTrade(t.app(), { buyer, seller });
+    await driveTo(t.app(), id, status);
+    return id;
   };
 
-  const move = (id: string, to: string, action: string, actor = 'BUYER') =>
-    t
-      .app()
-      .query(
-        `UPDATE trade.trades SET status = $2, status_action = $3, status_actor_type = $4 WHERE id = $1`,
-        [id, to, action, actor],
-      );
+  const move = (id: string, to: string, action: string, actor = 'SYSTEM') =>
+    t.app().query(
+      `UPDATE trade.trades
+          SET status = $2, status_action = $3, status_actor_type = $4,
+              status_revision = status_revision + 1
+        WHERE id = $1`,
+      [id, to, action, actor],
+    );
 
   it('allows an edge the map draws', async () => {
     const id = await aTrade();
-    await move(id, 'AWAITING_ACCEPTANCE', 'SEND', 'SELLER');
+    await move(id, 'AWAITING_ACCEPTANCE', 'SEND');
     const { rows } = await t
       .app()
       .query<{ status: string }>('SELECT status FROM trade.trades WHERE id = $1', [id]);
@@ -66,22 +69,64 @@ describe.runIf(infraEnabled)('the trades status guard', () => {
   });
 
   it('rejects a direct UPDATE that jumps AWAITING_ACCEPTANCE straight to FUNDED', async () => {
-    const id = await aTrade({ status: 'AWAITING_ACCEPTANCE' });
+    const id = await aTrade('AWAITING_ACCEPTANCE');
     expect(await sqlState(move(id, 'FUNDED', 'FUND'))).toBe('KT010');
   });
 
-  it('rejects cancelling a funded trade however it is attempted (M7 D3)', async () => {
-    const id = await aTrade({ status: 'AWAITING_ACCEPTANCE' });
-    await t.app().query(
-      `UPDATE trade.trades
-          SET status = 'PENDING_PAYMENT', status_action = 'ACCEPT', status_actor_type = 'SELLER',
-              fee_schedule_version = '2026-10-05.1', item_amount_minor = 1000, buyer_protection_fee_minor = 15,
-              buyer_total_minor = 1015, commission_minor = 0, seller_payout_minor = 1000,
-              fee_snapshot = '{}'::jsonb, fees_snapshotted_at = now()
-        WHERE id = $1`,
+  // Keying the guard on the status alone would let a status change through unvalidated whenever the
+  // caller simply did not touch the revision.
+  it('rejects a status change that does not bump the revision', async () => {
+    const id = await aTrade();
+    expect(
+      await sqlState(
+        t.app().query(
+          `UPDATE trade.trades SET status = 'AWAITING_ACCEPTANCE', status_action = 'SEND',
+                  status_actor_type = 'SYSTEM' WHERE id = $1`,
+          [id],
+        ),
+      ),
+    ).toBe('KT010');
+  });
+
+  it('rejects a revision that jumps by more than one', async () => {
+    const id = await aTrade();
+    expect(
+      await sqlState(
+        t.app().query(
+          `UPDATE trade.trades SET status = 'AWAITING_ACCEPTANCE', status_action = 'SEND',
+                  status_actor_type = 'SYSTEM', status_revision = status_revision + 2 WHERE id = $1`,
+          [id],
+        ),
+      ),
+    ).toBe('KT010');
+  });
+
+  // The counter-proposal keeps the turn, so the status does not move — and it is the transition
+  // that changes the price, which makes it the last one that should go unguarded or unaudited.
+  it('guards and records the counter-proposal that leaves the status where it is', async () => {
+    const id = await aTrade('AWAITING_ACCEPTANCE');
+    await transition(t.app(), id, { action: 'COUNTER_PROPOSE', to: 'AWAITING_ACCEPTANCE' });
+    const { rows } = await t.app().query<{ from_status: string; to_status: string; action: string }>(
+      `SELECT from_status, to_status, action FROM trade.trade_state_changes
+          WHERE trade_id = $1 ORDER BY id DESC LIMIT 1`,
       [id],
     );
-    await move(id, 'FUNDED', 'FUND', 'LEDGER');
+    expect(rows[0]).toEqual({
+      from_status: 'AWAITING_ACCEPTANCE',
+      to_status: 'AWAITING_ACCEPTANCE',
+      action: 'COUNTER_PROPOSE',
+    });
+  });
+
+  it('refuses a counter-proposal on a trade that has moved past acceptance', async () => {
+    const id = await aTrade('FUNDED');
+    expect(
+      await sqlState(transition(t.app(), id, { action: 'COUNTER_PROPOSE', to: 'AWAITING_ACCEPTANCE' })),
+    ).toBe('KT010');
+  });
+
+  it('rejects cancelling a funded trade however it is attempted (M7 D3)', async () => {
+    const id = await aTrade('FUNDED');
     expect(await sqlState(move(id, 'CANCELLED', 'CANCEL'))).toBe('KT010');
   });
 
@@ -123,7 +168,7 @@ describe.runIf(infraEnabled)('the trades status guard', () => {
 
   it('writes the state change row itself, with from, to, action and actor', async () => {
     const id = await aTrade();
-    await move(id, 'AWAITING_ACCEPTANCE', 'SEND', 'SELLER');
+    await move(id, 'AWAITING_ACCEPTANCE', 'SEND');
     const { rows } = await t
       .app()
       .query<{ from_status: string; to_status: string; action: string; actor_type: string }>(
@@ -131,7 +176,7 @@ describe.runIf(infraEnabled)('the trades status guard', () => {
         [id],
       );
     expect(rows).toEqual([
-      { from_status: 'DRAFT', to_status: 'AWAITING_ACCEPTANCE', action: 'SEND', actor_type: 'SELLER' },
+      { from_status: 'DRAFT', to_status: 'AWAITING_ACCEPTANCE', action: 'SEND', actor_type: 'SYSTEM' },
     ]);
   });
 
@@ -140,7 +185,8 @@ describe.runIf(infraEnabled)('the trades status guard', () => {
     const theYear2000 = '2000-01-01T00:00:00.000Z';
     await t.app().query(
       `UPDATE trade.trades SET status = 'AWAITING_ACCEPTANCE', status_action = 'SEND',
-              status_actor_type = 'SELLER', status_changed_at = $2 WHERE id = $1`,
+              status_actor_type = 'SYSTEM', status_revision = status_revision + 1,
+              status_changed_at = $2 WHERE id = $1`,
       [id, theYear2000],
     );
     const { rows } = await t
@@ -155,7 +201,8 @@ describe.runIf(infraEnabled)('the trades status guard', () => {
     try {
       await client.query('BEGIN');
       await client.query(
-        `UPDATE trade.trades SET status = 'AWAITING_ACCEPTANCE', status_action = 'SEND', status_actor_type = 'SELLER' WHERE id = $1`,
+        `UPDATE trade.trades SET status = 'AWAITING_ACCEPTANCE', status_action = 'SEND',
+                status_actor_type = 'SYSTEM', status_revision = status_revision + 1 WHERE id = $1`,
         [id],
       );
       await client.query('ROLLBACK');
@@ -166,14 +213,9 @@ describe.runIf(infraEnabled)('the trades status guard', () => {
     expect(rows).toHaveLength(0);
   });
 
-  it('writes no state change when only the terms change (a counter-proposal keeps the turn)', async () => {
-    const id = await aTrade({ status: 'AWAITING_ACCEPTANCE' });
-    await t
-      .app()
-      .query(
-        `UPDATE trade.trades SET status = 'AWAITING_ACCEPTANCE', status_reason = 'countered' WHERE id = $1`,
-        [id],
-      );
+  it('writes no state change for an edit that is not a transition', async () => {
+    const id = await aTrade();
+    await t.app().query(`UPDATE trade.trades SET order_id = gen_random_uuid() WHERE id = $1`, [id]);
     const { rows } = await t.app().query('SELECT 1 FROM trade.trade_state_changes WHERE trade_id = $1', [id]);
     expect(rows).toHaveLength(0);
   });

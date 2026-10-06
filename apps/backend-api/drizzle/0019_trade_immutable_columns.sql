@@ -6,12 +6,17 @@
 -- again. SQLSTATE KT011 names the column that was refused.
 --
 -- The inspection window moves in one direction only: BEI1 lets a buyer ask for more time, and
--- nothing may take time away from them (T-049 caps the extension).
+-- nothing may take time away from them (T-049 caps the extension). The delivery grace window has no
+-- such affordance — no screen offers to change it — so it is frozen outright; an extension of the
+-- *delivery deadline* (DE1/DE2) is a trade_deadlines row, not an edit to the snapshot.
+--
+-- The accepted terms version is frozen once pinned, and status_revision only counts upwards: both
+-- are what the state machine's guard and audit trail are keyed on.
 --
 -- A party may be bound (NULL to a user, when an invitation is claimed) but never swapped: rebinding
 -- a buyer mid-trade would redirect an escrow payout to someone the other side never agreed to.
 CREATE FUNCTION trade.freeze_immutable_columns() RETURNS trigger
-  LANGUAGE plpgsql AS $$
+  LANGUAGE plpgsql SET search_path = pg_catalog, trade AS $$
 DECLARE
   frozen text;
 BEGIN
@@ -26,6 +31,11 @@ BEGIN
     WHEN OLD.seller_user_id IS NOT NULL AND NEW.seller_user_id IS DISTINCT FROM OLD.seller_user_id
       THEN 'seller_user_id'
     WHEN NEW.inspection_window_hours < OLD.inspection_window_hours THEN 'inspection_window_hours'
+    WHEN NEW.delivery_grace_hours IS DISTINCT FROM OLD.delivery_grace_hours THEN 'delivery_grace_hours'
+    WHEN NEW.status_revision < OLD.status_revision THEN 'status_revision'
+    WHEN OLD.accepted_terms_version_id IS NOT NULL
+      AND NEW.accepted_terms_version_id IS DISTINCT FROM OLD.accepted_terms_version_id
+      THEN 'accepted_terms_version_id'
     WHEN OLD.fee_schedule_version IS NOT NULL THEN CASE
       WHEN NEW.fee_schedule_version IS DISTINCT FROM OLD.fee_schedule_version THEN 'fee_schedule_version'
       WHEN NEW.item_amount_minor IS DISTINCT FROM OLD.item_amount_minor THEN 'item_amount_minor'
@@ -33,7 +43,8 @@ BEGIN
         THEN 'buyer_protection_fee_minor'
       WHEN NEW.buyer_total_minor IS DISTINCT FROM OLD.buyer_total_minor THEN 'buyer_total_minor'
       WHEN NEW.commission_minor IS DISTINCT FROM OLD.commission_minor THEN 'commission_minor'
-      WHEN NEW.seller_payout_minor IS DISTINCT FROM OLD.seller_payout_minor THEN 'seller_payout_minor'
+      WHEN NEW.seller_proceeds_minor IS DISTINCT FROM OLD.seller_proceeds_minor THEN 'seller_proceeds_minor'
+      WHEN NEW.platform_revenue_minor IS DISTINCT FROM OLD.platform_revenue_minor THEN 'platform_revenue_minor'
       WHEN NEW.fee_snapshot IS DISTINCT FROM OLD.fee_snapshot THEN 'fee_snapshot'
       WHEN NEW.fees_snapshotted_at IS DISTINCT FROM OLD.fees_snapshotted_at THEN 'fees_snapshotted_at'
       ELSE NULL

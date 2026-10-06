@@ -10,7 +10,7 @@ import { applyTransition } from '../../../../src/modules/trades/infrastructure/p
 import type { ApiError } from '../../../../src/platform/errors.js';
 import { infraEnabled } from '../../../support/db-urls.js';
 import { useTestDatabase } from '../../../support/db.js';
-import { feeSnapshotColumnValues, insertRow, insertTrade, insertUser } from '../support.js';
+import { driveTo, insertRow, insertTrade, insertUser } from '../support.js';
 
 describe.runIf(infraEnabled)('readTradePrincipal', () => {
   const t = useTestDatabase();
@@ -119,11 +119,8 @@ describe.runIf(infraEnabled)('certification mid-trade', () => {
   it('lets a merchant certified mid-trade finish the buyer-side trade already in flight', async () => {
     const buyer = await insertUser(t.app(), { verification_level: 'CONTACT_VERIFIED' });
     const seller = await insertUser(t.app(), { verification_level: 'IDENTITY_VERIFIED' });
-    const id = await insertTrade(
-      t.app(),
-      { buyer, seller },
-      { status: 'PENDING_PAYMENT', ...feeSnapshotColumnValues() },
-    );
+    const id = await insertTrade(t.app(), { buyer, seller });
+    await driveTo(t.app(), id, 'PENDING_PAYMENT');
     await t
       .db()
       .transaction((tx) =>

@@ -1,5 +1,5 @@
 {
-  "id": "deecf413-a8dd-466f-83f6-b32ebae8b72e",
+  "id": "aa15640b-82d0-4c04-9857-9bda49bc1ff5",
   "prevId": "dca268c6-2e0f-4de2-9152-021981850a6b",
   "version": "7",
   "dialect": "postgresql",
@@ -3575,7 +3575,12 @@
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "policies": {},
-      "checkConstraints": {},
+      "checkConstraints": {
+        "trade_state_changes_actor_identified": {
+          "name": "trade_state_changes_actor_identified",
+          "value": "\"trade\".\"trade_state_changes\".\"actor_id\" IS NOT NULL OR \"trade\".\"trade_state_changes\".\"actor_type\" IN ('SYSTEM', 'LEDGER')"
+        }
+      },
       "isRLSEnabled": false
     },
     "trade.escrow_action_requests": {
@@ -4182,6 +4187,20 @@
           "notNull": true,
           "default": "'DRAFT'"
         },
+        "status_revision": {
+          "name": "status_revision",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "previous_status": {
+          "name": "previous_status",
+          "type": "trade_status",
+          "typeSchema": "trade",
+          "primaryKey": false,
+          "notNull": false
+        },
         "status_action": {
           "name": "status_action",
           "type": "trade_action",
@@ -4282,8 +4301,14 @@
           "primaryKey": false,
           "notNull": false
         },
-        "seller_payout_minor": {
-          "name": "seller_payout_minor",
+        "seller_proceeds_minor": {
+          "name": "seller_proceeds_minor",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "platform_revenue_minor": {
+          "name": "platform_revenue_minor",
           "type": "bigint",
           "primaryKey": false,
           "notNull": false
@@ -4518,15 +4543,19 @@
         },
         "trades_fee_snapshot_complete": {
           "name": "trades_fee_snapshot_complete",
-          "value": "num_nonnulls(\"trade\".\"trades\".\"fee_schedule_version\", \"trade\".\"trades\".\"item_amount_minor\", \"trade\".\"trades\".\"buyer_protection_fee_minor\",\n                      \"trade\".\"trades\".\"buyer_total_minor\", \"trade\".\"trades\".\"commission_minor\", \"trade\".\"trades\".\"seller_payout_minor\",\n                      \"trade\".\"trades\".\"fee_snapshot\", \"trade\".\"trades\".\"fees_snapshotted_at\") IN (0, 8)"
+          "value": "num_nonnulls(\"trade\".\"trades\".\"fee_schedule_version\", \"trade\".\"trades\".\"item_amount_minor\", \"trade\".\"trades\".\"buyer_protection_fee_minor\",\n                      \"trade\".\"trades\".\"buyer_total_minor\", \"trade\".\"trades\".\"commission_minor\", \"trade\".\"trades\".\"seller_proceeds_minor\",\n                      \"trade\".\"trades\".\"platform_revenue_minor\", \"trade\".\"trades\".\"fee_snapshot\", \"trade\".\"trades\".\"fees_snapshotted_at\")\n           IN (0, 9)"
         },
         "trades_fee_snapshot_arithmetic": {
           "name": "trades_fee_snapshot_arithmetic",
-          "value": "\"trade\".\"trades\".\"fee_schedule_version\" IS NULL\n          OR (\"trade\".\"trades\".\"item_amount_minor\" > 0\n              AND \"trade\".\"trades\".\"buyer_protection_fee_minor\" >= 0\n              AND \"trade\".\"trades\".\"commission_minor\" >= 0\n              AND \"trade\".\"trades\".\"seller_payout_minor\" >= 0\n              AND \"trade\".\"trades\".\"buyer_total_minor\" = \"trade\".\"trades\".\"item_amount_minor\" + \"trade\".\"trades\".\"buyer_protection_fee_minor\"\n              AND \"trade\".\"trades\".\"seller_payout_minor\" = \"trade\".\"trades\".\"item_amount_minor\" - \"trade\".\"trades\".\"commission_minor\")"
+          "value": "\"trade\".\"trades\".\"fee_schedule_version\" IS NULL\n          OR (\"trade\".\"trades\".\"item_amount_minor\" > 0\n              AND \"trade\".\"trades\".\"buyer_protection_fee_minor\" >= 0\n              AND \"trade\".\"trades\".\"commission_minor\" >= 0\n              AND \"trade\".\"trades\".\"seller_proceeds_minor\" >= 0\n              AND \"trade\".\"trades\".\"buyer_total_minor\" = \"trade\".\"trades\".\"item_amount_minor\" + \"trade\".\"trades\".\"buyer_protection_fee_minor\"\n              AND \"trade\".\"trades\".\"seller_proceeds_minor\" = \"trade\".\"trades\".\"item_amount_minor\" - \"trade\".\"trades\".\"commission_minor\"\n              AND \"trade\".\"trades\".\"platform_revenue_minor\" = \"trade\".\"trades\".\"buyer_protection_fee_minor\" + \"trade\".\"trades\".\"commission_minor\")"
         },
         "trades_fees_before_payment": {
           "name": "trades_fees_before_payment",
           "value": "\"trade\".\"trades\".\"fee_schedule_version\" IS NOT NULL OR \"trade\".\"trades\".\"status\" IN ('DRAFT', 'PENDING_COUNTERPARTY', 'UNDER_PROPOSAL_REVIEW', 'AWAITING_ACCEPTANCE', 'DECLINED', 'REJECTED', 'CANCELLED', 'EXPIRED')"
+        },
+        "trades_terms_before_payment": {
+          "name": "trades_terms_before_payment",
+          "value": "\"trade\".\"trades\".\"accepted_terms_version_id\" IS NOT NULL OR \"trade\".\"trades\".\"status\" IN ('DRAFT', 'PENDING_COUNTERPARTY', 'UNDER_PROPOSAL_REVIEW', 'AWAITING_ACCEPTANCE', 'DECLINED', 'REJECTED', 'CANCELLED', 'EXPIRED')"
         }
       },
       "isRLSEnabled": false
@@ -4719,11 +4748,11 @@
         },
         "trade_terms_delivery_address_shape": {
           "name": "trade_terms_delivery_address_shape",
-          "value": "\"trade\".\"trade_terms_versions\".\"delivery_address\" ?& array['street', 'landmark', 'recipient', 'state_id', 'city_id']"
+          "value": "\"trade\".\"trade_terms_versions\".\"delivery_address\" ?& array['street', 'landmark', 'recipient', 'state_id', 'city_id']\n      AND length(coalesce(\"trade\".\"trade_terms_versions\".\"delivery_address\" ->> 'street', '')) > 0\n      AND length(coalesce(\"trade\".\"trade_terms_versions\".\"delivery_address\" ->> 'recipient', '')) > 0\n      AND length(coalesce(\"trade\".\"trade_terms_versions\".\"delivery_address\" ->> 'state_id', '')) > 0\n      AND length(coalesce(\"trade\".\"trade_terms_versions\".\"delivery_address\" ->> 'city_id', '')) > 0"
         },
         "trade_terms_ships_from_address_shape": {
           "name": "trade_terms_ships_from_address_shape",
-          "value": "\"trade\".\"trade_terms_versions\".\"ships_from_address\" ?& array['street', 'landmark', 'recipient', 'state_id', 'city_id']"
+          "value": "\"trade\".\"trade_terms_versions\".\"ships_from_address\" ?& array['street', 'landmark', 'recipient', 'state_id', 'city_id']\n      AND length(coalesce(\"trade\".\"trade_terms_versions\".\"ships_from_address\" ->> 'street', '')) > 0\n      AND length(coalesce(\"trade\".\"trade_terms_versions\".\"ships_from_address\" ->> 'recipient', '')) > 0\n      AND length(coalesce(\"trade\".\"trade_terms_versions\".\"ships_from_address\" ->> 'state_id', '')) > 0\n      AND length(coalesce(\"trade\".\"trade_terms_versions\".\"ships_from_address\" ->> 'city_id', '')) > 0"
         }
       },
       "isRLSEnabled": false

@@ -5,21 +5,29 @@
 // read the same status and both believe they were first. Here the second blocks on the row lock,
 // re-evaluates against the committed status, matches nothing, and surfaces as 409. The database
 // trigger (migration 0018) is the backstop for a caller that writes `status` another way.
+//
+// A status condition cannot separate two transitions that leave the status where it is — two
+// counter-proposals on the same trade would both match. Those actions carry `expectedRevision`
+// instead, and the UPDATE adds `AND status_revision = $n`: the loser sees the revision has moved
+// and gets the same 409 as any other stale attempt.
 import { and, eq, inArray, sql } from 'drizzle-orm';
 import type { SQL } from 'drizzle-orm';
 import type { EventActor } from '@komtru/shared-types';
 import { ApiError } from '../../../../platform/errors.js';
 import { publish, type Tx } from '../../../../platform/events/publish.js';
 import { invalidTransitionError } from '../../domain/errors.js';
-import { tradeStateChangedEvent, type TradeActorType } from '../../domain/events.js';
+import { tradeStateChangedEvent } from '../../domain/events.js';
 import { sourceStatuses, type TradeAction, type TradeStatus } from '../../domain/stateMachine.js';
 import { trades } from './schema/trades.js';
 
-export interface TradeActor {
-  type: TradeActorType;
-  /** Absent for SYSTEM and for the ledger answering a request. */
-  id?: string;
-}
+/**
+ * A system or ledger transition has no person behind it; every other kind does, and the database
+ * agrees (`trade_state_changes_actor_identified`). Typed as a union so "who did this" cannot be
+ * left out by accident on the transitions where a person is accountable.
+ */
+export type TradeActor =
+  | { type: 'SYSTEM' | 'LEDGER'; id?: string }
+  | { type: 'BUYER' | 'SELLER' | 'STAFF' | 'LOGISTICS'; id: string };
 
 export interface TransitionInput {
   tradeId: string;
@@ -30,8 +38,13 @@ export interface TransitionInput {
   /** Recorded on the state change row: the dispute id, the signal source, the deadline that fired. */
   context?: Record<string, unknown>;
   /** Columns this transition also writes — a fee snapshot at ACCEPT, an inspection deadline at
-   * DELIVERY_SIGNAL. They land in the same UPDATE, so either all of it happens or none of it. */
-  set?: Partial<typeof trades.$inferInsert>;
+   * DELIVERY_SIGNAL. They land in the same UPDATE, so either all of it happens or none of it.
+   * Deliberately narrowed: the status, the revision and the audit columns are this function's to
+   * write, and a caller that could pass `status` through here would be back to an unguarded
+   * update with extra steps. */
+  set?: Partial<Omit<typeof trades.$inferInsert, TransitionOwnedColumn>>;
+  /** Required for an action that can leave the status unchanged; see the header. */
+  expectedRevision?: number;
   correlationId?: string;
   causationId?: string;
 }
@@ -41,7 +54,25 @@ export interface TransitionResult {
   tradeCode: string;
   from: TradeStatus;
   to: TradeStatus;
+  /** The trade's revision after this transition; pass it back for the next self-transition. */
+  revision: number;
 }
+
+/** What only applyTransition may write: the state machine's own bookkeeping. */
+type TransitionOwnedColumn =
+  | 'id'
+  | 'tradeCode'
+  | 'status'
+  | 'statusRevision'
+  | 'previousStatus'
+  | 'statusAction'
+  | 'statusActorType'
+  | 'statusActorId'
+  | 'statusReason'
+  | 'statusContext'
+  | 'statusChangedAt'
+  | 'createdAt'
+  | 'updatedAt';
 
 type TimestampColumn =
   | 'sentAt'
@@ -66,8 +97,8 @@ const ACTION_TIMESTAMPS: Partial<Record<TradeAction, readonly TimestampColumn[]>
   FUND: ['fundedAt'],
   BEGIN_CUSTODY: ['shippedAt'],
   DELIVERY_SIGNAL: ['deliverySignalledAt'],
-  CONFIRM_RECEIPT: ['deliveryConfirmedAt'],
-  GRACE_ELAPSED: ['deliveryConfirmedAt'],
+  CONFIRM_RECEIPT: [],
+  GRACE_ELAPSED: [],
   COMPLETE: ['completedAt'],
   INSPECTION_ELAPSED: ['completedAt'],
   SETTLE: ['settledAt'],
@@ -77,7 +108,12 @@ const ACTION_TIMESTAMPS: Partial<Record<TradeAction, readonly TimestampColumn[]>
   DISPUTE: ['disputedAt'],
 };
 
-/** Reaching INSPECTION starts the clock, whichever action got the trade there (M7 D5). */
+/**
+ * Reaching INSPECTION starts the clock, whichever action got the trade there (M7 D5). Delivery is
+ * *confirmed* only where something actually attested to it: the buyer saying so, a trusted signal,
+ * or the grace period elapsing, which M7 §6 treats as confirmation on purpose. A self-report that
+ * parks the trade in UNCONFIRMED_DELIVERY confirms nothing, and must not stamp that column.
+ */
 const STATUS_TIMESTAMPS: Partial<Record<TradeStatus, readonly TimestampColumn[]>> = {
   INSPECTION: ['inspectionStartedAt', 'deliveryConfirmedAt'],
 };
@@ -101,9 +137,20 @@ export async function applyTransition(tx: Tx, input: TransitionInput): Promise<T
   const { tradeId, action, to, actor } = input;
   const from = sourceStatuses(action, to);
 
+  // A self-transition cannot be told apart by status alone, so refusing it here is a bug report for
+  // the caller, not a 409 for the user: there is no request that could have made it correct.
+  if (from.includes(to) && input.expectedRevision === undefined) {
+    throw new Error(`applyTransition(): ${action} can leave ${to} unchanged, so it needs expectedRevision`);
+  }
+
   const timestamps: Partial<Record<TimestampColumn, SQL>> = {};
   for (const column of [...(ACTION_TIMESTAMPS[action] ?? []), ...(STATUS_TIMESTAMPS[to] ?? [])]) {
     timestamps[column] = now();
+  }
+
+  const conditions = [eq(trades.id, tradeId), inArray(trades.status, [...from])];
+  if (input.expectedRevision !== undefined) {
+    conditions.push(eq(trades.statusRevision, input.expectedRevision));
   }
 
   const moved = from.length
@@ -113,6 +160,7 @@ export async function applyTransition(tx: Tx, input: TransitionInput): Promise<T
           ...input.set,
           ...timestamps,
           status: to,
+          statusRevision: sql`${trades.statusRevision} + 1`,
           statusAction: action,
           statusActorType: actor.type,
           statusActorId: actor.id ?? null,
@@ -120,8 +168,14 @@ export async function applyTransition(tx: Tx, input: TransitionInput): Promise<T
           statusContext: input.context ?? null,
           updatedAt: now(),
         })
-        .where(and(eq(trades.id, tradeId), inArray(trades.status, [...from])))
-        .returning({ tradeCode: trades.tradeCode })
+        .where(and(...conditions))
+        .returning({
+          tradeCode: trades.tradeCode,
+          // Stamped by the guard trigger in the same statement, so the event cannot report a
+          // starting status the UPDATE did not actually leave.
+          previousStatus: trades.previousStatus,
+          revision: trades.statusRevision,
+        })
     : [];
 
   const row = moved[0];
@@ -133,9 +187,7 @@ export async function applyTransition(tx: Tx, input: TransitionInput): Promise<T
     throw invalidTransitionError(action, current.status, to);
   }
 
-  // Only the three actions with more than one source status need the extra read; everywhere else
-  // the map already names the single status the trade must have been in.
-  const fromStatus = from.length === 1 ? from[0]! : await recordedFrom(tx, tradeId);
+  const fromStatus = row.previousStatus ?? from[0]!;
 
   await publish(tx, tradeStateChangedEvent, {
     payload: {
@@ -155,16 +207,5 @@ export async function applyTransition(tx: Tx, input: TransitionInput): Promise<T
     ...(input.causationId ? { causationId: input.causationId } : {}),
   });
 
-  return { tradeId, tradeCode: row.tradeCode, from: fromStatus, to };
-}
-
-/** The status the audit trigger recorded this trade leaving, for an action with several sources. */
-async function recordedFrom(tx: Tx, tradeId: string): Promise<TradeStatus> {
-  const result = await tx.execute<{ from_status: TradeStatus }>(
-    sql`SELECT from_status FROM trade.trade_state_changes
-         WHERE trade_id = ${tradeId} ORDER BY id DESC LIMIT 1`,
-  );
-  const row = result.rows[0];
-  if (!row) throw new Error('applyTransition(): the state change trigger wrote no row');
-  return row.from_status;
+  return { tradeId, tradeCode: row.tradeCode, from: fromStatus, to, revision: row.revision };
 }

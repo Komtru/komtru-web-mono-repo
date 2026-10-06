@@ -117,7 +117,7 @@
     {
       "idx": 16,
       "version": "7",
-      "when": 1791237915374,
+      "when": 1791267259511,
       "tag": "0016_trade_schema",
       "breakpoints": true
     },
@@ -147,6 +147,13 @@
       "version": "7",
       "when": 1791238721182,
       "tag": "0020_trade_accepted_terms_fk",
+      "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1791239788322,
+      "tag": "0021_trade_write_paths",
       "breakpoints": true
     }
   ]

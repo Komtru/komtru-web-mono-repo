@@ -34,7 +34,8 @@ CREATE TABLE "trade"."trade_state_changes" (
 	"actor_type" "trade"."trade_actor_type" NOT NULL,
 	"actor_id" uuid,
 	"reason" text,
-	"metadata" jsonb
+	"metadata" jsonb,
+	CONSTRAINT "trade_state_changes_actor_identified" CHECK ("trade"."trade_state_changes"."actor_id" IS NOT NULL OR "trade"."trade_state_changes"."actor_type" IN ('SYSTEM', 'LEDGER'))
 );
 --> statement-breakpoint
 CREATE TABLE "trade"."escrow_action_requests" (
@@ -103,6 +104,8 @@ CREATE TABLE "trade"."trades" (
 	"category_id" uuid,
 	"trade_standard_version" integer,
 	"status" "trade"."trade_status" DEFAULT 'DRAFT' NOT NULL,
+	"status_revision" integer DEFAULT 0 NOT NULL,
+	"previous_status" "trade"."trade_status",
 	"status_action" "trade"."trade_action",
 	"status_actor_type" "trade"."trade_actor_type",
 	"status_actor_id" uuid,
@@ -119,7 +122,8 @@ CREATE TABLE "trade"."trades" (
 	"buyer_protection_fee_minor" bigint,
 	"buyer_total_minor" bigint,
 	"commission_minor" bigint,
-	"seller_payout_minor" bigint,
+	"seller_proceeds_minor" bigint,
+	"platform_revenue_minor" bigint,
 	"fee_snapshot" jsonb,
 	"fees_snapshotted_at" timestamp with time zone,
 	"sent_at" timestamp with time zone,
@@ -150,16 +154,19 @@ CREATE TABLE "trade"."trades" (
           OR "trade"."trades"."status" IN ('DRAFT', 'PENDING_COUNTERPARTY', 'EXPIRED', 'CANCELLED')),
 	CONSTRAINT "trades_window_positive" CHECK ("trade"."trades"."inspection_window_hours" > 0 AND "trade"."trades"."delivery_grace_hours" > 0),
 	CONSTRAINT "trades_fee_snapshot_complete" CHECK (num_nonnulls("trade"."trades"."fee_schedule_version", "trade"."trades"."item_amount_minor", "trade"."trades"."buyer_protection_fee_minor",
-                      "trade"."trades"."buyer_total_minor", "trade"."trades"."commission_minor", "trade"."trades"."seller_payout_minor",
-                      "trade"."trades"."fee_snapshot", "trade"."trades"."fees_snapshotted_at") IN (0, 8)),
+                      "trade"."trades"."buyer_total_minor", "trade"."trades"."commission_minor", "trade"."trades"."seller_proceeds_minor",
+                      "trade"."trades"."platform_revenue_minor", "trade"."trades"."fee_snapshot", "trade"."trades"."fees_snapshotted_at")
+           IN (0, 9)),
 	CONSTRAINT "trades_fee_snapshot_arithmetic" CHECK ("trade"."trades"."fee_schedule_version" IS NULL
           OR ("trade"."trades"."item_amount_minor" > 0
               AND "trade"."trades"."buyer_protection_fee_minor" >= 0
               AND "trade"."trades"."commission_minor" >= 0
-              AND "trade"."trades"."seller_payout_minor" >= 0
+              AND "trade"."trades"."seller_proceeds_minor" >= 0
               AND "trade"."trades"."buyer_total_minor" = "trade"."trades"."item_amount_minor" + "trade"."trades"."buyer_protection_fee_minor"
-              AND "trade"."trades"."seller_payout_minor" = "trade"."trades"."item_amount_minor" - "trade"."trades"."commission_minor")),
-	CONSTRAINT "trades_fees_before_payment" CHECK ("trade"."trades"."fee_schedule_version" IS NOT NULL OR "trade"."trades"."status" IN ('DRAFT', 'PENDING_COUNTERPARTY', 'UNDER_PROPOSAL_REVIEW', 'AWAITING_ACCEPTANCE', 'DECLINED', 'REJECTED', 'CANCELLED', 'EXPIRED'))
+              AND "trade"."trades"."seller_proceeds_minor" = "trade"."trades"."item_amount_minor" - "trade"."trades"."commission_minor"
+              AND "trade"."trades"."platform_revenue_minor" = "trade"."trades"."buyer_protection_fee_minor" + "trade"."trades"."commission_minor")),
+	CONSTRAINT "trades_fees_before_payment" CHECK ("trade"."trades"."fee_schedule_version" IS NOT NULL OR "trade"."trades"."status" IN ('DRAFT', 'PENDING_COUNTERPARTY', 'UNDER_PROPOSAL_REVIEW', 'AWAITING_ACCEPTANCE', 'DECLINED', 'REJECTED', 'CANCELLED', 'EXPIRED')),
+	CONSTRAINT "trades_terms_before_payment" CHECK ("trade"."trades"."accepted_terms_version_id" IS NOT NULL OR "trade"."trades"."status" IN ('DRAFT', 'PENDING_COUNTERPARTY', 'UNDER_PROPOSAL_REVIEW', 'AWAITING_ACCEPTANCE', 'DECLINED', 'REJECTED', 'CANCELLED', 'EXPIRED'))
 );
 --> statement-breakpoint
 CREATE TABLE "trade"."trade_terms_versions" (
@@ -180,8 +187,16 @@ CREATE TABLE "trade"."trade_terms_versions" (
 	CONSTRAINT "trade_terms_amount_positive" CHECK ("trade"."trade_terms_versions"."item_amount_minor" > 0),
 	CONSTRAINT "trade_terms_currency" CHECK ("trade"."trade_terms_versions"."currency" = 'NGN'),
 	CONSTRAINT "trade_terms_window_positive" CHECK ("trade"."trade_terms_versions"."inspection_window_hours" > 0 AND "trade"."trade_terms_versions"."delivery_grace_hours" > 0),
-	CONSTRAINT "trade_terms_delivery_address_shape" CHECK ("trade"."trade_terms_versions"."delivery_address" ?& array['street', 'landmark', 'recipient', 'state_id', 'city_id']),
-	CONSTRAINT "trade_terms_ships_from_address_shape" CHECK ("trade"."trade_terms_versions"."ships_from_address" ?& array['street', 'landmark', 'recipient', 'state_id', 'city_id'])
+	CONSTRAINT "trade_terms_delivery_address_shape" CHECK ("trade"."trade_terms_versions"."delivery_address" ?& array['street', 'landmark', 'recipient', 'state_id', 'city_id']
+      AND length(coalesce("trade"."trade_terms_versions"."delivery_address" ->> 'street', '')) > 0
+      AND length(coalesce("trade"."trade_terms_versions"."delivery_address" ->> 'recipient', '')) > 0
+      AND length(coalesce("trade"."trade_terms_versions"."delivery_address" ->> 'state_id', '')) > 0
+      AND length(coalesce("trade"."trade_terms_versions"."delivery_address" ->> 'city_id', '')) > 0),
+	CONSTRAINT "trade_terms_ships_from_address_shape" CHECK ("trade"."trade_terms_versions"."ships_from_address" ?& array['street', 'landmark', 'recipient', 'state_id', 'city_id']
+      AND length(coalesce("trade"."trade_terms_versions"."ships_from_address" ->> 'street', '')) > 0
+      AND length(coalesce("trade"."trade_terms_versions"."ships_from_address" ->> 'recipient', '')) > 0
+      AND length(coalesce("trade"."trade_terms_versions"."ships_from_address" ->> 'state_id', '')) > 0
+      AND length(coalesce("trade"."trade_terms_versions"."ships_from_address" ->> 'city_id', '')) > 0)
 );
 --> statement-breakpoint
 ALTER TABLE "trade"."trade_activity" ADD CONSTRAINT "trade_activity_trade_id_trades_id_fk" FOREIGN KEY ("trade_id") REFERENCES "trade"."trades"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint

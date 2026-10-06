@@ -1,6 +1,6 @@
 // The database's copy of the machine is generated from the map, never typed twice. If this fails,
-// migration 0018 was hand-edited or the map changed without regenerating it.
-import { readFile } from 'node:fs/promises';
+// the state-machine migration was hand-edited or the map changed without regenerating it.
+import { readdir, readFile } from 'node:fs/promises';
 import { describe, expect, it } from 'vitest';
 import { transitionTriples } from '../../../../src/modules/trades/domain/stateMachine.js';
 import { transitionFunctionSql } from '../../../../src/modules/trades/domain/stateMachineSql.js';
@@ -16,11 +16,15 @@ describe('transitionFunctionSql', () => {
     );
   });
 
+  // Found by name, not by number: migrations are renumbered when branches are merged, and a test
+  // pinned to 0018 would start passing vacuously the moment that happened.
   it('matches the shipped migration, so the map and the database cannot drift', async () => {
-    const migration = await readFile(
-      new URL('../../../../drizzle/0018_trade_state_machine.sql', import.meta.url),
-      'utf8',
+    const directory = new URL('../../../../drizzle/', import.meta.url);
+    const matches = (await readdir(directory)).filter((file) =>
+      /^\d{4}_trade_state_machine\.sql$/.test(file),
     );
+    expect(matches).toHaveLength(1);
+    const migration = await readFile(new URL(matches[0]!, directory), 'utf8');
     expect(migration).toContain(transitionFunctionSql());
   });
 });

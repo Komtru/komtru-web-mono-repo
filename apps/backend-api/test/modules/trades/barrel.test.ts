@@ -21,6 +21,8 @@ describe('the trades module surface', () => {
       'generateTradeCode',
       'feeSnapshotColumns',
       'assertFeeSnapshotConsistent',
+      'decodeSnapshotAmounts',
+      'withTradeCode',
       'tradeStateChangedEvent',
       'tradeEligibilityBlockedEvent',
       'applyTransition',

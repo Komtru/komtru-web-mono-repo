@@ -77,6 +77,12 @@ export const TRANSITIONS: TransitionMap = {
   ACCEPT: { AWAITING_ACCEPTANCE: ['PENDING_PAYMENT'] },
   DECLINE: { AWAITING_ACCEPTANCE: ['DECLINED'] },
   // M7 D3: before FUNDED a trade can simply be cancelled; after it, only refunded.
+  //
+  // A deliberate reconciliation, not an oversight: design §6.2 draws the `cancel` arrow only on
+  // AWAITING_ACCEPTANCE and PENDING_PAYMENT, while M7 D3 (and HTML CT1, which lets a proposer
+  // withdraw) say any state before funding. The three extra edges are M7's, and they are what the
+  // proposal screens need — a draft that cannot be abandoned and an invitation that cannot be
+  // withdrawn would both be bugs. Recorded on the ticket so the owner can see the widening.
   CANCEL: {
     DRAFT: ['CANCELLED'],
     PENDING_COUNTERPARTY: ['CANCELLED'],

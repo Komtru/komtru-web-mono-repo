@@ -2,45 +2,94 @@
 // are stored on the trade, so the buyer sees the exact total before funding and a later edit to
 // config/fees.yaml never restates an open trade's maths. Every ledger posting uses this snapshot.
 //
-// No fee rate or amount appears in this module. `snapshotFees({ itemMinor, sellerKind })` in the fee
-// module (T-047) returns the shape below, computed by `computeTradeFees` from the loaded file, with
-// `scheduleVersion` the file's `version` and every amount whole kobo. What this file owns is
-// refusing a snapshot that does not add up before it reaches the trade — the database re-checks the
-// same two identities (trades_fee_snapshot_arithmetic), because the money columns are the ones a
-// payout is computed from.
+// No fee rate or amount appears in this module. The snapshot is produced by `snapshotFees(itemMinor,
+// sellerKind, takenAt?)` in the config module (T-047) and arrives here whole; what this file owns is
+// putting it on the trade without losing a kobo, and refusing one that does not add up.
+//
+// `TradeFeeSnapshot` is `FeeSnapshot` from @komtru/shared-types, declared structurally because T-047
+// landed on main after this branch was cut. It must become a re-export of that type the moment the
+// two are together — the shape test in fee-snapshot.test.ts is what fails if they drift apart.
 import type { Kobo } from '@komtru/shared-types';
 
+export type SellerKind = 'CASUAL' | 'MERCHANT';
+
+/** Amounts are decimal digit strings: this is stored as JSONB and a JSON number loses kobo past 2^53. */
 export interface TradeFeeSnapshot {
-  /** The fee file's `version`, e.g. `2026-10-05.1`. Git history is the audit trail behind it. */
-  scheduleVersion: string;
-  /** Which commission applied: a casual seller's or a certified merchant's (§6.5). */
-  sellerKind: 'CASUAL' | 'MERCHANT';
-  itemMinor: Kobo;
-  /** Paid by the buyer on top of the item price (HTML V1, conflict C10). */
-  buyerProtectionFeeMinor: Kobo;
-  buyerTotalMinor: Kobo;
-  /** The platform's cut from the seller's proceeds at release. */
-  commissionMinor: Kobo;
-  sellerPayoutMinor: Kobo;
-  /** Every line the fee module computed, kobo as decimal strings, for display and for audit. */
-  breakdown: Record<string, string>;
+  /** The `version` of config/fees.yaml these amounts came from. */
+  version: string;
+  currency: 'NGN';
+  /** ISO-8601 instant the snapshot was taken, so an audit can line it up with git history. */
+  takenAt: string;
+  sellerKind: SellerKind;
+  amounts: {
+    itemMinor: string;
+    buyerProtectionFeeMinor: string;
+    buyerTotalMinor: string;
+    commissionMinor: string;
+    sellerProceedsMinor: string;
+    platformRevenueMinor: string;
+  };
+  terms: {
+    buyerProtectionBps: number;
+    buyerProtectionMinMinor: string;
+    buyerProtectionMaxMinor: string | null;
+    /** Q4's refund treatment as it stood at acceptance, not as it stands at the refund. */
+    buyerProtectionRefundableOnFullRefund: boolean;
+    commissionBps: number;
+    commissionMinMinor: string;
+    commissionMaxMinor: string | null;
+  };
 }
 
-export function assertFeeSnapshotConsistent(snapshot: TradeFeeSnapshot): void {
-  if (!snapshot.scheduleVersion) {
+export type SnapshotAmount = keyof TradeFeeSnapshot['amounts'];
+
+const AMOUNT_KEYS: readonly SnapshotAmount[] = [
+  'itemMinor',
+  'buyerProtectionFeeMinor',
+  'buyerTotalMinor',
+  'commissionMinor',
+  'sellerProceedsMinor',
+  'platformRevenueMinor',
+];
+
+const DIGITS = /^\d{1,19}$/;
+
+/** The amounts as kobo. Throws rather than returning NaN-by-another-name on a hand-edited row. */
+export function decodeSnapshotAmounts(snapshot: TradeFeeSnapshot): Record<SnapshotAmount, Kobo> {
+  const decoded = {} as Record<SnapshotAmount, Kobo>;
+  for (const key of AMOUNT_KEYS) {
+    const value = snapshot.amounts[key];
+    if (!DIGITS.test(value)) {
+      throw new RangeError(`A fee snapshot amount must be whole kobo as digits; ${key} is "${value}"`);
+    }
+    decoded[key] = BigInt(value);
+  }
+  return decoded;
+}
+
+/**
+ * The trade's own re-check of a snapshot it is about to freeze. The calculator already guarantees
+ * these identities; this is the last place to catch a snapshot that reached the trade by some other
+ * route — a backfill, a replayed request, a future caller that built one by hand — before the
+ * database's CHECK constraints see the same arithmetic from the columns.
+ */
+export function assertFeeSnapshotConsistent(snapshot: TradeFeeSnapshot): Record<SnapshotAmount, Kobo> {
+  if (!snapshot.version) {
     throw new RangeError('A fee snapshot must name the schedule version it was computed from');
   }
-  if (snapshot.itemMinor <= 0n) throw new RangeError('A trade amount must be greater than zero');
-  if (snapshot.buyerProtectionFeeMinor < 0n || snapshot.commissionMinor < 0n) {
-    throw new RangeError('A fee is never negative');
-  }
-  if (snapshot.buyerTotalMinor !== snapshot.itemMinor + snapshot.buyerProtectionFeeMinor) {
+  if (snapshot.currency !== 'NGN') throw new RangeError('A trade is priced in naira');
+  const at = decodeSnapshotAmounts(snapshot);
+  if (at.itemMinor <= 0n) throw new RangeError('A trade amount must be greater than zero');
+  if (at.buyerTotalMinor !== at.itemMinor + at.buyerProtectionFeeMinor) {
     throw new RangeError('The buyer total must be the item amount plus the buyer protection fee');
   }
-  if (snapshot.sellerPayoutMinor !== snapshot.itemMinor - snapshot.commissionMinor) {
+  if (at.sellerProceedsMinor !== at.itemMinor - at.commissionMinor) {
     throw new RangeError('The seller payout must be the item amount minus the commission');
   }
-  if (snapshot.sellerPayoutMinor < 0n) throw new RangeError('A commission cannot exceed the item amount');
+  if (at.platformRevenueMinor !== at.buyerProtectionFeeMinor + at.commissionMinor) {
+    throw new RangeError('Platform revenue must be the buyer protection fee plus the commission');
+  }
+  return at;
 }
 
 export interface TradeFeeColumns {
@@ -49,22 +98,26 @@ export interface TradeFeeColumns {
   buyerProtectionFeeMinor: Kobo;
   buyerTotalMinor: Kobo;
   commissionMinor: Kobo;
-  sellerPayoutMinor: Kobo;
-  feeSnapshot: TradeFeeSnapshot & { breakdown: Record<string, string> };
+  sellerProceedsMinor: Kobo;
+  platformRevenueMinor: Kobo;
+  /** Stored verbatim. Amounts stay strings here: drizzle serialises JSONB with JSON.stringify,
+   * which throws on a bigint, and a JSON number would lose kobo even if it did not. */
+  feeSnapshot: TradeFeeSnapshot;
   feesSnapshottedAt: Date;
 }
 
-/** The eight columns, written together in the acceptance transition's UPDATE. */
-export function feeSnapshotColumns(snapshot: TradeFeeSnapshot, at: Date = new Date()): TradeFeeColumns {
-  assertFeeSnapshotConsistent(snapshot);
+/** The nine columns, written in the acceptance transition's own UPDATE. */
+export function feeSnapshotColumns(snapshot: TradeFeeSnapshot): TradeFeeColumns {
+  const at = assertFeeSnapshotConsistent(snapshot);
   return {
-    feeScheduleVersion: snapshot.scheduleVersion,
-    itemAmountMinor: snapshot.itemMinor,
-    buyerProtectionFeeMinor: snapshot.buyerProtectionFeeMinor,
-    buyerTotalMinor: snapshot.buyerTotalMinor,
-    commissionMinor: snapshot.commissionMinor,
-    sellerPayoutMinor: snapshot.sellerPayoutMinor,
+    feeScheduleVersion: snapshot.version,
+    itemAmountMinor: at.itemMinor,
+    buyerProtectionFeeMinor: at.buyerProtectionFeeMinor,
+    buyerTotalMinor: at.buyerTotalMinor,
+    commissionMinor: at.commissionMinor,
+    sellerProceedsMinor: at.sellerProceedsMinor,
+    platformRevenueMinor: at.platformRevenueMinor,
     feeSnapshot: snapshot,
-    feesSnapshottedAt: at,
+    feesSnapshottedAt: new Date(snapshot.takenAt),
   };
 }

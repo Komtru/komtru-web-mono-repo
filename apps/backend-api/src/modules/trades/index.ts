@@ -9,4 +9,5 @@ export * from './domain/tradeCode.js';
 export * from './domain/feeSnapshot.js';
 export * from './infrastructure/postgres/schema/index.js';
 export * from './infrastructure/postgres/transitions.js';
+export * from './infrastructure/postgres/tradeCodes.js';
 export * from './infrastructure/postgres/principals.js';
