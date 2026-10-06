@@ -23,7 +23,11 @@ export interface ProviderRequest {
   method: ProviderHttpMethod;
   url: string;
   headers?: Record<string, string>;
-  /** Serialised as JSON when present. */
+  /**
+   * Serialised as JSON when present, and sent verbatim when it is already a string — which is what
+   * a provider that speaks `application/x-www-form-urlencoded` needs (Google's OAuth2 token
+   * endpoint, for one). A string body must bring its own `content-type`.
+   */
   body?: unknown;
   /** Deadline for one attempt, not for the call as a whole. */
   timeoutMs?: number;
@@ -145,8 +149,11 @@ async function attemptOnce(request: ProviderRequest, timeoutMs: number): Promise
   try {
     const response = await fetch(url, {
       method,
-      headers: body === undefined ? headers : { 'content-type': 'application/json', ...headers },
-      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+      headers:
+        body === undefined || typeof body === 'string'
+          ? headers
+          : { 'content-type': 'application/json', ...headers },
+      ...(body === undefined ? {} : { body: typeof body === 'string' ? body : JSON.stringify(body) }),
       signal: signal ? AbortSignal.any([deadline, signal]) : deadline,
     });
     const parsed = await readBody(response);

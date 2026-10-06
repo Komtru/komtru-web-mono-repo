@@ -17,6 +17,30 @@ const list = z.string().transform((v) =>
     .filter(Boolean),
 );
 
+/**
+ * A Google service account, as FCM_SERVICE_ACCOUNT_JSON carries it. Parsed here so a truncated or
+ * mis-pasted key fails at boot, naming the variable, rather than at the first push notification.
+ * Only the three fields the token exchange needs are kept; nothing else of a credential file is
+ * worth holding in memory.
+ */
+const serviceAccount = z
+  .string()
+  .transform((raw, ctx) => {
+    try {
+      return JSON.parse(raw) as unknown;
+    } catch {
+      ctx.addIssue({ code: 'custom', message: 'not valid JSON' });
+      return z.NEVER;
+    }
+  })
+  .pipe(
+    z.object({
+      client_email: z.string().min(1),
+      private_key: z.string().min(1),
+      token_uri: z.url(),
+    }),
+  );
+
 /** One entry per environment variable: its schema and whether it may be absent. */
 const VARIABLES = {
   NODE_ENV: { schema: z.enum(NODE_ENVS), required: false },
@@ -52,6 +76,28 @@ const VARIABLES = {
   // failure waiting for the first legitimate key rotation, not a safety net.
   PAYSTACK_SECRET_KEY: { schema: z.string().min(1), required: false },
   PAYSTACK_PUBLIC_KEY: { schema: z.string().min(1), required: false },
+
+  // --- Notifications (M11) -------------------------------------------------
+  // All optional: `pnpm env:backend` writes .env from the old backend's live file, not from
+  // .env.example, so a required variable here would stop every developer's API booting.
+  NOTIFY_DEFAULT_LOCALE: { schema: z.string().min(2), required: false },
+  NOTIFY_MAX_ATTEMPTS: { schema: int(1, 20), required: false },
+  NOTIFY_RETRY_BASE_DELAY_MS: { schema: int(100, 600_000), required: false },
+  NOTIFY_RATE_LIMIT_WINDOW_MINUTES: { schema: int(1, 1440), required: false },
+  NOTIFY_RATE_LIMIT_MAX_PER_WINDOW: { schema: int(1, 10_000), required: false },
+  /** Renders, records and logs an SMS with the recipient masked, but never sends it. */
+  NOTIFY_SMS_DRY_RUN: { schema: bool, required: false },
+  NOTIFY_PUSH_DRY_RUN: { schema: bool, required: false },
+  MAILJET_API_KEY: { schema: z.string().min(1), required: false },
+  MAILJET_API_SECRET: { schema: z.string().min(1), required: false },
+  MAILJET_FROM_EMAIL: { schema: z.email(), required: false },
+  MAILJET_FROM_NAME: { schema: z.string().min(1), required: false },
+  MAILJET_SANDBOX: { schema: bool, required: false },
+  TERMII_API_KEY: { schema: z.string().min(1), required: false },
+  TERMII_SENDER_ID: { schema: z.string().min(1), required: false },
+  TERMII_BASE_URL: { schema: z.url(), required: false },
+  FCM_PROJECT_ID: { schema: z.string().min(1), required: false },
+  FCM_SERVICE_ACCOUNT_JSON: { schema: serviceAccount, required: false },
 } satisfies Record<string, { schema: z.ZodType; required: boolean }>;
 
 type VariableName = keyof typeof VARIABLES;
@@ -85,6 +131,33 @@ export interface AppConfig {
    * fails closed with a named error and webhook signatures never verify — never an empty-key HMAC.
    */
   paystack: { secretKey?: string; publicKey?: string };
+  notify: NotifyConfig;
+}
+
+/** M11's tuning, and one block per provider. A block is absent until its credentials are complete. */
+export interface NotifyConfig {
+  defaultLocale: string;
+  /** How many send attempts a notification gets before it is dead-lettered (M11 D3). */
+  maxAttempts: number;
+  retryBaseDelayMs: number;
+  rateLimitWindowMinutes: number;
+  rateLimitMaxPerWindow: number;
+  /**
+   * Outside production both default to true. Local runs keep live provider keys, so this — not the
+   * absence of a credential — is what stops a developer texting a real person.
+   */
+  smsDryRun: boolean;
+  pushDryRun: boolean;
+  mailjet?: {
+    apiKey: string;
+    apiSecret: string;
+    fromEmail: string;
+    fromName: string;
+    /** Mailjet validates the request and sends nothing. True locally (set by `pnpm env:backend`). */
+    sandbox: boolean;
+  };
+  termii?: { apiKey: string; senderId: string; baseUrl: string };
+  fcm?: { projectId: string; clientEmail: string; privateKey: string; tokenUri: string };
 }
 
 export class ConfigError extends Error {
@@ -148,5 +221,46 @@ export function loadConfig(env: NodeJS.ProcessEnv): AppConfig {
       ...(v.SENTRY_DSN ? { dsn: v.SENTRY_DSN } : {}),
       environment: v.SENTRY_ENVIRONMENT ?? nodeEnv,
     },
+    notify: notifyConfig(v, nodeEnv),
+  };
+}
+
+function notifyConfig(v: Parsed, nodeEnv: (typeof NODE_ENVS)[number]): NotifyConfig {
+  const mailjet =
+    v.MAILJET_API_KEY && v.MAILJET_API_SECRET && v.MAILJET_FROM_EMAIL
+      ? {
+          apiKey: v.MAILJET_API_KEY,
+          apiSecret: v.MAILJET_API_SECRET,
+          fromEmail: v.MAILJET_FROM_EMAIL,
+          fromName: v.MAILJET_FROM_NAME ?? 'Komtru',
+          // Defaults to sandbox: an incomplete configuration must never be the one that sends.
+          sandbox: v.MAILJET_SANDBOX ?? true,
+        }
+      : undefined;
+  const termii =
+    v.TERMII_API_KEY && v.TERMII_SENDER_ID && v.TERMII_BASE_URL
+      ? { apiKey: v.TERMII_API_KEY, senderId: v.TERMII_SENDER_ID, baseUrl: v.TERMII_BASE_URL }
+      : undefined;
+  const fcm =
+    v.FCM_PROJECT_ID && v.FCM_SERVICE_ACCOUNT_JSON
+      ? {
+          projectId: v.FCM_PROJECT_ID,
+          clientEmail: v.FCM_SERVICE_ACCOUNT_JSON.client_email,
+          privateKey: v.FCM_SERVICE_ACCOUNT_JSON.private_key,
+          tokenUri: v.FCM_SERVICE_ACCOUNT_JSON.token_uri,
+        }
+      : undefined;
+
+  return {
+    defaultLocale: v.NOTIFY_DEFAULT_LOCALE ?? 'en-NG',
+    maxAttempts: v.NOTIFY_MAX_ATTEMPTS ?? 5,
+    retryBaseDelayMs: v.NOTIFY_RETRY_BASE_DELAY_MS ?? 2_000,
+    rateLimitWindowMinutes: v.NOTIFY_RATE_LIMIT_WINDOW_MINUTES ?? 60,
+    rateLimitMaxPerWindow: v.NOTIFY_RATE_LIMIT_MAX_PER_WINDOW ?? 20,
+    smsDryRun: v.NOTIFY_SMS_DRY_RUN ?? nodeEnv !== 'production',
+    pushDryRun: v.NOTIFY_PUSH_DRY_RUN ?? nodeEnv !== 'production',
+    ...(mailjet ? { mailjet } : {}),
+    ...(termii ? { termii } : {}),
+    ...(fcm ? { fcm } : {}),
   };
 }

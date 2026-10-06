@@ -4,8 +4,10 @@ import type { KomtruModule } from '../platform/module.js';
 import { configModule } from './config/index.js';
 import { identityModule } from './identity/index.js';
 import { ledgerModule } from './ledger/index.js';
+import { notifyModule } from './notify/index.js';
 
 // config first: it holds the fee schedule, which is read and validated at import, and everything
 // that posts money reads a snapshot taken from it. identity next, because its RBAC catalogue and
-// reserved namespace are what every other module's permissions are checked against.
-export const modules: KomtruModule[] = [configModule, identityModule, ledgerModule];
+// reserved namespace are what every other module's permissions are checked against. notify last:
+// it only subscribes to what the others publish.
+export const modules: KomtruModule[] = [configModule, identityModule, ledgerModule, notifyModule];

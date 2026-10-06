@@ -79,6 +79,16 @@
       "tag": "0015_identity_desc_indexes",
       "when": 1791229390662,
       "sha256": "774b9444e37319c92b706af3a1c03d4c2343c62c0b4f4ee2134fc72538d3730d"
+    },
+    {
+      "tag": "0016_notify_schema",
+      "when": 1791237871202,
+      "sha256": "942a73b9c558682995f5795916d1572e53d94341020a55e378580d183fcfa3f3"
+    },
+    {
+      "tag": "0017_notify_append_only",
+      "when": 1791237891386,
+      "sha256": "d3caa262924fad11f5f8500e7011a4bb30f65043e4856c2f2a559c65c497b6f3"
     }
   ]
 }

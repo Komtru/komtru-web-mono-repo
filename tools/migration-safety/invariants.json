@@ -92,6 +92,11 @@
       "table": "identity.users",
       "name": "users_username_pair",
       "definition": "CHECK ((((username IS NULL) AND (username_skeleton IS NULL)) OR ((username IS NOT NULL) AND (username_skeleton IS NOT NULL))))"
+    },
+    {
+      "table": "notify.notifications",
+      "name": "notifications_suppressed_has_reason",
+      "definition": "CHECK (((status <> 'SUPPRESSED'::notify.notification_status) OR (failed_reason IS NOT NULL)))"
     }
   ],
   "triggers": [
@@ -109,6 +114,11 @@
       "table": "identity.roles",
       "name": "roles_dual_approval_backfill",
       "definition": "[O] CREATE TRIGGER roles_dual_approval_backfill BEFORE UPDATE ON identity.roles FOR EACH ROW EXECUTE FUNCTION identity.enforce_dual_approval_backfill()"
+    },
+    {
+      "table": "notify.notification_delivery_attempts",
+      "name": "komtru_append_only",
+      "definition": "[O] CREATE TRIGGER komtru_append_only BEFORE DELETE OR UPDATE ON notify.notification_delivery_attempts FOR EACH ROW EXECUTE FUNCTION platform.reject_mutation()"
     }
   ]
 }

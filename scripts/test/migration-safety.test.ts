@@ -3,7 +3,7 @@
 // fixtures/migration-safety/ are minimal drizzle folders carrying exactly one defect each.
 import { cpSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { resolve } from 'node:path';
+import { join, resolve } from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { afterAll, describe, expect, it } from 'vitest';
@@ -35,28 +35,21 @@ afterAll(() => {
 describe('loadMigrations', () => {
   it('reads every migration the journal names, in journal order, with its snapshot', () => {
     const migrations = loadMigrations();
-    expect(migrations.map((migration) => migration.tag)).toEqual([
-      '0000_platform_schema',
-      '0001_platform_roles',
-      '0002_platform_events',
-      '0003_idempotency_keys',
-      '0004_identity_citext',
-      '0005_identity_enums',
-      '0006_identity_core',
-      '0007_identity_same_user_fks',
-      '0008_identity_rbac',
-      '0009_identity_dual_approval',
-      '0010_identity_sessions',
-      '0011_identity_audit_log',
-      '0012_identity_audit_append_only',
-      '0013_identity_four_eyes',
-      '0014_identity_dual_approval_hardening',
-      '0015_identity_desc_indexes',
-    ]);
+    // Derived from the journal, not a literal list: every ticket that adds a migration would
+    // otherwise have to edit this test, and the assertion that matters is that the folder and the
+    // journal agree — not what today's tags happen to be.
+    const journal = JSON.parse(readFileSync(join(MIGRATIONS_DIR, 'meta', '_journal.json'), 'utf8')) as {
+      entries: { idx: number; tag: string }[];
+    };
+    const expected = [...journal.entries].sort((a, b) => a.idx - b.idx).map((entry) => entry.tag);
+    expect(migrations.map((migration) => migration.tag)).toEqual(expected);
     expect(migrations.every((migration) => /^[0-9a-f]{64}$/.test(migration.sha256))).toBe(true);
-    expect(migrations[7]?.tag).toBe('0007_identity_same_user_fks');
-    expect(migrations[7]?.sql).toContain('users_primary_email_fk');
-    expect(Object.keys(migrations[7]?.snapshot.tables ?? {})).toContain('identity.users');
+
+    // One migration pinned by name rather than index, as a spot check that the SQL and the snapshot
+    // travel together.
+    const sameUserFks = migrations.find((migration) => migration.tag === '0007_identity_same_user_fks');
+    expect(sameUserFks?.sql).toContain('users_primary_email_fk');
+    expect(Object.keys(sameUserFks?.snapshot.tables ?? {})).toContain('identity.users');
   });
 
   it('throws when the journal names a migration that is not on disk', () => {
@@ -131,10 +124,17 @@ describe('checkLock', () => {
       entries: { idx: number; version: string; when: number; tag: string; breakpoints: boolean }[];
     };
     const last = journal.entries.at(-1)!;
-    journal.entries.push({ ...last, idx: last.idx + 1, when: last.when + 1, tag: '0016_new' });
+    // Numbered off the journal rather than a literal, so adding a real migration to the repo does
+    // not collide with this fixture's tag.
+    const nextIdx = last.idx + 1;
+    const tag = `${String(nextIdx).padStart(4, '0')}_new`;
+    journal.entries.push({ ...last, idx: nextIdx, when: last.when + 1, tag });
     writeFileSync(journalPath, JSON.stringify(journal, null, 2));
-    writeFileSync(resolve(dir, '0016_new.sql'), 'CREATE SCHEMA "later";\n');
-    cpSync(resolve(dir, 'meta/0015_snapshot.json'), resolve(dir, 'meta/0016_snapshot.json'));
+    writeFileSync(resolve(dir, `${tag}.sql`), 'CREATE SCHEMA "later";\n');
+    cpSync(
+      resolve(dir, `meta/${String(last.idx).padStart(4, '0')}_snapshot.json`),
+      resolve(dir, `meta/${String(nextIdx).padStart(4, '0')}_snapshot.json`),
+    );
     const findings = checkLock(dir);
     expect(rules(findings)).toEqual(['migration-unlocked']);
     expect(findings[0]?.message).toContain('--update-lock');
@@ -217,7 +217,8 @@ describe('runChecks', () => {
   it('passes every check that needs no database', async () => {
     const { findings, counts, ran } = await runChecks({ staticOnly: true });
     expect(findings).toEqual([]);
-    expect(counts).toMatchObject({ migrations: 16, waived: 4, errors: 0, warnings: 0 });
+    // The count comes from the journal for the same reason the list above does.
+    expect(counts).toMatchObject({ migrations: loadMigrations().length, waived: 4, errors: 0, warnings: 0 });
     expect(ran).toEqual(['journal', 'lock', 'lint']);
   });
 

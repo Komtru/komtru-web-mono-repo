@@ -93,6 +93,24 @@ describe('providerRequest', () => {
     expect(hit?.headers.authorization).toBe('Bearer sk_test');
   });
 
+  it('sends a string body verbatim, for a provider that speaks form encoding', async () => {
+    server = await startStubServer((_req, res) => json(res, 200, { ok: true }));
+
+    await providerRequest(silent, {
+      provider: 'fcm',
+      operation: 'token.exchange',
+      method: 'POST',
+      url: `${server.url}/token`,
+      headers: { 'content-type': 'application/x-www-form-urlencoded' },
+      body: 'grant_type=client_credentials&assertion=abc',
+    });
+
+    const [hit] = server.hits;
+    expect(hit?.body).toBe('grant_type=client_credentials&assertion=abc');
+    // Not overridden with application/json: a string body brings its own content type.
+    expect(hit?.headers['content-type']).toBe('application/x-www-form-urlencoded');
+  });
+
   it('throws ProviderHttpError carrying the status and parsed body on a 4xx', async () => {
     server = await startStubServer((_req, res) => json(res, 422, { message: 'bad' }));
 

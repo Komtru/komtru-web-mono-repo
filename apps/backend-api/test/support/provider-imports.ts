@@ -20,7 +20,13 @@ const HTTP_HELPER = path.join('platform', 'providers', 'http');
 const stripExtension = (file: string) => file.replace(/\.(ts|js|mts|mjs)$/, '');
 /** `paystack.client.ts`, and `paystack/client.ts` for a provider with a folder of its own. */
 const isClient = (file: string) => /(^|\.)client$/.test(path.basename(stripExtension(file)));
-const INDEX_FILES = new Set(['index.ts', 'index.js']);
+/**
+ * A module's composition root: the file that wires its jobs to the platform. Most modules do that
+ * in `index.ts`; a module large enough to keep its barrel separate from its wiring does it in
+ * `module.ts`, which `index.ts` then re-exports. Both sit at the module's top level, and both are
+ * the module's own surface rather than business logic, which is what this exemption is for.
+ */
+const ROOT_FILES = new Set(['index.ts', 'index.js', 'module.ts', 'module.js']);
 
 async function* walk(dir: string): AsyncGenerator<string> {
   const entries = await readdir(dir, { withFileTypes: true }).catch(() => []);
@@ -41,8 +47,8 @@ export async function findProviderImportViolations(root: string): Promise<Client
     const segments = relative.split(path.sep);
     const inJobs = segments.includes('jobs');
     const client = isClient(file);
-    /** `<module>/index.ts`: the module's own surface, which wires its jobs' dependencies at start. */
-    const moduleIndex = segments.length === 2 && INDEX_FILES.has(segments[1] ?? '');
+    /** `<module>/index.ts` or `<module>/module.ts`: top level only, never a nested file. */
+    const moduleIndex = segments.length === 2 && ROOT_FILES.has(segments[1] ?? '');
 
     if (!client && BARE_FETCH.test(source)) {
       violations.push({ file: relative, specifier: 'fetch()', kind: 'raw-network-call' });

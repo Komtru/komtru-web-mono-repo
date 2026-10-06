@@ -180,4 +180,17 @@ describe('src/modules', () => {
     expect(existsSync(root)).toBe(true);
     await expect(findProviderImportViolations(root)).resolves.toEqual([]);
   });
+
+  it("treats only a module's top-level module.ts as a composition root", async () => {
+    // index.ts and a module.ts beside it are the module's own surface, which wires its jobs at
+    // start. A module.ts nested deeper is ordinary code, and reaching a provider through it would
+    // be exactly the second route to the provider this rule exists to close.
+    const root = await modules({
+      'notify/module.ts': "import { send } from './jobs/send.job.js';\n",
+      'notify/jobs/send.job.ts': 'export const send = () => {};\n',
+      'notify/services/module.ts': "import { send } from '../jobs/send.job.js';\n",
+    });
+    const found = await findProviderImportViolations(root);
+    expect(found.map((violation) => violation.file)).toEqual([join('notify', 'services', 'module.ts')]);
+  });
 });

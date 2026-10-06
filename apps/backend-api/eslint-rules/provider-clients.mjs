@@ -36,7 +36,9 @@ const isModuleIndex = (file) => {
   return parts.length === 2 && INDEX_FILES.has(parts[1]);
 };
 
-const INDEX_FILES = new Set(['index.ts', 'index.js']);
+// A module's composition root: `index.ts`, or `module.ts` where a module keeps its wiring separate
+// from its barrel and re-exports it. Top level of the module only — see provider-imports.ts.
+const INDEX_FILES = new Set(['index.ts', 'index.js', 'module.ts', 'module.js']);
 
 /** @type {import('eslint').Rule.RuleModule} */
 export default {
