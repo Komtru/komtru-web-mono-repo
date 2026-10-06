@@ -188,3 +188,60 @@ export const identityVerificationLevelChangedEvent = defineEvent(
   1,
   z.object({ userId: z.uuid(), from: z.string().min(1), to: z.string().min(1) }),
 );
+
+// ---------------------------------------------------------------------------
+// T-036: devices, MFA factors and passkeys.
+// ---------------------------------------------------------------------------
+
+/**
+ * M1 §11's `identity.device.registered`. Risk consumes it; M11 learns there is a push token.
+ *
+ * `fingerprintHash` and not the fingerprint: §S12 forbids keeping the raw signal in a row that is
+ * retained, and what Risk needs is that two accounts share a handset, which a SHA-256 answers
+ * exactly. The device id is the join key for anything that needs more.
+ */
+export const identityDeviceRegisteredEvent = defineEvent(
+  'identity.device.registered',
+  1,
+  z.object({
+    userId: z.uuid(),
+    deviceId: z.uuid(),
+    fingerprintHash: z.string().min(1),
+    platform: z.string().min(1),
+    hasPushToken: z.boolean().default(false),
+  }),
+);
+
+export const mfaFactorTypeSchema = z.enum(['TOTP', 'SMS_OTP', 'EMAIL_OTP', 'PASSKEY', 'RECOVERY_CODE']);
+
+/**
+ * M1 §11's `identity.mfa.enrolled`. §S11 asks for a notification on every MFA change, and Risk
+ * scores an account that just became two-factor differently from one that always was.
+ */
+export const identityMfaEnrolledEvent = defineEvent(
+  'identity.mfa.enrolled',
+  1,
+  z.object({
+    userId: z.uuid(),
+    factorId: z.uuid(),
+    factorType: mfaFactorTypeSchema,
+    /** True when this is the factor that made the account two-factor. */
+    isFirstFactor: z.boolean().default(false),
+  }),
+);
+
+/**
+ * M1 §11's `identity.mfa.removed`. The one the user most needs to hear about: removing a factor is
+ * the step an account takeover takes before it changes anything else (§S11).
+ */
+export const identityMfaRemovedEvent = defineEvent(
+  'identity.mfa.removed',
+  1,
+  z.object({
+    userId: z.uuid(),
+    factorId: z.uuid(),
+    factorType: mfaFactorTypeSchema,
+    /** True when the account is no longer two-factor at all. */
+    lastFactor: z.boolean().default(false),
+  }),
+);

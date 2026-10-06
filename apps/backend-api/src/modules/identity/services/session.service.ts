@@ -10,11 +10,13 @@ import {
   identitySessionReuseDetectedEvent,
   type SessionScope,
 } from '@komtru/shared-types';
-import { and, eq, isNull, ne, sql } from 'drizzle-orm';
+import { and, desc, eq, isNull, ne, sql } from 'drizzle-orm';
+import type { Paged } from '@komtru/shared-types';
 import type { Db } from '../../../db/index.js';
 import { publish, type Tx } from '../../../platform/events/publish.js';
 import type { Logger } from '../../../platform/logger.js';
 import { issueRefreshToken, refreshTokenHash } from '../domain/session/refresh-token.js';
+import { deviceLabel } from './device.service.js';
 import { sessionUsableUnder } from '../domain/session/status.js';
 import { sessionExpiry, slidingIdleExpiry } from '../domain/session/ttl.js';
 import type { TokenSigner } from '../infrastructure/jwt/access-token.js';
@@ -380,4 +382,131 @@ export async function applyKillSwitch(
   // stale cache can never admit a token the database would refuse.
   await deps.epochs.invalidate(input.userId);
   return result;
+}
+
+// ---------------------------------------------------------------------------
+// §10.5's `GET /me/sessions` and `DELETE /me/sessions/{id}` (T-031 left these belonging to no
+// ticket; they sit on the same screen as the device list, so T-036 takes them).
+// ---------------------------------------------------------------------------
+
+export interface SessionView {
+  id: string;
+  scope: SessionScope;
+  /** How the holder authenticated. The user reads this as "password + authenticator app". */
+  amr: readonly string[];
+  deviceId: string | null;
+  /** `Chrome on Android`, from the stored user agent; the full string is noise on this screen. */
+  deviceLabel: string;
+  ip: string | null;
+  issuedAt: Date;
+  lastUsedAt: Date;
+  idleExpiresAt: Date;
+  /** True for the session making the request, so the client can label it and not offer to end it. */
+  current: boolean;
+}
+
+/**
+ * The sessions a user could still refresh.
+ *
+ * `consumed_at IS NULL` is deliberate: a rotated parent is spent, and listing it would show one
+ * device as several sessions that grow by one every ten minutes. What the user means by "where am I
+ * signed in" is the live tip of each family.
+ */
+export async function listSessions(
+  db: Db,
+  input: { userId: string; currentSessionId: string | null; page: number; limit: number },
+): Promise<Paged<SessionView>> {
+  const live = and(
+    eq(sessions.userId, input.userId),
+    isNull(sessions.revokedAt),
+    isNull(sessions.consumedAt),
+  );
+
+  const [rows, totals] = await Promise.all([
+    db
+      .select({
+        id: sessions.id,
+        scope: sessions.scope,
+        amr: sessions.amr,
+        deviceId: sessions.deviceId,
+        userAgent: sessions.userAgent,
+        ip: sessions.ip,
+        issuedAt: sessions.issuedAt,
+        lastUsedAt: sessions.lastUsedAt,
+        idleExpiresAt: sessions.idleExpiresAt,
+      })
+      .from(sessions)
+      .where(live)
+      .orderBy(desc(sessions.lastUsedAt))
+      .limit(input.limit)
+      .offset((input.page - 1) * input.limit),
+    db
+      .select({ total: sql<number>`count(*)::int` })
+      .from(sessions)
+      .where(live),
+  ]);
+
+  return {
+    items: rows.map((row) => ({
+      id: row.id,
+      scope: row.scope,
+      amr: row.amr,
+      deviceId: row.deviceId,
+      deviceLabel: deviceLabel(row.userAgent),
+      ip: row.ip,
+      issuedAt: row.issuedAt,
+      lastUsedAt: row.lastUsedAt,
+      idleExpiresAt: row.idleExpiresAt,
+      current: input.currentSessionId !== null && row.id === input.currentSessionId,
+    })),
+    page: input.page,
+    limit: input.limit,
+    total: totals[0]?.total ?? 0,
+  };
+}
+
+/**
+ * Signs one device out.
+ *
+ * The WHOLE family dies, not the named row: a session id is the tip of a rotation chain, and
+ * revoking only the tip leaves a parent that a thief holding the previous refresh token can still
+ * rotate from. `revokeSessionFamily` cannot be reused here because it takes a refresh token, which
+ * the person signing another device out does not have.
+ */
+export async function revokeSession(
+  tx: Tx,
+  input: { userId: string; sessionId: string; reason: string },
+): Promise<boolean> {
+  // Takes the caller's transaction, like `createSession`: §S10 asks for the audit row and the thing
+  // it describes to commit together, and a revoke that opened its own transaction could not.
+  //
+  // Before any row lock, for session-lock.ts's reason: a rotation committing beside this revoke
+  // would otherwise insert a child the revoke's snapshot never saw.
+  await lockUserSessions(tx, input.userId);
+
+  const target = (
+    await tx
+      .select({ familyId: sessions.familyId })
+      .from(sessions)
+      .where(and(eq(sessions.id, input.sessionId), eq(sessions.userId, input.userId)))
+  )[0];
+  // Another user's session id is a MISS, never a 403: a 403 would confirm the row exists.
+  if (!target) return false;
+
+  const revoked = await tx
+    .update(sessions)
+    .set({ revokedAt: sql`now()`, revokeReason: input.reason })
+    .where(
+      and(
+        eq(sessions.familyId, target.familyId),
+        // Scoped by user as well as by family. The family id comes from a row we have already
+        // proved belongs to the caller, but a predicate that does not say so is one refactor away
+        // from revoking somebody else's sessions.
+        eq(sessions.userId, input.userId),
+        isNull(sessions.revokedAt),
+      ),
+    )
+    .returning({ id: sessions.id });
+
+  return revoked.length > 0;
 }
