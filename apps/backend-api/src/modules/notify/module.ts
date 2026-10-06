@@ -91,20 +91,25 @@ export function createNotifyModule(options: NotifyModuleOptions = {}): KomtruMod
               templateKey: binding.templateKey,
               recipients: binding.recipients(envelope.payload),
             });
-            // Enqueued inside the handler's transaction for latency, and allowed to fail: an
-            // enqueue is not transactional, so `notify.requeue-stuck` is the floor underneath it.
-            // Throwing here would roll back the rows AND the processed_events marker, so the whole
-            // dispatch would be redone — which is safe (the ids are deterministic) but pointless.
-            for (const target of queued) {
-              try {
-                await enqueueSend(ctx.queues, config, target);
-              } catch (error) {
-                ctx.logger.error(
-                  { err: error, notificationId: target.notificationId },
-                  'notify: enqueue failed, the sweep will pick it up',
-                );
+            // Returned, not awaited here: the bus runs this once the rows above are committed.
+            // Enqueueing inside the transaction raced it — the send job would find no row, throw
+            // "is not committed yet", and burn an attempt; with a small attempt budget both tries
+            // could land early and dead-letter a notification that was never going to fail.
+            //
+            // Still allowed to fail, for the same reason as before: an enqueue is not
+            // transactional, and `notify.requeue-stuck` is the floor underneath it.
+            return async () => {
+              for (const target of queued) {
+                try {
+                  await enqueueSend(ctx.queues, config, target);
+                } catch (error) {
+                  ctx.logger.error(
+                    { err: error, notificationId: target.notificationId },
+                    'notify: enqueue failed, the sweep will pick it up',
+                  );
+                }
               }
-            }
+            };
           },
         });
       }
