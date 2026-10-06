@@ -28,7 +28,8 @@ import {
 import { lookupParty, type PartyDeps } from '../../../../src/modules/identity/services/party.service.js';
 import { infraEnabled } from '../../../support/db-urls.js';
 import { useTestDatabase } from '../../../support/db.js';
-import { insertUser } from '../infrastructure/postgres/support.js';
+import { TYPEAHEAD_HANDLES, insertUser } from '../infrastructure/postgres/support.js';
+import { skeleton } from '../../../../src/modules/identity/domain/username/skeleton.js';
 import { createTestRedis, redisReady, testConfig, testLogger } from '../support.js';
 
 const SAMPLES = 300;
@@ -298,12 +299,15 @@ describe.runIf(infraEnabled)('party lookup enumeration (M1 §17)', () => {
 
   it('answers a handle typeahead with at most eight, and nothing for two characters', async () => {
     const token = await seedCaller();
-    for (let i = 0; i < 12; i += 1) {
+    for (const username of TYPEAHEAD_HANDLES) {
       await insertUser(t.owner(), {
         status: 'ACTIVE',
         verification_level: 'CONTACT_VERIFIED',
-        username: `janedoe${String(i)}`,
-        username_skeleton: `janedoe${String(i)}`,
+        username,
+        // Through `skeleton()`, not the handle itself: the column holds the FOLD, and a fixture
+        // that writes the raw handle there seeds a row the service could never have written and
+        // quietly stops exercising users_username_skeleton_unique.
+        username_skeleton: skeleton(username),
       });
     }
 

@@ -14,7 +14,7 @@ import {
 import { skeleton } from '../../../../src/modules/identity/domain/username/skeleton.js';
 import { infraEnabled } from '../../../support/db-urls.js';
 import { useTestDatabase } from '../../../support/db.js';
-import { insertUser } from '../infrastructure/postgres/support.js';
+import { TYPEAHEAD_HANDLES, insertUser } from '../infrastructure/postgres/support.js';
 
 interface SeedOptions {
   username?: string | null;
@@ -315,7 +315,7 @@ describe.runIf(infraEnabled)('party service (M1 §8)', () => {
 
     it('returns at most eight', async () => {
       const caller = await seedCaller();
-      for (let i = 0; i < 12; i += 1) await seedParty({ username: `janedoe${String(i)}` });
+      for (const username of TYPEAHEAD_HANDLES) await seedParty({ username });
       expect((await suggest(caller, 'jan')).parties).toHaveLength(8);
     });
 
