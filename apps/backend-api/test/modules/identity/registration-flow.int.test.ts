@@ -127,7 +127,7 @@ describe.runIf(infraEnabled)('the registration flow end to end (M1 §9.3)', () =
         )
     ).rows;
 
-  it('takes a phone-first user from signup to CONTACT_VERIFIED', async () => {
+  it('walks a phone-first user through E2, E3, the password, the handle and E4', async () => {
     // E2: sign up with a number and a name, no password.
     const registered = bodyOf<Registered>(
       await request(app).post('/v1/auth/register').send({

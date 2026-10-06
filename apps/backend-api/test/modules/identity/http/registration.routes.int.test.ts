@@ -27,6 +27,7 @@ interface Registered {
   nextStep: string;
   expiresAt: number;
   maskedDestination: string;
+  delivered: boolean;
 }
 interface Session {
   verified: true;
@@ -39,7 +40,6 @@ interface Session {
 interface Resent {
   challengeId: string;
   expiresAt: number;
-  maskedDestination: string;
 }
 interface Terms {
   upToDate: boolean;
@@ -266,6 +266,9 @@ describe.runIf(infraEnabled)('registration over HTTP', () => {
 
     expect(response.status).toBe(200);
     expect(resent.challengeId).not.toBe(registered.challengeId);
+    // No mask: the client already has one from the call that created the challenge, and returning
+    // the account's here would tell a caller holding a forgot-password id whether it matched.
+    expect(response.body).not.toHaveProperty('maskedDestination');
     expect((await verify(registered.challengeId, oldCode)).status).toBe(422);
     expect((await verify(resent.challengeId, await codeFor(resent.challengeId))).status).toBe(200);
   });
@@ -286,6 +289,40 @@ describe.runIf(infraEnabled)('registration over HTTP', () => {
     const response = await request(app).post('/v1/auth/otp/resend').send({ challengeId: randomUUID() });
     expect(response.status).toBe(422);
     expect(bodyOf<Problem>(response).code).toBe('OTP_INVALID');
+  });
+
+  it('verifies the contact the code was ISSUED for, not whichever is primary now', async () => {
+    const registered = bodyOf<Registered>(await registerPhone());
+    const code = await codeFor(registered.challengeId);
+
+    // Another number becomes primary between the code being sent and the code being presented.
+    await t
+      .owner()
+      .query(`UPDATE identity.user_phones SET is_primary = false WHERE user_id = $1`, [registered.userId]);
+    await t.owner().query(
+      `INSERT INTO identity.user_phones (user_id, phone_e164, country_code, is_primary)
+           VALUES ($1, '+2348099999999', 'NG', true)`,
+      [registered.userId],
+    );
+
+    // `destination_hash` is an HMAC of the number the code went to; recomputing it from the row we
+    // are about to mark verified is the only thing standing between this and a bypass.
+    const response = await verify(registered.challengeId, code);
+    expect(response.status).toBe(422);
+    const { rows } = await t.app().query<{ count: string }>(
+      `SELECT count(*)::text AS count FROM identity.user_phones
+          WHERE user_id = $1 AND verified_at IS NOT NULL`,
+      [registered.userId],
+    );
+    expect(rows[0]?.count).toBe('0');
+  });
+
+  it('says when nothing was sent, rather than claiming a code is on its way', async () => {
+    // Fill the per-destination budget with three registrations on the same unverified number.
+    for (let i = 0; i < 3; i += 1) expect((await registerPhone()).status).toBe(201);
+    const fourth = await registerPhone();
+    expect(fourth.status).toBe(201);
+    expect(bodyOf<Registered & { delivered: boolean }>(fourth).delivered).toBe(false);
   });
 
   it('writes an identity_audit_log row before it returns success (S10)', async () => {

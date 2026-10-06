@@ -11,7 +11,13 @@ import { ApiError } from '../errors.js';
 import type { Logger } from '../logger.js';
 import type { RateLimitGate } from './mount.js';
 import { ANONYMOUS_ACTOR_KEY } from './principal.js';
-import { routeLabel, type RateLimitSpec, type RouteDefinition } from './route.js';
+import {
+  routeLabel,
+  type RateLimitKey,
+  type RateLimitSpec,
+  type RateLimitWindow,
+  type RouteDefinition,
+} from './route.js';
 
 /** Under the app's `komtru:` ioredis prefix, so every limiter key is namespaced twice over. */
 export const RATE_LIMIT_KEY_PREFIX = 'rl';
@@ -21,8 +27,6 @@ export interface RateLimitOptions {
   logger: Logger;
   keyPrefix?: string;
 }
-
-type RateLimitKey = RateLimitSpec['by'][number];
 
 /**
  * `identifier` and `device` both come out of the parsed body, so they are charged after validation;
@@ -55,11 +59,14 @@ const retryAfterSeconds = (msBeforeNext: number): number => Math.max(1, Math.cei
  * With more than one key, the headers must describe the *binding* one — the one with the least left
  * — not whichever was charged last.
  */
-const setHeaders = (res: Response, spec: RateLimitSpec, result: RateLimiterRes): void => {
+const windowFor = (spec: RateLimitSpec, kind: RateLimitKey): RateLimitWindow =>
+  spec.perKey?.[kind] ?? { points: spec.points, durationSeconds: spec.durationSeconds };
+
+const setHeaders = (res: Response, window: RateLimitWindow, result: RateLimiterRes): void => {
   const remaining = Math.max(0, result.remainingPoints);
   const previous = res.getHeader('RateLimit-Remaining');
   if (previous !== undefined && Number(previous) <= remaining) return;
-  res.setHeader('RateLimit-Limit', spec.points);
+  res.setHeader('RateLimit-Limit', window.points);
   res.setHeader('RateLimit-Remaining', remaining);
   res.setHeader('RateLimit-Reset', retryAfterSeconds(result.msBeforeNext));
 };
@@ -72,15 +79,15 @@ export function createRateLimitGate({
   // One limiter per route and window; `storeClient` is the shared app client, so every instance
   // counts into the same Redis keys.
   const limiters = new Map<string, RateLimiterRedis>();
-  const limiterFor = (route: RouteDefinition, spec: RateLimitSpec, kind: string): RateLimiterRedis => {
+  const limiterFor = (route: RouteDefinition, window: RateLimitWindow, kind: string): RateLimiterRedis => {
     const id = `${keyPrefix}:${route.method}:${route.path}:${kind}`;
     let limiter = limiters.get(id);
     if (!limiter) {
       limiter = new RateLimiterRedis({
         storeClient: redis,
         keyPrefix: id,
-        points: spec.points,
-        duration: spec.durationSeconds,
+        points: window.points,
+        duration: window.durationSeconds,
       });
       limiters.set(id, limiter);
     }
@@ -98,12 +105,13 @@ export function createRateLimitGate({
       // skip this key rather than collapsing every such caller into one shared bucket.
       if (!subject) continue;
 
+      const window = windowFor(spec, kind);
       try {
-        const result = await limiterFor(route, spec, kind).consume(subject);
-        setHeaders(res, spec, result);
+        const result = await limiterFor(route, window, kind).consume(subject);
+        setHeaders(res, window, result);
       } catch (error) {
         if (error instanceof RateLimiterRes) {
-          setHeaders(res, spec, error);
+          setHeaders(res, window, error);
           res.setHeader('Retry-After', retryAfterSeconds(error.msBeforeNext));
           logger.warn({ route: routeLabel(route), kind }, 'http: rate limit reached');
           throw new ApiError(

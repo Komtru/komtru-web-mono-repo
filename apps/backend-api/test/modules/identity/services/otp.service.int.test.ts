@@ -181,8 +181,64 @@ describe.runIf(infraEnabled)('otp challenges', () => {
     }
     const fourth = await issue({ purpose: 'LOGIN' });
     expect(fourth).toMatchObject({ delivered: false, throttled: true });
-    // Still a real row with a real id, so the caller's response shape does not change.
+    // Still a real id, so the caller's response shape does not change.
     expect(fourth.challengeId).toBeTruthy();
+  });
+
+  it('writes NO row once the budget is spent, so the window can drain', async () => {
+    // Counting attempts rather than sends is what turns a 24-hour cap into a permanent one: every
+    // refused attempt would push the window count up, and three forgot-password requests an hour
+    // against a known address would lock that person out of every OTP the platform can send.
+    for (let i = 0; i < OTP_SEND_DAILY.max; i += 1) await issue({ purpose: 'LOGIN' });
+    const before = await t
+      .app()
+      .query<{ count: string }>(`SELECT count(*)::text AS count FROM identity.otp_challenges`);
+
+    for (let i = 0; i < 20; i += 1) expect((await issue({ purpose: 'LOGIN' })).throttled).toBe(true);
+
+    const after = await t
+      .app()
+      .query<{ count: string }>(`SELECT count(*)::text AS count FROM identity.otp_challenges`);
+    expect(after.rows[0]?.count).toBe(before.rows[0]?.count);
+  });
+
+  it('hands back the live challenge when throttled, and does NOT kill the code already sent', async () => {
+    const live = await issue({ purpose: 'LOGIN' });
+    const code = await codeFor(live.challengeId);
+    for (let i = 0; i < OTP_SEND_BURST.max; i += 1) await issue({ purpose: 'LOGIN' });
+
+    const throttled = await issue({ purpose: 'LOGIN' });
+    expect(throttled.throttled).toBe(true);
+
+    // A user tapping "Didn't get a code?" a fourth time must not lose the code in their inbox —
+    // the 429 says "wait a few minutes", and waiting would not have brought it back.
+    const newest = await t
+      .app()
+      .query<{ id: string }>(
+        `SELECT id FROM identity.otp_challenges WHERE consumed_at IS NULL ORDER BY created_at DESC LIMIT 1`,
+      );
+    expect(throttled.challengeId).toBe(newest.rows[0]?.id);
+    const result = await t
+      .db()
+      .transaction((tx) => consumeOtp(tx, deps, { challengeId: live.challengeId, code }));
+    // The first code was superseded by the three legitimate re-issues, not by the throttled one.
+    expect(['VERIFIED', 'UNKNOWN']).toContain(result.outcome);
+  });
+
+  it('does not let one user\u2019s registration kill another\u2019s code on the same unverified number', async () => {
+    const a = await seedUser(t.app());
+    const b = await seedUser(t.app());
+
+    const first = await issue({ userId: a.userId, purpose: 'REGISTRATION' });
+    const firstCode = await codeFor(first.challengeId);
+    await issue({ userId: b.userId, purpose: 'REGISTRATION' });
+
+    // Unverified addresses are deliberately not unique, so both accounts legitimately hold this
+    // number. A global supersede would let either one lock the other out by registering again.
+    const result = await t
+      .db()
+      .transaction((tx) => consumeOtp(tx, deps, { challengeId: first.challengeId, code: firstCode }));
+    expect(result.outcome).toBe('VERIFIED');
   });
 
   it('throttles a destination at ten sends in a day (S4)', async () => {

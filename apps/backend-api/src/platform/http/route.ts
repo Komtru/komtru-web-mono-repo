@@ -19,11 +19,29 @@ const MUTATING: readonly HttpMethod[] = ['post', 'put', 'patch', 'delete'];
 /** `PUBLIC` is a route anyone may call (login, webhooks); the rest need a session of that scope. */
 export type RouteScope = SessionScope | 'PUBLIC';
 
+export type RateLimitKey = 'ip' | 'user' | 'identifier' | 'device';
+
+/** One key's budget, when it differs from the route's default. */
+export interface RateLimitWindow {
+  points: number;
+  durationSeconds: number;
+}
+
 export interface RateLimitSpec {
   points: number;
   durationSeconds: number;
   /** Which keys the budget is counted against; every listed key is checked. */
-  by: ('ip' | 'user' | 'identifier' | 'device')[];
+  by: RateLimitKey[];
+  /**
+   * A looser or tighter budget for one key.
+   *
+   * M1 §S4 asks for "login 5/min/identifier + 20/min/IP", which is two windows on one route. One
+   * shared window would have to be the tighter of the two, and behind Nigerian carrier-grade NAT
+   * one public IP is thousands of unrelated subscribers — five sign-ins a minute for all of them is
+   * an outage for a large part of the market, and an attacker simply varies their source. So a key
+   * may carry its own.
+   */
+  perKey?: Partial<Record<RateLimitKey, RateLimitWindow>>;
   /** For `identifier`: pulls the email, phone or PIN subject out of the request. */
   identifierFrom?: (input: { body: unknown; query: unknown; params: unknown }) => string | undefined;
   /**
@@ -188,6 +206,13 @@ export function assertRouteInvariants(routes: RouteDefinition[]): void {
     }
     if (route.rateLimit?.by.includes('device') && !route.rateLimit.deviceFrom) {
       problems.push(`${label}: rate limits by device but provides no deviceFrom`);
+    }
+    for (const key of Object.keys(route.rateLimit?.perKey ?? {}) as RateLimitKey[]) {
+      // A budget nobody charges reads as a control and is not one — the same reasoning as the
+      // permission-on-a-PUBLIC-route check below.
+      if (!route.rateLimit?.by.includes(key)) {
+        problems.push(`${label}: overrides the budget for "${key}", which it does not count`);
+      }
     }
     // A permission on a route anyone may call reads as protection and is never checked, which is
     // the worst of both: the same reasoning as the idempotency and rate-limit gates above.

@@ -80,15 +80,17 @@ export function passwordRoutes(deps: PasswordControllerDeps): RouteDefinition[] 
        */
       retryable: false,
       /**
-       * §S4's 5/min/identifier is the binding one and the window every key shares. The per-IP
-       * figure §S4 gives (20/min) cannot be expressed in the same spec, so the IP key rides the
-       * same five — tighter than M1 asks, and behind carrier-grade NAT that is a real cost, which
-       * is exactly why the identifier and device keys exist beside it.
+       * §S4 exactly: 5/min/identifier and 20/min/IP. They are two windows because they bound two
+       * different things — one account's password being guessed, and one source's volume — and
+       * collapsing them onto the tighter figure would cap a whole carrier-grade-NAT pool at five
+       * sign-ins a minute, which is an outage for a large part of this market and does not slow an
+       * attacker who varies their source. The device key is the one that bounds that attacker.
        */
       rateLimit: {
         points: 5,
         durationSeconds: 60,
         by: ['identifier', 'ip', 'device'],
+        perKey: { ip: { points: 20, durationSeconds: 60 } },
         identifierFrom: loginIdentifier,
         deviceFrom: fingerprint,
       },
@@ -104,11 +106,16 @@ export function passwordRoutes(deps: PasswordControllerDeps): RouteDefinition[] 
       status: 202,
       /** Always 202 with the same shape, so a repeat changes nothing a caller can observe. */
       retryable: false,
-      /** §S4: password reset 3/hour/identifier. */
+      /**
+       * §S4: password reset 3/hour/identifier. The per-IP budget is separate and much looser for
+       * the carrier-grade-NAT reason above — three recoveries an hour for everyone sharing one
+       * public address would deny the flow to a whole neighbourhood.
+       */
       rateLimit: {
         points: 3,
         durationSeconds: 3600,
         by: ['identifier', 'ip', 'device'],
+        perKey: { ip: { points: 60, durationSeconds: 3600 } },
         identifierFrom: loginIdentifier,
         deviceFrom: fingerprint,
       },

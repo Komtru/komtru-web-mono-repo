@@ -228,18 +228,26 @@ export async function markEmailVerified(
   tx: Tx,
   input: { userId: string; emailId: string; source: string },
 ): Promise<void> {
+  let updated: { id: string }[];
   try {
-    const updated = await tx
-      .update(userEmails)
-      .set({ verifiedAt: sql`now()`, verificationSource: input.source })
-      .where(
-        and(
-          eq(userEmails.id, input.emailId),
-          eq(userEmails.userId, input.userId),
-          isNull(userEmails.verifiedAt),
-        ),
-      )
-      .returning({ id: userEmails.id });
+    // A SAVEPOINT, because the 23505 below is a LIVE constraint violation and one of those aborts
+    // the whole Postgres transaction. Without it the caller's "clean 409" would arrive on a
+    // transaction whose COMMIT is silently a ROLLBACK: the OTP attempt charged a moment earlier
+    // would be refunded — so the loser could replay the same code without limit — and the §S10
+    // audit row for the conflict would never be written.
+    updated = await tx.transaction((sp) =>
+      sp
+        .update(userEmails)
+        .set({ verifiedAt: sql`now()`, verificationSource: input.source })
+        .where(
+          and(
+            eq(userEmails.id, input.emailId),
+            eq(userEmails.userId, input.userId),
+            isNull(userEmails.verifiedAt),
+          ),
+        )
+        .returning({ id: userEmails.id }),
+    );
     // Nothing updated means it was already verified (a replayed verify), which is not an error.
     if (!updated.length) return;
   } catch (error) {

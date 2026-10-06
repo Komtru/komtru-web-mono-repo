@@ -8,7 +8,7 @@
 //
 // Everything takes the caller's `Tx`. A registration writes a user, a contact, an audit row and a
 // challenge, and either all of them happen or none do.
-import { and, eq, gte, isNull, sql } from 'drizzle-orm';
+import { and, desc, eq, gte, isNull, sql } from 'drizzle-orm';
 import { v7 as uuidv7 } from 'uuid';
 import type { Tx } from '../../../platform/events/publish.js';
 import { publish } from '../../../platform/events/publish.js';
@@ -38,6 +38,10 @@ export interface OtpDeps {
   logger: Logger;
 }
 
+const raise = (message: string): never => {
+  throw new Error(message);
+};
+
 export type OtpRow = typeof otpChallenges.$inferSelect;
 
 export type OtpChannel = 'SMS' | 'EMAIL';
@@ -48,8 +52,13 @@ export interface IssueOtpInput {
   purpose: OtpPurpose;
   /** Where the code goes. More than one only when a phone OTP is mirrored to email in development. */
   channels: OtpChannel[];
-  /** Already canonical: `normaliseEmail().emailNormal` or `normalisePhone().phoneE164`. */
-  destination: string;
+  /**
+   * Already canonical: `normaliseEmail().emailNormal` or `normalisePhone().phoneE164`. Omitted only
+   * when `destinationHash` is supplied instead — a resend of a decoy challenge has the hash and
+   * cannot recover the address it was made from, which is the point of storing a hash.
+   */
+  destination?: string;
+  destinationHash?: Buffer;
   ip?: string | null;
   /**
    * False writes the row and publishes nothing.
@@ -75,12 +84,18 @@ export interface IssuedOtp {
 const WINDOWS = [OTP_SEND_BURST, OTP_SEND_DAILY];
 
 /**
- * How many challenges this destination has had in each §S4 window.
+ * How many codes this destination has been SENT in each §S4 window.
  *
  * Counted against the rows rather than against a Redis budget on the route because the limit M1
  * names is per DESTINATION, and a destination is not something a route key can see: a username
  * identifier, a resend keyed on a challenge id and a fresh registration all resolve to the same
  * phone number, and only this table knows that.
+ *
+ * It counts SENDS, not attempts, which is the difference between a rolling 24-hour cap and a
+ * permanent one. `issueOtp` writes no row once the budget is spent — if it did, every refused
+ * attempt would push the window count further up, and an attacker calling `/auth/password/forgot`
+ * three times an hour against a known address would lock that person out of every OTP the platform
+ * can send them, for good.
  */
 async function sendBudgetSpent(tx: Tx, destinationHash: Buffer, now: Date): Promise<boolean> {
   for (const window of WINDOWS) {
@@ -94,18 +109,76 @@ async function sendBudgetSpent(tx: Tx, destinationHash: Buffer, now: Date): Prom
   return false;
 }
 
+/**
+ * The newest challenge this caller already has for a destination and purpose, whatever its state.
+ *
+ * Scoped to the caller's own `user_id` (or to the NULL-user rows, for `/auth/password/forgot`'s
+ * decoy): two accounts may hold the same UNVERIFIED address, so a row with the same destination
+ * hash is not necessarily this caller's to hand back.
+ */
+async function newestOwnChallenge(
+  tx: Tx,
+  destinationHash: Buffer,
+  purpose: OtpPurpose,
+  userId: string | null,
+): Promise<OtpRow | undefined> {
+  return (
+    await tx
+      .select()
+      .from(otpChallenges)
+      .where(
+        and(
+          eq(otpChallenges.destinationHash, destinationHash),
+          eq(otpChallenges.purpose, purpose),
+          userId === null ? isNull(otpChallenges.userId) : eq(otpChallenges.userId, userId),
+        ),
+      )
+      .orderBy(desc(otpChallenges.createdAt))
+      .limit(1)
+  )[0];
+}
+
 export async function issueOtp(tx: Tx, deps: OtpDeps, input: IssueOtpInput): Promise<IssuedOtp> {
   const now = new Date();
-  const destinationHash = hashDestination(deps.hasher, input.destination);
-
-  // Before the invalidation below, never after: superseding the previous rows would hide the very
-  // evidence the budget is counted from, and a caller could then resend without limit.
+  const destinationHash =
+    input.destinationHash ??
+    hashDestination(deps.hasher, input.destination ?? raise('issueOtp needs a destination'));
   const throttled = await sendBudgetSpent(tx, destinationHash, now);
+
+  if (throttled) {
+    // Nothing is written and nothing is superseded.
+    //
+    // Not writing is what keeps the window draining (see `sendBudgetSpent`). Not superseding is
+    // what stops a fourth tap on screen E3's "Didn't get a code?" from killing the code already in
+    // the user's inbox — which, with a 429 that says "wait a few minutes", would be a lie: waiting
+    // would not have brought it back.
+    //
+    // A spent budget means at least three of this caller's own rows exist inside the window, so the
+    // handed-back challenge is theirs and is almost always the one they are already looking at.
+    const existing = await newestOwnChallenge(tx, destinationHash, input.purpose, input.userId);
+    if (existing) {
+      deps.logger.warn(
+        { challengeId: existing.id, purpose: input.purpose },
+        'identity: otp send budget spent for this destination, nothing delivered',
+      );
+      return {
+        challengeId: existing.id,
+        expiresAt: existing.expiresAt,
+        delivered: false,
+        throttled: true,
+      };
+    }
+    // The budget was filled by somebody else's rows on the same unverified address. There is
+    // nothing of this caller's to hand back, so one row is written — it is the only path on which a
+    // refused send costs a row, and it needs another caller's abuse to reach.
+  }
+
   const deliver = (input.deliver ?? true) && !throttled;
 
-  // §S6's "invalidated on new issuance for the same purpose+destination". Without it the old code
-  // keeps working for its remaining five minutes, which is five minutes of two live codes on one
-  // channel — and the user, who is looking at the newest SMS, cannot tell which is which.
+  // §S6's "invalidated on new issuance for the same purpose+destination", scoped to this user's own
+  // challenges. Unverified addresses are deliberately not unique, so two accounts may be mid-way
+  // through verifying the same number; a global supersede would let either one kill the other's
+  // code by registering again.
   await tx
     .update(otpChallenges)
     .set({ consumedAt: sql`now()` })
@@ -114,6 +187,7 @@ export async function issueOtp(tx: Tx, deps: OtpDeps, input: IssueOtpInput): Pro
         eq(otpChallenges.destinationHash, destinationHash),
         eq(otpChallenges.purpose, input.purpose),
         isNull(otpChallenges.consumedAt),
+        input.userId === null ? isNull(otpChallenges.userId) : eq(otpChallenges.userId, input.userId),
       ),
     );
 
@@ -152,13 +226,6 @@ export async function issueOtp(tx: Tx, deps: OtpDeps, input: IssueOtpInput): Pro
       aggregateId: row.id,
       ...(input.userId ? { actor: { type: 'CONSUMER' as const, id: input.userId } } : {}),
     });
-  } else if (throttled) {
-    // The destination is never logged, only the challenge: §S12 is absolute, and the challenge id
-    // is enough to find the row an operator is asking about.
-    deps.logger.warn(
-      { challengeId: row.id, purpose: input.purpose },
-      'identity: otp send budget spent for this destination, nothing delivered',
-    );
   }
 
   return { challengeId: row.id, expiresAt, delivered: deliver, throttled };

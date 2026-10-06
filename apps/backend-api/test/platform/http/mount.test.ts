@@ -414,3 +414,30 @@ describe('problem extension members', () => {
     });
   });
 });
+
+describe('problem extension members cannot forge a standard field', () => {
+  it.each(['type', 'title', 'status', 'code', 'detail', 'errors', 'instance'])(
+    'ignores an extension named %s',
+    async (field) => {
+      const route = defineRoute({
+        method: 'post',
+        path: `/forge-${field}`,
+        scope: 'PUBLIC',
+        summary: 'Forge',
+        retryable: false,
+        schema: { body: z.object({}), response: z.object({ ok: z.boolean() }) },
+        handler: () => {
+          throw new ApiError(422, 'OTP_INVALID', 'No', undefined, undefined, {
+            [field]: 'forged',
+            attemptsRemaining: 1,
+          });
+        },
+      });
+      const response = await request(appWith([route]))
+        .post(`/v1/forge-${field}`)
+        .send({});
+      expect(response.body).toMatchObject({ code: 'OTP_INVALID', status: 422, attemptsRemaining: 1 });
+      expect((response.body as Record<string, unknown>)[field]).not.toBe('forged');
+    },
+  );
+});

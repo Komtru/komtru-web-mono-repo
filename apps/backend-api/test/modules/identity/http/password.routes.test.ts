@@ -37,16 +37,18 @@ describe('login and the password routes (M1 §10.1)', () => {
     expect(byPath['/auth/password/change']?.scope).toBe('CONSUMER');
   });
 
-  it('limits login to five a minute per identifier (S4)', () => {
-    expect(byPath['/auth/login']?.rateLimit).toMatchObject({ points: 5, durationSeconds: 60 });
-    expect(byPath['/auth/login']?.rateLimit?.by).toEqual(['identifier', 'ip', 'device']);
+  it('limits login to five a minute per identifier and twenty a minute per IP (S4)', () => {
+    const spec = byPath['/auth/login']?.rateLimit;
+    expect(spec).toMatchObject({ points: 5, durationSeconds: 60 });
+    expect(spec?.by).toEqual(['identifier', 'ip', 'device']);
+    // Behind carrier-grade NAT one IP is thousands of people; a shared 5/min would lock out a city.
+    expect(spec?.perKey?.ip).toEqual({ points: 20, durationSeconds: 60 });
   });
 
-  it('limits password reset to three an hour per identifier (S4)', () => {
-    expect(byPath['/auth/password/forgot']?.rateLimit).toMatchObject({
-      points: 3,
-      durationSeconds: 3600,
-    });
+  it('limits password reset to three an hour per identifier, with room for a shared IP (S4)', () => {
+    const spec = byPath['/auth/password/forgot']?.rateLimit;
+    expect(spec).toMatchObject({ points: 3, durationSeconds: 3600 });
+    expect(spec?.perKey?.ip?.points).toBeGreaterThan(3);
   });
 
   it('answers forgot-password with 202, as M1 §10.1 specifies', () => {

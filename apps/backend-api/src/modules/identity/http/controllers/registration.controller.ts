@@ -60,6 +60,7 @@ export async function registerUser(
         nextStep: result.nextStep,
         expiresAt: result.expiresAt.getTime(),
         maskedDestination: result.maskedDestination,
+        delivered: result.delivered,
       };
     case 'TAKEN':
       // A deliberate enumeration trade-off, recorded in the ticket: a duplicate must be
@@ -183,11 +184,7 @@ export async function resendCode(
   });
 
   if (result.outcome === 'ISSUED') {
-    return {
-      challengeId: result.challengeId,
-      expiresAt: result.expiresAt.getTime(),
-      maskedDestination: result.maskedDestination,
-    };
+    return { challengeId: result.challengeId, expiresAt: result.expiresAt.getTime() };
   }
   if (result.outcome === 'THROTTLED') {
     throw new ApiError(
@@ -197,9 +194,9 @@ export async function resendCode(
       'Wait a few minutes before asking for another code',
     );
   }
-  // An unknown or expired challenge, and a decoy one from `/auth/password/forgot`, answer alike:
-  // a resend that distinguished them would undo the uniform forgot-password response one endpoint
-  // later.
+  // An unknown or expired challenge. A DECOY challenge from `/auth/password/forgot` does NOT reach
+  // here: it is re-issued and answers ISSUED exactly as a real one does, because a resend that told
+  // the two apart would undo the uniform forgot-password response one endpoint later.
   throw new ApiError(
     422,
     'OTP_INVALID',

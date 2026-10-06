@@ -169,6 +169,41 @@ describe.runIf(infraEnabled)('enumeration (M1 §17)', () => {
     expect(attempt.body).toMatchObject({ code: 'OTP_INVALID', attemptsRemaining: 4 });
   });
 
+  it('answers a resend the same way for a decoy challenge and a real one (closes the oracle)', async () => {
+    await seedKnownUser();
+    const known = await request(app).post('/v1/auth/password/forgot').send({ identifier: KNOWN });
+    const unknown = await request(app).post('/v1/auth/password/forgot').send({ identifier: UNKNOWN });
+
+    // The whole decoy design is undone if one extra unauthenticated request can tell them apart:
+    // take the challengeId the forgot response just gave you and ask for a resend.
+    const resendKnown = await request(app)
+      .post('/v1/auth/otp/resend')
+      .send({ challengeId: (known.body as { challengeId: string }).challengeId });
+    const resendUnknown = await request(app)
+      .post('/v1/auth/otp/resend')
+      .send({ challengeId: (unknown.body as { challengeId: string }).challengeId });
+
+    expect(resendKnown.status).toBe(200);
+    expect(resendUnknown.status).toBe(resendKnown.status);
+    const shape = (body: Record<string, unknown>) => ({ ...body, challengeId: '', expiresAt: 0 });
+    expect(shape(resendUnknown.body as Record<string, unknown>)).toEqual(
+      shape(resendKnown.body as Record<string, unknown>),
+    );
+    // And the resend response carries no mask, which would have been the same oracle by another name.
+    expect(resendKnown.body).not.toHaveProperty('maskedDestination');
+  });
+
+  it('still sends nothing for the decoy, however many times it is resent', async () => {
+    const unknown = await request(app).post('/v1/auth/password/forgot').send({ identifier: UNKNOWN });
+    const challengeId = (unknown.body as { challengeId: string }).challengeId;
+    await request(app).post('/v1/auth/otp/resend').send({ challengeId });
+
+    const { rows } = await t
+      .app()
+      .query(`SELECT 1 FROM platform.outbox WHERE event_type = 'identity.otp.requested'`);
+    expect(rows).toEqual([]);
+  });
+
   it('sends nothing for the unknown identifier', async () => {
     await request(app).post('/v1/auth/password/forgot').send({ identifier: UNKNOWN });
     const { rows } = await t

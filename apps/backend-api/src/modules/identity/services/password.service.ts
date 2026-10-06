@@ -38,6 +38,35 @@ import { bumpSessionsEpoch, revokeAllSessions } from './session.service.js';
 
 const otpDeps = (deps: AccountDeps): OtpDeps => ({ hasher: deps.otpHasher, logger: deps.logger });
 
+/**
+ * Thrown rather than returned so the caller's transaction rolls back and the single-use reset token
+ * survives a recoverable user mistake.
+ */
+class PasswordRefusedError extends Error {
+  constructor(
+    readonly rejection: PasswordRejection,
+    readonly detail: string,
+  ) {
+    super(detail);
+    this.name = 'PasswordRefusedError';
+  }
+}
+
+/**
+ * What this account is known by, so `CONTAINS_IDENTIFIER` applies to a changed or reset password as
+ * well as to the one chosen at registration. Without it a user can reset to `jane@example.com2026`,
+ * which no breach corpus catches because it is only weak for Jane.
+ */
+async function identifiersFor(tx: Tx, userId: string): Promise<string[]> {
+  const contacts = await primaryContacts(tx, userId);
+  const user = (
+    await tx.select({ username: users.username }).from(users).where(eq(users.id, userId)).limit(1)
+  )[0];
+  return [contacts.email?.address, contacts.phone?.address, user?.username].filter(
+    (value): value is string => typeof value === 'string' && value.length > 0,
+  );
+}
+
 export interface StartResetInput {
   identifier: string;
   ip: string | null;
@@ -195,52 +224,69 @@ export async function completePasswordReset(
   // resets would share and one would read the other's user out of.
   let subject: string | undefined;
 
-  const result = await db.transaction(async (tx): Promise<ResetResult> => {
-    const used = await consumeProofToken(tx, otpDeps(deps), input.resetToken);
-    if (used.outcome !== 'VERIFIED') return used;
+  let result: ResetResult;
+  try {
+    result = await db.transaction(async (tx): Promise<ResetResult> => {
+      const used = await consumeProofToken(tx, otpDeps(deps), input.resetToken);
+      if (used.outcome !== 'VERIFIED') return used;
 
-    const userId = used.challenge.userId;
-    // A proof token minted from a decoy challenge has no user. It cannot happen — a decoy is never
-    // delivered, so nobody can verify it to mint one — but a reset that reached here without a
-    // subject would be a reset of nothing, reported as success.
-    if (!userId) return { outcome: 'UNKNOWN' };
-    subject = userId;
+      const userId = used.challenge.userId;
+      // A proof token minted from a decoy challenge has no user. It cannot happen — a decoy is never
+      // delivered, so nobody can verify it to mint one — but a reset that reached here without a
+      // subject would be a reset of nothing, reported as success.
+      if (!userId) return { outcome: 'UNKNOWN' };
+      subject = userId;
 
-    const written = await setPassword(tx, deps, { userId, password: input.newPassword });
-    if (!written.ok) {
-      return { outcome: 'REJECTED', rejection: written.rejection, message: written.message };
-    }
-
-    // §9.2's full kill. No `exceptSessionId`: a recovery means the account may have been in
-    // somebody else's hands, and the one session we would be sparing could be theirs.
-    await bumpSessionsEpoch(tx, userId);
-    const revokedSessions = await revokeAllSessions(tx, { userId, reason: 'password_reset' });
-
-    await writeAudit(tx, {
-      action: AUDIT_ACTIONS.PASSWORD_RESET,
-      outcome: 'SUCCESS',
-      actorType: 'USER',
-      actorUserId: userId,
-      subjectUserId: userId,
-      ip: input.ip,
-      userAgent: input.userAgent,
-      metadata: { revokedSessions, viaRecovery: true },
-    });
-
-    await publish(tx, identityPasswordChangedEvent, {
-      payload: {
+      const written = await setPassword(tx, deps, {
         userId,
-        viaRecovery: true,
-        changedAt: new Date().toISOString(),
-        revokedSessions,
-      },
-      aggregateType: 'identity.user',
-      aggregateId: userId,
-      actor: { type: 'CONSUMER', id: userId },
-    });
+        password: input.newPassword,
+        identifiers: await identifiersFor(tx, userId),
+      });
+      if (!written.ok) {
+        // THROWN, not returned. `consumeProofToken` has already spent the token's single attempt, and
+        // returning would commit that — so a user who typed a password they had used before would be
+        // told to pick another one and then find the token dead, with `/auth/password/forgot` three
+        // an hour away. REUSED is the one rejection that survives `validatePassword`, and it is
+        // exactly the one a real person hits.
+        throw new PasswordRefusedError(written.rejection, written.message);
+      }
 
-    return { outcome: 'RESET', revokedSessions };
-  });
+      // §9.2's full kill. No `exceptSessionId`: a recovery means the account may have been in
+      // somebody else's hands, and the one session we would be sparing could be theirs.
+      await bumpSessionsEpoch(tx, userId);
+      const revokedSessions = await revokeAllSessions(tx, { userId, reason: 'password_reset' });
+
+      await writeAudit(tx, {
+        action: AUDIT_ACTIONS.PASSWORD_RESET,
+        outcome: 'SUCCESS',
+        actorType: 'USER',
+        actorUserId: userId,
+        subjectUserId: userId,
+        ip: input.ip,
+        userAgent: input.userAgent,
+        metadata: { revokedSessions, viaRecovery: true },
+      });
+
+      await publish(tx, identityPasswordChangedEvent, {
+        payload: {
+          userId,
+          viaRecovery: true,
+          changedAt: new Date().toISOString(),
+          revokedSessions,
+        },
+        aggregateType: 'identity.user',
+        aggregateId: userId,
+        actor: { type: 'CONSUMER', id: userId },
+      });
+
+      return { outcome: 'RESET', revokedSessions };
+    });
+  } catch (error) {
+    if (error instanceof PasswordRefusedError) {
+      return { outcome: 'REJECTED', rejection: error.rejection, message: error.detail };
+    }
+    throw error;
+  }
 
   // After the commit, and best-effort: a missed invalidation costs one cache hit and nothing more,
   // because `resolvePrincipal` compares the token's epoch against the row it just read (T-031).
@@ -296,6 +342,7 @@ export async function changePassword(
     const written = await setPassword(tx, deps, {
       userId: input.userId,
       password: input.newPassword,
+      identifiers: await identifiersFor(tx, input.userId),
     });
     if (!written.ok) {
       return { outcome: 'REJECTED', rejection: written.rejection, message: written.message };

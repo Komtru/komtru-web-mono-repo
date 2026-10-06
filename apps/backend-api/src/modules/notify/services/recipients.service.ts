@@ -25,12 +25,19 @@ const PHONE_CHANNELS: readonly NotificationChannel[] = ['SMS', 'WHATSAPP', 'VOIC
 
 export interface DestinationOptions {
   /**
-   * Allow an unverified primary contact. `allowsUnverifiedDestination` in domain/binding.ts is the
-   * only thing that sets it, and only for `identity.otp.requested` — see the reasoning there.
+   * Fall back to an unverified contact when the user has NO verified one on this channel.
    *
-   * Dispatch and the send job both derive it from `templateKey`, a column on the notification row,
-   * so the two cannot disagree. If they could, a row would be QUEUED at dispatch and dead-letter at
-   * send, which is worse than either answer taken consistently.
+   * It is a fallback and not a preference, and that distinction is the whole safety argument. A
+   * registration OTP has to reach an address nobody has proven yet — it is the thing that proves it
+   * — so "nothing verified exists" must resolve to the unverified primary. But a user who already
+   * has a verified address and later adds an unverified one must still receive their PASSWORD RESET
+   * at the proven address: preferring the primary would send a recovery code to an address the
+   * account holder never confirmed, which is the failure the verified-only filter exists to stop.
+   *
+   * `allowsUnverifiedDestination` in domain/binding.ts is the only thing that sets it. Dispatch and
+   * the send job both derive it from `templateKey`, a column on the notification row, so the two
+   * cannot disagree — a row QUEUED at dispatch and dead-lettered at send is worse than either
+   * answer taken consistently.
    */
   allowUnverified?: boolean;
 }
@@ -48,16 +55,25 @@ export async function resolveDestination(
     const rows = await reader
       .select({ email: userEmails.email, verifiedAt: userEmails.verifiedAt })
       .from(userEmails)
-      .where(and(eq(userEmails.userId, userId), eq(userEmails.isPrimary, true)))
-      // `is_primary` is a partial unique index, so there is at most one row; the ordering is
-      // belt and braces against a future where it is not.
-      .orderBy(asc(sql`${userEmails.verifiedAt} IS NULL`))
+      .where(
+        options.allowUnverified
+          ? eq(userEmails.userId, userId)
+          : and(
+              eq(userEmails.userId, userId),
+              eq(userEmails.isPrimary, true),
+              isNotNull(userEmails.verifiedAt),
+            ),
+      )
+      // Verified first, primary second. A verified non-primary address beats an unverified primary
+      // one: the fallback exists for an account with nothing proven, not to let an unproven address
+      // take precedence the moment somebody makes it primary.
+      .orderBy(asc(sql`${userEmails.verifiedAt} IS NULL`), asc(sql`NOT ${userEmails.isPrimary}`))
       .limit(1);
     const row = rows[0];
     // Unverified is the same as absent here: sending to an address nobody proved they own is how a
     // password-reset link reaches the wrong person. The one exception is the OTP that MAKES an
     // address verified — demanding verification before sending it is a cycle no user can break.
-    if (!row || (row.verifiedAt === null && !options.allowUnverified)) return undefined;
+    if (!row) return undefined;
     return { address: [row.email], masked: maskEmail(row.email) };
   }
 
@@ -65,11 +81,19 @@ export async function resolveDestination(
     const rows = await reader
       .select({ phone: userPhones.phoneE164, verifiedAt: userPhones.verifiedAt })
       .from(userPhones)
-      .where(and(eq(userPhones.userId, userId), eq(userPhones.isPrimary, true)))
-      .orderBy(asc(sql`${userPhones.verifiedAt} IS NULL`))
+      .where(
+        options.allowUnverified
+          ? eq(userPhones.userId, userId)
+          : and(
+              eq(userPhones.userId, userId),
+              eq(userPhones.isPrimary, true),
+              isNotNull(userPhones.verifiedAt),
+            ),
+      )
+      .orderBy(asc(sql`${userPhones.verifiedAt} IS NULL`), asc(sql`NOT ${userPhones.isPrimary}`))
       .limit(1);
     const row = rows[0];
-    if (!row || (row.verifiedAt === null && !options.allowUnverified)) return undefined;
+    if (!row) return undefined;
     return { address: [row.phone], masked: maskPhone(row.phone) };
   }
 

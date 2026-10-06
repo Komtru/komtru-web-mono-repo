@@ -110,6 +110,8 @@ export const registerResponseSchema = z.object({
   expiresAt: z.number().int().positive(),
   /** `+23480•••5567`, so screen E3 can say where it went without printing the number. */
   maskedDestination: z.string().min(1),
+  /** False when the per-destination send budget was spent; the account exists but no code went out. */
+  delivered: z.boolean(),
 });
 
 export const resendOtpRequestSchema = z.strictObject({
@@ -117,11 +119,15 @@ export const resendOtpRequestSchema = z.strictObject({
   deviceFingerprint: deviceFingerprintSchema.optional(),
 });
 
+/**
+ * No `maskedDestination`, deliberately: the client already has it from the call that created the
+ * challenge, and an account's real mask here would tell a caller holding a `/auth/password/forgot`
+ * challenge id whether that identifier matched anybody (M1 §17).
+ */
 export const resendOtpResponseSchema = z.object({
   /** A NEW id: issuing a code invalidates the previous challenge for the same destination (§S6). */
   challengeId: z.uuid(),
   expiresAt: z.number().int().positive(),
-  maskedDestination: z.string().min(1),
 });
 
 export const verifyOtpRequestSchema = z.strictObject({

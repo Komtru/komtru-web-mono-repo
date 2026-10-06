@@ -16,6 +16,7 @@ import {
 import type { Logger } from '../../../platform/logger.js';
 import type { HmacHasher } from '../../../platform/crypto/hmac.js';
 import { identityDeviceSignedInEvent, identityUserRegisteredEvent } from '../domain/events.js';
+import { OTP_DESTINATION_DOMAIN } from '../domain/otp/challenge.js';
 import { nextStep, type NextStep, type OnboardingState } from '../domain/registration.js';
 import { termsUpToDate, type TermsState } from '../domain/terms.js';
 import { users, userProfiles } from '../infrastructure/postgres/schema/users.js';
@@ -98,6 +99,12 @@ export type RegisterResult =
       expiresAt: Date;
       nextStep: NextStep;
       maskedDestination: string;
+      /**
+       * False when §S4's per-destination budget was already spent, so nothing was sent. The account
+       * exists and the challenge is real; the client must say "we could not send a code right now"
+       * rather than "check your messages", or the user waits for an SMS that never comes.
+       */
+      delivered: boolean;
     }
   /** Somebody has already PROVEN they control this address. */
   | { outcome: 'TAKEN' }
@@ -232,6 +239,7 @@ export async function register(db: Db, deps: AccountDeps, input: RegisterInput):
       expiresAt: challenge.expiresAt,
       nextStep: contact.channel === 'EMAIL' ? 'VERIFY_EMAIL' : 'VERIFY_PHONE',
       maskedDestination: contact.masked,
+      delivered: challenge.delivered,
     };
   });
 }
@@ -286,31 +294,39 @@ async function insertUser(tx: Tx, input: RegisterInput): Promise<{ id: string; p
   for (let attempt = 0; attempt < PUBLIC_ID_ATTEMPTS; attempt += 1) {
     const publicId = generatePublicId();
     try {
-      const row = (
-        await tx
-          .insert(users)
-          .values({
-            publicId,
-            status: 'PENDING_VERIFICATION',
-            registeredVia: `register:${input.channel}`,
-            registrationIp: input.ip,
-            // NDPA §15: the version, the moment and the address it was given from.
-            termsVersion: input.acceptedTermsVersion,
-            privacyVersion: input.acceptedPrivacyVersion ?? input.acceptedTermsVersion,
-            consentRecordedAt: sql`now()`,
-            consentIp: input.ip,
-            marketingOptIn: input.marketingOptIn,
-            ...(input.marketingOptIn ? { marketingOptInAt: sql`now()` } : {}),
-          })
-          .returning({ id: users.id, publicId: users.publicId })
-      )[0];
-      if (row) return row;
+      // A SAVEPOINT, not a bare try/catch. A constraint violation puts the whole Postgres
+      // transaction in the aborted state, so a retry INSERT issued after one fails with 25P02
+      // ("current transaction is aborted") rather than with another 23505 — the retry would be
+      // dead code and a collision would be a 500. drizzle's nested `transaction` emits the
+      // savepoint and rolls back to it.
+      return await tx.transaction(async (sp) => {
+        const row = (
+          await sp
+            .insert(users)
+            .values({
+              publicId,
+              status: 'PENDING_VERIFICATION',
+              registeredVia: `register:${input.channel}`,
+              registrationIp: input.ip,
+              // NDPA §15: the version, the moment and the address it was given from.
+              termsVersion: input.acceptedTermsVersion,
+              privacyVersion: input.acceptedPrivacyVersion ?? input.acceptedTermsVersion,
+              consentRecordedAt: sql`now()`,
+              consentIp: input.ip,
+              marketingOptIn: input.marketingOptIn,
+              ...(input.marketingOptIn ? { marketingOptInAt: sql`now()` } : {}),
+            })
+            .returning({ id: users.id, publicId: users.publicId })
+        )[0];
+        if (!row) throw new Error('register: the insert returned no row');
+        return row;
+      });
     } catch (error) {
       const code = (error as { code?: string }).code;
       const constraint = String((error as { constraint?: string }).constraint ?? '');
       if (code !== '23505' || !constraint.includes('public_id')) throw error;
-      // Six characters of Crockford base32 is ~30 bits; a collision is the UNIQUE constraint's job
-      // to catch and this loop's job to survive (T-030 left the retry to the first inserter).
+      // Six characters of Crockford base32 is ~30 bits, so birthday collisions start showing up in
+      // the tens of thousands of accounts. T-030 left the retry to the first inserter; this is it.
     }
   }
   throw new Error('register: could not allocate a unique public id');
@@ -388,11 +404,33 @@ export async function verifyChallenge(
     const userId = challenge.userId;
 
     const contacts = await primaryContacts(tx, userId);
+    // The challenge names a CHANNEL, so the contact it proves is that channel's primary — and
+    // nothing else. There is deliberately no fallback between the two: an `else if (contacts.phone)`
+    // on an EMAIL challenge would mark a phone number verified on the strength of a code sent to an
+    // inbox, which proves nothing about the phone.
+    const contact = challenge.channel === 'EMAIL' ? contacts.email : contacts.phone;
+    if (!contact) return { outcome: 'UNKNOWN' };
+
+    // And it must be the SAME contact the code was sent to. `destination_hash` is an HMAC, so it
+    // cannot be read back — but it can be recomputed from the row we are about to mark verified and
+    // compared. Without this, a challenge issued for contact A verifies whichever contact is
+    // primary at the moment the code is presented, which is a verification bypass as soon as a
+    // later ticket adds a route that changes the primary (T-036, T-039).
+    const canonical =
+      challenge.channel === 'EMAIL' ? normaliseEmail(contact.address).emailNormal : contact.address;
+    if (!deps.otpHasher.matches(OTP_DESTINATION_DOMAIN, canonical, Buffer.from(challenge.destinationHash))) {
+      deps.logger.warn(
+        { userId, challengeId: challenge.id },
+        'identity: the verified code was issued for a different contact than the current primary',
+      );
+      return { outcome: 'UNKNOWN' };
+    }
+
     try {
-      if (challenge.channel === 'EMAIL' && contacts.email) {
-        await markEmailVerified(tx, { userId, emailId: contacts.email.id, source: 'otp' });
-      } else if (contacts.phone) {
-        await markPhoneVerified(tx, { userId, phoneId: contacts.phone.id });
+      if (challenge.channel === 'EMAIL') {
+        await markEmailVerified(tx, { userId, emailId: contact.id, source: 'otp' });
+      } else {
+        await markPhoneVerified(tx, { userId, phoneId: contact.id });
       }
     } catch (error) {
       if (error instanceof ContactTakenError) return { outcome: 'TAKEN' };
@@ -454,7 +492,7 @@ export async function verifyChallenge(
 }
 
 export type ResendResult =
-  | { outcome: 'ISSUED'; challengeId: string; expiresAt: Date; maskedDestination: string }
+  | { outcome: 'ISSUED'; challengeId: string; expiresAt: Date }
   | { outcome: 'THROTTLED' }
   | { outcome: 'UNKNOWN' };
 
@@ -465,6 +503,17 @@ export type ResendResult =
  * challenge: `destination_hash` is an HMAC and there is nothing to recover. That is a real
  * limitation — a challenge for a non-primary contact cannot be resent — and it is honest for this
  * ticket, where every challenge is for the primary one.
+ *
+ * **A challenge with no user is NOT rejected.** `/auth/password/forgot` answers identically for an
+ * identifier that matches an account and one that matches nobody, and it does that by writing a
+ * real, undelivered challenge for the miss (M1 §17). If this endpoint then answered 200 for the
+ * real one and 422 for the decoy, one extra unauthenticated request would undo the whole thing: the
+ * caller takes the challenge id the forgot response just gave them and asks for a resend. So the
+ * decoy is re-issued against its own stored hash and answers exactly as a real one does.
+ *
+ * `maskedDestination` is deliberately NOT in the response for the same reason: the client already
+ * has it from the call that created the challenge, and returning the account's one here would be
+ * the oracle the status code no longer is.
  */
 export async function resendOtp(
   db: Db,
@@ -473,9 +522,22 @@ export async function resendOtp(
 ): Promise<ResendResult> {
   return db.transaction(async (tx): Promise<ResendResult> => {
     const challenge = await findLiveChallenge(tx, input.challengeId);
-    // A decoy challenge (`user_id` NULL) answers the same way as one that never existed: the
-    // forgot-password response must not become an oracle one endpoint later.
-    if (!challenge?.userId) return { outcome: 'UNKNOWN' };
+    if (!challenge) return { outcome: 'UNKNOWN' };
+
+    // The decoy: re-issue against the hash the original was made from, deliver nothing.
+    if (!challenge.userId) {
+      const issued = await issueOtp(tx, otpDeps(deps), {
+        userId: null,
+        purpose: challenge.purpose,
+        channels: [challenge.channel === 'EMAIL' ? 'EMAIL' : 'SMS'],
+        destinationHash: Buffer.from(challenge.destinationHash),
+        ip: input.ip,
+        deliver: false,
+      });
+      return issued.throttled
+        ? { outcome: 'THROTTLED' }
+        : { outcome: 'ISSUED', challengeId: issued.challengeId, expiresAt: issued.expiresAt };
+    }
 
     const contacts = await primaryContacts(tx, challenge.userId);
     const contact = challenge.channel === 'EMAIL' ? contacts.email : contacts.phone;
@@ -491,15 +553,12 @@ export async function resendOtp(
       destination,
       ip: input.ip,
     });
-    if (!issued.delivered) return { outcome: 'THROTTLED' };
 
-    return {
-      outcome: 'ISSUED',
-      challengeId: issued.challengeId,
-      expiresAt: issued.expiresAt,
-      maskedDestination:
-        challenge.channel === 'EMAIL' ? maskEmail(contact.address) : maskPhone(contact.address),
-    };
+    // `throttled`, not `!delivered`: a decoy is never delivered and must still answer ISSUED, or
+    // the distinction this function exists to remove comes back through the status code.
+    return issued.throttled
+      ? { outcome: 'THROTTLED' }
+      : { outcome: 'ISSUED', challengeId: issued.challengeId, expiresAt: issued.expiresAt };
   });
 }
 

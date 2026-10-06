@@ -74,14 +74,20 @@ export function registrationRoutes(deps: RegistrationControllerDeps): RouteDefin
        */
       retryable: false,
       /**
-       * Three keys, which M1 §17 asks to trigger independently. The identifier bound is tighter
-       * than the IP one because behind carrier-grade NAT one IP is thousands of unrelated people,
-       * while one normalised address is one account.
+       * Three keys, which M1 §17 asks to trigger independently.
+       *
+       * The per-IP budget is the TIGHT one here, which is the opposite of every other auth route,
+       * and deliberately: a duplicate verified contact answers 409 so a client can send the user to
+       * sign in, and that makes this route an enumeration surface. An attacker walking a list of
+       * candidate addresses never repeats the identifier key, so the IP budget is the only one that
+       * binds them — 5/min is 7,200 probes a day per address they can source from, against 28,800
+       * at the route default. A legitimate human registers once.
        */
       rateLimit: {
         points: 20,
         durationSeconds: 60,
         by: ['ip', 'identifier', 'device'],
+        perKey: { ip: { points: 5, durationSeconds: 60 } },
         identifierFrom: registrationIdentifier,
         deviceFrom: fingerprint,
       },

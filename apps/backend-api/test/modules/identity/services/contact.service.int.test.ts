@@ -135,6 +135,41 @@ describe.runIf(infraEnabled)('contact channels', () => {
     ).rejects.toBeInstanceOf(ContactTakenError);
   });
 
+  it('leaves the caller transaction usable after losing the race (so the attempt is still charged)', async () => {
+    // The 409 comes from a LIVE 23505, which aborts the whole Postgres transaction unless the
+    // UPDATE is inside a savepoint. Without one, the caller's COMMIT is silently a ROLLBACK: the
+    // OTP attempt charged a moment earlier is refunded, so the loser can replay the same code
+    // without limit, and the §S10 audit row for the conflict is never written.
+    const a = await seedUser(t.app());
+    const b = await seedUser(t.app());
+    const emailA = await t
+      .db()
+      .transaction((tx) => attachEmail(tx, { userId: a.userId, email: 'shared@example.com' }));
+    const emailB = await t
+      .db()
+      .transaction((tx) => attachEmail(tx, { userId: b.userId, email: 'shared@example.com' }));
+    await t
+      .db()
+      .transaction((tx) =>
+        markEmailVerified(tx, { userId: a.userId, emailId: emailA.emailId, source: 'otp' }),
+      );
+
+    const written = await t.db().transaction(async (tx) => {
+      try {
+        await markEmailVerified(tx, { userId: b.userId, emailId: emailB.emailId, source: 'otp' });
+      } catch (error) {
+        if (!(error instanceof ContactTakenError)) throw error;
+      }
+      // Still inside the same transaction, and it must still work.
+      await attachPhone(tx, { userId: b.userId, phone: '08023415567' });
+      return true;
+    });
+
+    expect(written).toBe(true);
+    const { rows } = await t.app().query(`SELECT 1 FROM identity.user_phones WHERE user_id = $1`, [b.userId]);
+    expect(rows).toHaveLength(1);
+  });
+
   it('is idempotent: verifying an already-verified row publishes nothing new', async () => {
     const { userId } = await seedUser(t.app());
     const email = await t.db().transaction((tx) => attachEmail(tx, { userId, email: 'jane@example.com' }));

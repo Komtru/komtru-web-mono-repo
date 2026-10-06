@@ -533,6 +533,29 @@ describe.runIf(infraEnabled)('channel targeting and unverified destinations (T-0
     ]);
   });
 
+  it('sends a reset code to the VERIFIED address even when an unverified one is primary', async () => {
+    // The allowance is a FALLBACK for an account with nothing proven, not a preference. Preferring
+    // the primary would send a recovery code to an address the account holder never confirmed —
+    // exactly what the verified-only filter exists to stop.
+    const userId = await insertUser(t.app());
+    await t.app().query(
+      `INSERT INTO identity.user_emails (user_id, email, email_normal, is_primary, verified_at)
+           VALUES ($1, 'proven@example.com', 'proven@example.com', false, now())`,
+      [userId],
+    );
+    await t.app().query(
+      `INSERT INTO identity.user_emails (user_id, email, email_normal, is_primary)
+           VALUES ($1, 'unproven@example.com', 'unproven@example.com', true)`,
+      [userId],
+    );
+
+    await dispatchOtp(userId, ['EMAIL']);
+    const { rows: found } = await t
+      .app()
+      .query<{ recipient_masked: string }>(`SELECT recipient_masked FROM notify.notifications`);
+    expect(found[0]?.recipient_masked).toBe('p•••@example.com');
+  });
+
   it('prefers the verified contact when both a verified and an unverified one exist', async () => {
     const userId = await insertUser(t.app());
     await insertVerifiedPhone(t.app(), userId, '+2348012345678');

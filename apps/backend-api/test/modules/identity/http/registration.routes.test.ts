@@ -77,6 +77,16 @@ describe('the registration routes (M1 §10.1)', () => {
     ).toBeUndefined();
   });
 
+  it('bounds the register 409 with a per-IP budget of its own, not the route default', () => {
+    // A duplicate contact is answerable (409) so a client can send the user to sign in, which makes
+    // the route an enumeration surface. The per-identifier key never repeats for an attacker
+    // walking a list of addresses, so the per-IP budget is the only one that binds — and it has to
+    // be tight enough to matter.
+    const spec = byPath['/auth/register']?.rateLimit;
+    expect(spec?.perKey?.ip).toBeDefined();
+    expect(spec?.perKey?.ip?.points).toBeLessThanOrEqual(10);
+  });
+
   it('reads the device key off the fingerprint the body carries', () => {
     const spec = byPath['/auth/verify-otp']?.rateLimit;
     expect(spec?.deviceFrom?.({ body: { deviceFingerprint: 'fp-1' }, query: {}, params: {} })).toBe('fp-1');

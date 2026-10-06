@@ -288,6 +288,60 @@ describe.runIf(infraEnabled)('login and the password routes over HTTP', () => {
     ).toBe(422);
   });
 
+  it('does NOT burn the reset token when the new password is refused', async () => {
+    await signUp();
+    const forgot = bodyOf<Forgot>(
+      await request(app).post('/v1/auth/password/forgot').send({ identifier: PHONE }),
+    );
+    const verified = bodyOf<Reset>(
+      await request(app)
+        .post('/v1/auth/verify-otp')
+        .send({ challengeId: forgot.challengeId, code: await codeFor(forgot.challengeId) }),
+    );
+
+    // REUSED is the one rejection that survives validatePassword, and the one a real person hits.
+    const refused = await request(app)
+      .post('/v1/auth/password/reset')
+      .send({ resetToken: verified.resetToken, newPassword: PASSWORD });
+    expect(refused.status).toBe(422);
+    expect(bodyOf<Problem>(refused).code).toBe('VALIDATION_FAILED');
+
+    // The token must still work: otherwise the user is told to pick another password and then finds
+    // their only route back is /auth/password/forgot, three an hour away.
+    const retried = await request(app)
+      .post('/v1/auth/password/reset')
+      .send({ resetToken: verified.resetToken, newPassword: NEXT_PASSWORD });
+    expect(retried.status).toBe(200);
+  });
+
+  it('refuses a new password that contains the account\u2019s own identifier, on reset too', async () => {
+    await signUp();
+    const forgot = bodyOf<Forgot>(
+      await request(app).post('/v1/auth/password/forgot').send({ identifier: PHONE }),
+    );
+    const verified = bodyOf<Reset>(
+      await request(app)
+        .post('/v1/auth/verify-otp')
+        .send({ challengeId: forgot.challengeId, code: await codeFor(forgot.challengeId) }),
+    );
+
+    // No corpus catches '2348023415567abc'; it is only weak for this account.
+    const response = await request(app)
+      .post('/v1/auth/password/reset')
+      .send({ resetToken: verified.resetToken, newPassword: '2348023415567abc' });
+    expect(response.status).toBe(422);
+    expect(bodyOf<{ errors: { message: string }[] }>(response).errors[0]?.message).toMatch(/your own/i);
+  });
+
+  it('refuses a changed password that contains the account\u2019s own identifier', async () => {
+    const { session } = await signUp();
+    const response = await request(app)
+      .post('/v1/auth/password/change')
+      .set('Authorization', `Bearer ${session.accessToken}`)
+      .send({ currentPassword: PASSWORD, newPassword: '2348023415567abc' });
+    expect(response.status).toBe(422);
+  });
+
   it('refuses a reset token after fifteen minutes', async () => {
     await signUp();
     const forgot = bodyOf<Forgot>(

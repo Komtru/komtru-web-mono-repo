@@ -160,3 +160,34 @@ describe('the rate-limit keys a route may declare', () => {
     ).not.toThrow();
   });
 });
+
+describe('per-key rate-limit windows', () => {
+  const limited = (rateLimit: object) => postRoute({ retryable: false, rateLimit });
+
+  it('lets a route give one key a looser budget than another (S4: 5/min/identifier + 20/min/IP)', () => {
+    expect(() =>
+      assertRouteInvariants([
+        limited({
+          points: 5,
+          durationSeconds: 60,
+          by: ['identifier', 'ip'],
+          identifierFrom: () => 'x',
+          perKey: { ip: { points: 20, durationSeconds: 60 } },
+        }),
+      ]),
+    ).not.toThrow();
+  });
+
+  it('refuses an override for a key the route does not count', () => {
+    expect(() =>
+      assertRouteInvariants([
+        limited({
+          points: 5,
+          durationSeconds: 60,
+          by: ['ip'],
+          perKey: { device: { points: 20, durationSeconds: 60 } },
+        }),
+      ]),
+    ).toThrow(/overrides the budget for "device", which it does not count/);
+  });
+});
