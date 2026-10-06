@@ -24,21 +24,60 @@ export interface KomtruMiddlewareOptions {
 }
 
 /**
+ * The extensions a Komtru app serves as files. An allowlist, not "anything after a dot": a path
+ * segment may legitimately contain one.
+ */
+const ASSET_EXTENSIONS = [
+  'css',
+  'js',
+  'mjs',
+  'map',
+  'json',
+  'txt',
+  'xml',
+  'webmanifest',
+  'png',
+  'jpg',
+  'jpeg',
+  'gif',
+  'svg',
+  'webp',
+  'avif',
+  'ico',
+  'bmp',
+  'woff',
+  'woff2',
+  'ttf',
+  'otf',
+  'eot',
+  'mp4',
+  'webm',
+  'pdf',
+];
+const ASSET_PATTERN = `.*\\.(?:${ASSET_EXTENSIONS.join('|')})$`;
+
+/**
  * What a template's `export const config = { matcher: KOMTRU_MATCHER }` uses. Next never runs
  * middleware for anything this excludes, which keeps a page's own chunks and images off the hot
  * path. `middleware()` re-checks the same exclusions anyway: an app that narrows the matcher for
  * its own reasons must not thereby start redirecting its stylesheet.
  */
-export const KOMTRU_MATCHER = ['/((?!_next/static|_next/image|favicon.ico|.*\\..*).*)'] as const;
+export const KOMTRU_MATCHER = [`/((?!_next/|favicon\\.ico$|${ASSET_PATTERN}).*)`] as const;
 
 const AUTH_ROUTES = '/api/auth';
 
 const isSegmentPrefix = (pathname: string, prefix: string): boolean =>
   pathname === prefix || pathname.startsWith(`${prefix}/`);
 
-/** A chunk, an image, a font: anything Next serves from `_next` or with a file extension. */
+/**
+ * A chunk, an image, a font — decided by the same expression the matcher uses, so the two can never
+ * disagree. The naive `.*\..*` reads as "has an extension" and means "has a dot anywhere": it
+ * exempts `/trades/KMT-1.2`, `/u/jane.doe` and `/settings/v1.5` from the session check entirely.
+ */
 const isAsset = (pathname: string): boolean =>
-  isSegmentPrefix(pathname, '/_next') || pathname === '/favicon.ico' || /\.[^/]+$/.test(pathname);
+  isSegmentPrefix(pathname, '/_next') ||
+  pathname === '/favicon.ico' ||
+  new RegExp(`^/${ASSET_PATTERN}$`).test(pathname);
 
 export function createKomtruMiddleware({
   config,
@@ -59,9 +98,12 @@ export function createKomtruMiddleware({
     const hint = await sealer.open(request.cookies.get(SESSION_COOKIE)?.value, now());
 
     if (hint === null) {
-      return reject(request, new URL(config.signInPath, request.nextUrl.origin), {
-        next: `${pathname}${search}`,
-      });
+      const target = `${pathname}${search}`;
+      return reject(
+        request,
+        new URL(config.signInPath, request.nextUrl.origin),
+        isSameSitePath(target) ? { next: target } : {},
+      );
     }
 
     if (hint.scope !== config.scope) {
@@ -83,6 +125,16 @@ export function createKomtruMiddleware({
  * left in place it would be re-read, re-rejected and re-redirected on every navigation, and the
  * sign-in page itself would be sitting behind a cookie that says the visitor is someone else.
  */
+/**
+ * `new URL('//evil.com/x', 'https://app.komtru.com')` resolves to `https://evil.com/x`, so a path
+ * beginning with two slashes — or a backslash, which browsers normalise to one — turns the obvious
+ * `router.replace(next)` on a sign-in screen into an open redirect. The producer does not hand out a
+ * value the consumer has to defend against: anything that is not plainly a path on this host is
+ * dropped, and the visitor lands on the app's home instead.
+ */
+const isSameSitePath = (value: string): boolean =>
+  value.startsWith('/') && !value.startsWith('//') && !value.startsWith('/\\');
+
 function reject(request: NextRequest, target: URL, query: Record<string, string>): NextResponse {
   for (const [key, value] of Object.entries(query)) target.searchParams.set(key, value);
   const response = NextResponse.redirect(target, 307);

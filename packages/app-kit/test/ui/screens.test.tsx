@@ -20,7 +20,16 @@ describe('ErrorScreen', () => {
   it('never apologises and never shows a stack', () => {
     render(<ErrorScreen {...home} reference="9f3a1c" />);
     const text = document.body.textContent ?? '';
+    // Anchored on the copy actually being there, so a screen that renders nothing fails this too.
+    expect(text).toContain("This page didn't load");
     expect(text).not.toMatch(/sorry|oops|unexpected error|Error:/i);
+  });
+
+  it('announces itself, because Next swaps it in without a navigation', () => {
+    // On a client-side error the URL does not change and focus does not move, so a screen-reader
+    // user is told nothing at all unless the replacement is a live region.
+    const { container } = render(<ErrorScreen {...home} />);
+    expect(container.querySelector('[role="alert"]')).not.toBeNull();
   });
 
   it('shows the reference in the mono face a Trade code uses', () => {
@@ -83,6 +92,24 @@ describe('both screens', () => {
   ])('%s passes axe', async (_name, element) => {
     const { container } = render(element);
     await expectNoAxeViolations(container);
+  });
+
+  it.each([
+    ['ErrorScreen', <ErrorScreen key="e" {...home} reference="9f3a1c" onRetry={() => undefined} />],
+    ['NotFoundScreen', <NotFoundScreen key="n" {...home} />],
+  ])('%s passes axe at page scope, inside the document global-error renders', async (_name, element) => {
+    // A container-scoped run reports `region`, `landmark-one-main` and `page-has-heading-one` as
+    // inapplicable, so "passes axe" above is weaker than it reads. This is the run that evaluates
+    // them, in the markup `templates/app/global-error.tsx` actually produces.
+    document.documentElement.lang = 'en';
+    const main = document.createElement('main');
+    const heading = document.createElement('h1');
+    heading.className = 'sr-only';
+    heading.textContent = 'Something went wrong';
+    main.append(heading);
+    document.body.append(main);
+    render(element, { container: main });
+    await expectNoAxeViolations(document.body);
   });
 
   it.each([

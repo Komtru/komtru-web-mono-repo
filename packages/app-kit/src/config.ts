@@ -42,6 +42,25 @@ export const SENTRY_DSN_ENV = 'NEXT_PUBLIC_SENTRY_DSN';
 
 export type AppEnv = Record<string, string | undefined>;
 
+/**
+ * The public environment, read as four literal member expressions.
+ *
+ * This matters only in the browser, and it is not cosmetic. Next inlines `process.env.NEXT_PUBLIC_X`
+ * into the client bundle **one literal at a time**; it never defines `process.env` itself, and the
+ * browser's `process` shim has an empty `env`. So a client file that calls
+ * `readAppConfig(appSpec, process.env)` sees `{}` and throws at module evaluation — the app
+ * white-screens on first paint, which is also the moment Sentry would have been there to notice.
+ *
+ * Pass anything else the app needs (an `elsewhereUrlEnv`, say) as `extra`, written the same way.
+ */
+export const publicEnv = (extra: AppEnv = {}): AppEnv => ({
+  NEXT_PUBLIC_KOMTRU_APP_URL: process.env.NEXT_PUBLIC_KOMTRU_APP_URL,
+  NEXT_PUBLIC_KOMTRU_API_URL: process.env.NEXT_PUBLIC_KOMTRU_API_URL,
+  NEXT_PUBLIC_KOMTRU_SOCKET_URL: process.env.NEXT_PUBLIC_KOMTRU_SOCKET_URL,
+  NEXT_PUBLIC_SENTRY_DSN: process.env.NEXT_PUBLIC_SENTRY_DSN,
+  ...extra,
+});
+
 const url = z.url();
 const optionalUrl = url.optional();
 

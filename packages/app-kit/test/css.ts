@@ -26,16 +26,16 @@ async function loadStylesheet(id: string, base: string) {
   return { path: resolved, base: path.dirname(resolved), content: await readFile(resolved, 'utf8') };
 }
 
-let compiled: Promise<string> | undefined;
+let compiled: Promise<(candidates: string[]) => string> | undefined;
 
-/** The whole emitted sheet, with no utilities asked for: this package declares no classes. */
-export function compiledStyles(): Promise<string> {
+/** The whole emitted sheet, plus whichever utilities a caller wants to see beside it. */
+export async function compiledStyles(...candidates: string[]): Promise<string> {
   compiled ??= (async () => {
     const source = await readFile(STYLESHEET, 'utf8');
     const built = await compile(source, { base: path.dirname(STYLESHEET), loadStylesheet });
-    return built.build([]);
+    return (names: string[]) => built.build(names);
   })();
-  return compiled;
+  return (await compiled)(candidates);
 }
 
 export function parseDeclarations(body: string): Map<string, string> {
@@ -87,7 +87,10 @@ export function parseRules(css: string): CssRule[] {
       } else if (char === '}') {
         depth -= 1;
         if (depth > 0) continue;
-        const prelude = text.slice(preludeStart, bodyStart).trim();
+        // Only the text after the last top-level `;`: a preceding `@import` or `@source` statement
+        // never closes a brace, so without this it would be glued onto the next rule's prelude —
+        // which hid `@keyframes` from the skip below and turned `0%` into a selector.
+        const prelude = splitTop(text.slice(preludeStart, bodyStart), ';').at(-1)!.trim();
         const body = text.slice(bodyStart + 1, index);
         if (prelude.startsWith('@')) {
           // `@keyframes` bodies are percentage selectors, not rules: do not descend.
@@ -110,7 +113,8 @@ export function parseRules(css: string): CssRule[] {
 
 /**
  * What a selector's property computes to in the emitted sheet. Unlayered rules beat layered ones
- * whatever the order (CSS Cascade 5 §6.4.4); among equals, the last one wins.
+ * whatever the order (CSS Cascade 5 §6.4.4); among equals, the last one wins. Everything this
+ * stylesheet adds is layered, so in practice this is "the last rule in `@layer base`".
  */
 export async function resolved(selector: string, property: string): Promise<string | undefined> {
   const rules = parseRules(await compiledStyles()).filter(
@@ -136,10 +140,15 @@ export function sourceExclusions(sheet: string): string[] {
   return [...sheet.matchAll(/@source\s+not\s+['"]([^'"]+)['"]/g)].map((match) => match[1]!);
 }
 
-/** The declarations a hand-written stylesheet states for one selector, before any compilation. */
+/**
+ * The declarations a hand-written stylesheet states for one selector, before any compilation.
+ * `@layer base` is allowed around it: that is where these rules belong, and nesting them changes
+ * which rules they beat, not what they say.
+ */
 export function declarationsOf(sheet: string, selector: string): Map<string, string> | undefined {
   const rule = parseRules(sheet).find(
-    (candidate) => candidate.selectors.join(', ') === selector && candidate.atRules.length === 0,
+    (candidate) =>
+      candidate.selectors.join(', ') === selector && candidate.atRules.every((at) => at === '@layer base'),
   );
   return rule?.declarations;
 }

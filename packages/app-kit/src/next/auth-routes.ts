@@ -20,6 +20,9 @@ import {
   type SessionSealer,
 } from '../session.js';
 
+/** The same bound `@komtru/api-client`'s transport uses, so both halves give up together. */
+const DEFAULT_TIMEOUT_MS = 15_000;
+
 /** M1's 30-day sliding window. The backend's own expiry is the truth; this bounds the cookie. */
 export const REFRESH_MAX_AGE_SECONDS = 30 * 24 * 60 * 60;
 
@@ -32,6 +35,8 @@ export interface AuthRouteOptions {
   fetch?: typeof globalThis.fetch;
   loginPath?: string;
   refreshMaxAgeSeconds?: number;
+  /** How long to wait for the backend before answering 502. Matches api-client's own default. */
+  timeoutMs?: number;
 }
 
 export interface AuthRouteHandlers {
@@ -105,29 +110,57 @@ const readCookie = (request: Request, name: string): string | undefined => {
  */
 const rotations = new Map<string, Promise<Response>>();
 
+/** Keyed per app as well as per token: two apps in one process must not share a sealed cookie. */
+const rotationKey = (appName: string, refreshToken: string): string => `${appName}\u0000${refreshToken}`;
+
 export function createAuthRouteHandlers({
   config,
   sealer,
   fetch: fetchImpl,
   loginPath = DEFAULT_LOGIN_PATH,
   refreshMaxAgeSeconds = REFRESH_MAX_AGE_SECONDS,
+  timeoutMs = DEFAULT_TIMEOUT_MS,
 }: AuthRouteOptions): AuthRouteHandlers {
   const doFetch = fetchImpl ?? globalThis.fetch.bind(globalThis);
 
+  /**
+   * `Secure` is decided from the app's own declared origin, never from the request. A request's
+   * Host header is whatever reached the process: behind a TLS-terminating proxy that forwards to
+   * `http://localhost` the request looks like loopback, and a production session cookie would lose
+   * `Secure` on the strength of it.
+   */
+  const secure = secureCookieFor(new URL(config.appUrl));
+
+  /**
+   * Bounded. A backend that accepts the connection and never answers would otherwise hold the
+   * request open forever *and* pin the rotation below, so every later tab with that token would
+   * block on the same dead promise.
+   */
   const callBackend = async (path: string, body: unknown): Promise<Response> =>
     doFetch(`${config.apiUrl}${path}`, {
       method: 'POST',
       headers: { 'content-type': 'application/json', accept: 'application/json' },
       body: JSON.stringify(body),
+      signal: AbortSignal.timeout(timeoutMs),
     });
 
+  /**
+   * `undefined` for an empty or unparseable body. A truncated request is what a flaky mobile
+   * connection produces, and an unguarded `JSON.parse` turns it into a 500 — on `logout`, a 500
+   * that never reaches the line clearing the cookies, leaving the person signed in on a shared
+   * phone. The schemas below decide what a missing body means; this only has to not throw.
+   */
   const readJson = async (request: Request): Promise<unknown> => {
-    const text = await request.text();
-    return text === '' ? undefined : (JSON.parse(text) as unknown);
+    try {
+      const text = await request.text();
+      return text === '' ? undefined : (JSON.parse(text) as unknown);
+    } catch {
+      return undefined;
+    }
   };
 
   /** The browser gets the session minus the one field that must never leave this process. */
-  const issue = async (backendBody: Record<string, unknown>, request: Request): Promise<Response> => {
+  const issue = async (backendBody: Record<string, unknown>): Promise<Response> => {
     const parsed = backendSessionSchema.safeParse(backendBody);
     if (!parsed.success) {
       return problem(
@@ -137,7 +170,19 @@ export function createAuthRouteHandlers({
         'The platform answered with a session this app does not understand',
       );
     }
-    const { refreshToken, ...forBrowser } = { ...backendBody, ...parsed.data };
+    // An allowlist, not `{ ...backendBody }` minus one key. A denylist means any field the backend
+    // grows later — a device secret, an MFA challenge, an internal id — reaches the browser by
+    // default, which is the wrong default on a platform whose responses carry credentials.
+    // `nextStep` and `user` are named because T-111's sign-in screen branches on them.
+    const forBrowser: Record<string, unknown> = {
+      accessToken: parsed.data.accessToken,
+      scope: parsed.data.scope,
+      expiresIn: parsed.data.expiresIn,
+      expiresAt: parsed.data.expiresAt,
+    };
+    if (backendBody.nextStep !== undefined) forBrowser.nextStep = backendBody.nextStep;
+    if (backendBody.user !== undefined) forBrowser.user = backendBody.user;
+    const refreshToken = parsed.data.refreshToken;
     const sealed = await sealer.seal({ scope: parsed.data.scope, expiresAt: expiryOf(refreshMaxAgeSeconds) });
     return json(
       forBrowser,
@@ -146,7 +191,7 @@ export function createAuthRouteHandlers({
         refreshToken,
         sealed,
         maxAgeSeconds: refreshMaxAgeSeconds,
-        secure: secureCookieFor(new URL(request.url)),
+        secure,
       }),
     );
   };
@@ -185,10 +230,10 @@ export function createAuthRouteHandlers({
       );
     }
 
-    return issue(payload ?? {}, request);
+    return issue(payload ?? {});
   };
 
-  const rotate = async (request: Request, refreshToken: string): Promise<Response> => {
+  const rotate = async (refreshToken: string): Promise<Response> => {
     let upstream: Response;
     try {
       upstream = await callBackend('/auth/refresh', { refreshToken });
@@ -207,13 +252,13 @@ export function createAuthRouteHandlers({
     if (upstream.status === 401) {
       // The one status that means the credential is gone. `api-client` reads a 401 here as "the
       // session is over" and stops retrying, so nothing else may answer with one.
-      return json(payload ?? {}, 401, clearedCookies(secureCookieFor(new URL(request.url))));
+      return json(payload ?? {}, 401, clearedCookies(secure));
     }
     // A 500 or a 503 is the platform having a bad minute. Clearing cookies here would sign every
     // signed-in user out at once, over something that fixes itself.
     if (!upstream.ok) return json(payload ?? {}, upstream.status);
 
-    return issue(payload ?? {}, request);
+    return issue(payload ?? {});
   };
 
   const refresh = async (request: Request): Promise<Response> => {
@@ -222,11 +267,12 @@ export function createAuthRouteHandlers({
       return problem(401, 'UNAUTHENTICATED', 'There is no session here', 'Sign in again');
     }
 
-    const inFlight = rotations.get(refreshToken);
+    const key = rotationKey(config.appName, refreshToken);
+    const inFlight = rotations.get(key);
     if (inFlight) return (await inFlight).clone();
 
-    const started = rotate(request, refreshToken).finally(() => rotations.delete(refreshToken));
-    rotations.set(refreshToken, started);
+    const started = rotate(refreshToken).finally(() => rotations.delete(key));
+    rotations.set(key, started);
     return (await started).clone();
   };
 
@@ -243,7 +289,7 @@ export function createAuthRouteHandlers({
       }).catch(() => undefined);
     }
 
-    return json({ ok: true }, 200, clearedCookies(secureCookieFor(new URL(request.url))));
+    return json({ ok: true }, 200, clearedCookies(secure));
   };
 
   return { login, refresh, logout };

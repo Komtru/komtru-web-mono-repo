@@ -45,6 +45,50 @@ describe('the global line-height, which T-013 and T-014 both attributed to this 
     expect(await resolved('html', 'line-height')).toBe('normal');
   });
 
+  it.each(['html', 'body', 'h1', 'p', 'img', 'svg', ':focus-visible'])(
+    'puts its rule for %s in @layer base, so a utility still beats it',
+    (selector) => {
+      // Unlayered declarations beat layered ones before specificity is consulted (CSS Cascade 5
+      // §6.4.4). Leaving these unlayered would mean `p { margin: 0 }` beating `mb-[14px]`,
+      // `img, svg { display: block }` beating `hidden`, and `:focus-visible { border-radius: 4px }`
+      // snapping every button, input and chip to a 4px radius the moment it takes focus — which is
+      // the opposite of what `ui-kit`'s `focus.ts` says the global rule does.
+      const rules = parseRules(emitted).filter((rule) => rule.selectors.includes(selector));
+      expect(rules.length, selector).toBeGreaterThan(0);
+      for (const rule of rules) {
+        expect(
+          rule.atRules.some((at) => at.startsWith('@layer')),
+          selector,
+        ).toBe(true);
+      }
+    },
+  );
+
+  it.each([
+    ['p', 'mb-[14px]', 'margin'],
+    ['img', 'hidden', 'display'],
+    [':focus-visible', 'rounded-sm', 'border-radius'],
+    ['h1', 'tracking-normal', 'letter-spacing'],
+  ])("a %s carrying .%s keeps the utility's %s", async (selector, utility, property) => {
+    const layerOf = (rule: { atRules: string[] }) =>
+      rule.atRules.find((at) => at.startsWith('@layer')) ?? '(unlayered)';
+    const rules = parseRules(await compiledStyles(utility));
+    // The last rule in the sheet that states this property for this selector is this package's;
+    // preflight states some of them too, earlier in the same layer.
+    const element = rules
+      .filter((rule) => rule.selectors.includes(selector) && rule.declarations.has(property))
+      .at(-1);
+    const utilityRule = rules.find((rule) =>
+      rule.selectors.some((candidate) => candidate.replace(/\\/g, '') === `.${utility}`),
+    );
+    expect(element, `nothing declares ${property} for ${selector}`).toBeDefined();
+    expect(utilityRule, `${utility} compiled to no rule`).toBeDefined();
+    // Both layered, and `utilities` comes after `base` in Tailwind's own `@layer` statement, so
+    // the utility wins. Unlayered, the element rule would win and the utility would do nothing.
+    expect(layerOf(element!)).toBe('@layer base');
+    expect(layerOf(utilityRule!)).toBe('@layer utilities');
+  });
+
   it('leaves preflight itself in place: the rule is an override, not a fork of the reset', () => {
     const preflight = parseRules(emitted).filter(
       (rule) => rule.selectors.includes('html') && rule.atRules.some((at) => at.startsWith('@layer')),
@@ -109,6 +153,16 @@ describe('the Tailwind sources', () => {
 });
 
 describe('agreement with the Storybook preview', () => {
+  it('layers its rules the same way, or a story shows a radius the app does not', () => {
+    // `preview.css` carries the same declarations for Storybook. Unlayered there, `:focus-visible
+    // { border-radius: 4px }` beats `rounded-sm` on every focused control in every story — the bug
+    // this package just fixed, in the one place that is meant to show what the app looks like.
+    for (const rule of parseRules(previewCss)) {
+      if (rule.selectors.some((selector) => selector.startsWith('.'))) continue;
+      expect(rule.atRules, rule.selectors.join(', ')).toContain('@layer base');
+    }
+  });
+
   it.each(['body', 'h1,\nh2,\nh3,\nh4', 'p', 'img,\nsvg', ':focus-visible'])(
     'declares exactly what the stories declare for %j',
     (previewSelector) => {

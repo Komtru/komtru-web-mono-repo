@@ -72,6 +72,7 @@ describe('the per-app templates', () => {
       'instrumentation-client.ts',
       'instrumentation.ts',
       'middleware.ts',
+      'tsconfig.json',
     ]);
   });
 
@@ -96,13 +97,31 @@ describe('the per-app templates', () => {
   );
 
   it('actually imports something from this package in every template', () => {
-    for (const file of templateFiles.filter((name) => !name.endsWith('.css'))) {
+    // `.css` and `.json` templates reference it without an import statement.
+    for (const file of templateFiles.filter((name) => /\.tsx?$/.test(name))) {
       expect(komtruImports(read(file)).length, relative(file)).toBeGreaterThan(0);
     }
   });
 
   it('wires the matcher on the middleware template, or middleware runs on every asset', () => {
     expect(read(path.join(templates, 'middleware.ts'))).toContain('KOMTRU_MATCHER');
+  });
+
+  it('never hands `process.env` whole to readAppConfig from a file that runs in the browser', () => {
+    // Next defines `process.env.NEXT_PUBLIC_X` one literal at a time and never `process.env`
+    // itself; in the browser `process.env` is `{}`, so `readAppConfig(appSpec, process.env)` throws
+    // at module evaluation and the app white-screens.
+    for (const file of templateFiles.filter((name) => !name.endsWith('.css'))) {
+      const source = read(file);
+      const inBrowser = source.includes("'use client'") || file.includes('instrumentation-client');
+      if (!inBrowser) continue;
+      expect(source, relative(file)).not.toMatch(/readAppConfig\(\s*appSpec,\s*process\.env\s*\)/);
+    }
+  });
+
+  it('ships a tsconfig that extends the Next.js preset T-002 created for it', () => {
+    const tsconfig = JSON.parse(read(path.join(templates, 'tsconfig.json'))) as { extends: string };
+    expect(tsconfig.extends).toBe('@komtru/config/tsconfig/next.json');
   });
 
   it('reads the session secret from the server, never from a NEXT_PUBLIC_ variable', () => {

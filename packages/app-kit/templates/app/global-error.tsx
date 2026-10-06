@@ -16,6 +16,8 @@ export default function GlobalError({
     <html lang="en">
       <body>
         <main>
+          {/* The only heading ErrorScreen draws is the panel's; a document needs a level one. */}
+          <h1 className="sr-only">Something went wrong</h1>
           <ErrorScreen
             {...(error.digest === undefined ? {} : { reference: error.digest })}
             onRetry={reset}

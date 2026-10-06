@@ -33,6 +33,7 @@ export function ErrorScreen({
   return (
     <StatePage
       tone="error"
+      announce
       icon={<AlertIcon />}
       title="This page didn't load"
       body="Nothing you were doing was changed. Try again, and if it keeps happening give support the reference below."

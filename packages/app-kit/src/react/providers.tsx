@@ -15,7 +15,7 @@ import {
 } from '@komtru/api-client';
 import { RealtimeProvider, retryProblemAware, type SocketFactory } from '@komtru/api-client/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { createContext, useContext, useMemo, useState, type ReactNode } from 'react';
+import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import type { AppConfig } from '../config.js';
 
 /**
@@ -87,6 +87,24 @@ export function KomtruProviders({
     if (session !== null) tokens.set(session);
     return createApiClient({ baseUrl: config.apiUrl, tokens });
   });
+
+  /**
+   * Keeps the token store in step with what the server last said. The App Router pattern after a
+   * sign-in or a sign-out is `router.refresh()`, which re-renders this layout with a different
+   * `session` — and without this the store would keep the token it was seeded with: `useSession()`
+   * would say signed out while `useApiClient()` carried on calling the platform with a token good
+   * for another ten minutes.
+   *
+   * Compared by access token, not by identity, so a layout that re-renders with an equivalent
+   * object does not overwrite a token the client refreshed in the meantime.
+   */
+  const applied = useRef<string | null>(session?.accessToken ?? null);
+  useEffect(() => {
+    const next = session?.accessToken ?? null;
+    if (next === applied.current) return;
+    applied.current = next;
+    client.tokens?.set(session);
+  }, [client, session]);
 
   const value = useMemo<KomtruContextValue>(() => ({ client, session }), [client, session]);
 

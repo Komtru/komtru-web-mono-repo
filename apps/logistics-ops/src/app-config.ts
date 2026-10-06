@@ -1,9 +1,11 @@
 // What this app states about itself, for `@komtru/app-kit`. Committed, not configured: the scope is
 // a property of the product, not of the environment.
 //
-// A Park Agent holds a LOGISTICS session too, so scope alone cannot separate this app from
-// park.komtru.com: T-160 redirects an agent there after asking the backend who they are.
-// `elsewhereUrlEnv` covers only the scope mismatch middleware can see without a round trip.
+// No `elsewhereUrlEnv`. Middleware only reaches that branch when the held scope differs from the
+// required one, and a Park Agent holds the same `LOGISTICS` scope a courier operator does — so it
+// could never fire for the case the name suggests, and would fire for a CONSUMER or STAFF session
+// by sending that person to park.komtru.com, which will refuse them too. Separating an agent from
+// an operator needs the backend's answer about who they are, and that redirect is T-160's.
 import type { AppSpec } from '@komtru/app-kit';
 
 export const appSpec = {
@@ -11,5 +13,4 @@ export const appSpec = {
   scope: 'LOGISTICS',
   signInPath: '/sign-in',
   homePath: '/packages',
-  elsewhereUrlEnv: 'NEXT_PUBLIC_KOMTRU_PARK_URL',
 } as const satisfies AppSpec;

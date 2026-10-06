@@ -28,38 +28,52 @@
 
 /*
  * The reference's own page defaults, so a story reads the way a screen does. These are the app's
- * job, not ui-kit's — T-017 owns the global stylesheet. The `:focus-visible` rule below especially:
- * primitives carry the ring as a utility, but any focusable element a *screen* adds gets it only
- * from this global rule, so without it in the app those elements have a ring here and none there.
+ * job, not ui-kit's — T-017 owns the global stylesheet, and `@komtru/app-kit/styles.css` declares
+ * exactly this block; `packages/app-kit/test/styles.test.ts` holds the two files to each other.
+ * The `:focus-visible` rule especially: primitives carry the ring as a utility, but any focusable
+ * element a *screen* adds gets it only from this global rule, so without it in the app those
+ * elements have a ring here and none there.
+ *
+ * `@layer base`, not unlayered. An unlayered declaration beats every layered one before
+ * specificity is consulted, so unlayered these would beat the utilities the primitives are built
+ * from: `p { margin: 0 }` over `mb-[14px]`, `img, svg { display: block }` over `hidden`, and
+ * `:focus-visible { border-radius: 4px }` over every `rounded-*` the moment a control took focus —
+ * which is the opposite of what `src/primitives/focus.ts` says this rule does.
  */
-body {
-  margin: 0;
-  font-family: var(--font-body);
-  background: var(--cloud-gray);
-  color: var(--midnight-text);
-  -webkit-font-smoothing: antialiased;
-}
+@layer base {
+  html {
+    line-height: normal;
+  }
 
-h1,
-h2,
-h3,
-h4 {
-  font-family: var(--font-display);
-  margin: 0;
-  letter-spacing: -0.01em;
-}
+  body {
+    margin: 0;
+    font-family: var(--font-body);
+    background: var(--cloud-gray);
+    color: var(--midnight-text);
+    -webkit-font-smoothing: antialiased;
+  }
 
-p {
-  margin: 0;
-}
+  h1,
+  h2,
+  h3,
+  h4 {
+    font-family: var(--font-display);
+    margin: 0;
+    letter-spacing: -0.01em;
+  }
 
-img,
-svg {
-  display: block;
-}
+  p {
+    margin: 0;
+  }
 
-:focus-visible {
-  outline: 2.5px solid var(--trust-indigo);
-  outline-offset: 2px;
-  border-radius: 4px;
+  img,
+  svg {
+    display: block;
+  }
+
+  :focus-visible {
+    outline: 2.5px solid var(--trust-indigo);
+    outline-offset: 2px;
+    border-radius: 4px;
+  }
 }

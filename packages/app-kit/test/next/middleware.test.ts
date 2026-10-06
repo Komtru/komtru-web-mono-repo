@@ -50,7 +50,9 @@ const run = async (
     ...(options.now ? { now: options.now } : {}),
     ...(options.publicPaths ? { publicPaths: options.publicPaths } : {}),
   });
-  const request = new NextRequest(new URL(path, 'https://app.komtru.com'), {
+  // Concatenated, not `new URL(path, origin)`: the two-argument form resolves `//evil.com/x`
+  // against the base *before* middleware sees it, which is exactly the normalisation under test.
+  const request = new NextRequest(new URL(`https://app.komtru.com${path}`), {
     headers: cookie === undefined ? {} : { cookie: `${SESSION_COOKIE}=${cookie}` },
   });
   return middleware(request);
@@ -133,6 +135,36 @@ describe('createKomtruMiddleware', () => {
     const stale = await sealer.seal({ scope: 'CONSUMER', expiresAt: 1_000 });
     expect((await run('CONSUMER', stale, '/trades', { now: () => 2_000 })).status).toBe(307);
   });
+
+  it.each(['/trades/KMT-1.2', '/u/jane.doe', '/settings/v1.5', '/a.b/c'])(
+    'guards %s, which is a page and not an asset',
+    async (path) => {
+      // `.*\\..*` would exclude a dot anywhere, not only a trailing extension, and every protected
+      // page whose URL carries a username, a version or a decimal would be served with no check.
+      const [matcher] = KOMTRU_MATCHER;
+      expect(new RegExp(`^${matcher}$`).test(path), `matcher skips ${path}`).toBe(true);
+      expect((await run('CONSUMER', undefined, path)).status).toBe(307);
+    },
+  );
+
+  it.each(['/styles.css', '/chunk.js', '/logo.svg', '/favicon.ico', '/fonts/inter.woff2'])(
+    'lets the asset %s through, by the same rule the matcher uses',
+    async (path) => {
+      const [matcher] = KOMTRU_MATCHER;
+      expect(new RegExp(`^${matcher}$`).test(path), `matcher guards ${path}`).toBe(false);
+      expect(passedThrough(await run('CONSUMER', undefined, path))).toBe(true);
+    },
+  );
+
+  it.each(['//evil.com/x', '/\\evil.com', '//evil.com'])(
+    'does not hand the sign-in page %j to redirect to',
+    async (path) => {
+      // `new URL('//evil.com/x', origin)` resolves to https://evil.com/x, so a sign-in screen that
+      // does `router.replace(next)` would be an open redirect. Do not emit the value at all.
+      const location = new URL((await run('CONSUMER', undefined, path)).headers.get('location')!);
+      expect(location.searchParams.get('next')).toBeNull();
+    },
+  );
 
   it('exports a matcher that excludes the static paths it also guards against', () => {
     const [matcher] = KOMTRU_MATCHER;

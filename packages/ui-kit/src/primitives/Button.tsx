@@ -30,6 +30,27 @@ export interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElemen
   asChild?: boolean;
 }
 
+/** `onClick`, `onKeyDown`, …: both run, the child's first. */
+function composeHandlers(
+  lent: Record<string, unknown>,
+  own: Record<string, unknown>,
+): Record<string, unknown> {
+  const composed: Record<string, unknown> = {};
+  for (const [name, lentValue] of Object.entries(lent)) {
+    if (!/^on[A-Z]/.test(name) || typeof lentValue !== 'function') continue;
+    const ownValue = own[name];
+    if (typeof ownValue !== 'function') {
+      composed[name] = lentValue;
+      continue;
+    }
+    composed[name] = (...args: unknown[]) => {
+      (ownValue as (...a: unknown[]) => void)(...args);
+      (lentValue as (...a: unknown[]) => void)(...args);
+    };
+  }
+  return composed;
+}
+
 export function Button({
   variant = 'primary',
   className,
@@ -41,15 +62,26 @@ export function Button({
   const classes = cx(VARIANTS[variant], disabled === true && 'opacity-55', className);
 
   if (asChild) {
-    const child: unknown = rest.children;
-    if (!isValidElement<{ className?: string }>(child)) {
+    const { children, ...lent } = rest;
+    if (!isValidElement<Record<string, unknown>>(children)) {
       // A string, a fragment, two children: there is no single element to lend the treatment to,
       // and silently rendering a bare `<button>` instead would hide the mistake behind a control
       // that looks right and is the wrong element.
       throw new TypeError('Button asChild needs exactly one element child');
     }
-    return cloneElement(child, {
-      className: cx(classes, child.props.className),
+    if (disabled === true) {
+      // `disabled` is not an attribute an `<a>` has, so the treatment would dim a control that is
+      // still perfectly clickable and announces nothing. Which element to render is the caller's.
+      throw new TypeError('Button asChild cannot be disabled; render a disabled <button> instead');
+    }
+    // Every prop reaches the child, the way the name promises. Where both declare the same thing
+    // the child wins — it is the more specific statement — except for handlers, which both run,
+    // child first, so the element's own behaviour is never silently replaced.
+    return cloneElement(children, {
+      ...lent,
+      ...children.props,
+      ...composeHandlers(lent, children.props),
+      className: cx(classes, children.props.className as string | undefined),
     });
   }
 

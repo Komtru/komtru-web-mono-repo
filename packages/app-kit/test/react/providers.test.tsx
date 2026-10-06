@@ -165,6 +165,66 @@ describe('KomtruProviders', () => {
     await waitFor(() => expect(invalidate).toHaveBeenCalledWith({ queryKey: ['trades'] }));
   });
 
+  it('drops the access token when the server says the session has ended', () => {
+    // The App Router pattern after a server-side sign-out is `router.refresh()`, which re-renders
+    // the layout with `session={null}`. Without this, the client keeps calling the platform with a
+    // token that is good for another ten minutes while `useSession()` says signed out.
+    let client: ReturnType<typeof useApiClient> | undefined;
+    function Probe() {
+      client = useApiClient();
+      return null;
+    }
+    const { rerender } = renderWith({ session }, <Probe />);
+    expect(client!.tokens!.read().accessToken).toBe('at-1');
+
+    rerender(
+      <KomtruProviders config={config} session={null}>
+        <Probe />
+      </KomtruProviders>,
+    );
+    expect(client!.tokens!.read().accessToken).toBeNull();
+  });
+
+  it('takes up a session that arrives after the first render', () => {
+    let client: ReturnType<typeof useApiClient> | undefined;
+    function Probe() {
+      client = useApiClient();
+      return null;
+    }
+    const { rerender } = renderWith({ session: null }, <Probe />);
+    rerender(
+      <KomtruProviders config={config} session={session}>
+        <Probe />
+      </KomtruProviders>,
+    );
+    expect(client!.tokens!.read().accessToken).toBe('at-1');
+  });
+
+  it('does not clobber a token the client refreshed with the same stale prop', async () => {
+    fetchMock.mockResolvedValue(
+      new Response(JSON.stringify({ accessToken: 'at-2', scope: 'CONSUMER' }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      }),
+    );
+    let client: ReturnType<typeof useApiClient> | undefined;
+    function Probe() {
+      client = useApiClient();
+      return null;
+    }
+    const { rerender } = renderWith({ session }, <Probe />);
+    await client!.tokens!.refreshOnce(client!.tokens!.read().generation);
+    expect(client!.tokens!.read().accessToken).toBe('at-2');
+
+    // A new object with the same contents: the layout re-rendered, the session did not change.
+    rerender(
+      <KomtruProviders config={config} session={{ ...session }}>
+        <Probe />
+      </KomtruProviders>,
+    );
+    expect(client!.tokens!.read().accessToken).toBe('at-2');
+  });
+
   it('throws a named error when useApiClient is called outside the provider', () => {
     function Orphan() {
       useApiClient();

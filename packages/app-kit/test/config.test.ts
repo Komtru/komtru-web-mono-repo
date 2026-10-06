@@ -1,5 +1,7 @@
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
-import { readAppConfig, type AppSpec } from '../src/config.js';
+import { publicEnv, readAppConfig, type AppSpec } from '../src/config.js';
 
 const env = {
   NEXT_PUBLIC_KOMTRU_APP_URL: 'https://app.komtru.com',
@@ -7,6 +9,30 @@ const env = {
   NEXT_PUBLIC_KOMTRU_SOCKET_URL: 'https://api.komtru.com',
 };
 const spec: AppSpec = { appName: 'web-app-ui', scope: 'CONSUMER' };
+
+describe('publicEnv', () => {
+  it('reads each variable as a literal member expression', () => {
+    // Next inlines `process.env.NEXT_PUBLIC_X` into the browser bundle one key at a time; it never
+    // defines `process.env` itself, and the browser's `process` shim has an empty `env`. A client
+    // file that passed `process.env` whole to `readAppConfig` would throw on every page load.
+    const source = readFileSync(fileURLToPath(new URL('../src/config.ts', import.meta.url)), 'utf8');
+    const body = source.slice(source.indexOf('export const publicEnv'));
+    for (const name of [
+      'NEXT_PUBLIC_KOMTRU_APP_URL',
+      'NEXT_PUBLIC_KOMTRU_API_URL',
+      'NEXT_PUBLIC_KOMTRU_SOCKET_URL',
+      'NEXT_PUBLIC_SENTRY_DSN',
+    ]) {
+      expect(body).toContain(`process.env.${name}`);
+    }
+  });
+
+  it('merges whatever else the caller names', () => {
+    expect(publicEnv({ NEXT_PUBLIC_KOMTRU_PARK_URL: 'https://park.komtru.com' })).toMatchObject({
+      NEXT_PUBLIC_KOMTRU_PARK_URL: 'https://park.komtru.com',
+    });
+  });
+});
 
 describe('readAppConfig', () => {
   it('reads the public environment and applies the path defaults', () => {

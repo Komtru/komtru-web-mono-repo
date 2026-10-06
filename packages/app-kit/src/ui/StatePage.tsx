@@ -19,6 +19,12 @@ export interface StatePageProps {
   secondaryAction?: React.ReactNode;
   /** Shown under the panel in the mono face, the way a Trade code is. */
   reference?: string;
+  /**
+   * `role="alert"` on the panel. Next swaps an error boundary in without changing the URL and
+   * without moving focus, so a screen-reader user is told nothing at all unless the replacement
+   * announces itself. A missing page arrives with a navigation and needs no announcement.
+   */
+  announce?: boolean;
 }
 
 export function StatePage({
@@ -29,10 +35,11 @@ export function StatePage({
   action,
   secondaryAction,
   reference,
+  announce = false,
 }: StatePageProps): React.JSX.Element {
   return (
     <div className="flex min-h-dvh items-center justify-center bg-surface-secondary p-[16px]">
-      <div className="w-full max-w-[360px]">
+      <div className="w-full max-w-[360px]" {...(announce ? { role: 'alert' } : {})}>
         <EmptyState
           tone={tone}
           icon={icon}

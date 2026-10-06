@@ -89,8 +89,13 @@ export function createSessionSealer(secret: string): SessionSealer {
   const open = async (token: string | undefined, now = Date.now()): Promise<SessionHint | null> => {
     if (token === undefined || token === '') return null;
     try {
-      const [version, body, signature] = token.split('.');
-      if (version !== VERSION || body === undefined || signature === undefined) return null;
+      // Exactly three parts: `v1.<body>.<sig>.anything` would otherwise verify, which makes two
+      // distinct cookie strings the same session. Not forgeable, but a malleable security token is
+      // not a thing to leave lying around.
+      const parts = token.split('.');
+      if (parts.length !== 3) return null;
+      const [version, body, signature] = parts as [string, string, string];
+      if (version !== VERSION) return null;
 
       // `crypto.subtle.verify`, not a string compare: the platform's comparison is the constant-time
       // one, and a hand-rolled `===` on a MAC is the classic timing leak.

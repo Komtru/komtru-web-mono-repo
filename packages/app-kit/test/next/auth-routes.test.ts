@@ -54,7 +54,16 @@ class Backend {
     });
     if (this.failure) throw this.failure;
     const next = this.queue.shift() ?? { status: 200, body: session, delayMs: 0 };
-    if (next.delayMs > 0) await new Promise((resolve) => setTimeout(resolve, next.delayMs));
+    if (next.delayMs > 0) {
+      // Honours the caller's AbortSignal, the way a real fetch does, so a timeout test is a test.
+      await new Promise<void>((resolve, reject) => {
+        const timer = setTimeout(resolve, next.delayMs);
+        init?.signal?.addEventListener('abort', () => {
+          clearTimeout(timer);
+          reject(new DOMException('aborted', 'AbortError'));
+        });
+      });
+    }
     return new Response(JSON.stringify(next.body), {
       status: next.status,
       headers: { 'content-type': 'application/json' },
@@ -118,6 +127,35 @@ describe('login', () => {
     const response = await handlers.login(post({ identifier: 'a@b.c' }));
     expect(response.status).toBe(422);
     expect(backend.calls).toEqual([]);
+  });
+
+  it('refuses a truncated body with a 422 rather than a 500', async () => {
+    const response = await handlers.login(
+      new Request('https://app.komtru.com/api/auth/login', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: '{"identifier":"a@b.c","passw',
+      }),
+    );
+    expect(response.status).toBe(422);
+    expect(backend.calls).toEqual([]);
+  });
+
+  it('hands the browser only the fields it is meant to see', async () => {
+    backend.reply(200, { ...session, nextStep: 'NONE', user: { id: 'u1' }, internalSecret: 'leak' });
+    const body = (await (
+      await handlers.login(post({ identifier: 'a@b.c', password: 'x' }))
+    ).json()) as Record<string, unknown>;
+    // An allowlist, not a denylist: a field the backend adds later must not reach the browser by
+    // default on a platform whose responses carry credentials.
+    expect(Object.keys(body).sort()).toEqual([
+      'accessToken',
+      'expiresAt',
+      'expiresIn',
+      'nextStep',
+      'scope',
+      'user',
+    ]);
   });
 
   it('refuses a response the backend should never have sent', async () => {
@@ -210,6 +248,20 @@ describe('logout', () => {
     expect(cookiesOf(response).every((cookie) => /Max-Age=0/.test(cookie))).toBe(true);
   });
 
+  it('still clears the cookies when the body is truncated', async () => {
+    // A flaky mobile connection truncates a request. Throwing here would leave the person signed in
+    // on a shared phone, looking at a 500.
+    const response = await handlers.logout(
+      new Request('https://app.komtru.com/api/auth/logout', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', cookie: 'komtru_rt=rt-1' },
+        body: '{',
+      }),
+    );
+    expect(response.status).toBe(200);
+    expect(cookiesOf(response).every((cookie) => /Max-Age=0/.test(cookie))).toBe(true);
+  });
+
   it('signs out with no cookie to revoke', async () => {
     const response = await handlers.logout(post({ allDevices: false }));
     expect(response.status).toBe(200);
@@ -220,6 +272,56 @@ describe('logout', () => {
     backend.reply(200, { ok: true });
     await handlers.logout(post({ allDevices: true }, { cookie: 'komtru_rt=rt-1' }));
     expect(backend.calls[0]?.body).toMatchObject({ allDevices: true });
+  });
+});
+
+describe('the backend calls', () => {
+  it('give up rather than hold a request open against a backend that never answers', async () => {
+    const impatient = createAuthRouteHandlers({
+      config: configFor('CONSUMER'),
+      sealer,
+      fetch: backend.fetch,
+      timeoutMs: 20,
+    });
+    backend.replyAfter(5_000, 200, session);
+    const response = await impatient.refresh(post(undefined, { cookie: 'komtru_rt=rt-1' }));
+    expect(response.status).toBe(502);
+    // And the rotation is not pinned: the next tab gets its own attempt rather than the dead promise.
+    backend.reply(200, session);
+    expect((await impatient.refresh(post(undefined, { cookie: 'komtru_rt=rt-1' }))).status).toBe(200);
+  });
+
+  it("decides Secure from the app's own origin, not from the request's Host header", async () => {
+    // Behind a TLS-terminating proxy that forwards to http://localhost and rewrites Host, a
+    // request-derived answer drops Secure from a production cookie.
+    const https = createAuthRouteHandlers({
+      config: { ...configFor('CONSUMER'), appUrl: 'https://app.komtru.com' },
+      sealer,
+      fetch: backend.fetch,
+    });
+    const response = await https.login(
+      new Request('http://localhost:3001/api/auth/login', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ identifier: 'a@b.c', password: 'x' }),
+      }),
+    );
+    expect(cookiesOf(response).every((cookie) => /Secure/.test(cookie))).toBe(true);
+  });
+
+  it('does not share a rotation between two apps in one process', async () => {
+    const other = createAuthRouteHandlers({
+      config: { ...configFor('CONSUMER'), appName: 'other-app' },
+      sealer,
+      fetch: backend.fetch,
+    });
+    backend.replyAfter(20, 200, { ...session, refreshToken: 'rt-2' });
+    backend.replyAfter(20, 200, { ...session, refreshToken: 'rt-3' });
+    await Promise.all([
+      handlers.refresh(post(undefined, { cookie: 'komtru_rt=rt-1' })),
+      other.refresh(post(undefined, { cookie: 'komtru_rt=rt-1' })),
+    ]);
+    expect(backend.calls).toHaveLength(2);
   });
 });
 

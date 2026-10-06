@@ -70,6 +70,11 @@ describe('the sealed session hint', () => {
     expect(await sealer.open(resealed, 1_000)).toBeNull();
   });
 
+  it('refuses a token with anything after the signature, so one session is one string', async () => {
+    const sealed = await sealer.seal(hint);
+    expect(await sealer.open(`${sealed}.trailing`, 1_000)).toBeNull();
+  });
+
   it('refuses a hint that has expired', async () => {
     expect(await sealer.open(await sealer.seal(hint), hint.expiresAt + 1)).toBeNull();
   });
