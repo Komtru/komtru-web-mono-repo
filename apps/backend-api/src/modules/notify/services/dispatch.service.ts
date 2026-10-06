@@ -14,7 +14,7 @@ import { decideDelivery, rateLimitWindowStart, type DeliveryDecision } from '../
 import { notificationDeadLettered, notificationSent } from '../domain/events.js';
 import { notificationIdFor } from '../domain/identity.js';
 import { TemplateRenderError, renderTemplate, type NotificationTemplate } from '../domain/template.js';
-import type { NotificationRecipient } from '../domain/binding.js';
+import { allowsUnverifiedDestination, type NotificationRecipient } from '../domain/binding.js';
 import {
   notificationEventMappings,
   notificationPreferences,
@@ -135,8 +135,20 @@ async function dispatchToRecipient(
     throw new Error(`notify: no active template for '${templateKey}' in '${locale}' or the default`);
   }
 
+  // A recipient may name the channels this one event is for: an OTP goes to the channel the
+  // challenge was issued on, not to every channel the template key happens to ship.
+  const wanted = recipient.channels;
+  const selected = wanted ? templates.filter((t) => wanted.includes(t.channel)) : templates;
+  if (!selected.length) {
+    // Silence here would be a security-critical message nobody sent, nobody logged and nobody can
+    // find afterwards. A binding naming a channel its template does not have is a code bug.
+    throw new Error(
+      `notify: '${templateKey}' has no template for the requested channel(s) ${(wanted ?? []).join(', ')}`,
+    );
+  }
+
   const queued: QueuedSend[] = [];
-  for (const template of templates) {
+  for (const template of selected) {
     const result = await dispatchOne(deps, tx, envelope, template, recipient);
     if (result) queued.push(result);
   }
@@ -152,7 +164,9 @@ async function dispatchOne(
 ): Promise<QueuedSend | undefined> {
   const { userId } = recipient;
   const { channel, category, templateKey } = template;
-  const destination = await resolveDestination(tx, userId, channel);
+  const destination = await resolveDestination(tx, userId, channel, {
+    allowUnverified: allowsUnverifiedDestination(templateKey),
+  });
   const windowStart = rateLimitWindowStart(new Date(envelope.occurredAt), deps.config.rateLimitWindowMinutes);
 
   const decision = decideDelivery({

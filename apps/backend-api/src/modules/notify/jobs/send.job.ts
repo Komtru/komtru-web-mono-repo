@@ -23,6 +23,7 @@ import {
   notificationExists,
   type ClaimedNotification,
 } from '../services/delivery.service.js';
+import { allowsUnverifiedDestination } from '../domain/binding.js';
 import { resolveDestination } from '../services/recipients.service.js';
 import { sendEmail } from '../infrastructure/providers/mailjet.client.js';
 import { sendPush } from '../infrastructure/providers/fcm.client.js';
@@ -84,7 +85,11 @@ export async function runSendJob(deps: SendJobDeps, data: SendJobData): Promise<
     throw new Error(`notify: ${data.notificationId} is not committed yet`);
   }
 
-  const destination = await resolveDestination(db, claimed.userId, claimed.channel);
+  // The same allowance dispatch used, derived from the same column, so a row cannot be QUEUED at
+  // dispatch and dead-letter here for a reason that never changed.
+  const destination = await resolveDestination(db, claimed.userId, claimed.channel, {
+    allowUnverified: allowsUnverifiedDestination(claimed.templateKey),
+  });
   if (!destination) {
     // The address went away between dispatch and send. Deterministic, so retrying is pointless.
     await markDeadLettered(db, claimed, 'no destination at send time', logger);
