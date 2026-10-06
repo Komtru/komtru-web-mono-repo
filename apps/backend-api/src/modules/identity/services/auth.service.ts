@@ -47,6 +47,7 @@ import {
   type OtpDeps,
   type VerifyOutcome,
 } from './otp.service.js';
+import { claimInvitationsForDestination, resolveInvitationToken } from './invitation.service.js';
 import { createSession, type IssuedSession, type SessionDeps } from './session.service.js';
 import type { PasswordRejection } from '../domain/credential/policy.js';
 
@@ -85,6 +86,8 @@ export interface RegisterInput {
   acceptedTermsVersion: string;
   acceptedPrivacyVersion?: string;
   marketingOptIn: boolean;
+  /** §10.1, T-035. Binds the signup to a party invitation; the TRADE binds on claim-on-verify. */
+  invitationToken?: string;
   deviceFingerprint?: string;
   ip: string | null;
   userAgent: string | null;
@@ -111,7 +114,11 @@ export type RegisterResult =
   | { outcome: 'TAKEN' }
   | { outcome: 'INVALID_CONTACT'; channel: 'EMAIL' | 'PHONE' }
   | { outcome: 'REJECTED'; rejection: PasswordRejection; message: string }
-  | { outcome: 'STALE_TERMS' };
+  | { outcome: 'STALE_TERMS' }
+  /** The `invitationToken` names nothing live. Answered rather than ignored: a client that sent a
+   * stale link and got a plain 201 would have an account that never binds to the trade it was
+   * invited to, and no way to find out. */
+  | { outcome: 'INVALID_INVITATION' };
 
 /** A display name is what the user typed; the split is a convenience, never a legal name (§5.3). */
 const splitName = (fullName: string): { firstName: string; lastName: string | null } => {
@@ -165,6 +172,13 @@ export async function register(db: Db, deps: AccountDeps, input: RegisterInput):
         : await findUserByVerifiedPhone(tx, contact.destination);
     if (owner) return { outcome: 'TAKEN' };
 
+    // Resolved before anything is written, so a dead link costs a 422 and no row. Note what it does
+    // NOT do: it does not pre-claim, and it does not restrict which channel may be registered. §8.5
+    // rule 6 is that the invitation binds only to the channel actually verified, and a token that
+    // could override that would be the link-forwarding attack the rule exists to stop.
+    const invitation = input.invitationToken ? await resolveInvitationToken(tx, input.invitationToken) : null;
+    if (input.invitationToken && !invitation) return { outcome: 'INVALID_INVITATION' };
+
     const user = await insertUser(tx, input);
 
     try {
@@ -215,6 +229,7 @@ export async function register(db: Db, deps: AccountDeps, input: RegisterInput):
         channel: input.channel,
         challengeId: challenge.challengeId,
         termsVersion: deps.terms.termsVersion,
+        ...(invitation ? { invitationId: invitation.id } : {}),
       },
     });
 
@@ -225,6 +240,7 @@ export async function register(db: Db, deps: AccountDeps, input: RegisterInput):
         registeredVia: `register:${input.channel}`,
         channel: input.channel,
         ip: input.ip,
+        invitationId: invitation?.id ?? null,
       },
       aggregateType: 'identity.user',
       aggregateId: user.id,
@@ -439,6 +455,15 @@ export async function verifyChallenge(
     }
 
     await applyVerificationProgress(tx, userId);
+
+    // §8.5 steps 5–6. `canonical` is the value the destination_hash comparison above was made from,
+    // so the claim matches on exactly the address this code proved — not on the token, which anyone
+    // can forward, and not on whatever contact happens to be primary.
+    await claimInvitationsForDestination(
+      tx,
+      { hasher: deps.otpHasher },
+      { userId, channel: challenge.channel === 'EMAIL' ? 'EMAIL' : 'PHONE', canonical },
+    );
 
     const device = await upsertDevice(tx, {
       userId,

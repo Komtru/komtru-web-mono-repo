@@ -51,6 +51,15 @@ export const registerRequestSchema = z
     /** Absent means "the same version as the Terms", which is what screen TOS1 presents. */
     acceptedPrivacyVersion: versionSchema.optional(),
     marketingOptIn: z.boolean().default(false),
+    /**
+     * §10.1's "optional, binds a party_invitation" (T-035). T-032 rejected it deliberately rather
+     * than accepting and ignoring it, so that nobody shipped a client believing it worked; this is
+     * the ticket that makes it work.
+     *
+     * It binds an ATTRIBUTION and never a trade. The trade binds when the invited channel is
+     * verified (§8.5 steps 5–6), which is what makes forwarding the link useless.
+     */
+    invitationToken: z.string().min(16).max(128).optional(),
     deviceFingerprint: deviceFingerprintSchema.optional(),
   })
   .check((ctx) => {

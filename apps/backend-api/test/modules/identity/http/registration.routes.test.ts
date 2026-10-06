@@ -149,3 +149,43 @@ describe('the registration request shapes', () => {
     expect(verifyOtpRequestSchema.safeParse({ challengeId, code: ' 482913 ' }).success).toBe(false);
   });
 });
+
+describe('the §10.1 invitationToken (T-035)', () => {
+  const base = {
+    acceptedTermsVersion: '2026-08-01',
+    password: 'a sturdy passphrase 1',
+  };
+
+  it('accepts an invitation token, which T-032 deliberately rejected', () => {
+    expect(
+      registerRequestSchema.safeParse({
+        ...base,
+        channel: 'EMAIL',
+        email: 'jane@example.com',
+        invitationToken: 't'.repeat(43),
+      }).success,
+    ).toBe(true);
+  });
+
+  it('refuses a token too short to be one we issued', () => {
+    expect(
+      registerRequestSchema.safeParse({
+        ...base,
+        channel: 'EMAIL',
+        email: 'jane@example.com',
+        invitationToken: 'short',
+      }).success,
+    ).toBe(false);
+  });
+
+  it('still rejects an unknown field', () => {
+    expect(
+      registerRequestSchema.safeParse({
+        ...base,
+        channel: 'EMAIL',
+        email: 'jane@example.com',
+        scope: 'STAFF',
+      }).success,
+    ).toBe(false);
+  });
+});
