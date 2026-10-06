@@ -16,7 +16,8 @@
     "test": "vitest run",
     "test:int": "KOMTRU_INFRA_TESTS=1 vitest run test/integration test/db",
     "db:generate": "drizzle-kit generate",
-    "db:migrate": "tsx --env-file-if-exists=.env src/db/migrate-cli.ts"
+    "db:migrate": "tsx --env-file-if-exists=.env src/db/migrate-cli.ts",
+    "db:seed": "tsx --env-file-if-exists=.env src/db/seed-cli.ts"
   },
   "devDependencies": {
     "@komtru/config": "workspace:*",

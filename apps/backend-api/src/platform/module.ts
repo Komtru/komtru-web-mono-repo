@@ -49,6 +49,16 @@ export interface KomtruModule {
   queues?: QueueDefinition<never>[];
   /** Recurring jobs (`module.job-name`, cron in Africa/Lagos); only the worker schedules them. */
   schedules?: ScheduledJob[];
+  /**
+   * Reference data the schema needs in order to function — the RBAC catalogue, the reserved
+   * username namespace — reconciled from code into the database.
+   *
+   * Not a migration, and deliberately so: this data changes whenever a module adds a permission or
+   * Trust & Safety adds a brand, which is far more often than the schema changes. `pnpm db:migrate`
+   * runs every module's seed once the migrations are applied, as the owner, and `pnpm db:seed`
+   * re-runs them alone. Must be idempotent: it runs on every deploy.
+   */
+  seed?: (db: Db) => Promise<void>;
   /** Runs at process start, in registry order (e.g. subscribing to events). */
   start?: (ctx: ModuleContext) => Promise<void>;
   /** Runs at shutdown, in reverse registry order. */
@@ -83,3 +93,21 @@ export const moduleClosers = (modules: KomtruModule[]): Closer[] =>
     const { stop } = module;
     return stop ? [{ name: `module:${module.name}`, close: () => stop() }] : [];
   });
+
+/**
+ * Runs every module's seed, in registry order, one after another rather than in parallel: a later
+ * module's reference data may reference an earlier one's, and these run once per deploy.
+ *
+ * A failure names the module. Without that the stack is a drizzle insert and a constraint name, and
+ * the operator has to guess which module's catalogue drifted.
+ */
+export async function runModuleSeeds(modules: KomtruModule[], db: Db): Promise<void> {
+  for (const module of modules) {
+    if (!module.seed) continue;
+    try {
+      await module.seed(db);
+    } catch (error) {
+      throw new Error(`module "${module.name}" failed to seed`, { cause: error });
+    }
+  }
+}

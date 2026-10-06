@@ -4,7 +4,7 @@ import { createApp } from '../../src/app.js';
 import { loadConfig } from '../../src/config/env.js';
 import { createLogger } from '../../src/platform/logger.js';
 import { defineRoute } from '../../src/platform/http/route.js';
-import { defineModule, moduleHealthChecks, mountModules } from '../../src/platform/module.js';
+import { defineModule, moduleHealthChecks, mountModules, runModuleSeeds } from '../../src/platform/module.js';
 import { z } from 'zod';
 import { testRedisUrl } from '../support/db-urls.js';
 
@@ -49,5 +49,30 @@ describe('module registry', () => {
     expect(moduleHealthChecks([trades, defineModule({ name: 'identity' })]).map((c) => c.name)).toEqual([
       'trades-cache',
     ]);
+  });
+});
+
+describe('module seeds', () => {
+  it('runs each module seed once, in registry order', async () => {
+    const order: string[] = [];
+    const db = {} as never;
+    await runModuleSeeds(
+      [
+        defineModule({ name: 'a', seed: () => Promise.resolve(void order.push('a')) }),
+        defineModule({ name: 'b' }),
+        defineModule({ name: 'c', seed: () => Promise.resolve(void order.push('c')) }),
+      ],
+      db,
+    );
+    expect(order).toEqual(['a', 'c']);
+  });
+
+  it('names the module whose seed failed', async () => {
+    await expect(
+      runModuleSeeds(
+        [defineModule({ name: 'identity', seed: () => Promise.reject(new Error('boom')) })],
+        {} as never,
+      ),
+    ).rejects.toThrow(/identity/);
   });
 });
