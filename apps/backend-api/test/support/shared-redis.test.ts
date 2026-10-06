@@ -71,7 +71,13 @@ describe('the shared test Redis database', () => {
       .filter((path) => path !== SELF && path !== CONFIG_DEFAULTS_TEST)
       .filter((path) => {
         const source = readFileSync(path, 'utf8');
-        return source.includes('REDIS_URL: testRedisUrl()') && !source.includes('...testRedisEnv()');
+        // Either helper carries the namespace: `testProcessEnv` is `testRedisEnv` plus a pool cap,
+        // for the suites that start a real API or worker.
+        return (
+          source.includes('REDIS_URL: testRedisUrl()') &&
+          !source.includes('...testRedisEnv()') &&
+          !source.includes('...testProcessEnv()')
+        );
       });
     expect(offenders.map((path) => path.slice(TEST_ROOT.length))).toEqual([]);
   });
