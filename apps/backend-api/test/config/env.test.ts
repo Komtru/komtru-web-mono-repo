@@ -222,4 +222,29 @@ describe('loadConfig: notifications', () => {
   it('rejects a non-positive attempt cap', () => {
     expect(failure({ ...minimal, NOTIFY_MAX_ATTEMPTS: '0' }).invalid).toContain('NOTIFY_MAX_ATTEMPTS');
   });
+
+  it('defaults the redis namespace to the shared production one', () => {
+    const { redis } = loadConfig(minimal);
+    expect(redis.keyPrefix).toBe('komtru:');
+    expect(redis.queuePrefix).toBe('komtru:bull');
+  });
+
+  it('takes a namespace per run, so two runs cannot see each other', () => {
+    const { redis } = loadConfig({
+      ...minimal,
+      REDIS_KEY_PREFIX: 'komtru_t3:',
+      REDIS_QUEUE_PREFIX: 'komtru_t3:bull',
+    });
+    expect(redis.keyPrefix).toBe('komtru_t3:');
+    expect(redis.queuePrefix).toBe('komtru_t3:bull');
+  });
+
+  // `FOO=` means "not set" everywhere in this loader, so an empty namespace falls back to the
+  // production one rather than to no prefix at all. That is the safe direction: keys land where
+  // they land today. Nothing can reach Redis with an empty prefix.
+  it('treats an empty namespace as unset, not as no prefix', () => {
+    const { redis } = loadConfig({ ...minimal, REDIS_KEY_PREFIX: '', REDIS_QUEUE_PREFIX: '' });
+    expect(redis.keyPrefix).toBe('komtru:');
+    expect(redis.queuePrefix).toBe('komtru:bull');
+  });
 });

@@ -3,6 +3,7 @@
 // SECURITY: the backend's .env holds live credentials. Errors from this module name the variables that
 // are missing or invalid, never their values.
 import { z } from 'zod';
+import { BULL_PREFIX, KEY_PREFIX } from '../platform/redis/connections.js';
 
 const NODE_ENVS = ['development', 'test', 'production'] as const;
 const LOG_LEVELS = ['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent'] as const;
@@ -56,6 +57,12 @@ const VARIABLES = {
   POSTGRES_SSL: { schema: bool, required: false },
   POSTGRES_POOL_MAX: { schema: int(1, 200), required: false },
   REDIS_URL: { schema: z.url(), required: true },
+  // The namespace every Redis key lands under. Production leaves both unset; the integration suite
+  // sets them per Vitest worker so parallel test files cannot see each other's queues and counters.
+  // Empty is rejected rather than treated as unset: at the call site the two are indistinguishable,
+  // and they mean the opposite things.
+  REDIS_KEY_PREFIX: { schema: z.string().min(1), required: false },
+  REDIS_QUEUE_PREFIX: { schema: z.string().min(1), required: false },
   SENTRY_DSN: { schema: z.url(), required: false },
   // 32 bytes of hex. The name is the old backend's, so its .env drops in unchanged (design §3.4);
   // nothing it encrypted migrates, so rotating the value costs a redeploy and nothing else.
@@ -125,7 +132,13 @@ export interface AppConfig {
     ssl: boolean;
     poolMax: number;
   };
-  redis: { url: string };
+  redis: {
+    url: string;
+    /** ioredis `keyPrefix` for the app's own client. */
+    keyPrefix: string;
+    /** BullMQ's own prefix; it refuses ioredis's `keyPrefix` and takes this instead. */
+    queuePrefix: string;
+  };
   sentry: { dsn?: string; environment: string };
   /**
    * Optional, not required: the API and worker boot without it, and only a call site that actually
@@ -233,7 +246,11 @@ export function loadConfig(env: NodeJS.ProcessEnv): AppConfig {
       ssl: v.POSTGRES_SSL ?? false,
       poolMax: v.POSTGRES_POOL_MAX ?? 10,
     },
-    redis: { url: v.REDIS_URL as string },
+    redis: {
+      url: v.REDIS_URL as string,
+      keyPrefix: v.REDIS_KEY_PREFIX ?? KEY_PREFIX,
+      queuePrefix: v.REDIS_QUEUE_PREFIX ?? BULL_PREFIX,
+    },
     crypto: { ...(v.ENCRYPTION_KEY ? { encryptionKey: v.ENCRYPTION_KEY } : {}) },
     scheduler: { timezone: v.SCHEDULER_TIMEZONE ?? 'Africa/Lagos' },
     identity: {
