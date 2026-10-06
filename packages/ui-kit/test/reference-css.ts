@@ -292,6 +292,21 @@ export function expandDeclaration(property: string, rawValue: string): [string, 
       }
       return out;
     }
+    // `border-top: 1px solid var(--border-hairline)` — the one-sided shorthand. The reference reaches
+    // for it constantly (`.p13-req`, `.p13-audit`, every `data-table` cell) and Tailwind only ever
+    // emits the longhands, so without this the two sides never meet.
+    case 'border-top':
+    case 'border-right':
+    case 'border-bottom':
+    case 'border-left': {
+      const side = property.split('-')[1] ?? '';
+      const out: [string, string][] = [];
+      for (const part of value.split(/\s+/).filter(Boolean)) {
+        const facet = BORDER_STYLES.has(part) ? 'style' : isColour(part) ? 'color' : 'width';
+        out.push([`border-${side}-${facet}`, part]);
+      }
+      return out;
+    }
     case 'background': {
       // `background:none` resets every background longhand, which leaves the colour transparent.
       if (value === 'none') return [['background-color', 'transparent']];
