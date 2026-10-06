@@ -3,9 +3,11 @@
 // holds an ACTIVE SELLER capability" gate is gone (conflict C19) — the money-safety gates stay.
 //
 // `canActAsBuyer` is one rule, checked server-side everywhere someone would become a buyer. Design
-// §6.3 calls it an identity function; identity has no service layer yet (T-031), so it lives here
-// against a plain principal and must be lifted into identity's barrel — not copied — when there is
-// one to lift it into.
+// §6.3 calls it an identity function, and since T-035 identity exports one — so this module
+// DELEGATES to it rather than keeping a second copy, which is what this file's original note asked
+// for. What stays here is what trades does with the answer: the paths, the errors, and the funding
+// gates, none of which identity has any business knowing about.
+import { canActAsBuyer as identityCanActAsBuyer } from '../../identity/index.js';
 import { buyerNotVerifiedError, merchantCannotBuyError, sellerNotVerifiedError } from './errors.js';
 
 /** Every place a user would take the buyer side. Each is checked, and each names itself when it fails. */
@@ -49,7 +51,7 @@ const atLeast = (level: VerificationLevel, required: VerificationLevel): boolean
 
 /** False only while the account holds an ACTIVE MERCHANT capability; losing it restores buying. */
 export const canActAsBuyer = (principal: TradePrincipal): boolean =>
-  principal.merchantCapabilityStatus !== 'ACTIVE';
+  identityCanActAsBuyer(principal.merchantCapabilityStatus);
 
 export function assertCanActAsBuyer(principal: TradePrincipal, path: BuyerPath): void {
   if (!canActAsBuyer(principal)) throw merchantCannotBuyError(path);
