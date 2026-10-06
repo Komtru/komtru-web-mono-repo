@@ -24,19 +24,25 @@ export function TabBar({ items, label = 'Sections' }: TabBarProps): React.JSX.El
         const active = index === current;
         const content = (
           <>
-            {/* The reference strokes `.tab svg` and colours `.tab span` separately but always to the
-                same token; routing both through `color` keeps them from drifting apart. */}
-            <span aria-hidden className="h-[19px] w-[19px] stroke-current">
+            {/* The reference strokes `.tab svg` and colours `.tab span` with their own rules, not
+                through the tab, so the two states are stated where the reference states them. */}
+            <span
+              aria-hidden
+              className={cx('h-[19px] w-[19px]', active ? 'stroke-trust-indigo' : 'stroke-trust-gray')}
+            >
               {item.icon}
             </span>
-            <span className={cx('text-[9px]', active ? 'font-bold' : 'font-medium')}>{item.label}</span>
+            <span
+              className={cx(
+                'text-[9px]',
+                active ? 'font-bold text-trust-indigo' : 'font-medium text-trust-gray',
+              )}
+            >
+              {item.label}
+            </span>
           </>
         );
-        const className = cx(
-          'flex flex-1 flex-col items-center gap-[3px]',
-          active ? 'text-trust-indigo' : 'text-trust-gray',
-          FOCUS_RING,
-        );
+        const className = cx('flex flex-1 flex-col items-center gap-[3px]', FOCUS_RING);
 
         return item.href === undefined ? (
           <button

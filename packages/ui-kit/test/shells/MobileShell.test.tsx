@@ -38,10 +38,16 @@ describe('TabBar', () => {
     expect(screen.getByRole('navigation', { name: 'Customer sections' })).toBeDefined();
   });
 
-  it('gives the current tab indigo and the rest trust-gray', () => {
+  it('gives the current tab indigo and the rest trust-gray, icon and label alike', () => {
+    // The reference states both in their own rules (`.tab.active svg`, `.tab.active span`) rather
+    // than through the tab, so a tab that only coloured its label would still read as inactive.
     render(<TabBar items={TABS} />);
-    expect(screen.getByRole('button', { name: /Trades/ }).className).toContain('text-trust-indigo');
-    expect(screen.getByRole('button', { name: /Alerts/ }).className).toContain('text-trust-gray');
+    const current = screen.getByRole('button', { name: /Trades/ });
+    expect(current.firstElementChild?.className).toContain('stroke-trust-indigo');
+    expect(current.lastElementChild?.className).toContain('text-trust-indigo');
+    const other = screen.getByRole('button', { name: /Alerts/ });
+    expect(other.firstElementChild?.className).toContain('stroke-trust-gray');
+    expect(other.lastElementChild?.className).toContain('text-trust-gray');
   });
 
   it('renders a tab with an href as a link', () => {

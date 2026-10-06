@@ -112,6 +112,85 @@ export function parseRules(css: string, includeAtRules: string[] = []): CssRule[
   return rules;
 }
 
+/** A rule together with the `@media` preludes it is nested inside, outermost first. */
+export interface ConditionalRule extends CssRule {
+  conditions: string[];
+}
+
+/**
+ * Every style rule in a stylesheet, in emission order, each carrying the `@media` preludes it sits
+ * inside. `parseRules` descends into those at-rules and throws the prelude away, which conflates a
+ * responsive override with the rule it overrides; this keeps them apart.
+ */
+export function parseConditionalRules(css: string): ConditionalRule[] {
+  const rules: ConditionalRule[] = [];
+  const walk = (text: string, conditions: string[]) => {
+    let depth = 0;
+    let preludeStart = 0;
+    let bodyStart = 0;
+    for (let i = 0; i < text.length; i += 1) {
+      const char = text[i];
+      if (char === '{') {
+        if (depth === 0) bodyStart = i;
+        depth += 1;
+      } else if (char === '}') {
+        depth -= 1;
+        if (depth === 0) {
+          const prelude = text.slice(preludeStart, bodyStart).trim();
+          const body = text.slice(bodyStart + 1, i);
+          if (prelude.startsWith('@')) {
+            const name = /^@([\w-]+)/.exec(prelude)?.[1] ?? '';
+            // `@keyframes`, `@property` and `@font-face` bodies are not rules a class can match.
+            if (!['keyframes', 'property', 'font-face'].includes(name)) {
+              walk(body, name === 'media' ? [...conditions, prelude] : conditions);
+            }
+          } else if (prelude !== '') {
+            rules.push({
+              selectors: splitSelectors(prelude),
+              declarations: parseDeclarations(body),
+              conditions,
+            });
+          }
+          preludeStart = i + 1;
+        }
+      }
+    }
+  };
+  walk(stripComments(css), []);
+  return rules;
+}
+
+/** The CSS root font size a `rem` in a media condition is relative to. */
+const REM = 16;
+
+/**
+ * Whether a `@media` prelude holds at a viewport width. Both sides are read through this: the
+ * reference writes `(max-width:900px)`, Tailwind v4 writes range syntax. A condition this cannot
+ * read throws rather than counting as satisfied — silently honouring an unreadable condition is
+ * how a rule gets merged that the width never applies.
+ */
+export function mediaHolds(prelude: string, width: number): boolean {
+  const body = prelude.replace(/^@media\s*/, '').trim();
+  const pixels = (value: string, unit: string): number =>
+    unit === 'rem' ? Number(value) * REM : Number(value);
+  return body.split(/\s+and\s+/).every((clause) => {
+    const range = /^\(width\s*(>=|<=|>|<)\s*([\d.]+)(rem|px)\)$/.exec(clause.trim());
+    if (range !== null) {
+      const bound = pixels(range[2] ?? '', range[3] ?? 'px');
+      if (range[1] === '>=') return width >= bound;
+      if (range[1] === '<=') return width <= bound;
+      if (range[1] === '>') return width > bound;
+      return width < bound;
+    }
+    const minMax = /^\((min|max)-width:\s*([\d.]+)(rem|px)\)$/.exec(clause.trim());
+    if (minMax !== null) {
+      const bound = pixels(minMax[2] ?? '', minMax[3] ?? 'px');
+      return minMax[1] === 'min' ? width >= bound : width <= bound;
+    }
+    throw new Error(`Cannot evaluate the media condition "${clause.trim()}" at ${String(width)}px`);
+  });
+}
+
 /** Every `<style>` block in the reference document, in source order, with its id when it has one. */
 export function styleBlocks(html: string): { id: string | undefined; css: string }[] {
   return [...html.matchAll(/<style([^>]*)>([\s\S]*?)<\/style>/g)].map((match) => ({
@@ -134,6 +213,14 @@ export function referenceRule(
    * centred-dot rail in `komtru-nav-v2` — so the component names which one it reproduces.
    */
   styleId?: string,
+  /**
+   * The viewport width to read the rule at. The reference carries its own responsive overrides —
+   * the console sheet collapses the rail under `@media(max-width:900px)` and stacks the page head
+   * under `@media(max-width:640px)` — and without a width those are merged into the base rule and
+   * reported as the reference disagreeing with itself. Omitted, every copy is merged, which is
+   * what an unconditional primitive rule wants.
+   */
+  options: { atWidth?: number } = {},
 ): Map<string, string> {
   const wanted = selector.replace(/\s+/g, ' ').trim();
   const merged = new Map<string, string>();
@@ -141,18 +228,31 @@ export function referenceRule(
   let found = false;
   for (const block of styleBlocks(html)) {
     if (styleId !== undefined && block.id !== styleId) continue;
-    for (const rule of parseRules(block.css, ['media', 'supports'])) {
+    for (const rule of parseConditionalRules(block.css)) {
       if (!rule.selectors.includes(wanted)) continue;
+      if (
+        options.atWidth !== undefined &&
+        !rule.conditions.every((condition) => mediaHolds(condition, options.atWidth ?? 0))
+      ) {
+        continue;
+      }
+      // After the width check, so a selector that exists only inside a media query this width does
+      // not satisfy reports "declares no rule" rather than silently comparing against nothing.
       found = true;
       for (const [property, value] of rule.declarations) {
-        const previous = seen.get(property);
+        // Keyed by the condition stack as well as the property: the reference restates its
+        // component rules in five near-identical blocks, and a disagreement between those copies
+        // is a real drift — but a `@media` override legitimately differs from the rule it
+        // overrides, and merging in source order is exactly what a browser does with it.
+        const key = `${rule.conditions.join(' & ')}|${property}`;
+        const previous = seen.get(key);
         if (previous !== undefined && previous !== value) {
           throw new Error(
             `The reference declares ${wanted} { ${property} } twice with different values: ` +
               `"${previous}" and "${value}". Pick the instance deliberately.`,
           );
         }
-        seen.set(property, value);
+        seen.set(key, value);
         merged.set(property, value);
       }
     }
@@ -283,6 +383,21 @@ export function expandDeclaration(property: string, rawValue: string): [string, 
       const facet = property.split('-')[1] ?? '';
       const box = expandBox(value);
       return SIDES.map((side, i) => [`border-${side}-${facet}`, box[i]] as [string, string]);
+    }
+    case 'border-top':
+    case 'border-right':
+    case 'border-bottom':
+    case 'border-left': {
+      // `border-bottom: 1px solid var(--border-hairline)` — the hairline every shell's chrome is
+      // separated by. Without this the longhands a `border-b-*` utility emits have nothing to
+      // compare against, and a missing hairline reads as a clean pass.
+      const side = property.split('-')[1] ?? '';
+      const out: [string, string][] = [];
+      for (const part of value.split(/\s+/).filter(Boolean)) {
+        const facet = BORDER_STYLES.has(part) ? 'style' : isColour(part) ? 'color' : 'width';
+        out.push([`border-${side}-${facet}`, part]);
+      }
+      return out;
     }
     case 'border': {
       const out: [string, string][] = [];

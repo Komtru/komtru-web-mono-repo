@@ -87,7 +87,13 @@ const SINGLE_CLAIMANT = [
 
 export function describeParity(suite: ParitySuite): void {
   const { html, rows, deviations, additions, declarations } = suite;
+  /** The width the compiled cascade is resolved at. */
   const widthOf = (row: ParityRow): number => row.width ?? suite.defaultWidth ?? Number.MAX_SAFE_INTEGER;
+  /** The width the *reference's* own media queries are read at; absent means "merge every copy". */
+  const referenceWidth = (row: ParityRow): { atWidth?: number } => {
+    const width = row.width ?? suite.defaultWidth;
+    return width === undefined ? {} : { atWidth: width };
+  };
   const classesOf = (row: ParityRow): string[] => [
     ...(row.classes ?? (classAttributes(row.element!)[row.node ?? 0] ?? '').split(/\s+/)),
   ];
@@ -98,7 +104,9 @@ export function describeParity(suite: ParitySuite): void {
     it(`compiles to what the reference declares for ${row.selector}`, async () => {
       const raw = new Map<string, string>();
       for (const selector of [...(row.extends ?? []), row.selector]) {
-        for (const [property, value] of referenceRule(html, selector, row.styleId)) raw.set(property, value);
+        for (const [property, value] of referenceRule(html, selector, row.styleId, referenceWidth(row))) {
+          raw.set(property, value);
+        }
       }
       if (row.inline !== undefined) {
         for (const [property, value] of referenceInlineStyle(html, row.inline)) raw.set(property, value);
@@ -157,8 +165,11 @@ export function describeParity(suite: ParitySuite): void {
     });
 
     it('claims each decisive property exactly once', async () => {
+      // Keyed by variant as well as property: `hidden` and `lg:block` both claim `display`, and
+      // that is the whole mechanism of a responsive shell rather than two rules racing.
       const claimants = new Map<string, string[]>();
       for (const utility of classes.filter((name) => name !== '')) {
+        const variant = utility.includes(':') ? utility.slice(0, utility.indexOf(':')) : '';
         let compiled: Map<string, string>;
         try {
           compiled = await declarations([utility], widthOf(row));
@@ -167,12 +178,13 @@ export function describeParity(suite: ParitySuite): void {
         }
         for (const property of SINGLE_CLAIMANT) {
           if (!compiled.has(property)) continue;
-          claimants.set(property, [...(claimants.get(property) ?? []), utility]);
+          const key = `${variant}|${property}`;
+          claimants.set(key, [...(claimants.get(key) ?? []), utility]);
         }
       }
       const contested = [...claimants]
         .filter(([, utilities]) => utilities.length > 1)
-        .map(([property, utilities]) => `${property}: ${utilities.join(' and ')}`);
+        .map(([key, utilities]) => `${key.split('|')[1] ?? key}: ${utilities.join(' and ')}`);
       expect(contested, `${row.id} lets the stylesheet pick, rather than picking`).toEqual([]);
     });
   });
@@ -199,7 +211,7 @@ export function describeParity(suite: ParitySuite): void {
         if (row === undefined) continue;
         const declared = new Map<string, string>();
         for (const selector of [...(row.extends ?? []), row.selector]) {
-          for (const [property, value] of referenceRule(html, selector, row.styleId)) {
+          for (const [property, value] of referenceRule(html, selector, row.styleId, referenceWidth(row))) {
             declared.set(property, value);
           }
         }

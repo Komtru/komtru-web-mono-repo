@@ -31,6 +31,10 @@ export interface ConsoleShellProps {
  *
  * Collapsing hides every label, so each destination carries its own accessible name and a `title`.
  * A rail of bare glyphs is unusable otherwise, and the reference's rule gives it neither.
+ *
+ * The ops sheet carries its own breakpoints — it collapses the rail at `max-width:900px` and stacks
+ * the page head at `max-width:640px`. The ticket's scale wins (`lg` 1024, `sm` 640), so the rail
+ * collapses 124px later than the drawing does and the page head stacks one pixel earlier.
  */
 export function ConsoleShell({
   brandLabel = 'Komtru Ops',
@@ -127,8 +131,8 @@ export function ConsoleShell({
         )}
       </aside>
 
-      <div className="min-w-0 flex-1 bg-surface-primary pt-[24px] pr-[28px] pb-[28px] pl-[28px]">
-        <header className="mb-[18px] flex items-start justify-between gap-[20px]">
+      <div className="min-w-0 flex-1 bg-surface-primary p-[20px] lg:pt-[24px] lg:pr-[28px] lg:pb-[28px] lg:pl-[28px]">
+        <header className="mb-[18px] flex flex-col items-stretch justify-between gap-[20px] sm:flex-row sm:items-start">
           <div>
             {/* The shell owns the page's one top-level heading: a console screen's title is the
                 page, and leaving it to the body is how two h1s end up on one screen. */}

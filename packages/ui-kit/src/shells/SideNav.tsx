@@ -33,16 +33,17 @@ export function SideNav({
       <ShellBrand
         label={brandLabel}
         icon={brandIcon}
-        className="mb-[20px] gap-[7px] px-[6px] font-display text-[13px] font-semibold"
+        className="mb-[20px] gap-[7px] px-[6px] py-0 font-display text-[13px] font-semibold"
       />
       <nav aria-label={label}>
         {items.map((item, index) => {
           const active = index === current;
           const content = (
             <>
-              {/* The reference strokes `.dweb-item svg` and `.dweb-item.active svg` to exactly the
-                  colour the item itself carries, so one `color` drives both. */}
-              <span aria-hidden className="h-[15px] w-[15px] stroke-current">
+              <span
+                aria-hidden
+                className={cx('h-[15px] w-[15px]', active ? 'stroke-info-on-soft' : 'stroke-slate')}
+              >
                 {item.icon}
               </span>
               {item.label}

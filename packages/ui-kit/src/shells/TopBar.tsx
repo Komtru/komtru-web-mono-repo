@@ -43,9 +43,9 @@ export function TopBarControl({
 }) {
   const inner = (
     <>
-      {/* `stroke` is inherited, so stroking the wrapper strokes whatever icon a screen passes; the
-          reference strokes the `svg` itself with the same `--midnight-text`. */}
-      <span aria-hidden className="h-[16px] w-[16px] stroke-current text-midnight-text">
+      {/* `stroke` is inherited, so stroking the wrapper strokes whatever icon a screen passes —
+          with exactly the token the reference strokes `.back-btn svg` and `.tb-icon svg` with. */}
+      <span aria-hidden className="h-[16px] w-[16px] stroke-midnight-text">
         {action.icon ?? fallbackIcon}
       </span>
       {action.badge === true && (
