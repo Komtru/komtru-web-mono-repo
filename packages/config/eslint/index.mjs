@@ -39,6 +39,10 @@ const reactConfigs = () => [
     rules: {
       ...nextPlugin.flatConfig.recommended.rules,
       ...nextPlugin.flatConfig.coreWebVitals.rules,
+      // A Pages Router rule. Every Komtru app is App Router, and the rule's own implementation
+      // scans for a `pages/` directory and prints a warning to stdout when it cannot find one —
+      // on a shared package with no `pages/` at all, that is noise on every lint run.
+      '@next/next/no-html-link-for-pages': 'off',
     },
   },
   { files: ['**/*.{ts,tsx,js,jsx,mjs}'], ...reactHooks.configs.flat['recommended-latest'] },
