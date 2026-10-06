@@ -80,6 +80,12 @@ const VARIABLES = {
   IDENTITY_TOKEN_ISSUER: { schema: z.url(), required: false },
   IDENTITY_TOKEN_AUDIENCE: { schema: z.string().min(1), required: false },
   IDENTITY_EPOCH_CACHE_TTL_SECONDS: { schema: int(1, 300), required: false },
+  // --- Realtime (T-027) ----------------------------------------------------
+  SOCKET_ENABLED: { schema: bool, required: false },
+  SOCKET_PATH: { schema: z.string().startsWith('/'), required: false },
+  SOCKET_CORS_ORIGINS: { schema: list, required: false },
+  SOCKET_REVALIDATE_INTERVAL_SECONDS: { schema: int(5, 300), required: false },
+  SOCKET_CREDENTIAL_GRACE_SECONDS: { schema: int(0, 600), required: false },
   // Not shape-checked: a test key and a live key differ only by prefix, so a regex here is a boot
   // failure waiting for the first legitimate key rotation, not a safety net.
   PAYSTACK_SECRET_KEY: { schema: z.string().min(1), required: false },
@@ -155,6 +161,30 @@ export interface AppConfig {
    */
   paystack: { secretKey?: string; publicKey?: string };
   notify: NotifyConfig;
+  socket: SocketConfig;
+}
+
+/** T-027's gateway. A process with `enabled: false` builds no Socket.IO server and no connections. */
+export interface SocketConfig {
+  enabled: boolean;
+  path: string;
+  /**
+   * Browser origins allowed to open a socket. Empty means no browser may connect, which is why this
+   * falls back to `ALLOWED_ORIGINS`: the web apps that call the API are the web apps that open
+   * sockets, and the two lists only diverge when someone deliberately separates them.
+   */
+  corsOrigins: string[];
+  /**
+   * How often every live credential is re-authenticated. A socket has no "next request" to re-check
+   * authorisation on, so the gateway makes one on this timer — which makes this number the worst
+   * case for M1 D5's kill switch over an already-open connection.
+   */
+  revalidateIntervalSeconds: number;
+  /**
+   * How long past its access token's expiry a socket keeps its place while it is asked to present a
+   * fresh one. Zero would drop every socket the moment its 10-minute token lapsed.
+   */
+  credentialGraceSeconds: number;
 }
 
 /** M11's tuning, and one block per provider. A block is absent until its credentials are complete. */
@@ -253,6 +283,13 @@ export function loadConfig(env: NodeJS.ProcessEnv): AppConfig {
       environment: v.SENTRY_ENVIRONMENT ?? nodeEnv,
     },
     notify: notifyConfig(v, nodeEnv),
+    socket: {
+      enabled: v.SOCKET_ENABLED ?? true,
+      path: v.SOCKET_PATH ?? '/socket.io',
+      corsOrigins: v.SOCKET_CORS_ORIGINS ?? v.ALLOWED_ORIGINS ?? [],
+      revalidateIntervalSeconds: v.SOCKET_REVALIDATE_INTERVAL_SECONDS ?? 30,
+      credentialGraceSeconds: v.SOCKET_CREDENTIAL_GRACE_SECONDS ?? 60,
+    },
   };
 }
 
