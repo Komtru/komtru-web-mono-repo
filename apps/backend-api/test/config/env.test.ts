@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { CLOUDINARY_PREFIXES, ConfigError, loadConfig } from '../../src/config/env.js';
 import { testRedisUrl } from '../support/db-urls.js';
+import { productionProcessEnv } from '../support/production-env.js';
 
 const minimal = {
   POSTGRES_URL: 'postgresql://komtru:komtru@localhost:56432/komtru_v2_dev',
@@ -12,10 +13,11 @@ const minimal = {
  *
  * It is not `{ ...minimal, NODE_ENV: 'production' }` any more: T-050 made the KYC provider flag a
  * deliberate choice in production, because its default is a deterministic fake that would otherwise
- * grant identity levels nobody attested. Every production assertion below goes through this, so the
- * reason is written once rather than repeated at each call site.
+ * grant identity levels nobody attested. The production-only variables come from the shared fixture
+ * rather than being listed here, so the next rule added to `loadConfig` reaches this suite without
+ * anybody remembering to carry it over.
  */
-const production = { ...minimal, NODE_ENV: 'production', TRUST_KYC_PROVIDER: 'DOJAH' };
+const production = { ...minimal, ...productionProcessEnv() };
 
 const failure = (env: Record<string, string>): ConfigError => {
   try {
