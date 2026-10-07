@@ -320,6 +320,30 @@ describe.runIf(infraEnabled)('idempotency', () => {
     expect(second.headers[REPLAYED_HEADER.toLowerCase()]).toBeUndefined();
   });
 
+  // T-029, the other half of it. `completed_at` carries microseconds that the `pg` driver truncates
+  // away before JS sees a Date, so a record sitting on the ttl boundary used to be judged twice:
+  // once in JS on the app clock at millisecond resolution, once in Postgres at microsecond
+  // resolution. Postgres alone decides now, so a settled request can never answer 409.
+  it('re-runs a record parked exactly on the ttl boundary rather than conflicting', async () => {
+    const handler = vi.fn(() => Promise.resolve({ id: randomUUID() }));
+    const app = buildApp(handler, { ttlHours: 24 });
+    const key = randomUUID();
+    const send = () =>
+      request(app).post('/v1/trades').set(IDEMPOTENCY_HEADER, key).send({ amountKobo: 1000 });
+
+    const first = await send().expect(201);
+    // A full ttl old, carrying a microsecond the millisecond-resolution clock cannot represent.
+    await t.app().query(
+      `UPDATE platform.idempotency_keys
+          SET completed_at = now() - make_interval(hours => 24) + interval '1 microsecond'`,
+    );
+
+    const second = await send().expect(201);
+    expect(handler).toHaveBeenCalledTimes(2);
+    expect(second.body).not.toEqual(first.body);
+    expect(second.headers[REPLAYED_HEADER.toLowerCase()]).toBeUndefined();
+  });
+
   it('counts a different query string as a different request', async () => {
     const handler = vi.fn(() => Promise.resolve({ id: randomUUID() }));
     const app = buildApp(handler);
