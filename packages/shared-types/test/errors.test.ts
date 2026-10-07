@@ -114,3 +114,30 @@ describe('the codes T-032 answers with', () => {
     expect(parsed).toMatchObject({ attemptsRemaining: 2 });
   });
 });
+
+describe('the codes T-051 answers with', () => {
+  it('knows the three refusals the level-3 ladder needs', () => {
+    expect(PROBLEM_CODES).toContain('IDENTITY_VERIFICATION_REQUIRED');
+    expect(PROBLEM_CODES).toContain('BUSINESS_VERIFICATION_REQUIRED');
+    expect(PROBLEM_CODES).toContain('CHALLENGE_EXPIRED');
+  });
+
+  /**
+   * The social-proof re-check throttle answers `RATE_LIMITED`, which already exists and already
+   * means exactly this — the platform limiter, the OTP resend throttle and identity's lookup budget
+   * all use it for "you did this too recently, here is how long to wait". A second 429 code spelled
+   * `TOO_MANY_REQUESTS` would be the same fact under two names, and a client would have to branch on
+   * both to show one message.
+   */
+  it('does not add a second name for a 429', () => {
+    expect(PROBLEM_CODES).toContain('RATE_LIMITED');
+    expect(PROBLEM_CODES).not.toContain('TOO_MANY_REQUESTS');
+  });
+
+  it('gives each one the documented problem type uri', () => {
+    expect(problemTypeUri('BUSINESS_VERIFICATION_REQUIRED')).toBe(
+      'https://docs.komtru.com/problems/business-verification-required',
+    );
+    expect(problemTypeUri('CHALLENGE_EXPIRED')).toBe('https://docs.komtru.com/problems/challenge-expired');
+  });
+});

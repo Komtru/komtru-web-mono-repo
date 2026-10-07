@@ -3,7 +3,7 @@
 // It is separated from the port (store.ts) so the services and jobs above can be tested against a
 // hand-written stub, and so there is exactly one file to read when the question is "what does trust
 // actually write". Nothing here decides anything — the rules are in `domain/` and in the services.
-import { and, desc, eq, inArray, isNotNull, lt, sql, type SQL } from 'drizzle-orm';
+import { and, count, desc, eq, inArray, isNotNull, lt, sql, type SQL } from 'drizzle-orm';
 import { TransactionRollbackError } from 'drizzle-orm/errors';
 import type { Db } from '../../../../db/index.js';
 import { publish, type Tx } from '../../../../platform/events/publish.js';
@@ -17,13 +17,25 @@ import {
   verificationSubmitted,
 } from '../../domain/events.js';
 import { decideLevelChange, levelName, levelNumber } from '../../domain/levels.js';
+import { bankAccountNameMatches, businessVerifications } from './schema/business.js';
+import { addressChecks, verificationDocuments } from './schema/documents.js';
+import { socialProofClaims } from './schema/social-proof.js';
 import type { IdentifierType, KycProvider, VerificationRequestStatus } from './schema/enums.js';
 import { bvnVerifications, ninVerifications } from './schema/identity-checks.js';
 import { kycProviderCalls } from './schema/provider-calls.js';
 import { livenessChecks } from './schema/liveness.js';
 import { verificationLevelChanges } from './schema/level-changes.js';
 import { verificationRequests, type VerificationRequest } from './schema/requests.js';
-import type { ExpiredRequest, IdentityFactsRow, LevelOutcome, TrustStore } from './store.js';
+import type {
+  BusinessFactsRow,
+  BusinessOutcomeInput,
+  DuplicateBusinessInput,
+  ExpiredRequest,
+  IdentityFactsRow,
+  LevelOutcome,
+  RejectedRequestRow,
+  TrustStore,
+} from './store.js';
 
 /** Statuses that still hold the user's one in-flight slot (the partial unique index's predicate). */
 const OPEN_STATUSES = ['SUBMITTED', 'PROVIDER_PENDING', 'MANUAL_REVIEW'] as const;
@@ -114,6 +126,63 @@ async function applied(work: Promise<unknown>): Promise<boolean> {
     if (error instanceof TransactionRollbackError) return false;
     throw error;
   }
+}
+
+/**
+ * Moves the umbrella request, returning false when it had already left the open set.
+ *
+ * Every T-051 outcome needs exactly this and the identity paths each spelled it out inline. One copy,
+ * because the thing it guards is subtle: a job reads the status once and then spends seconds inside
+ * a provider call, so a blind `UPDATE … WHERE id = $1` would overwrite a request the sweep had
+ * already EXPIRED with APPROVED, and go on to grant a level the sweep denied.
+ */
+async function moveRequest(
+  tx: Tx,
+  input: {
+    requestId: string;
+    status: VerificationRequestStatus;
+    provider: KycProvider;
+    providerReference: string;
+    rejectionReason?: string | undefined;
+  },
+): Promise<boolean> {
+  const moved = await tx
+    .update(verificationRequests)
+    .set({
+      status: input.status,
+      provider: input.provider,
+      providerReference: input.providerReference,
+      rejectionReason: input.rejectionReason ?? null,
+      decidedAt: decidedAtFor(input.status),
+    })
+    .where(
+      and(
+        eq(verificationRequests.id, input.requestId),
+        inArray(verificationRequests.status, [...OPEN_STATUSES]),
+      ),
+    )
+    .returning({ id: verificationRequests.id });
+  return moved.length > 0;
+}
+
+/** The `business_verifications` insert both the ordinary and the duplicate CAC path make. */
+async function insertBusinessOutcome(
+  tx: Tx,
+  input: BusinessOutcomeInput | DuplicateBusinessInput,
+  verified: boolean,
+): Promise<void> {
+  await tx.insert(businessVerifications).values({
+    requestId: input.request.id,
+    userId: input.request.userId,
+    cacRcNumber: input.cacRcNumber,
+    registeredBusinessName: input.registeredBusinessName,
+    businessType: input.businessType ?? null,
+    cacStatus: input.cacStatus ?? null,
+    officersMatch: input.officersMatch ?? null,
+    provider: input.provider,
+    providerReference: input.providerReference,
+    verifiedAt: verified ? sql`now()` : null,
+  });
 }
 
 export function bindStore(db: Db): TrustStore {
@@ -546,6 +615,356 @@ export function bindStore(db: Db): TrustStore {
           ),
         );
       return row?.count ?? 0;
+    },
+
+    // --- T-051: business, bank name-match, address, social proof --------------------------------
+
+    applyBusinessOutcome: async (input) =>
+      applied(
+        db.transaction(async (tx) => {
+          await insertBusinessOutcome(tx, input, input.markVerified);
+          // Rolls the outcome row back with the request: a `business_verifications` row whose
+          // request the sweep expired is an orphan the user-active unique index would still honour,
+          // which would then refuse the resubmission BVR1 invites.
+          if (
+            !(await moveRequest(tx, {
+              requestId: input.request.id,
+              status: input.requestStatus,
+              provider: input.provider,
+              providerReference: input.providerReference,
+              rejectionReason: input.rejectionReason,
+            }))
+          ) {
+            tx.rollback();
+          }
+
+          if (input.requestStatus === 'REJECTED') {
+            await publish(tx, verificationRejected, {
+              payload: {
+                requestId: input.request.id,
+                userId: input.request.userId,
+                type: 'CAC',
+                reason: input.rejectionReason ?? 'rejected',
+                attemptCount: input.request.attemptCount,
+              },
+              aggregateType: 'verification_request',
+              aggregateId: input.request.id,
+            });
+          }
+        }),
+      ),
+
+    applyDuplicateBusiness: async (input) =>
+      applied(
+        db.transaction(async (tx) => {
+          // No `verified_at`: the registration stays unclaimed until a human says otherwise, so the
+          // real company is not locked out of level 3 by somebody else's attempt on its RC number.
+          await insertBusinessOutcome(tx, input, false);
+          if (
+            !(await moveRequest(tx, {
+              requestId: input.request.id,
+              status: 'MANUAL_REVIEW',
+              provider: input.provider,
+              providerReference: input.providerReference,
+            }))
+          ) {
+            tx.rollback();
+          }
+
+          await publish(tx, verificationDuplicateIdentityDetected, {
+            payload: {
+              identifierType: 'CAC',
+              /**
+               * Hashed, even though an RC number is public record and sits in the clear in the
+               * column beside it (§6.5).
+               *
+               * `identifierHashHex` is one field with one meaning across every type a consumer
+               * reads it for. A plain RC number here and a keyed HMAC there would be two shapes
+               * behind one name, and a consumer correlating across types would quietly never match.
+               */
+              identifierHashHex: input.rcNumberHashHex,
+              firstUserId: input.firstUserId,
+              conflictingUserId: input.request.userId,
+              requestId: input.request.id,
+            },
+            aggregateType: 'verification_request',
+            aggregateId: input.request.id,
+          });
+        }),
+      ),
+
+    applyBankMatchOutcome: async (input) =>
+      applied(
+        db.transaction(async (tx) => {
+          await tx.insert(bankAccountNameMatches).values({
+            requestId: input.request.id,
+            userId: input.request.userId,
+            accountNumberMasked: input.accountNumberMasked,
+            bankCode: input.bankCode,
+            resolvedAccountName: input.resolvedAccountName ?? null,
+            expectedName: input.expectedName,
+            matchResult: input.matchResult,
+            matchScore: input.matchScore?.toFixed(2) ?? null,
+            provider: input.provider,
+            providerReference: input.providerReference,
+          });
+
+          if (
+            !(await moveRequest(tx, {
+              requestId: input.request.id,
+              status: input.requestStatus,
+              provider: input.provider,
+              providerReference: input.providerReference,
+              rejectionReason: input.rejectionReason,
+            }))
+          ) {
+            tx.rollback();
+          }
+
+          if (input.requestStatus === 'REJECTED') {
+            await publish(tx, verificationRejected, {
+              payload: {
+                requestId: input.request.id,
+                userId: input.request.userId,
+                type: 'BANK_ACCOUNT_NAME_MATCH',
+                reason: input.rejectionReason ?? 'rejected',
+                attemptCount: input.request.attemptCount,
+              },
+              aggregateType: 'verification_request',
+              aggregateId: input.request.id,
+            });
+          }
+        }),
+      ),
+
+    findBusinessOwner: async (rcNumber) => {
+      // Verified rows only (§7). "Has any user ever typed this number" is the wrong question: a
+      // rejected attempt by a fraudster would otherwise lock the real company out of its own RC.
+      const [row] = await db
+        .select({
+          userId: businessVerifications.userId,
+          registeredBusinessName: businessVerifications.registeredBusinessName,
+        })
+        .from(businessVerifications)
+        .where(
+          and(eq(businessVerifications.cacRcNumber, rcNumber), isNotNull(businessVerifications.verifiedAt)),
+        )
+        .orderBy(desc(businessVerifications.verifiedAt))
+        .limit(1);
+      return row;
+    },
+
+    findVerifiedBusiness: async (userId) => {
+      const [row] = await db
+        .select({
+          cacRcNumber: businessVerifications.cacRcNumber,
+          registeredBusinessName: businessVerifications.registeredBusinessName,
+        })
+        .from(businessVerifications)
+        .where(and(eq(businessVerifications.userId, userId), isNotNull(businessVerifications.verifiedAt)))
+        .limit(1);
+      return row;
+    },
+
+    businessFacts: async (userId): Promise<BusinessFactsRow> => {
+      const [subject] = await db
+        .select({ verificationLevel: users.verificationLevel })
+        .from(users)
+        .where(eq(users.id, userId))
+        .limit(1);
+      const [cac] = await db
+        .select({ id: businessVerifications.id })
+        .from(businessVerifications)
+        .where(and(eq(businessVerifications.userId, userId), isNotNull(businessVerifications.verifiedAt)))
+        .limit(1);
+      /**
+       * `EXACT` only, and on an APPROVED request.
+       *
+       * `FUZZY_MATCH` deliberately does not count (`decideBankMatchOutcome`), and the join to the
+       * request is what stops a row written against a request a human later rejected from still
+       * reading as a pass — the outcome row is insert-only, so the request is the record of the
+       * decision.
+       */
+      const [bank] = await db
+        .select({ id: bankAccountNameMatches.id })
+        .from(bankAccountNameMatches)
+        .innerJoin(verificationRequests, eq(bankAccountNameMatches.requestId, verificationRequests.id))
+        .where(
+          and(
+            eq(bankAccountNameMatches.userId, userId),
+            eq(bankAccountNameMatches.matchResult, 'EXACT'),
+            eq(verificationRequests.status, 'APPROVED'),
+          ),
+        )
+        .limit(1);
+
+      return {
+        // 0 rather than a throw: `businessFacts` runs on `GET /verification/status`, and a read path
+        // that throws because the user row vanished mid-request is a 500 on the screen whose job is
+        // to explain where the user stands. `findSubject` above it has already answered that.
+        currentLevel: subject ? levelNumber(subject.verificationLevel) : 0,
+        cacVerified: cac !== undefined,
+        businessBankMatched: bank !== undefined,
+      };
+    },
+
+    findBankNameMatch: async (input) => {
+      const [row] = await db
+        .select({
+          id: bankAccountNameMatches.id,
+          matchResult: bankAccountNameMatches.matchResult,
+          resolvedAccountName: bankAccountNameMatches.resolvedAccountName,
+          expectedName: bankAccountNameMatches.expectedName,
+          checkedAt: bankAccountNameMatches.checkedAt,
+        })
+        .from(bankAccountNameMatches)
+        .where(
+          and(
+            eq(bankAccountNameMatches.userId, input.userId),
+            eq(bankAccountNameMatches.bankCode, input.bankCode),
+            eq(bankAccountNameMatches.accountNumberMasked, input.accountNumberMasked),
+          ),
+        )
+        // The most recent check on that account: T-073 asks what we know NOW, and a seller who
+        // moved an account into the business name must not be answered with the old mismatch.
+        .orderBy(desc(bankAccountNameMatches.checkedAt))
+        .limit(1);
+      return row;
+    },
+
+    createAddressCheck: (input) =>
+      db.transaction(async (tx) => {
+        const [row] = await tx
+          .insert(verificationRequests)
+          .values({
+            userId: input.userId,
+            verificationType: 'ADDRESS',
+            /**
+             * Straight to MANUAL_REVIEW, not SUBMITTED.
+             *
+             * §6.6 gives `address_checks` no provider columns, so nothing is going to call anybody
+             * about this — there is no job and no webhook. A request parked in SUBMITTED would be
+             * swept by `expireStale` within the day and the user told their address proof "timed
+             * out" when in fact it was waiting for a person the whole time.
+             */
+            status: 'MANUAL_REVIEW',
+            targetLevel: input.targetLevel,
+            attemptCount: input.attemptCount,
+            expiresAt: sql`now() + make_interval(mins => ${input.ttlMinutes})`,
+          })
+          .returning();
+        if (!row) throw new Error('trust: the address verification request was not written');
+
+        await tx.insert(addressChecks).values({
+          requestId: row.id,
+          userId: input.userId,
+          addressLine1: input.addressLine1,
+          city: input.city,
+          state: input.state,
+          method: input.method,
+          documentRef: input.documentRef ?? null,
+          // Null: nobody has decided yet, and that is this column's normal state until a reviewer
+          // sets it (T-052).
+          passed: null,
+        });
+
+        if (input.documentRef && input.documentType) {
+          await tx.insert(verificationDocuments).values({
+            requestId: row.id,
+            userId: input.userId,
+            documentType: input.documentType,
+            storageRef: input.documentRef,
+          });
+        }
+
+        await publish(tx, verificationSubmitted, {
+          payload: { requestId: row.id, userId: row.userId, type: 'ADDRESS' },
+          aggregateType: 'verification_request',
+          aggregateId: row.id,
+        });
+        return row;
+      }),
+
+    createSocialProofClaim: async (input) => {
+      const [row] = await db
+        .insert(socialProofClaims)
+        .values({
+          userId: input.userId,
+          platform: input.platform,
+          handle: input.handle,
+          challengeCode: input.challengeCode,
+        })
+        .returning();
+      if (!row) throw new Error('trust: the social proof claim was not written');
+      return row;
+    },
+
+    findSocialProofClaim: async (claimId) => {
+      const [row] = await db
+        .select()
+        .from(socialProofClaims)
+        .where(eq(socialProofClaims.id, claimId))
+        .limit(1);
+      return row;
+    },
+
+    listSocialProofClaims: async (input) => {
+      const where = eq(socialProofClaims.userId, input.userId);
+      const [items, [totals]] = await Promise.all([
+        db
+          .select()
+          .from(socialProofClaims)
+          .where(where)
+          .orderBy(desc(socialProofClaims.createdAt))
+          .limit(input.limit)
+          .offset((input.page - 1) * input.limit),
+        db.select({ total: count() }).from(socialProofClaims).where(where),
+      ]);
+      return { items, total: totals?.total ?? 0 };
+    },
+
+    settleSocialProofClaim: async (input) => {
+      /**
+       * `last_checked_at` moves on EVERY call, pass or fail.
+       *
+       * It is what rate-limits a re-check, and a failed lookup that left it untouched would be a
+       * free retry loop against a third party whose servers we have no contract with.
+       *
+       * The `verified = false` predicate is the idempotency: a redelivered job must not re-stamp
+       * `verified_at` on a claim that is already proved, and the false return tells the caller it
+       * had nothing to do.
+       */
+      const settled = await db
+        .update(socialProofClaims)
+        .set({
+          lastCheckedAt: sql`now()`,
+          ...(input.verified ? { verified: true, verifiedAt: sql`now()` } : {}),
+        })
+        .where(and(eq(socialProofClaims.id, input.claimId), eq(socialProofClaims.verified, false)))
+        .returning({ id: socialProofClaims.id });
+      return settled.length > 0;
+    },
+
+    listRecentRejections: async (userId): Promise<RejectedRequestRow[]> => {
+      /**
+       * The most recent REJECTED request per verification type, which is what VF1 and BVR1 render.
+       *
+       * `DISTINCT ON` rather than a window function or N queries: one index scan over
+       * `verification_requests_user_idx`, and the shape the two screens need — one banner per check,
+       * showing the latest answer. Bounded by the eight members of `verification_type`, so it is not
+       * a collection needing a page.
+       */
+      const rows = await db
+        .selectDistinctOn([verificationRequests.verificationType], {
+          requestId: verificationRequests.id,
+          verificationType: verificationRequests.verificationType,
+          rejectionReason: verificationRequests.rejectionReason,
+          decidedAt: verificationRequests.decidedAt,
+        })
+        .from(verificationRequests)
+        .where(and(eq(verificationRequests.userId, userId), eq(verificationRequests.status, 'REJECTED')))
+        .orderBy(verificationRequests.verificationType, desc(verificationRequests.decidedAt));
+      return rows;
     },
 
     expireStale: (now) =>

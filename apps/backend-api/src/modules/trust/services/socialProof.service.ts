@@ -4,6 +4,7 @@
 // `findKycSelfie` is not involved, no provider attests anything, and no verification level moves. The
 // output is a badge on a merchant profile, which is why the claim row is its own small lifecycle
 // rather than a `verification_requests` row — see the note on `social_proof_claims`.
+import type { Paged } from '@komtru/shared-types';
 import { ApiError } from '../../../platform/errors.js';
 import type { Logger } from '../../../platform/logger.js';
 import { isUniqueViolation } from '../../../db/errors.js';
@@ -168,11 +169,22 @@ export async function requestSocialProofCheck(
     );
   }
   if (claim.lastCheckedAt && Date.now() - claim.lastCheckedAt.getTime() < RECHECK_INTERVAL_MS) {
+    /**
+     * `RATE_LIMITED`, not a code of its own.
+     *
+     * This is the platform's 429 and it already means exactly this: the route limiter, identity's
+     * party-lookup budget and the OTP resend throttle all answer with it. `retryAfter` travels in
+     * the body rather than the header for the same reason the lookup budget does — the header is set
+     * by the platform limiter on the routes it owns, and this budget is ours.
+     */
+    const retryAfter = Math.ceil((RECHECK_INTERVAL_MS - (Date.now() - claim.lastCheckedAt.getTime())) / 1000);
     throw new ApiError(
       429,
-      'TOO_MANY_REQUESTS',
+      'RATE_LIMITED',
       'We just checked',
       'Give it a minute and try again — it can take a moment for a profile change to appear.',
+      undefined,
+      { retryAfter },
     );
   }
 
@@ -180,17 +192,17 @@ export async function requestSocialProofCheck(
 }
 
 /**
- * The caller's own claims.
+ * The caller's own claims, a page at a time.
  *
- * Bounded by `social_proof_claims_user_platform` to the two platforms that exist, plus whatever
- * abandoned unverified attempts they made, so it is capped by the rate limit rather than by a page.
- * It is still declared `paginated: 'page'` on the route — the invariant does not take "it is small"
- * for an answer, and it is right not to.
+ * Only the VERIFIED claims are capped — `social_proof_claims_user_platform` holds those to one per
+ * platform. The abandoned unverified attempts beside them are capped by nothing but the rate limit,
+ * and the first thing anyone does after mistyping their handle is type it again. So the page is real
+ * rather than a declaration over an unbounded query.
  */
 export async function listSocialProof(
   deps: SocialProofDeps,
-  userId: string,
-): Promise<SocialProofClaimView[]> {
-  const claims = await deps.store.listSocialProofClaims(userId);
-  return claims.map(view);
+  input: { userId: string; page: number; limit: number },
+): Promise<Paged<SocialProofClaimView>> {
+  const { items, total } = await deps.store.listSocialProofClaims(input);
+  return { items: items.map(view), page: input.page, limit: input.limit, total };
 }

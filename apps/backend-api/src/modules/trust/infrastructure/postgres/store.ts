@@ -148,6 +148,22 @@ export interface BankMatchOutcomeInput {
   rejectionReason?: string;
 }
 
+/** §7's CAC branch. The hash travels pre-computed, for the reason `rcNumberHash` documents. */
+export interface DuplicateBusinessInput extends BusinessOutcomeInput {
+  /** The account that verified this RC number first. Null when the row has since been removed. */
+  firstUserId: string | null;
+  /**
+   * `rcNumberHash(...).toString('hex')`.
+   *
+   * Hashed rather than sent plain even though an RC number is public record, because it lands in
+   * `trust.verification.duplicate_identity_detected`'s `identifierHashHex`, which every consumer
+   * already reads as one opaque correlation key across every identifier type. It is computed by the
+   * job, which holds the hasher, rather than here — the store moves rows and does not decide or
+   * derive anything.
+   */
+  rcNumberHashHex: string;
+}
+
 export interface AddressSubmissionInput {
   userId: string;
   addressLine1: string;
@@ -300,7 +316,7 @@ export interface TrustStore {
    * verified business. Writes the outcome row WITHOUT a `verified_at`, parks the request in
    * MANUAL_REVIEW and publishes `trust.verification.duplicate_identity_detected`.
    */
-  applyDuplicateBusiness(input: BusinessOutcomeInput & { firstUserId: string | null }): Promise<boolean>;
+  applyDuplicateBusiness(input: DuplicateBusinessInput): Promise<boolean>;
   /**
    * Who holds this RC number as their one verified business.
    *
@@ -327,7 +343,21 @@ export interface TrustStore {
   /** Throws `social_proof_claims_platform_handle` when the handle is verified elsewhere. */
   createSocialProofClaim(input: SocialProofClaimInput): Promise<SocialProofClaim>;
   findSocialProofClaim(claimId: string): Promise<SocialProofClaim | undefined>;
-  listSocialProofClaims(userId: string): Promise<SocialProofClaim[]>;
+  /**
+   * Paginated, and the signature says so rather than returning the lot.
+   *
+   * The port originally read `listSocialProofClaims(userId): Promise<SocialProofClaim[]>` and the
+   * service above it noted that the route would still declare `paginated: 'page'`. That is a route
+   * declaring a promise the query underneath it does not keep: design §STEP 2's rule is "no
+   * unpaginated SELECT anywhere, including admin-only, low-volume endpoints", and a verified claim
+   * being capped at two per user is exactly the "it is small" argument the rule refuses — the
+   * unverified attempts beside them are not capped by anything but a rate limit.
+   */
+  listSocialProofClaims(input: {
+    userId: string;
+    page: number;
+    limit: number;
+  }): Promise<{ items: SocialProofClaim[]; total: number }>;
   /**
    * Records the outcome of a lookup.
    *

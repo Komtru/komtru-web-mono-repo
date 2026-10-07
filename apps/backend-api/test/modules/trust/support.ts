@@ -8,12 +8,25 @@ import { createHmacHasher, type HmacHasher } from '../../../src/platform/crypto/
 import { createLogger, type Logger } from '../../../src/platform/logger.js';
 import type { SocketGateway } from '../../../src/modules/socket/index.js';
 import type {
+  BankMatchCheckResult,
+  BusinessCheckResult,
   IdentityCheckResult,
   KycProviderAdapter,
   LivenessCheckResult,
 } from '../../../src/modules/trust/domain/provider.js';
-import type { VerificationRequest } from '../../../src/modules/trust/index.js';
 import type {
+  SocialLookupResult,
+  SocialProofAdapter,
+} from '../../../src/modules/trust/domain/social-proof.js';
+import type { SocialProofClaim, VerificationRequest } from '../../../src/modules/trust/index.js';
+import type {
+  AddressSubmissionInput,
+  BankMatchOutcomeInput,
+  BankNameMatchRecord,
+  BusinessFactsRow,
+  BusinessOutcomeInput,
+  BusinessOwner,
+  DuplicateBusinessInput,
   DuplicateIdentityInput,
   ExpiredRequest,
   GrantInput,
@@ -22,10 +35,14 @@ import type {
   LevelOutcome,
   LivenessOutcomeInput,
   ProviderCallInput,
+  RejectedRequestRow,
   RevokeInput,
   SelfieFile,
+  SocialProofClaimInput,
+  SocialProofDecisionInput,
   TrustStore,
   VerificationSubject,
+  VerifiedBusiness,
 } from '../../../src/modules/trust/infrastructure/postgres/store.js';
 
 export const silentLogger = (): Logger => createLogger({ log: { level: 'silent', format: 'json' } } as never);
@@ -55,6 +72,20 @@ export const requestRow = (overrides: Partial<VerificationRequest> = {}): Verifi
   ...overrides,
 });
 
+/** A `social_proof_claims` row, with the fields a test does not care about filled in. */
+export const socialClaimRow = (overrides: Partial<SocialProofClaim> = {}): SocialProofClaim => ({
+  id: randomUUID(),
+  userId: randomUUID(),
+  platform: 'INSTAGRAM',
+  handle: 'techedge_ng',
+  challengeCode: 'KOMTRU-ACDEFGHJ',
+  verified: false,
+  verifiedAt: null,
+  lastCheckedAt: null,
+  createdAt: new Date(),
+  ...overrides,
+});
+
 export interface RecordedStore extends TrustStore {
   readonly requests: VerificationRequest[];
   readonly providerCalls: ProviderCallInput[];
@@ -64,6 +95,13 @@ export interface RecordedStore extends TrustStore {
   readonly livenessOutcomes: LivenessOutcomeInput[];
   readonly grants: GrantInput[];
   readonly revokes: RevokeInput[];
+  // --- T-051 ---------------------------------------------------------------------------------
+  readonly businessOutcomes: BusinessOutcomeInput[];
+  readonly bankMatchOutcomes: BankMatchOutcomeInput[];
+  readonly duplicateBusinesses: DuplicateBusinessInput[];
+  readonly addressChecks: AddressSubmissionInput[];
+  readonly socialClaimsCreated: SocialProofClaimInput[];
+  readonly socialDecisions: SocialProofDecisionInput[];
 }
 
 export interface StubStoreOptions {
@@ -80,6 +118,21 @@ export interface StubStoreOptions {
   grantResult?: LevelOutcome;
   /** False simulates the request having been decided by someone else mid-call. */
   outcomeApplied?: boolean;
+  // --- T-051 ---------------------------------------------------------------------------------
+  /** §7's CAC branch: who already holds this RC as their one verified business. */
+  businessOwner?: BusinessOwner | undefined;
+  /** The caller's own verified business, which the bank name-match is run against. */
+  verifiedBusiness?: VerifiedBusiness | undefined;
+  businessFacts?: Partial<BusinessFactsRow>;
+  bankNameMatch?: BankNameMatchRecord | undefined;
+  socialClaim?: SocialProofClaim | undefined;
+  socialClaims?: SocialProofClaim[];
+  rejections?: RejectedRequestRow[];
+  createAddressCheckThrows?: Error;
+  createSocialProofClaimThrows?: Error;
+  applyBusinessOutcomeThrows?: Error;
+  /** False simulates `settleSocialProofClaim` finding the claim already verified or gone. */
+  socialSettled?: boolean;
 }
 
 /** Records what it was asked to write, so a test asserts over the writes rather than over SQL. */
@@ -92,7 +145,14 @@ export function stubStore(options: StubStoreOptions = {}): RecordedStore {
   const livenessOutcomes: LivenessOutcomeInput[] = [];
   const grants: GrantInput[] = [];
   const revokes: RevokeInput[] = [];
+  const businessOutcomes: BusinessOutcomeInput[] = [];
+  const bankMatchOutcomes: BankMatchOutcomeInput[] = [];
+  const duplicateBusinesses: DuplicateBusinessInput[] = [];
+  const addressChecks: AddressSubmissionInput[] = [];
+  const socialClaimsCreated: SocialProofClaimInput[] = [];
+  const socialDecisions: SocialProofDecisionInput[] = [];
   let thrownOnce = false;
+  let businessThrownOnce = false;
 
   return {
     requests,
@@ -103,6 +163,12 @@ export function stubStore(options: StubStoreOptions = {}): RecordedStore {
     livenessOutcomes,
     grants,
     revokes,
+    businessOutcomes,
+    bankMatchOutcomes,
+    duplicateBusinesses,
+    addressChecks,
+    socialClaimsCreated,
+    socialDecisions,
 
     // `in` rather than `=== undefined`: a test that passes `{ subject: undefined }` is saying "this
     // user is gone", which is a case worth being able to express.
@@ -181,6 +247,87 @@ export function stubStore(options: StubStoreOptions = {}): RecordedStore {
     findKycSelfie: () => Promise.resolve(options.selfie),
     countAttempts: () => Promise.resolve(options.attempts ?? 0),
     expireStale: () => Promise.resolve(options.expired ?? []),
+
+    // --- T-051 -------------------------------------------------------------------------------
+
+    applyBusinessOutcome: (input) => {
+      // Throws once, so a test can drive the duplicate-RC branch and then the write that follows it.
+      if (options.applyBusinessOutcomeThrows && !businessThrownOnce) {
+        businessThrownOnce = true;
+        return Promise.reject(options.applyBusinessOutcomeThrows);
+      }
+      businessOutcomes.push(input);
+      return Promise.resolve(options.outcomeApplied ?? true);
+    },
+
+    applyBankMatchOutcome: (input) => {
+      bankMatchOutcomes.push(input);
+      return Promise.resolve(options.outcomeApplied ?? true);
+    },
+
+    applyDuplicateBusiness: (input) => {
+      duplicateBusinesses.push(input);
+      return Promise.resolve(options.outcomeApplied ?? true);
+    },
+
+    findBusinessOwner: () => Promise.resolve(options.businessOwner),
+    findVerifiedBusiness: () => Promise.resolve(options.verifiedBusiness),
+
+    businessFacts: () =>
+      Promise.resolve({
+        currentLevel: 2,
+        cacVerified: false,
+        businessBankMatched: false,
+        ...options.businessFacts,
+      }),
+
+    findBankNameMatch: () => Promise.resolve(options.bankNameMatch),
+
+    createAddressCheck: (input) => {
+      if (options.createAddressCheckThrows) return Promise.reject(options.createAddressCheckThrows);
+      addressChecks.push(input);
+      const row = requestRow({
+        userId: input.userId,
+        verificationType: 'ADDRESS',
+        status: 'MANUAL_REVIEW',
+        targetLevel: input.targetLevel,
+        attemptCount: input.attemptCount,
+      });
+      requests.push(row);
+      return Promise.resolve(row);
+    },
+
+    createSocialProofClaim: (input) => {
+      if (options.createSocialProofClaimThrows) {
+        return Promise.reject(options.createSocialProofClaimThrows);
+      }
+      socialClaimsCreated.push(input);
+      return Promise.resolve(
+        socialClaimRow({
+          userId: input.userId,
+          platform: input.platform,
+          handle: input.handle,
+          challengeCode: input.challengeCode,
+        }),
+      );
+    },
+
+    findSocialProofClaim: () => Promise.resolve(options.socialClaim),
+
+    listSocialProofClaims: ({ page, limit }) => {
+      const all = options.socialClaims ?? [];
+      return Promise.resolve({
+        items: all.slice((page - 1) * limit, page * limit),
+        total: all.length,
+      });
+    },
+
+    settleSocialProofClaim: (input) => {
+      socialDecisions.push(input);
+      return Promise.resolve(options.socialSettled ?? true);
+    },
+
+    listRecentRejections: () => Promise.resolve(options.rejections ?? []),
   };
 }
 
@@ -212,6 +359,8 @@ export const recordingGateway = (): SocketGateway & { emitted: Emitted[] } => {
 export interface AdapterScript {
   identity?: IdentityCheckResult | Error;
   liveness?: LivenessCheckResult | Error;
+  business?: BusinessCheckResult | Error;
+  bankMatch?: BankMatchCheckResult | Error;
 }
 
 /**
@@ -228,6 +377,8 @@ export const scriptedAdapter = (script: AdapterScript = {}): KycProviderAdapter 
     verifyNin: () => answer<IdentityCheckResult>(script.identity),
     verifyBvn: () => answer<IdentityCheckResult>(script.identity),
     checkLiveness: () => answer<LivenessCheckResult>(script.liveness),
+    verifyBusiness: () => answer<BusinessCheckResult>(script.business),
+    verifyBankAccountName: () => answer<BankMatchCheckResult>(script.bankMatch),
   };
   function answer<T>(scripted: T | Error | undefined): Promise<T> {
     return Promise.resolve().then(() => {
@@ -248,3 +399,21 @@ export const scriptedAdapter = (script: AdapterScript = {}): KycProviderAdapter 
  */
 export const containing = (shape: Record<string, unknown>): unknown =>
   expect.objectContaining(shape) as unknown;
+
+/** A social-proof lookup that answers what a test tells it to, and counts its calls. */
+export const scriptedSocialAdapter = (
+  scripted?: SocialLookupResult | Error,
+): SocialProofAdapter & { calls: number } => {
+  const adapter = {
+    calls: 0,
+    name: 'scripted',
+    lookup: () =>
+      Promise.resolve().then(() => {
+        adapter.calls += 1;
+        if (scripted === undefined) throw new Error('scriptedSocialAdapter: not scripted');
+        if (scripted instanceof Error) throw scripted;
+        return scripted;
+      }),
+  };
+  return adapter;
+};

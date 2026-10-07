@@ -31,7 +31,13 @@
 // not an implementation detail, and it is the first thing to settle.
 import type { DojahCredentials } from '../../../../config/env.js';
 import { KycProviderNotConfiguredError } from '../../domain/errors.js';
-import type { IdentityCheckResult, KycProviderAdapter, LivenessCheckResult } from '../../domain/provider.js';
+import type {
+  BankMatchCheckResult,
+  BusinessCheckResult,
+  IdentityCheckResult,
+  KycProviderAdapter,
+  LivenessCheckResult,
+} from '../../domain/provider.js';
 
 const NOT_INTEGRATED = [
   'a live Dojah integration (no call has ever been made from this repository)',
@@ -48,5 +54,15 @@ export function createDojahClient(_credentials: DojahCredentials): KycProviderAd
     verifyNin: () => refuse<IdentityCheckResult>(),
     verifyBvn: () => refuse<IdentityCheckResult>(),
     checkLiveness: () => refuse<LivenessCheckResult>(),
+    // D3's other two, added by T-051 and refusing for exactly the same reason as the three above.
+    // Dojah's KYB endpoints its documentation names, for whoever picks this up:
+    //   GET /api/v1/kyc/cac           ?rc_number=   (and /kyc/cac/advance for officer data)
+    //   GET /api/v1/kyc/nuban         ?account_number=&bank_code=
+    // The officer question is the one to settle first: §8's own table is honest that officer data is
+    // implied rather than confirmed across this vendor space, and `decideBusinessOutcome` sends an
+    // unknown to a human — so whether Dojah's response can answer it at all decides how much of the
+    // KYB flow is automatic.
+    verifyBusiness: () => refuse<BusinessCheckResult>(),
+    verifyBankAccountName: () => refuse<BankMatchCheckResult>(),
   };
 }
