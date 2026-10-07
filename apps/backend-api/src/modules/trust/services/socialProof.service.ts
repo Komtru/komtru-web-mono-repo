@@ -92,6 +92,26 @@ export async function claimSocialHandle(
     );
   }
 
+  /**
+   * Somebody else has already proved this handle. Refused BEFORE a code is issued.
+   *
+   * `social_proof_claims_platform_handle` is partial on `verified = true`, so it would not have
+   * refused this insert at all — the user would have been handed a code, gone and put it in a bio,
+   * and only then discovered the badge can never be granted. The index is still the enforcement
+   * point for two users racing; this read is what stops the ordinary case wasting their time.
+   *
+   * It does not say WHO holds it: that would turn the endpoint into a lookup from handle to account.
+   */
+  const owner = await deps.store.findVerifiedHandleOwner({ platform: input.platform, handle });
+  if (owner && owner !== input.userId) {
+    throw new ApiError(
+      409,
+      'CONFLICT',
+      'That handle is already verified on another account',
+      'If it is yours, contact support and we will sort it out.',
+    );
+  }
+
   try {
     const claim = await deps.store.createSocialProofClaim({
       userId: input.userId,

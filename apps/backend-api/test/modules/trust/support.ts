@@ -126,6 +126,8 @@ export interface StubStoreOptions {
   businessFacts?: Partial<BusinessFactsRow>;
   bankNameMatch?: BankNameMatchRecord | undefined;
   socialClaim?: SocialProofClaim | undefined;
+  /** Who has already PROVED the handle being claimed, if anybody. */
+  verifiedHandleOwner?: string | undefined;
   socialClaims?: SocialProofClaim[];
   rejections?: RejectedRequestRow[];
   createAddressCheckThrows?: Error;
@@ -312,6 +314,7 @@ export function stubStore(options: StubStoreOptions = {}): RecordedStore {
       );
     },
 
+    findVerifiedHandleOwner: () => Promise.resolve(options.verifiedHandleOwner),
     findSocialProofClaim: () => Promise.resolve(options.socialClaim),
 
     listSocialProofClaims: ({ page, limit }) => {

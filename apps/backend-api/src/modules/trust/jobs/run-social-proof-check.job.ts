@@ -4,6 +4,7 @@
 // proof claim has its own small lifecycle (see `social_proof_claims`), and what it produces is a
 // badge on a merchant profile. It still runs as a job, because reading somebody's public profile is
 // external I/O and must not happen on a request handler.
+import { isUniqueViolation } from '../../../db/errors.js';
 import type { Logger } from '../../../platform/logger.js';
 import type { SocketGateway } from '../../socket/index.js';
 import { SOCIAL_PROOF_SOCKET_EVENT, type SocialProofCheckJob } from '../domain/queues.js';
@@ -83,7 +84,31 @@ export async function runSocialProofCheck(
   const verified = reason === undefined;
   // `last_checked_at` moves on EVERY settled lookup, pass or fail — it is what rate-limits the
   // re-check, and a failure that left it untouched is a free retry loop against a third party.
-  const settled = await deps.store.settleSocialProofClaim({ claimId: claim.id, verified });
+  /**
+   * The index is the enforcement point, so the violation is caught rather than prevented.
+   *
+   * `claimSocialHandle` already refuses a handle somebody else has proved, which handles every
+   * ordinary case. What is left is the race: two users publishing the same handle's code and both
+   * jobs running before either committed. `social_proof_claims_platform_handle` lets exactly one
+   * through, and the loser must not fail the job forever — so it is settled as not verified, which
+   * moves `last_checked_at` and applies the cooldown like any other unsuccessful lookup.
+   *
+   * No reason is attached: the taxonomy in `domain/rejection.ts` comes from BVR1 and VF1 and has no
+   * member for this, and inventing one to cover a race would be inventing the part of the taxonomy
+   * the ticket says not to invent. The claim simply reads as unverified on the list endpoint.
+   */
+  let settled: boolean;
+  try {
+    settled = await deps.store.settleSocialProofClaim({ claimId: claim.id, verified });
+  } catch (error) {
+    if (!isUniqueViolation(error, 'social_proof_claims_platform_handle')) throw error;
+    deps.logger.warn(
+      { claimId: claim.id, platform: claim.platform },
+      'trust: the handle was proved on another account first; this claim stays unverified',
+    );
+    settled = await deps.store.settleSocialProofClaim({ claimId: claim.id, verified: false });
+    return;
+  }
   if (!settled) {
     deps.logger.info({ claimId: claim.id }, 'trust: the social proof claim was settled elsewhere');
     return;

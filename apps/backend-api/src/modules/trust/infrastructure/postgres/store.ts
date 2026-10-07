@@ -340,8 +340,22 @@ export interface TrustStore {
    */
   createAddressCheck(input: AddressSubmissionInput): Promise<VerificationRequest>;
 
-  /** Throws `social_proof_claims_platform_handle` when the handle is verified elsewhere. */
   createSocialProofClaim(input: SocialProofClaimInput): Promise<SocialProofClaim>;
+  /**
+   * Who has already PROVED this handle, if anybody.
+   *
+   * `social_proof_claims_platform_handle` is partial on `verified = true` — deliberately, so a user
+   * may abandon a mistyped claim and start another — which means creating a second UNVERIFIED claim
+   * on a handle somebody else has proved does not violate it. Without this read the refusal was
+   * unreachable: the user would be handed a code, go and publish it, and only then find out the
+   * badge can never be granted. The index remains the enforcement point for the race; this is the
+   * read that stops the ordinary case wasting the user's time, exactly as `identityFacts` does for
+   * "your NIN is already verified".
+   */
+  findVerifiedHandleOwner(input: {
+    platform: SocialProofPlatform;
+    handle: string;
+  }): Promise<string | undefined>;
   findSocialProofClaim(claimId: string): Promise<SocialProofClaim | undefined>;
   /**
    * Paginated, and the signature says so rather than returning the lot.

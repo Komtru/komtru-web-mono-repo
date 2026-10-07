@@ -899,6 +899,21 @@ export function bindStore(db: Db): TrustStore {
       return row;
     },
 
+    findVerifiedHandleOwner: async ({ platform, handle }) => {
+      const [row] = await db
+        .select({ userId: socialProofClaims.userId })
+        .from(socialProofClaims)
+        .where(
+          and(
+            eq(socialProofClaims.platform, platform),
+            eq(socialProofClaims.handle, handle),
+            eq(socialProofClaims.verified, true),
+          ),
+        )
+        .limit(1);
+      return row?.userId;
+    },
+
     findSocialProofClaim: async (claimId) => {
       const [row] = await db
         .select()
