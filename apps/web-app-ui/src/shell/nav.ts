@@ -58,8 +58,10 @@ const isSegmentPrefix = (pathname: string, prefix: string): boolean =>
 
 /**
  * Which tab a path sits under, or `undefined` when it sits under none — a Park Hub application, a
- * sign-in. Whole segments only: `/tradesmanship` is not the Trades tab, and `aria-current="page"`
- * on the wrong tab is worse than on none.
+ * sign-in, or Shop read by someone who is not a certified merchant. Whole segments only:
+ * `/tradesmanship` is not the Trades tab, and `aria-current="page"` on the wrong tab is worse than
+ * on none. A screen declares a tab only when the viewer actually has it, which is the rule
+ * `app/(app)/shop/page.tsx` follows.
  */
 export function currentTab(pathname: string, viewer: Viewer): TabId | undefined {
   return tabsFor(viewer).find((tab) => isSegmentPrefix(pathname, tab.href))?.id;

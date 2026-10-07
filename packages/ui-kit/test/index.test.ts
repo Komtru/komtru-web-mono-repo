@@ -46,6 +46,7 @@ describe('@komtru/ui-kit', () => {
       'PolicyCite',
       'PublicShell',
       'QueuedActionNote',
+      'ResponsiveAppShell',
       'Select',
       'SettingsGroup',
       'SettingsRow',

@@ -9,7 +9,7 @@
 // token's scope on every call, and that is the check that matters.
 import { createKomtruMiddleware } from '@komtru/app-kit/next';
 import { createSessionSealer, requireSessionSecret } from '@komtru/app-kit';
-import { NextResponse, type NextRequest } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { readWebAppConfig } from './src/app-config';
 import { routeRequest } from './src/hosts';
 import { PRE_AUTH_PUBLIC_PATHS, PUBLIC_PATHS } from './src/middleware-rules';
@@ -22,17 +22,35 @@ const requireSession = createKomtruMiddleware({
   publicPaths: [...PUBLIC_PATHS, ...PRE_AUTH_PUBLIC_PATHS],
 });
 
+/**
+ * The host the visitor actually asked for.
+ *
+ * Not `request.nextUrl.host`: under `next start` — this app's own start script — Next builds the
+ * middleware URL from the origin the Node server is bound to, so `nextUrl.host` is always
+ * `localhost:3001` and the passport rule never fired on any real deployment. The public host
+ * arrives in a header. `x-forwarded-host` comes first because a load balancer puts the host the
+ * visitor typed there and its own address in `Host`.
+ */
+const requestedHost = (request: NextRequest): string =>
+  request.headers.get('x-forwarded-host') ?? request.headers.get('host') ?? request.nextUrl.host;
+
 export default async function middleware(request: NextRequest): Promise<NextResponse> {
-  const { host, pathname, search } = request.nextUrl;
-  const route = routeRequest({ host, pathname, search }, appConfig);
+  const { pathname, search } = request.nextUrl;
+  const route = routeRequest({ host: requestedHost(request), pathname, search }, appConfig);
 
   // 307 rather than 308: park-agent-app's own route names are T-170's to settle, and a permanent
   // redirect would sit in browsers' caches long after this mapping changed.
   if (route.kind === 'redirect') return NextResponse.redirect(route.url, 307);
 
-  // A passport page is public by definition, so there is nothing further to ask about it.
   if (route.kind === 'rewrite') {
-    return NextResponse.rewrite(new URL(`${route.pathname}${search}`, request.nextUrl.origin));
+    // The gate is not skipped here. Which host this is was decided from a header the caller
+    // controls, so returning the rewrite before asking about a session would put an authorization
+    // decision behind a forgeable signal. Instead the gate runs on the path the rewrite will
+    // serve: `/passport/*` is public, so a forged `Host` buys a visitor the pages that were
+    // already public to everyone, and nothing more.
+    const rewritten = new URL(`${route.pathname}${search}`, request.nextUrl.origin);
+    const gated = await requireSession(new NextRequest(rewritten, request));
+    return gated.headers.has('location') ? gated : NextResponse.rewrite(rewritten);
   }
 
   return requireSession(request);

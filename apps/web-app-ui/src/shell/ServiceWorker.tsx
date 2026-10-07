@@ -33,5 +33,17 @@ export function ServiceWorker(): null {
 export async function clearOfflineCache(): Promise<void> {
   if (!('serviceWorker' in navigator)) return;
   const registration = await navigator.serviceWorker.getRegistration();
-  registration?.active?.postMessage(CLEAR_CACHE_MESSAGE);
+  // Nothing registered is nothing cached: this worker is the only thing that writes the cache.
+  if (registration === undefined) return;
+
+  // `registration.active` is null while a worker is still installing or waiting — on a first load,
+  // or in the moment after an update. Reading it alone posted no message, raised nothing and
+  // resolved, so sign-out reported success while every page it was meant to drop stayed cached.
+  // `ready` resolves once this registration has an active worker, which is the thing that can
+  // actually act on the message.
+  const worker = registration.active ?? (await navigator.serviceWorker.ready).active;
+  if (worker === null) {
+    throw new Error('offline cache not cleared: no active service worker to receive the message');
+  }
+  worker.postMessage(CLEAR_CACHE_MESSAGE);
 }

@@ -17,6 +17,8 @@ interface FakeCache {
   put: (request: unknown, response: unknown) => Promise<void>;
   match: (request: unknown, options?: { ignoreSearch?: boolean }) => Promise<unknown>;
   addAll: (paths: string[]) => Promise<void>;
+  keys: () => Promise<{ url: string }[]>;
+  delete: (request: unknown) => Promise<boolean>;
 }
 
 const keyOf = (request: unknown): string =>
@@ -32,6 +34,8 @@ function fakeCache(): FakeCache {
       for (const path of paths) entries.set(path, { ok: true, body: `precached ${path}` });
       return Promise.resolve();
     },
+    keys: () => Promise.resolve([...entries.keys()].map((url) => ({ url }))),
+    delete: (request) => Promise.resolve(entries.delete(keyOf(request))),
   };
 }
 
@@ -219,11 +223,53 @@ describe('signing out', () => {
   it('empties the cache when the app says so', async () => {
     await harness.dispatch('install', {});
     await harness.dispatch('message', { data: { type: 'komtru-clear-cache' } });
-    expect(harness.deleted).toContain('komtru-app-v1');
+    expect(await harness.cache.match(navigation(`${ORIGIN}/trades`))).toBeUndefined();
+  });
+
+  // The fallback document is the whole point of the worker, and a clear used to take it with it:
+  // `caches.delete(CACHE)` dropped the `/offline` entry, and `install` only runs for a *new*
+  // worker, so it was never re-added. The next person to lose signal on a page they had not
+  // visited got the browser's own error page instead of OF1.
+  it('keeps the offline document, so the fallback still works after a sign-out', async () => {
+    await harness.dispatch('install', {});
+    await harness.dispatch('message', { data: { type: 'komtru-clear-cache' } });
+
+    expect(await harness.cache.match('/offline')).toBeDefined();
+
+    harness.fetch.mockRejectedValueOnce(new Error('offline'));
+    const response = await harness.dispatch('fetch', { request: navigation(`${ORIGIN}/never-visited`) });
+    expect(response).toMatchObject({ body: 'precached /offline' });
   });
 
   it('ignores a message from anything else', async () => {
     await harness.dispatch('message', { data: { type: 'something-else' } });
     expect(harness.deleted).toEqual([]);
+  });
+});
+
+describe('serving a saved page offline', () => {
+  // Entries are stored under the full URL, query included, but the offline lookup used to discard
+  // it — so the first saved variant of a path answered for every other. "Showing your last saved
+  // data" over a page the person never asked for is the same lie the network-first policy exists
+  // to avoid, told with no connection to blame.
+  it('does not answer one query string with another page', async () => {
+    harness.fetch.mockResolvedValueOnce(page(`${ORIGIN}/trades?tab=selling`));
+    await harness.dispatch('fetch', { request: navigation(`${ORIGIN}/trades?tab=selling`) });
+
+    await harness.dispatch('install', {});
+    harness.fetch.mockRejectedValueOnce(new Error('offline'));
+    const response = await harness.dispatch('fetch', { request: navigation(`${ORIGIN}/trades?tab=buying`) });
+
+    expect(response).not.toMatchObject({ url: `${ORIGIN}/trades?tab=selling` });
+    expect(response).toMatchObject({ body: 'precached /offline' });
+  });
+
+  it('still answers the same URL it saved', async () => {
+    harness.fetch.mockResolvedValueOnce(page(`${ORIGIN}/trades?tab=selling`));
+    await harness.dispatch('fetch', { request: navigation(`${ORIGIN}/trades?tab=selling`) });
+
+    harness.fetch.mockRejectedValueOnce(new Error('offline'));
+    const response = await harness.dispatch('fetch', { request: navigation(`${ORIGIN}/trades?tab=selling`) });
+    expect(response).toMatchObject({ cached: true });
   });
 });

@@ -1,5 +1,7 @@
 'use client';
 
+import { captureException } from '@sentry/nextjs';
+
 import { KomtruProviders } from '@komtru/app-kit/react';
 import { readAppConfig } from '@komtru/app-kit';
 import { useRouter } from 'next/navigation';
@@ -23,10 +25,17 @@ export function Providers({ children }: { children: React.ReactNode }): React.JS
     // Everything this device saved belonged to the person whose session just ended. The Cache API
     // is per origin, not per person, and the phone at a motor park counter is a shared phone — so
     // the pages go before the next person reaches the sign-in screen.
-    void clearOfflineCache().finally(() => {
-      // `replace`, not `push`: a dead session is not somewhere to go back to.
-      router.replace(appSpec.signInPath);
-    });
+    void clearOfflineCache()
+      // Reported, never swallowed: a sign-out that left the last person's pages on a shared phone
+      // is the one failure in this path worth knowing about. It must not block the redirect
+      // either — leaving someone signed in on screen because a cache write failed is worse.
+      .catch((error: unknown) => {
+        captureException(error);
+      })
+      .finally(() => {
+        // `replace`, not `push`: a dead session is not somewhere to go back to.
+        router.replace(appSpec.signInPath);
+      });
   }, [router]);
 
   return (
