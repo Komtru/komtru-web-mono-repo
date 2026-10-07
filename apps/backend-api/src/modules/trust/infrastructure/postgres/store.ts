@@ -7,8 +7,18 @@
 //
 // The port is deliberately thin: it moves rows, it does not decide anything. Every rule lives in
 // `domain/` or in a service above it. The one exception is noted on `applyIdentityOutcome`.
-import type { IdentifierType, KycProvider, VerificationRequestStatus } from './schema/enums.js';
+import type {
+  AddressMethod,
+  BankMatchResult,
+  IdentifierType,
+  KycProvider,
+  SocialProofPlatform,
+  VerificationDocumentType,
+  VerificationRequestStatus,
+  VerificationType,
+} from './schema/enums.js';
 import type { VerificationRequest } from './schema/requests.js';
+import type { SocialProofClaim } from './schema/social-proof.js';
 
 /** The slice of identity's `users` row a verification decision depends on. */
 export interface VerificationSubject {
@@ -26,7 +36,12 @@ export interface SelfieFile {
 
 export interface CreateRequestInput {
   userId: string;
-  verificationType: IdentifierType | 'LIVENESS';
+  /**
+   * Any of §6.1's eight. It was `IdentifierType | 'LIVENESS'` while T-050 was the only writer;
+   * widening it to the enum is what lets the four T-051 checks share one umbrella row (§6.2) rather
+   * than each growing a parallel lifecycle of its own.
+   */
+  verificationType: VerificationType;
   targetLevel: number;
   ttlMinutes: number;
   selfieStorageRef?: string;
@@ -36,7 +51,7 @@ export interface CreateRequestInput {
 export interface ProviderCallInput {
   requestId: string;
   provider: KycProvider;
-  callType: IdentifierType | 'LIVENESS';
+  callType: VerificationType;
   latencyMs: number;
   succeeded: boolean;
   httpStatus?: number;
@@ -105,6 +120,71 @@ export interface LevelOutcome {
   to: number;
 }
 
+export interface BusinessOutcomeInput {
+  request: VerificationRequest;
+  cacRcNumber: string;
+  registeredBusinessName: string;
+  businessType?: string;
+  cacStatus?: string;
+  officersMatch?: boolean;
+  provider: KycProvider;
+  providerReference: string;
+  requestStatus: VerificationRequestStatus;
+  markVerified: boolean;
+  rejectionReason?: string;
+}
+
+export interface BankMatchOutcomeInput {
+  request: VerificationRequest;
+  accountNumberMasked: string;
+  bankCode: string;
+  resolvedAccountName?: string;
+  expectedName: string;
+  matchResult: BankMatchResult;
+  matchScore?: number;
+  provider: KycProvider;
+  providerReference: string;
+  requestStatus: VerificationRequestStatus;
+  rejectionReason?: string;
+}
+
+export interface AddressSubmissionInput {
+  userId: string;
+  addressLine1: string;
+  city: string;
+  state: string;
+  method: AddressMethod;
+  documentRef?: string;
+  documentType?: VerificationDocumentType;
+  ttlMinutes: number;
+  attemptCount: number;
+  targetLevel: number;
+}
+
+/** §7's CAC adjustment: who holds this RC as their one verified business, if anybody. */
+export interface BusinessOwner {
+  userId: string;
+  registeredBusinessName: string;
+}
+
+/** The slice of a verified business a bank name-match is run against. */
+export interface VerifiedBusiness {
+  cacRcNumber: string;
+  registeredBusinessName: string;
+}
+
+export interface SocialProofClaimInput {
+  userId: string;
+  platform: SocialProofPlatform;
+  handle: string;
+  challengeCode: string;
+}
+
+export interface SocialProofDecisionInput {
+  claimId: string;
+  verified: boolean;
+}
+
 export interface IdentityFactsRow {
   identifierVerified: boolean;
   /** Which of NIN/BVN already carry a `verified_at` for this user. Empty when none do. */
@@ -113,6 +193,31 @@ export interface IdentityFactsRow {
   latestVerifiedIdentifier?: IdentifierType;
   livenessPassed: boolean;
   levelAttainedAt?: Date;
+}
+
+/** §4's level-3 inputs, read back rather than inferred (see `earnedBusinessLevel`). */
+export interface BusinessFactsRow {
+  currentLevel: number;
+  cacVerified: boolean;
+  businessBankMatched: boolean;
+}
+
+/** What T-073 reads to decide whether a payout account may be made default. */
+export interface BankNameMatchRecord {
+  id: string;
+  matchResult: BankMatchResult;
+  resolvedAccountName: string | null;
+  expectedName: string;
+  checkedAt: Date;
+}
+
+/** The most recent terminal rejection of a check, for VF1 and BVR1. */
+export interface RejectedRequestRow {
+  requestId: string;
+  verificationType: VerificationType;
+  /** A `RejectionCode`, as stored. Typed as `string` because the column cannot vouch for it. */
+  rejectionReason: string | null;
+  decidedAt: Date | null;
 }
 
 export interface ExpiredRequest {
@@ -177,4 +282,60 @@ export interface TrustStore {
   findKycSelfie(fileId: string): Promise<SelfieFile | undefined>;
   countAttempts(userId: string, verificationType: string): Promise<number>;
   expireStale(now: Date): Promise<ExpiredRequest[]>;
+
+  // --- T-051: business, bank name-match, address, social proof --------------------------------
+
+  /**
+   * The CAC outcome row and the request move, in one transaction. Same contract as
+   * `applyIdentityOutcome`: false means the request had already left the open set, and the caller
+   * must grant nothing.
+   *
+   * It does not catch `business_verifications_user_active_unique` either, for the same reason — what
+   * to do about a second verified business on one account is a rule, not a persistence detail.
+   */
+  applyBusinessOutcome(input: BusinessOutcomeInput): Promise<boolean>;
+  applyBankMatchOutcome(input: BankMatchOutcomeInput): Promise<boolean>;
+  /**
+   * §7's CAC branch: the registration is real, but another account already holds it as its one
+   * verified business. Writes the outcome row WITHOUT a `verified_at`, parks the request in
+   * MANUAL_REVIEW and publishes `trust.verification.duplicate_identity_detected`.
+   */
+  applyDuplicateBusiness(input: BusinessOutcomeInput & { firstUserId: string | null }): Promise<boolean>;
+  /**
+   * Who holds this RC number as their one verified business.
+   *
+   * Scoped to verified rows on purpose (§7): "has any user ever typed this number" is not the
+   * question, because a rejected attempt by a fraudster would then lock out the real company.
+   */
+  findBusinessOwner(rcNumber: string): Promise<BusinessOwner | undefined>;
+  /** The caller's own verified business, which a bank name-match is run against. */
+  findVerifiedBusiness(userId: string): Promise<VerifiedBusiness | undefined>;
+  businessFacts(userId: string): Promise<BusinessFactsRow>;
+  /** T-073's read: the name-match on record for a payout account, if there is one. */
+  findBankNameMatch(input: {
+    userId: string;
+    bankCode: string;
+    accountNumberMasked: string;
+  }): Promise<BankNameMatchRecord | undefined>;
+
+  /**
+   * The request row, the `address_checks` row and the supporting `verification_documents` row, in
+   * one transaction. Returns the request, so the caller can report its id and status.
+   */
+  createAddressCheck(input: AddressSubmissionInput): Promise<VerificationRequest>;
+
+  /** Throws `social_proof_claims_platform_handle` when the handle is verified elsewhere. */
+  createSocialProofClaim(input: SocialProofClaimInput): Promise<SocialProofClaim>;
+  findSocialProofClaim(claimId: string): Promise<SocialProofClaim | undefined>;
+  listSocialProofClaims(userId: string): Promise<SocialProofClaim[]>;
+  /**
+   * Records the outcome of a lookup.
+   *
+   * `last_checked_at` moves on EVERY call, verified or not — it is what rate-limits a re-check, and
+   * a failed lookup that leaves it untouched is a free retry loop against a third party's website.
+   * Returns false when the claim was already verified or has gone.
+   */
+  settleSocialProofClaim(input: SocialProofDecisionInput): Promise<boolean>;
+  /** The most recent REJECTED request per verification type, for VF1 and BVR1. */
+  listRecentRejections(userId: string): Promise<RejectedRequestRow[]>;
 }

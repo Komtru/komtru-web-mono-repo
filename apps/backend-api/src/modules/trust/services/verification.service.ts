@@ -8,12 +8,13 @@ import type { Encryption } from '../../../platform/crypto/encryption.js';
 import type { HmacHasher } from '../../../platform/crypto/hmac.js';
 import type { Logger } from '../../../platform/logger.js';
 import { isUniqueViolation } from '../../../db/errors.js';
-import { contactVerificationRequired } from '../domain/errors.js';
 import { isValidIdentifier, normaliseIdentifier } from '../domain/identifiers.js';
 import { IDENTITY_VERIFIED_LEVEL, levelNumber } from '../domain/levels.js';
+import { describeRejection, type RejectionReason } from '../domain/rejection.js';
 import type { IdentityCheckJob, LivenessCheckJob } from '../domain/queues.js';
 import type { IdentifierType } from '../infrastructure/postgres/schema/enums.js';
-import type { TrustStore, VerificationSubject } from '../infrastructure/postgres/store.js';
+import type { TrustStore } from '../infrastructure/postgres/store.js';
+import { assertActive, assertContactVerified, inFlightConflict } from './submission.js';
 
 export interface VerificationDeps {
   store: TrustStore;
@@ -45,19 +46,9 @@ export interface SubmitResult<J> {
   job: J;
 }
 
-/** M6 §2: a verified email and phone come first. Level 1 is identity's to grant, not ours to skip. */
-const CONTACT_VERIFIED_LEVEL = 1;
-
-function assertEligible(subject: VerificationSubject | undefined): VerificationSubject {
-  // A principal the database no longer knows is not a 404 — the caller's session resolved against a
-  // row that has since gone, and "sign in again" is the only honest answer.
-  if (!subject) throw new ApiError(401, 'UNAUTHENTICATED', 'Sign in to verify your identity');
-  if (subject.status !== 'ACTIVE') {
-    throw new ApiError(403, 'FORBIDDEN', 'This account cannot start a verification right now');
-  }
-  if (levelNumber(subject.verificationLevel) < CONTACT_VERIFIED_LEVEL) throw contactVerificationRequired();
-  return subject;
-}
+/** The ladder lives in `submission.ts` now: T-051 added three more submitters that need it. */
+const assertEligible = (subject: Parameters<typeof assertActive>[0]) =>
+  assertContactVerified(assertActive(subject));
 
 export async function submitIdentifierCheck(
   deps: VerificationDeps,
@@ -182,53 +173,48 @@ async function createRequest(deps: VerificationDeps, input: Parameters<TrustStor
     return await deps.store.createRequest(input);
   } catch (error) {
     if (isUniqueViolation(error, 'verification_requests_one_in_flight'))
-      throw await inFlightConflict(deps, input);
+      throw await inFlightConflict(deps.store, input.userId, input.verificationType);
     throw error;
   }
-}
-
-/**
- * Two different 409s, because they are two different situations for the person reading them.
- *
- * A request waiting on a provider really will produce a result shortly. One in MANUAL_REVIEW will
- * not: it is waiting on a human, the expiry sweep deliberately skips it, and until T-052 ships the
- * queue there is nobody to clear it. Telling that user "you will get a result shortly" is a
- * falsehood they will act on by retrying, which is the worst possible advice.
- */
-async function inFlightConflict(
-  deps: VerificationDeps,
-  input: Parameters<TrustStore['createRequest']>[0],
-): Promise<ApiError> {
-  const open = await deps.store.listOpenRequests(input.userId);
-  const blocking = open.find((request) => request.verificationType === input.verificationType);
-  if (blocking?.status === 'MANUAL_REVIEW') {
-    return new ApiError(
-      409,
-      'CONFLICT',
-      'That check is with our team',
-      'Someone is reviewing your last submission by hand. Contact support if you have been waiting a while.',
-    );
-  }
-  return new ApiError(
-    409,
-    'CONFLICT',
-    'That check is already running',
-    'We are still working on your last submission. You will get a result shortly.',
-  );
 }
 
 export interface VerificationStatus {
   level: string;
   levelNumber: number;
   levelAttainedAt: string | null;
-  /** What §4 still wants for level 2. Two booleans, because that is what the screen renders. */
-  requirements: { identifier: boolean; liveness: boolean };
+  /**
+   * What §4 still wants, as the booleans the screens render.
+   *
+   * Level 2's two, plus level 3's two. They are flat rather than nested by level because J2 and the
+   * seller verification screen both render one checklist, and a client that has to know which level
+   * a requirement belongs to in order to tick a box is a client reimplementing §4.
+   */
+  requirements: {
+    identifier: boolean;
+    liveness: boolean;
+    business: boolean;
+    businessBankAccount: boolean;
+  };
   inFlight: {
     requestId: string;
     type: string;
     status: string;
     submittedAt: string;
     expiresAt: string;
+  }[];
+  /**
+   * The most recent rejection per check, structured — this is what VF1 and BVR1 render.
+   *
+   * `inFlight` alone could never drive either screen: a rejected request is not in flight, so
+   * without this the only thing a client could say after a failure is that nothing is happening.
+   * The `reason` is the whole `RejectionReason` rather than a code, so the copy lives on the server
+   * and a fix to a confusing sentence ships without a client release.
+   */
+  rejections: {
+    requestId: string;
+    type: string;
+    decidedAt: string | null;
+    reason: RejectionReason;
   }[];
 }
 
@@ -246,22 +232,37 @@ export async function readVerificationStatus(
   const subject = await deps.store.findSubject(userId);
   if (!subject) throw new ApiError(401, 'UNAUTHENTICATED', 'Sign in to see your verification status');
 
-  const [facts, open] = await Promise.all([
+  const [facts, business, open, rejected] = await Promise.all([
     deps.store.identityFacts(userId),
+    deps.store.businessFacts(userId),
     deps.store.listOpenRequests(userId),
+    deps.store.listRecentRejections(userId),
   ]);
 
   return {
     level: subject.verificationLevel,
     levelNumber: levelNumber(subject.verificationLevel),
     levelAttainedAt: facts.levelAttainedAt?.toISOString() ?? null,
-    requirements: { identifier: facts.identifierVerified, liveness: facts.livenessPassed },
+    requirements: {
+      identifier: facts.identifierVerified,
+      liveness: facts.livenessPassed,
+      business: business.cacVerified,
+      businessBankAccount: business.businessBankMatched,
+    },
     inFlight: open.map((request) => ({
       requestId: request.id,
       type: request.verificationType,
       status: request.status,
       submittedAt: request.submittedAt.toISOString(),
       expiresAt: request.expiresAt.toISOString(),
+    })),
+    rejections: rejected.map((request) => ({
+      requestId: request.requestId,
+      type: request.verificationType,
+      decidedAt: request.decidedAt?.toISOString() ?? null,
+      // `?? ''` rather than a branch: `describeRejection` is total and falls back to
+      // NEEDS_HUMAN_REVIEW, so a rejection written before codes existed still renders something.
+      reason: describeRejection(request.rejectionReason ?? ''),
     })),
   };
 }

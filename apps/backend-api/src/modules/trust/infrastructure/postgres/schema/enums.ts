@@ -50,6 +50,47 @@ export const KYC_PROVIDERS = [
   'FAKE',
 ] as const;
 
+/**
+ * §6.6's `social_proof_platform`. Two, and deliberately only two (M1 §7.2).
+ *
+ * Neither is a login provider and neither ever will be: Instagram's Basic Display API died for
+ * personal accounts in December 2024 and X bills per profile read, so both exist here as *proof* a
+ * seller already has, claimed through a bio/post challenge at zero API spend.
+ */
+export const SOCIAL_PROOF_PLATFORMS = ['INSTAGRAM', 'X'] as const;
+
+/**
+ * §6.5's `match_result`, an enum rather than the spec's free text for the same reason `direction` is
+ * one: there are exactly three, and this is the column level 3 is decided on.
+ *
+ * `FUZZY_MATCH` is NOT a pass. It is "a human should look at this" — see `decideBankMatchOutcome`.
+ */
+export const BANK_MATCH_RESULTS = ['EXACT', 'FUZZY_MATCH', 'MISMATCH'] as const;
+
+/**
+ * §6.6's `address_checks.method`.
+ *
+ * `PROVIDER_LOOKUP` is declared and currently unreachable: `address_checks` is the one outcome table
+ * in §6.6 with no `provider` or `provider_reference` column, which is the spec saying address proof
+ * is document-based here. The member stays so a later provider-backed lookup is not a migration.
+ */
+export const ADDRESS_METHODS = ['UTILITY_BILL', 'BANK_STATEMENT', 'PROVIDER_LOOKUP'] as const;
+
+/**
+ * §6.6's `verification_documents.document_type`, plus `BANK_STATEMENT`.
+ *
+ * The extra member is not a liberty: §6.6's own `address_checks.method` offers `BANK_STATEMENT` as a
+ * proof of address, and the document table it would be stored in had no type to store it under.
+ */
+export const VERIFICATION_DOCUMENT_TYPES = [
+  'NATIONAL_ID',
+  'PASSPORT',
+  'DRIVERS_LICENSE',
+  'CAC_CERTIFICATE',
+  'UTILITY_BILL',
+  'BANK_STATEMENT',
+] as const;
+
 /** §6.11's `direction`, an enum here rather than the spec's free text: there are exactly two. */
 export const LEVEL_CHANGE_DIRECTIONS = ['GRANT', 'REVOKE'] as const;
 
@@ -57,6 +98,10 @@ export const LEVEL_CHANGE_DIRECTIONS = ['GRANT', 'REVOKE'] as const;
 export const LEVEL_CHANGE_ACTOR_TYPES = ['PROVIDER_AUTO', 'KYC_ANALYST', 'SYSTEM'] as const;
 
 export const verificationType = trust.enum('verification_type', VERIFICATION_TYPES);
+export const socialProofPlatform = trust.enum('social_proof_platform', SOCIAL_PROOF_PLATFORMS);
+export const bankMatchResult = trust.enum('bank_match_result', BANK_MATCH_RESULTS);
+export const addressMethod = trust.enum('address_method', ADDRESS_METHODS);
+export const verificationDocumentType = trust.enum('verification_document_type', VERIFICATION_DOCUMENT_TYPES);
 export const verificationRequestStatus = trust.enum(
   'verification_request_status',
   VERIFICATION_REQUEST_STATUSES,
@@ -70,6 +115,10 @@ export type VerificationRequestStatus = (typeof VERIFICATION_REQUEST_STATUSES)[n
 export type KycProvider = (typeof KYC_PROVIDERS)[number];
 export type LevelChangeDirection = (typeof LEVEL_CHANGE_DIRECTIONS)[number];
 export type LevelChangeActorType = (typeof LEVEL_CHANGE_ACTOR_TYPES)[number];
+export type SocialProofPlatform = (typeof SOCIAL_PROOF_PLATFORMS)[number];
+export type BankMatchResult = (typeof BANK_MATCH_RESULTS)[number];
+export type AddressMethod = (typeof ADDRESS_METHODS)[number];
+export type VerificationDocumentType = (typeof VERIFICATION_DOCUMENT_TYPES)[number];
 
 /** The two identifiers this module hashes. Narrower than `VerificationType` on purpose. */
 export type IdentifierType = Extract<VerificationType, 'NIN' | 'BVN'>;

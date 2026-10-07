@@ -5,5 +5,8 @@ export * from './enums.js';
 export * from './requests.js';
 export * from './identity-checks.js';
 export * from './liveness.js';
+export * from './business.js';
+export * from './documents.js';
+export * from './social-proof.js';
 export * from './provider-calls.js';
 export * from './level-changes.js';

@@ -64,3 +64,52 @@ export function identifierHash(hasher: HmacHasher, type: IdentifierType, normali
   }
   return hasher.hmac(HASH_DOMAIN[type], normalised);
 }
+
+/** The CAC's own prefixes, which users type inconsistently and which carry no information. */
+const RC_PREFIX = /^(RC|BN|IT|LP|LLP)/;
+const RC_MIN = 4;
+const RC_MAX = 20;
+
+/**
+ * A CAC registration number, normalised.
+ *
+ * Unlike a NIN this is public record and is stored in the clear (§6.5), so this function exists for
+ * one reason only: `RC 1487322`, `rc-1487322` and `1487322` are one registration, and §7's "is this
+ * RC already the primary verified business of another merchant" check compares strings. Without a
+ * single normal form that check silently stops finding anything, which is a failure with no symptom
+ * until a suspended merchant is trading again under a second account.
+ *
+ * The prefix is dropped rather than kept: CAC's own search accepts the number with or without it,
+ * and keeping it would make `BN1487322` and `1487322` two different businesses to us.
+ */
+export const normaliseRcNumber = (raw: string): string =>
+  raw
+    .toUpperCase()
+    .replace(/[^A-Z0-9]/g, '')
+    .replace(RC_PREFIX, '');
+
+/**
+ * Shape only, and loose on purpose — the same posture `isValidIdentifier` takes.
+ *
+ * CAC numbers have changed format more than once (plain RC numbers, BN numbers, the post-2021
+ * unified registration numbers), the provider is the authority on whether one exists, and a strict
+ * client-side rule here refuses real businesses whose number predates whatever pattern we guessed.
+ */
+export const isValidRcNumber = (normalised: string): boolean =>
+  normalised.length >= RC_MIN && normalised.length <= RC_MAX && /^[A-Z0-9]+$/.test(normalised);
+
+/**
+ * The §7 duplicate key for a business.
+ *
+ * Hashed even though the RC number is public, because it travels on
+ * `trust.verification.duplicate_identity_detected`, whose `identifierHashHex` field every consumer
+ * already reads as an opaque correlation key. Putting a plain RC number in that field for CAC and a
+ * hash for NIN would mean two shapes behind one name — and a consumer comparing the two across
+ * types would quietly never match.
+ */
+export function rcNumberHash(hasher: HmacHasher, normalised: string): Buffer {
+  if (normaliseRcNumber(normalised) !== normalised) {
+    throw new TypeError('rcNumberHash(): the RC number must be normalised before it is hashed');
+  }
+  return hasher.hmac('trust:cac', normalised);
+}
