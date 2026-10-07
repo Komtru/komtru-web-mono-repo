@@ -138,8 +138,24 @@ export function classifyBusinessFailure(result: BusinessCheckResult): RejectionC
   if (result.failureCode) return result.failureCode;
   if (result.verdict === 'LOW_CONFIDENCE') return 'NEEDS_HUMAN_REVIEW';
   if (result.officersMatch === false) return 'CAC_OFFICER_MISMATCH';
-  if (result.verdict === 'PASSED' && result.cacStatus !== undefined) return 'CAC_INACTIVE';
-  return 'CAC_NOT_FOUND';
+  // Not PASSED: the registration was not found at all.
+  if (result.verdict !== 'PASSED') return 'CAC_NOT_FOUND';
+  /**
+   * PASSED from here, so the registration IS real — and the two branches below have to mirror
+   * `decideBusinessOutcome`'s, because they are describing its decision.
+   *
+   * An earlier version read `verdict === 'PASSED' && cacStatus !== undefined → CAC_INACTIVE`, which
+   * called an ACTIVE registration inactive, and then fell through to `CAC_NOT_FOUND` for the
+   * officers-unknown case. That second one is the damaging half: a registration parked in
+   * MANUAL_REVIEW because the registry was silent on its officers would have rendered BVR1's banner
+   * as "the CAC number submitted doesn't match any active registration on file" — flatly untrue of a
+   * registration that matched, and it offers a resubmit where the honest answer is that a person is
+   * looking at it.
+   */
+  if (result.cacStatus !== undefined && result.cacStatus.toLowerCase() !== 'active') {
+    return 'CAC_INACTIVE';
+  }
+  return 'NEEDS_HUMAN_REVIEW';
 }
 
 export function classifyBankMatchFailure(result: BankMatchCheckResult): RejectionCode {

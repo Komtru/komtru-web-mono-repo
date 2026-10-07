@@ -7,8 +7,10 @@ import type { TrustConfig } from '../../../config/env.js';
 import type { Logger } from '../../../platform/logger.js';
 import { KycProviderNotConfiguredError } from '../domain/errors.js';
 import type { KycProviderAdapter } from '../domain/provider.js';
+import type { SocialProofAdapter } from '../domain/social-proof.js';
 import { createDojahClient } from '../infrastructure/providers/dojah.client.js';
 import { createFakeKycClient } from '../infrastructure/providers/fake-kyc.client.js';
+import { createFakeSocialClient } from '../infrastructure/providers/fake-social.client.js';
 
 const DOJAH_VARIABLES = ['DOJAH_APP_ID', 'DOJAH_SECRET_KEY', 'DOJAH_BASE_URL'] as const;
 
@@ -33,4 +35,26 @@ export function kycProvider(config: TrustConfig, logger: Logger): KycProviderAda
     'trust: identity verification is running on the deterministic FAKE adapter; every level it grants is recorded as provider=FAKE',
   );
   return createFakeKycClient();
+}
+
+/**
+ * The social-proof lookup. One implementation, and no config flag selecting between them — because
+ * there is nothing to select.
+ *
+ * Unlike the KYC adapters this is not "no account yet": neither platform is purchasable at this
+ * stage at all. Instagram's Basic Display API died for personal accounts in December 2024 and the
+ * Graph API that replaced it needs a Professional account plus a Meta app review; X bills per profile
+ * read. A `TRUST_SOCIAL_PROVIDER` variable offering a choice of one would be a configuration
+ * surface pretending a decision exists. It becomes a branch, like `kycProvider` above, the day one
+ * does.
+ *
+ * It warns for the same reason the FAKE KYC selection does: an operator reading a boot log should
+ * never have to learn from a database row which badges on this platform were attested by nobody.
+ */
+export function socialProofAdapter(logger: Logger): SocialProofAdapter {
+  logger.warn(
+    { provider: 'FAKE' },
+    'trust: social proof is running on the deterministic FAKE lookup; no Instagram or X integration exists',
+  );
+  return createFakeSocialClient();
 }

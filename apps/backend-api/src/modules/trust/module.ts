@@ -14,17 +14,23 @@ import type { SocketGateway } from '../socket/index.js';
 import {
   TRUST_QUEUES,
   TRUST_SCHEDULES,
+  type BankMatchJob,
+  type BusinessCheckJob,
   type IdentityCheckJob,
   type LivenessCheckJob,
+  type SocialProofCheckJob,
 } from './domain/queues.js';
 import { trustRoutes } from './http/routes.js';
 import { bindStore } from './infrastructure/postgres/bind-store.js';
 import type { TrustStore } from './infrastructure/postgres/store.js';
 import type { TrustJobDeps } from './jobs/deps.js';
-import { kycProvider } from './jobs/providers.js';
+import { kycProvider, socialProofAdapter } from './jobs/providers.js';
 import { runExpireStale } from './jobs/expire-stale.job.js';
+import { runBankMatchCheck } from './jobs/run-bank-match.job.js';
+import { runBusinessCheck } from './jobs/run-business-check.job.js';
 import { runIdentityCheck } from './jobs/run-identity-check.job.js';
 import { runLivenessCheck } from './jobs/run-liveness-check.job.js';
+import { runSocialProofCheck, type SocialProofJobDeps } from './jobs/run-social-proof-check.job.js';
 
 /**
  * 31 past the hour, off the top like files' sweeps, so the hourly jobs do not all land together.
@@ -59,6 +65,11 @@ interface TrustRuntime {
   encryption: Encryption;
   logger: Logger;
   jobs: TrustJobDeps;
+  /**
+   * Narrower than `jobs`, and deliberately so: the social-proof lookup has no business holding a
+   * `KycProviderAdapter`, and a job that cannot reach one cannot spend a billed call by accident.
+   */
+  socialJobs: SocialProofJobDeps;
 }
 
 export interface TrustModuleOptions {
@@ -109,6 +120,27 @@ export function createTrustModule(options: TrustModuleOptions): KomtruModule {
         backoffMs: JOB_BACKOFF_MS,
         process: async (data: LivenessCheckJob) => await runLivenessCheck(need().jobs, data),
       },
+      {
+        name: TRUST_QUEUES.BUSINESS_CHECK,
+        concurrency: JOB_CONCURRENCY,
+        attempts: JOB_ATTEMPTS,
+        backoffMs: JOB_BACKOFF_MS,
+        process: async (data: BusinessCheckJob) => await runBusinessCheck(need().jobs, data),
+      },
+      {
+        name: TRUST_QUEUES.BANK_MATCH,
+        concurrency: JOB_CONCURRENCY,
+        attempts: JOB_ATTEMPTS,
+        backoffMs: JOB_BACKOFF_MS,
+        process: async (data: BankMatchJob) => await runBankMatchCheck(need().jobs, data),
+      },
+      {
+        name: TRUST_QUEUES.SOCIAL_PROOF_CHECK,
+        concurrency: JOB_CONCURRENCY,
+        attempts: JOB_ATTEMPTS,
+        backoffMs: JOB_BACKOFF_MS,
+        process: async (data: SocialProofCheckJob) => await runSocialProofCheck(need().socialJobs, data),
+      },
     ],
 
     schedules: [
@@ -155,6 +187,12 @@ export function createTrustModule(options: TrustModuleOptions): KomtruModule {
           adapter: kycProvider(config, ctx.logger),
           hasher,
           encryption,
+          gateway: options.gateway,
+          logger: ctx.logger,
+        },
+        socialJobs: {
+          store,
+          social: socialProofAdapter(ctx.logger),
           gateway: options.gateway,
           logger: ctx.logger,
         },

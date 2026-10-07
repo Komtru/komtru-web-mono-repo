@@ -227,7 +227,7 @@ export interface BankNameMatchRecord {
   checkedAt: Date;
 }
 
-/** The most recent terminal rejection of a check, for VF1 and BVR1. */
+/** The most recent terminal failure of a check — a rejection or an expiry — for VF1 and BVR1. */
 export interface RejectedRequestRow {
   requestId: string;
   verificationType: VerificationType;
@@ -366,6 +366,6 @@ export interface TrustStore {
    * Returns false when the claim was already verified or has gone.
    */
   settleSocialProofClaim(input: SocialProofDecisionInput): Promise<boolean>;
-  /** The most recent REJECTED request per verification type, for VF1 and BVR1. */
+  /** The most recent terminally-failed request (REJECTED or EXPIRED) per type, for VF1 and BVR1. */
   listRecentRejections(userId: string): Promise<RejectedRequestRow[]>;
 }

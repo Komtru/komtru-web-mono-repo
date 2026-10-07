@@ -962,7 +962,15 @@ export function bindStore(db: Db): TrustStore {
           decidedAt: verificationRequests.decidedAt,
         })
         .from(verificationRequests)
-        .where(and(eq(verificationRequests.userId, userId), eq(verificationRequests.status, 'REJECTED')))
+        .where(
+          and(
+            eq(verificationRequests.userId, userId),
+            // EXPIRED as well as REJECTED. Both are terminal failures the user is looking at a
+            // screen about, and a sweep that closed a request the provider never answered is the
+            // `PROVIDER_UNAVAILABLE` case — leaving it out would make that code unrenderable.
+            inArray(verificationRequests.status, ['REJECTED', 'EXPIRED']),
+          ),
+        )
         .orderBy(verificationRequests.verificationType, desc(verificationRequests.decidedAt));
       return rows;
     },
@@ -978,7 +986,15 @@ export function bindStore(db: Db): TrustStore {
          */
         const expired = await tx
           .update(verificationRequests)
-          .set({ status: 'EXPIRED', decidedAt: sql`now()` })
+          /**
+           * `PROVIDER_UNAVAILABLE`, written here and nowhere else.
+           *
+           * Without it the code was unreachable and an expired request carried no reason at all, so
+           * VF1 had nothing to render after the one failure that is not the user's fault. Its copy is
+           * the only one on that screen that asks the user to do the same thing again rather than
+           * change something, which is the difference between a retry and a support ticket.
+           */
+          .set({ status: 'EXPIRED', decidedAt: sql`now()`, rejectionReason: 'PROVIDER_UNAVAILABLE' })
           .where(
             and(
               lt(verificationRequests.expiresAt, now),
