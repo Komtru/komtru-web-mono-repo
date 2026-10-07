@@ -48,31 +48,51 @@ const trimmed = (env: AppEnv, name: string): string | undefined => {
 /** Trailing slash off, so `${parkUrl}/log-arrival` never becomes `//log-arrival`. */
 const withoutTrailingSlash = (value: string): string => value.replace(/\/+$/, '');
 
+const readUrl = (env: AppEnv, name: string, errors: string[]): string => {
+  const value = trimmed(env, name);
+  if (value === undefined) {
+    errors.push(`${name} is missing`);
+    return '';
+  }
+  if (!URL.canParse(value)) {
+    errors.push(`${name} is not a valid URL`);
+    return '';
+  }
+  return withoutTrailingSlash(value);
+};
+
+const required = (env: AppEnv, name: string): string => {
+  const errors: string[] = [];
+  const value = readUrl(env, name, errors);
+  if (errors.length > 0) throw new Error(`${appSpec.appName}: ${errors.join('; ')}`);
+  return value;
+};
+
 /**
- * `readAppConfig` plus the two URLs only this app has. Both are required rather than optional: the
- * Account screen links to one and `middleware` routes a whole host to the other, and an app that
- * started without them would fail at the click rather than at the boundary.
+ * Where the Park Agent app lives. Read on its own because Account is the only screen that needs it:
+ * a deployment missing it should cost the Park Agent row, not sign-in and not error reporting.
+ */
+export const readParkUrl = (env: AppEnv): string => required(env, PARK_URL_ENV);
+
+/** Where the passport pages are served. Only the host rules need it. */
+export const readPassportUrl = (env: AppEnv): string => required(env, PASSPORT_URL_ENV);
+
+/**
+ * `readAppConfig` plus the two URLs only this app has, which together are exactly the `HostRules`.
+ *
+ * Only `middleware` asks for all of it, because only `middleware` routes by all of it. Everything
+ * else reads the one value it uses: the auth route and `instrumentation` take `readAppConfig`, and
+ * Account takes `readParkUrl`. A deployment with no `NEXT_PUBLIC_KOMTRU_PARK_URL` should not be a
+ * deployment with no login.
  */
 export function readWebAppConfig(env: AppEnv): WebAppConfig {
   const base = readAppConfig(appSpec, env);
   const errors: string[] = [];
-  const url = (name: string): string => {
-    const value = trimmed(env, name);
-    if (value === undefined) {
-      errors.push(`${name} is missing`);
-      return '';
-    }
-    if (!URL.canParse(value)) {
-      errors.push(`${name} is not a valid URL`);
-      return '';
-    }
-    return withoutTrailingSlash(value);
-  };
 
   // Both read before either is reported: fixing `.env.local` one restart at a time is the slowest
   // possible way to learn that two of them are wrong.
-  const passportUrl = url(PASSPORT_URL_ENV);
-  const parkUrl = url(PARK_URL_ENV);
+  const passportUrl = readUrl(env, PASSPORT_URL_ENV, errors);
+  const parkUrl = readUrl(env, PARK_URL_ENV, errors);
   if (errors.length > 0) throw new Error(`${appSpec.appName}: ${errors.join('; ')}`);
 
   return { ...base, passportUrl, parkUrl };

@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import { EmptyState, OfflineBanner } from '@komtru/ui-kit';
-import { AppShell } from '../../src/shell/AppShell';
-import { ANONYMOUS_VIEWER } from '../../src/shell/nav';
+import { AppShell } from '../../../src/shell/AppShell';
+import { ANONYMOUS_VIEWER } from '../../../src/shell/nav';
 
 export const metadata: Metadata = { title: 'Offline' };
 

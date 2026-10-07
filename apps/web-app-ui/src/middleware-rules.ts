@@ -7,7 +7,14 @@ import { HUB_APPLICATION_PATHS, PASSPORT_ROUTE_PREFIX } from './hosts';
  * have an account, and the whole point of the page is that it can be checked by a stranger. The
  * offline document has to be reachable with no network and therefore no refresh call.
  */
-export const PUBLIC_PATHS = [PASSPORT_ROUTE_PREFIX, '/offline'] as const;
+export const PUBLIC_PATHS = [
+  PASSPORT_ROUTE_PREFIX,
+  '/offline',
+  // The URL a person types. `/` only redirects to the app's home, which is gated like every other
+  // screen, so opening it exposes nothing — and gating the redirect itself is how a bare origin
+  // ends up at a sign-in route that does not exist yet.
+  '/',
+] as const;
 
 /**
  * Paths that need a session and cannot have one yet.

@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
-import { AppShell } from '../../src/shell/AppShell';
-import { Placeholder } from '../../src/shell/Placeholder';
-import { resolveViewer } from '../../src/shell/viewer';
+import { AppShell } from '../../../src/shell/AppShell';
+import { Placeholder } from '../../../src/shell/Placeholder';
+import { resolveViewer } from '../../../src/shell/viewer';
 
 export const metadata: Metadata = { title: 'Messages' };
 
