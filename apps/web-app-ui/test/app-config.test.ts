@@ -1,8 +1,9 @@
 import { readAppConfig, SESSION_SECRET_ENV } from '@komtru/app-kit';
+import { PARK_URL_ENV, PASSPORT_URL_ENV, readWebAppConfig } from '../src/app-config';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
-import { appSpec } from '../src/app-config.js';
+import { appSpec } from '../src/app-config';
 
 /** `.env.example` is the documented environment; a config that cannot be built from it is wrong. */
 const envExample = (): Record<string, string> => {
@@ -30,5 +31,26 @@ describe('@komtru/web-app-ui app spec', () => {
 
   it('declares the session secret the middleware needs', () => {
     expect(Object.keys(envExample())).toContain(SESSION_SECRET_ENV);
+  });
+});
+
+describe('the two URLs only this app has', () => {
+  it('builds both from the documented environment', () => {
+    expect(readWebAppConfig(envExample())).toMatchObject({
+      passportUrl: 'http://localhost:3001/passport',
+      parkUrl: 'http://localhost:3004',
+    });
+  });
+
+  it('names every missing variable at once, not one restart at a time', () => {
+    const env = { ...envExample(), [PASSPORT_URL_ENV]: '', [PARK_URL_ENV]: 'not-a-url' };
+    expect(() => readWebAppConfig(env)).toThrow(
+      `web-app-ui: ${PASSPORT_URL_ENV} is missing; ${PARK_URL_ENV} is not a valid URL`,
+    );
+  });
+
+  it('drops a trailing slash, so a built link never doubles one', () => {
+    const env = { ...envExample(), [PARK_URL_ENV]: 'https://park.komtru.com/' };
+    expect(readWebAppConfig(env).parkUrl).toBe('https://park.komtru.com');
   });
 });

@@ -6,19 +6,29 @@ export interface TabBarProps {
   items: readonly NavItem[];
   /** Names the landmark. A screen with two navigations needs them told apart. */
   label?: string;
+  /**
+   * The shell's own visibility, which is the shell's decision, not the nav's — the same reason
+   * `<SideNav>` and `<TopNav>` take one. An app that draws one responsive shell rather than two
+   * hides the tab bar from `md` up, where the top nav takes over.
+   */
+  className?: string;
 }
 
 /**
  * `.scr-tabbar` — the bottom tab bar. `margin-top:auto` is what pins it to the bottom of a short
  * screen, so it only works inside `<MobileShell>`'s flex column.
  */
-export function TabBar({ items, label = 'Sections' }: TabBarProps): React.JSX.Element {
+export function TabBar({ items, label = 'Sections', className }: TabBarProps): React.JSX.Element {
   const current = soleCurrent(items, 'TabBar');
 
   return (
     <nav
       aria-label={label}
-      className="sticky bottom-0 mt-auto flex border-t-[1px] border-t-border-hairline bg-surface-primary pt-[8px] pr-[4px] pb-[12px] pl-[4px]"
+      className={cx(
+        'sticky bottom-0 mt-auto flex border-t-[1px] border-t-border-hairline bg-surface-primary',
+        'pt-[8px] pr-[4px] pb-[12px] pl-[4px]',
+        className,
+      )}
     >
       {items.map((item, index) => {
         const active = index === current;
@@ -42,7 +52,7 @@ export function TabBar({ items, label = 'Sections' }: TabBarProps): React.JSX.El
             </span>
           </>
         );
-        const className = cx('flex flex-1 flex-col items-center gap-[3px]', FOCUS_RING);
+        const tabClass = cx('flex flex-1 flex-col items-center gap-[3px]', FOCUS_RING);
 
         return item.href === undefined ? (
           <button
@@ -50,7 +60,7 @@ export function TabBar({ items, label = 'Sections' }: TabBarProps): React.JSX.El
             type="button"
             aria-current={active ? 'page' : undefined}
             onClick={item.onSelect}
-            className={className}
+            className={tabClass}
           >
             {content}
           </button>
@@ -59,7 +69,7 @@ export function TabBar({ items, label = 'Sections' }: TabBarProps): React.JSX.El
             key={item.label}
             href={item.href}
             aria-current={active ? 'page' : undefined}
-            className={className}
+            className={tabClass}
           >
             {content}
           </a>

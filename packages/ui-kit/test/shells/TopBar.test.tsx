@@ -85,6 +85,11 @@ describe('LogoBar', () => {
     expect(header?.className).not.toContain('border-b');
   });
 
+  it('takes a class list, so a one-shell app can hide it where the top nav takes over', () => {
+    const { container } = render(<LogoBar className="md:hidden" />);
+    expect(container.querySelector('header')?.className).toContain('md:hidden');
+  });
+
   it('carries the same action control the top bar does, badge and all', () => {
     render(<LogoBar action={{ label: 'Alerts', icon: BELL, badge: true }} />);
     expect(screen.getByRole('button', { name: 'Alerts' }).querySelector('.bg-risk')).not.toBeNull();
