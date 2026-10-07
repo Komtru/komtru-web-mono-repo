@@ -77,6 +77,20 @@ jobs:
   build:
     needs: [test]
     runs-on: ubuntu-latest
+    # `next build` inlines every NEXT_PUBLIC_* value into the client bundle and evaluates the route
+    # modules to collect page data, so the app's environment has to exist before the build, not at
+    # deploy time. The fallbacks keep this job honest on a fork or before the repository variables
+    # are set; the artefact is never deployed from here (the deploy step below is still a
+    # placeholder, and T-005 is where the real values arrive as repository variables and secrets).
+    env:
+      NEXT_PUBLIC_KOMTRU_APP_URL: ${{ vars.WEB_APP_URL || 'https://app.komtru.com' }}
+      NEXT_PUBLIC_KOMTRU_API_URL: ${{ vars.KOMTRU_API_URL || 'https://api.komtru.com/v1' }}
+      NEXT_PUBLIC_KOMTRU_PASSPORT_URL: ${{ vars.KOMTRU_PASSPORT_URL || 'https://passport.komtru.com' }}
+      NEXT_PUBLIC_KOMTRU_PARK_URL: ${{ vars.KOMTRU_PARK_URL || 'https://park.komtru.com' }}
+      # Server-side only and never baked into a bundle; the build needs one because middleware and
+      # the auth route refuse to load without it, which is the behaviour that keeps a deployment
+      # from running with no way to tell a real session from a made-up one.
+      KOMTRU_SESSION_SECRET: ${{ secrets.KOMTRU_SESSION_SECRET || 'ci-build-only-placeholder-secret' }}
     steps:
       - uses: actions/checkout@v7
       - uses: ./.github/actions/setup

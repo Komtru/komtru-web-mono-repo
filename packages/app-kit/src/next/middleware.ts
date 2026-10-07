@@ -100,8 +100,8 @@ export function createKomtruMiddleware({
     if (hint === null) {
       const target = `${pathname}${search}`;
       return reject(
-        request,
-        new URL(config.signInPath, request.nextUrl.origin),
+        config.appUrl,
+        new URL(config.signInPath, config.appUrl),
         isSameSitePath(target) ? { next: target } : {},
       );
     }
@@ -111,9 +111,9 @@ export function createKomtruMiddleware({
       // to the app their session actually belongs to rather than to a sign-in they will fail again.
       const target =
         config.elsewhereUrl === undefined
-          ? new URL(config.signInPath, request.nextUrl.origin)
+          ? new URL(config.signInPath, config.appUrl)
           : new URL('/', config.elsewhereUrl);
-      return reject(request, target, config.elsewhereUrl === undefined ? { error: 'wrong-scope' } : {});
+      return reject(config.appUrl, target, config.elsewhereUrl === undefined ? { error: 'wrong-scope' } : {});
     }
 
     return NextResponse.next();
@@ -135,10 +135,19 @@ export function createKomtruMiddleware({
 const isSameSitePath = (value: string): boolean =>
   value.startsWith('/') && !value.startsWith('//') && !value.startsWith('/\\');
 
-function reject(request: NextRequest, target: URL, query: Record<string, string>): NextResponse {
+/**
+ * `appUrl`, not the request's own origin. Behind a proxy — which is every deployment, and
+ * `next start` locally — `request.nextUrl` and `request.url` carry the origin the Node server is
+ * bound to, `http://localhost:3001`, not the one the visitor asked for. Redirecting to that sends
+ * someone off the public host onto an address only the server can reach, and deriving the cookie's
+ * `Secure` flag from its `http:` scheme drops the flag, so the `Set-Cookie` does not overwrite the
+ * `Secure` cookie it is meant to clear — leaving the rejected session in place to be re-read,
+ * re-rejected and re-redirected on the next navigation, which is exactly what clearing it prevents.
+ */
+function reject(appUrl: string, target: URL, query: Record<string, string>): NextResponse {
   for (const [key, value] of Object.entries(query)) target.searchParams.set(key, value);
   const response = NextResponse.redirect(target, 307);
-  const secure = secureCookieFor(new URL(request.url));
+  const secure = secureCookieFor(new URL(appUrl));
   for (const cookie of clearedCookies(secure)) response.cookies.set(cookie);
   return response;
 }

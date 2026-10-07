@@ -4,7 +4,16 @@
   "tasks": {
     "build": {
       "dependsOn": ["^build"],
-      "outputs": ["dist/**", ".next/**", "!.next/cache/**"]
+      "outputs": ["dist/**", ".next/**", "!.next/cache/**"],
+      "env": [
+        "NEXT_PUBLIC_KOMTRU_APP_URL",
+        "NEXT_PUBLIC_KOMTRU_API_URL",
+        "NEXT_PUBLIC_KOMTRU_SOCKET_URL",
+        "NEXT_PUBLIC_KOMTRU_PASSPORT_URL",
+        "NEXT_PUBLIC_KOMTRU_PARK_URL",
+        "NEXT_PUBLIC_SENTRY_DSN",
+        "KOMTRU_SESSION_SECRET"
+      ]
     },
     "lint": {
       "dependsOn": ["^build"]

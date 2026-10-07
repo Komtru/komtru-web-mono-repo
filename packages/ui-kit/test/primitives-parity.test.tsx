@@ -23,8 +23,12 @@ import {
   FOCUS_RING_UTILITIES,
   FileDropzone,
   NodeLoader,
+  OfflineBanner,
   OtpInput,
+  QueuedActionNote,
   Select,
+  SettingsGroup,
+  SettingsRow,
   Sheet,
   Skeleton,
   Stepper,
@@ -45,6 +49,13 @@ const html = readFileSync(path.join(here, '../../../docs/design-reference', REFE
  * Every property a primitive knowingly does not reproduce, keyed by parity id, with the reason. Each
  * entry is also carried into the ticket's deferred list and into `src/primitives/DEVIATIONS.md`.
  */
+/** One headed group with one destination row — C10's shape, and Account's (T-110). */
+const SETTINGS = (
+  <SettingsGroup label="Security">
+    <SettingsRow label="Trusted devices" sub="1 device" href="/account/security" />
+  </SettingsGroup>
+);
+
 const DEVIATIONS: Deviations = {
   'focus-visible': {
     'border-radius':
@@ -131,6 +142,14 @@ const ADDITIONS: Additions = {
   // The icon wrapper carries `color` so `stroke-current` resolves to the tone — see DEVIATIONS.
   'proof-compare-note-icon': ['color'],
   'guard-lock-banner-icon': ['color'],
+  // The reference's row is a `<div>`; a row that goes somewhere is an `<a>`, which arrives
+  // underlined.
+  'm-settings-row': ['text-decoration-line'],
+  // `.sr-label` and `.sr-sub` are `<div>`s in the reference. They are `<span>`s here so a row can
+  // be one link rather than a link wrapped around block content, which puts the two lines back on
+  // their own lines.
+  'sr-label': ['display'],
+  'sr-sub': ['display'],
 };
 
 const ROWS: ParityRow[] = [
@@ -423,6 +442,71 @@ const ROWS: ParityRow[] = [
       </Banner>
     ),
     node: 2,
+  },
+
+  {
+    id: 'm-settings-group',
+    selector: '.m-settings-group',
+    element: SETTINGS,
+  },
+  {
+    id: 'm-settings-label',
+    selector: '.m-settings-label',
+    element: SETTINGS,
+    node: 1,
+  },
+  {
+    id: 'm-settings-row',
+    selector: '.m-settings-row',
+    element: SETTINGS,
+    node: 2,
+  },
+  {
+    id: 'sr-label',
+    selector: '.m-settings-row .sr-label',
+    element: SETTINGS,
+    node: 4,
+  },
+  {
+    id: 'sr-sub',
+    selector: '.m-settings-row .sr-sub',
+    element: SETTINGS,
+    node: 5,
+  },
+
+  {
+    id: 'offline-banner',
+    selector: '.offline-banner',
+    element: <OfflineBanner>Showing your last saved data.</OfflineBanner>,
+  },
+  {
+    id: 'offline-banner-icon',
+    selector: '.offline-banner svg',
+    element: <OfflineBanner>Showing your last saved data.</OfflineBanner>,
+    node: 1,
+  },
+  {
+    id: 'offline-banner-title',
+    selector: '.offline-banner b',
+    element: <OfflineBanner>Showing your last saved data.</OfflineBanner>,
+    node: 2,
+  },
+  {
+    id: 'offline-banner-body',
+    selector: '.offline-banner span',
+    element: <OfflineBanner>Showing your last saved data.</OfflineBanner>,
+    node: 3,
+  },
+  {
+    id: 'offline-queued',
+    selector: '.offline-queued',
+    element: <QueuedActionNote>&quot;Confirm delivery&quot; for KMT-88190 is queued.</QueuedActionNote>,
+  },
+  {
+    id: 'offline-queued-icon',
+    selector: '.offline-queued svg',
+    element: <QueuedActionNote>&quot;Confirm delivery&quot; for KMT-88190 is queued.</QueuedActionNote>,
+    node: 1,
   },
 
   {
