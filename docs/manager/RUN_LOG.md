@@ -6,6 +6,18 @@ cost and to find work to resume.
 
 ## Waiting on the owner
 
+- **T-037 access-control defaults.** Each was applied deny-by-default and listed under "Owner
+  decisions pending" in `docs/superpowers/plans/2026-11-06-t-037-rbac-staff-admin.md`:
+  - the holders of the risk, park, cases, config, compliance, analytics, growth and moderation
+    permissions;
+  - `moderation.act` removed from SUPPORT_LEAD;
+  - `trade.dispute_escalate` removed from DISPUTE_REVIEWER;
+  - `payout.retry` and `reconciliation.resolve` made two-person;
+  - staff without an MFA factor cannot be granted a role;
+  - an MFA reset needs an evidence reference, such as a ticket or call id;
+  - only a SUPER_ADMIN may act on another staff member;
+  - every refund is two-step until a "large refund" threshold is set;
+  - the two initial SUPER_ADMINs are created with `pnpm db:bootstrap-super-admins`.
 - ~~Mobile Buy/Sell switch (T-191).~~ Answered 2026-11-06: use the same Buy/Sell switch as desktop,
   in the mobile header, not Y2's role list.
 - Q1 (hosting and the GitHub remote) still blocks T-005 and the T-183 push.
@@ -70,3 +82,28 @@ cost and to find work to resume.
   week-cost=2. Per ticket that is about 9 and 1.
 - Next: the T-191 fix pass. Resume the worktree; a fresh Sonnet fixer works from REVIEW.md.
   Then T-037, which should reuse the `wip/main-uncommitted-2026-10-15` RBAC work, and T-072.
+
+## 2026-11-06 17:30–18:40 WAT — T-191 fix and T-037 in parallel (interactive, outside the schedule)
+
+- Usage at start: 5h 0% (fresh window), week 36%. At end: 5h 48%, week 43%.
+- **T-191: merged.** A fresh Sonnet fixer handled all 12 review items, including the owner's
+  mobile Buy/Sell ruling, and created T-222 for the tab-bar re-base (MVP). Verified: ui-kit
+  850/850 and web-app-ui 115/115 tests; lint, types and prettier clean.
+- **T-037: merged.**
+  - The Sonnet implementer took the RBAC catalogue from the wip branch. The catalogue has 14
+    roles, 70 permissions and 212 grants. The ticket also brought MFA-only staff login and admin
+    endpoints with two-person approvals.
+  - Because this is access control, the review ran on **Opus**. It found 5 must-fixes and 9
+    should-fixes, all fixed. The must-fixes were: self-reinstate, an approval not bound to its
+    payload, missing DENIED audit rows, grants permanent by default, and no cap on SUPER_ADMIN
+    holders.
+  - Verified: 2,499 identity and trust tests with infrastructure; migration safety clean; lint
+    and types clean on the branch and on main, after rebuilding the packages' `dist`.
+- Ticket costs:
+  - T-191 fix: about 5h 6, week 1.
+  - T-037 (build, Opus review, fix): about 5h 40, week 6. This is the first measured
+    security-heavy ticket.
+- `wip/main-uncommitted-2026-10-15`: its T-037 and T-051 parts are now superseded. It still
+  holds T-028 social login and the avatar work, so keep it until those tickets are done.
+- Next: T-072 (funding a trade; money, so an Opus implementer) or T-038 (staff invitations, now
+  unblocked by T-037).

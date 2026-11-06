@@ -92,7 +92,9 @@ start the next phase. Instead:
 
 **Merging**, which the manager does itself:
 
-1. Run the whole-repo checks in the worktree:
+1. First run `pnpm --filter "./packages/**" build`. Apps typecheck against the packages' built
+   `dist`, so stale output there shows up as false type errors, which happened after T-051 and
+   T-191. Then run the whole-repo checks in the worktree, and again on `main` after merging:
    `pnpm -w exec turbo run lint typecheck test --force` (scoped with `--filter` to the touched
    packages if the full suite will not fit the budget), then `pnpm format:check` and
    `pnpm migration:safety` if there is a migration.

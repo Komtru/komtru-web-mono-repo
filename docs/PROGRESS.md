@@ -5,11 +5,11 @@ after every run. The run-by-run history is [`manager/RUN_LOG.md`](manager/RUN_LO
 behind it is [`BUILD_PLAN.md`](BUILD_PLAN.md).
 
 ```
-MVP   ████████████······················  38/110  (35%)
-Total ████████··························  38/167  (23%)
+MVP   ████████████······················  40/111  (36%)
+Total ████████··························  40/168  (24%)
 ```
 
-72 MVP tickets left, 57 deferred past it.
+71 MVP tickets left, 57 deferred past it.
 
 ## By epic
 
@@ -18,7 +18,7 @@ Total ████████·························
 | 00-foundations         | 5    | 6     |
 | 01-shared-packages     | 8    | 8     |
 | 02-backend-platform    | 9    | 10    |
-| 03-identity            | 6    | 11    |
+| 03-identity            | 7    | 11    |
 | 04-files-notify-config | 3    | 7     |
 | 05-trust               | 2    | 3     |
 | 06-merchant-search     | 0    | 3     |
@@ -33,7 +33,7 @@ Total ████████·························
 | 15-logistics-ops       | 0    | 3     |
 | 16-park-agent-app      | 0    | 5     |
 | 17-release             | 0    | 4     |
-| 18-ui-master-v2        | 1    | 32    |
+| 18-ui-master-v2        | 2    | 33    |
 
 ## In progress
 
@@ -43,15 +43,21 @@ Total ████████·························
 
 ## Ready to start (MVP first)
 
-| Ticket | Title                                                         | MVP |
-| ------ | ------------------------------------------------------------- | --- |
-| T-029  | Isolate the integration suite's shared Redis and queues       | yes |
-| T-037  | RBAC catalog, staff login and admin endpoints                 | yes |
-| T-072  | Funding a trade                                               | yes |
-| T-191  | Rework T-110 shells to the v2 desktop, tablet and mode switch | yes |
-| T-034  | Social login                                                  |     |
-| T-041  | Avatars                                                       |     |
-| T-085  | Logistics schema and Park seed                                |     |
+| Ticket | Title                                                             | MVP |
+| ------ | ----------------------------------------------------------------- | --- |
+| T-029  | Isolate the integration suite's shared Redis and queues           | yes |
+| T-038  | Staff invitations                                                 | yes |
+| T-039  | Account lifecycle, recovery and NDPA hooks                        | yes |
+| T-046  | Location catalog: states, cities and city requests                | yes |
+| T-048  | Configuration (M17)                                               | yes |
+| T-072  | Funding a trade                                                   | yes |
+| T-107  | Universal case model, work queue and advisory                     | yes |
+| T-222  | Re-base TabBar to v2 mobile styling                               | yes |
+| T-034  | Social login                                                      |     |
+| T-041  | Avatars                                                           |     |
+| T-085  | Logistics schema and Park seed                                    |     |
+| T-100  | Support tickets (M10)                                             |     |
+| T-103  | Administration: impersonation and admin action log (M14, adapted) |     |
 
 ## Blocked on an owner decision
 
@@ -67,7 +73,6 @@ Total ████████·························
 | ------ | ------------------------------------------------------------------------- | --- |
 | T-005  | Hosting confirmation and real deploy jobs                                 | yes |
 | T-029  | Isolate the integration suite's shared Redis and queues                   | yes |
-| T-037  | RBAC catalog, staff login and admin endpoints                             | yes |
 | T-038  | Staff invitations                                                         | yes |
 | T-039  | Account lifecycle, recovery and NDPA hooks                                | yes |
 | T-042  | Saved delivery addresses                                                  | yes |
@@ -115,7 +120,6 @@ Total ████████·························
 | T-180  | End-to-end critical paths                                                 | yes |
 | T-182  | Security review                                                           | yes |
 | T-183  | Definition-of-done audit and first push                                   | yes |
-| T-191  | Rework T-110 shells to the v2 desktop, tablet and mode switch             | yes |
 | T-192  | Create a trade: buyer starts, seller completes                            | yes |
 | T-193  | Create a trade: seller starts, buyer completes                            | yes |
 | T-194  | Trade workspace supporting screens: funding, terms, agreement and payment | yes |
@@ -137,3 +141,4 @@ Total ████████·························
 | T-213  | Tablet: fulfil, deliver, inspect and payouts                              | yes |
 | T-214  | Tablet: issues, messages, account and help                                | yes |
 | T-221  | Desktop and tablet: issues and resolution                                 | yes |
+| T-222  | Re-base TabBar to v2 mobile styling                                       | yes |
