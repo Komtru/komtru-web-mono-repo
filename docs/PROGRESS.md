@@ -5,11 +5,11 @@ after every run. The run-by-run history is [`manager/RUN_LOG.md`](manager/RUN_LO
 behind it is [`BUILD_PLAN.md`](BUILD_PLAN.md).
 
 ```
-MVP   ██████████████····················  46/111  (41%)
-Total █████████·························  46/168  (27%)
+MVP   ██████████████····················  47/111  (42%)
+Total ██████████························  47/168  (28%)
 ```
 
-65 MVP tickets left, 57 deferred past it.
+64 MVP tickets left, 57 deferred past it.
 
 ## By epic
 
@@ -29,7 +29,7 @@ Total █████████·······················�
 | 11-park                | 0    | 6     |
 | 12-ops-domains         | 0    | 9     |
 | 13-web-app-ui          | 1    | 22    |
-| 14-operations-app      | 0    | 16    |
+| 14-operations-app      | 1    | 16    |
 | 15-logistics-ops       | 0    | 3     |
 | 16-park-agent-app      | 0    | 5     |
 | 17-release             | 0    | 4     |
@@ -50,13 +50,14 @@ Total █████████·······················�
 | T-061  | Proposal flow                                                     | yes |
 | T-072  | Funding a trade                                                   | yes |
 | T-107  | Universal case model, work queue and advisory                     | yes |
-| T-140  | Console scaffold, shell and staff auth                            | yes |
 | T-034  | Social login                                                      |     |
 | T-041  | Avatars                                                           |     |
 | T-085  | Logistics schema and Park seed                                    |     |
 | T-100  | Support tickets (M10)                                             |     |
 | T-101  | Risk and fraud (M13)                                              |     |
 | T-103  | Administration: impersonation and admin action log (M14, adapted) |     |
+| T-155  | Location catalog management                                       |     |
+| T-219  | TrustOps: people development                                      |     |
 
 ## Blocked on an owner decision
 
@@ -106,7 +107,6 @@ Total █████████·······················�
 | T-123  | Seller trade handling and shipping                                        | yes |
 | T-124  | Seller payouts                                                            | yes |
 | T-126  | Trust, account and settings                                               | yes |
-| T-140  | Console scaffold, shell and staff auth                                    | yes |
 | T-141  | Work queue and universal case                                             | yes |
 | T-143  | Disputes                                                                  | yes |
 | T-144  | Identity review                                                           | yes |
