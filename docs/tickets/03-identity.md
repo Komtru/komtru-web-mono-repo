@@ -124,7 +124,7 @@ Spec: `docs/specs/module-01-identity-and-user-management.md`. Decision C2 (desig
 
 ### T-042 — Saved delivery addresses
 
-- **Status (2026-11-06): in progress** — implementation and tests complete; next: review.
+- **Status:** Done (2026-11-07). Plan: `docs/superpowers/plans/2026-11-06-t-042-saved-addresses.md`. Review: 0 must-fix, 6 should-fix items fixed. Cap of 20 live addresses; `anonymiseUserAddresses` is ready for T-039.
 - **Touches:** `identity/services/address.service.ts`, `identity/http/me.controller.ts`, migration `identity_addresses`
 - **Depends on:** T-030, T-046
 - **Acceptance criteria:**
