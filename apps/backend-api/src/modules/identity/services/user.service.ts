@@ -14,12 +14,28 @@
 // level that M6 decided, and it performs the write and publishes the event. The write lands in the
 // same transaction as M6's append-only `verification_level_changes` row, so the log and the column
 // cannot disagree — which a subscription cannot promise either.
-import { eq } from 'drizzle-orm';
-import { sql } from 'drizzle-orm';
+import { and, desc, eq, ilike, sql, type SQL } from 'drizzle-orm';
+import type { Db } from '../../../db/index.js';
+import { ApiError } from '../../../platform/errors.js';
 import { publish, type Tx } from '../../../platform/events/publish.js';
-import { identityVerificationLevelChangedEvent } from '../domain/events.js';
-import { users } from '../infrastructure/postgres/schema/users.js';
-import { VERIFICATION_LEVELS, type VerificationLevelName } from '../infrastructure/postgres/schema/enums.js';
+import { identityUserStatusChangedEvent, identityVerificationLevelChangedEvent } from '../domain/events.js';
+import type { PermissionCode } from '../domain/rbac/catalog.js';
+import { skeletonVariants } from '../domain/username/skeleton.js';
+import type { ReservedCategory } from '../domain/username/reserved.js';
+import { identityAuditLog } from '../infrastructure/postgres/schema/audit.js';
+import { userEmails, userPhones } from '../infrastructure/postgres/schema/contacts.js';
+import { userCapabilities } from '../infrastructure/postgres/schema/rbac.js';
+import { mfaFactors } from '../infrastructure/postgres/schema/sessions.js';
+import { reservedUsernames } from '../infrastructure/postgres/schema/usernames.js';
+import { userProfiles, users } from '../infrastructure/postgres/schema/users.js';
+import {
+  VERIFICATION_LEVELS,
+  type userStatus,
+  type VerificationLevelName,
+} from '../infrastructure/postgres/schema/enums.js';
+import { AUDIT_ACTIONS } from './audit.service.js';
+import { auditStaff, requireAuthorised, type StaffActor } from './rbac.service.js';
+import { bumpSessionsEpoch, revokeAllSessions } from './session.service.js';
 
 export interface ApplyVerificationLevelInput {
   userId: string;
@@ -76,4 +92,501 @@ export async function applyVerificationLevel(
   });
 
   return { from, to: input.to, changed: true };
+}
+
+// ---------------------------------------------------------------------------
+// T-037: what staff do to a user (M1 section 10.6). Each function writes exactly one audit row with
+// the stated reason, inside the transaction of the thing it describes. Route-level permission is
+// enforced by the platform before any of these run; `requireAuthorised` here is the second gate for
+// the actions where a condition or separation-of-duties rule applies.
+// ---------------------------------------------------------------------------
+
+export type UserStatusName = (typeof userStatus.enumValues)[number];
+
+export interface AdminUserSummary {
+  id: string;
+  publicId: string;
+  username: string | null;
+  status: UserStatusName;
+  verificationLevel: VerificationLevelName;
+  createdAt: Date;
+}
+
+export interface Pagination {
+  page: number;
+  limit: number;
+}
+
+const summaryColumns = {
+  id: users.id,
+  publicId: users.publicId,
+  username: users.username,
+  status: users.status,
+  verificationLevel: users.verificationLevel,
+  createdAt: users.createdAt,
+};
+
+const notFound = (): ApiError => new ApiError(404, 'NOT_FOUND', 'No such user');
+
+const escapeLike = (value: string): string => value.replace(/[\\%_]/g, (character) => `\\${character}`);
+
+/**
+ * `GET /admin/users?q=&status=&verificationLevel=&page=`. `q` matches a handle by prefix or a public
+ * id exactly and nothing else: searching by email or phone would make this list a PII lookup, and
+ * that is `user.view_pii`'s job. No contact detail is ever returned.
+ */
+export async function searchUsers(
+  db: Db,
+  input: {
+    actor: StaffActor;
+    reason: string;
+    q?: string | undefined;
+    status?: UserStatusName | undefined;
+    verificationLevel?: VerificationLevelName | undefined;
+  } & Pagination,
+): Promise<{ items: AdminUserSummary[]; page: number; limit: number; total: number }> {
+  const filters: SQL[] = [];
+  const q = input.q?.trim().replace(/^@/, '');
+  if (q) {
+    filters.push(
+      /^KMT-U-/i.test(q) ? eq(users.publicId, q.toUpperCase()) : ilike(users.username, `${escapeLike(q)}%`),
+    );
+  }
+  if (input.status) filters.push(eq(users.status, input.status));
+  if (input.verificationLevel) filters.push(eq(users.verificationLevel, input.verificationLevel));
+  const where = filters.length > 0 ? and(...filters) : undefined;
+
+  return db.transaction(async (tx) => {
+    const [items, count] = await Promise.all([
+      tx
+        .select(summaryColumns)
+        .from(users)
+        .where(where)
+        .orderBy(desc(users.createdAt), desc(users.id))
+        .limit(input.limit)
+        .offset((input.page - 1) * input.limit),
+      tx
+        .select({ n: sql<number>`count(*)::int` })
+        .from(users)
+        .where(where),
+    ]);
+    await auditStaff(tx, input.actor, {
+      action: AUDIT_ACTIONS.ADMIN_USER_SEARCHED,
+      reason: input.reason,
+      metadata: {
+        hasQuery: Boolean(q),
+        status: input.status ?? null,
+        verificationLevel: input.verificationLevel ?? null,
+        page: input.page,
+      },
+    });
+    return { items, page: input.page, limit: input.limit, total: count[0]?.n ?? 0 };
+  });
+}
+
+export interface AdminUserDetail extends AdminUserSummary {
+  statusReason: string | null;
+  statusChangedAt: Date;
+  mfaEnrolled: boolean;
+  capabilities: { capability: string; status: string }[];
+}
+
+/** `GET /admin/users/{id}`: everything about the account except what `user.view_pii` guards. */
+export async function getUserDetail(
+  db: Db,
+  input: { actor: StaffActor; userId: string; reason: string },
+): Promise<AdminUserDetail> {
+  return db.transaction(async (tx) => {
+    const row = (
+      await tx
+        .select({
+          ...summaryColumns,
+          statusReason: users.statusReason,
+          statusChangedAt: users.statusChangedAt,
+        })
+        .from(users)
+        .where(eq(users.id, input.userId))
+    )[0];
+    if (!row) throw notFound();
+    const [capabilities, factors] = await Promise.all([
+      tx
+        .select({ capability: userCapabilities.capability, status: userCapabilities.status })
+        .from(userCapabilities)
+        .where(eq(userCapabilities.userId, input.userId)),
+      tx
+        .select({ id: mfaFactors.id })
+        .from(mfaFactors)
+        .where(and(eq(mfaFactors.userId, input.userId), eq(mfaFactors.status, 'ACTIVE')))
+        .limit(1),
+    ]);
+    await auditStaff(tx, input.actor, {
+      action: AUDIT_ACTIONS.ADMIN_USER_VIEWED,
+      subjectUserId: input.userId,
+      reason: input.reason,
+    });
+    return { ...row, mfaEnrolled: factors.length > 0, capabilities };
+  });
+}
+
+export const PII_FIELDS = ['email', 'phone', 'firstName', 'lastName', 'dateOfBirth'] as const;
+export type PiiField = (typeof PII_FIELDS)[number];
+
+/**
+ * `GET /admin/users/{id}/pii`. Authorised with the footnote conditions (a support agent needs an
+ * open ticket on this user, which nothing can yet supply, so today they are refused) and written
+ * as one audit row PER FIELD revealed, as M1 section 12.3 note 1 asks.
+ */
+export async function revealPii(
+  db: Db,
+  input: {
+    actor: StaffActor;
+    userId: string;
+    reason: string;
+    ticket?: { open: boolean; referencesSubject: boolean };
+  },
+): Promise<Partial<Record<PiiField, string>>> {
+  await requireAuthorised(
+    db,
+    input.actor,
+    {
+      permission: 'user.view_pii',
+      subjectUserId: input.userId,
+      ...(input.ticket ? { ticket: input.ticket } : {}),
+    },
+    input.reason,
+  );
+
+  return db.transaction(async (tx) => {
+    if ((await tx.select({ id: users.id }).from(users).where(eq(users.id, input.userId))).length === 0) {
+      throw notFound();
+    }
+    const [email, phone, profile] = await Promise.all([
+      tx
+        .select({ value: userEmails.email })
+        .from(userEmails)
+        .where(and(eq(userEmails.userId, input.userId), eq(userEmails.isPrimary, true))),
+      tx
+        .select({ value: userPhones.phoneE164 })
+        .from(userPhones)
+        .where(and(eq(userPhones.userId, input.userId), eq(userPhones.isPrimary, true))),
+      tx
+        .select({
+          firstName: userProfiles.firstName,
+          lastName: userProfiles.lastName,
+          dateOfBirth: userProfiles.dateOfBirth,
+        })
+        .from(userProfiles)
+        .where(eq(userProfiles.userId, input.userId)),
+    ]);
+
+    const revealed: Partial<Record<PiiField, string>> = {};
+    const put = (field: PiiField, value: string | null | undefined) => {
+      if (value) revealed[field] = value;
+    };
+    put('email', email[0]?.value);
+    put('phone', phone[0]?.value);
+    put('firstName', profile[0]?.firstName);
+    put('lastName', profile[0]?.lastName);
+    put('dateOfBirth', profile[0]?.dateOfBirth);
+
+    // The field NAME goes in the audit row, never its value (section S12).
+    const fields = Object.keys(revealed);
+    for (const field of fields.length > 0 ? fields : [null]) {
+      await auditStaff(tx, input.actor, {
+        action: AUDIT_ACTIONS.ADMIN_PII_VIEWED,
+        subjectUserId: input.userId,
+        reason: input.reason,
+        metadata: { field },
+      });
+    }
+    return revealed;
+  });
+}
+
+/** M1 section 9.1's transitions that staff may make through this ticket; the rest are T-039's. */
+const STAFF_TRANSITIONS: Readonly<Record<string, readonly UserStatusName[]>> = {
+  ACTIVE: ['RESTRICTED', 'SUSPENDED'],
+  RESTRICTED: ['ACTIVE', 'SUSPENDED'],
+  SUSPENDED: ['ACTIVE'],
+  LOCKED: ['ACTIVE'],
+};
+
+const PERMISSION_FOR_STATUS: Partial<Record<UserStatusName, PermissionCode>> = {
+  RESTRICTED: 'user.restrict',
+  SUSPENDED: 'user.suspend',
+  ACTIVE: 'user.reinstate',
+};
+
+export const STAFF_SETTABLE_STATUSES = Object.keys(PERMISSION_FOR_STATUS);
+
+export interface StatusChangeDeps {
+  db: Db;
+  epochs?: { invalidate(userId: string): Promise<void> };
+}
+
+/**
+ * `POST /admin/users/{id}/status`. Restrict, suspend and reinstate only: closing needs the
+ * active-trade check and anonymising needs the erasure procedure, and both are T-039's. Suspension
+ * is M1 D5's kill switch in the same transaction: epoch bump and every session revoked.
+ */
+export async function changeUserStatus(
+  deps: StatusChangeDeps,
+  input: {
+    actor: StaffActor;
+    userId: string;
+    to: UserStatusName;
+    reason: string;
+    evidenceRef?: string | undefined;
+  },
+): Promise<{ from: UserStatusName; to: UserStatusName }> {
+  const permission = PERMISSION_FOR_STATUS[input.to];
+  if (!permission) {
+    throw new ApiError(
+      400,
+      'VALIDATION_FAILED',
+      'That status cannot be set here',
+      `Staff may set ${STAFF_SETTABLE_STATUSES.join(', ')}; closing and anonymising are the lifecycle service's.`,
+    );
+  }
+  await requireAuthorised(deps.db, input.actor, { permission, subjectUserId: input.userId }, input.reason);
+
+  const result = await deps.db.transaction(async (tx) => {
+    const row = (
+      await tx.select({ status: users.status }).from(users).where(eq(users.id, input.userId)).for('update')
+    )[0];
+    if (!row) throw notFound();
+    if (!STAFF_TRANSITIONS[row.status]?.includes(input.to)) {
+      throw new ApiError(
+        409,
+        'INVALID_TRANSITION',
+        'That status change is not allowed',
+        `An account that is ${row.status} cannot become ${input.to}`,
+      );
+    }
+
+    await tx
+      .update(users)
+      .set({
+        status: input.to,
+        statusReason: input.reason,
+        statusChangedAt: sql`now()`,
+        updatedAt: sql`now()`,
+      })
+      .where(eq(users.id, input.userId));
+
+    let revoked = 0;
+    if (input.to === 'SUSPENDED') {
+      await bumpSessionsEpoch(tx, input.userId);
+      revoked = await revokeAllSessions(tx, { userId: input.userId, reason: 'suspended by staff' });
+    }
+
+    await publish(tx, identityUserStatusChangedEvent, {
+      payload: { userId: input.userId, from: row.status, to: input.to, reason: input.reason },
+      aggregateType: 'identity.user',
+      aggregateId: input.userId,
+      actor: { type: 'STAFF', id: input.actor.userId },
+    });
+    await auditStaff(tx, input.actor, {
+      action: AUDIT_ACTIONS.ADMIN_STATUS_CHANGED,
+      subjectUserId: input.userId,
+      reason: input.reason,
+      metadata: {
+        from: row.status,
+        to: input.to,
+        evidenceRef: input.evidenceRef ?? null,
+        sessionsRevoked: revoked,
+      },
+    });
+    return { from: row.status, to: input.to };
+  });
+
+  if (input.to === 'SUSPENDED') await deps.epochs?.invalidate(input.userId).catch(() => undefined);
+  return result;
+}
+
+/** `POST /admin/users/{id}/sessions/revoke-all`. */
+export async function revokeUserSessions(
+  deps: StatusChangeDeps,
+  input: { actor: StaffActor; userId: string; reason: string },
+): Promise<{ revoked: number }> {
+  await requireAuthorised(
+    deps.db,
+    input.actor,
+    { permission: 'session.revoke', subjectUserId: input.userId },
+    input.reason,
+  );
+  const revoked = await deps.db.transaction(async (tx) => {
+    if ((await tx.select({ id: users.id }).from(users).where(eq(users.id, input.userId))).length === 0) {
+      throw notFound();
+    }
+    await bumpSessionsEpoch(tx, input.userId);
+    const count = await revokeAllSessions(tx, { userId: input.userId, reason: 'revoked by staff' });
+    await auditStaff(tx, input.actor, {
+      action: AUDIT_ACTIONS.ADMIN_SESSIONS_REVOKED,
+      subjectUserId: input.userId,
+      reason: input.reason,
+      metadata: { revoked: count },
+    });
+    return count;
+  });
+  await deps.epochs?.invalidate(input.userId).catch(() => undefined);
+  return { revoked };
+}
+
+export interface AuditEntryView {
+  id: number;
+  occurredAt: Date;
+  action: string;
+  outcome: string;
+  actorType: string;
+  actorUserId: string | null;
+  metadata: unknown;
+}
+
+/** `GET /admin/users/{id}/audit-log`, newest first. Viewing it is itself audited, after the read. */
+export async function listUserAuditLog(
+  db: Db,
+  input: { actor: StaffActor; userId: string; reason: string } & Pagination,
+): Promise<{ items: AuditEntryView[]; page: number; limit: number; total: number }> {
+  return db.transaction(async (tx) => {
+    if ((await tx.select({ id: users.id }).from(users).where(eq(users.id, input.userId))).length === 0) {
+      throw notFound();
+    }
+    const where = eq(identityAuditLog.subjectUserId, input.userId);
+    const [items, count] = await Promise.all([
+      tx
+        .select({
+          id: identityAuditLog.id,
+          occurredAt: identityAuditLog.occurredAt,
+          action: identityAuditLog.action,
+          outcome: identityAuditLog.outcome,
+          actorType: identityAuditLog.actorType,
+          actorUserId: identityAuditLog.actorUserId,
+          metadata: identityAuditLog.metadata,
+        })
+        .from(identityAuditLog)
+        .where(where)
+        .orderBy(desc(identityAuditLog.occurredAt), desc(identityAuditLog.id))
+        .limit(input.limit)
+        .offset((input.page - 1) * input.limit),
+      tx
+        .select({ n: sql<number>`count(*)::int` })
+        .from(identityAuditLog)
+        .where(where),
+    ]);
+    await auditStaff(tx, input.actor, {
+      action: AUDIT_ACTIONS.ADMIN_AUDIT_LOG_VIEWED,
+      subjectUserId: input.userId,
+      reason: input.reason,
+      metadata: { page: input.page },
+    });
+    return { items, page: input.page, limit: input.limit, total: count[0]?.n ?? 0 };
+  });
+}
+
+export interface LinkedAccountView {
+  userId: string;
+  publicId: string;
+  username: string | null;
+  status: string;
+  via: 'DEVICE' | 'IP';
+  shared: number;
+}
+
+/**
+ * `GET /admin/users/{id}/linked-accounts`: other accounts that signed in from the same device
+ * fingerprint or the same IP. Payout instruments are M8's, so that third link is not here yet.
+ */
+export async function listLinkedAccounts(
+  db: Db,
+  input: { actor: StaffActor; userId: string; reason: string } & Pagination,
+): Promise<{ items: LinkedAccountView[]; page: number; limit: number; total: number }> {
+  return db.transaction(async (tx) => {
+    if ((await tx.select({ id: users.id }).from(users).where(eq(users.id, input.userId))).length === 0) {
+      throw notFound();
+    }
+    const links = sql`
+      SELECT other.user_id AS user_id, 'DEVICE'::text AS via, count(DISTINCT mine.device_fingerprint)::int AS shared
+        FROM identity.devices mine
+        JOIN identity.devices other
+          ON other.device_fingerprint = mine.device_fingerprint AND other.user_id <> mine.user_id
+       WHERE mine.user_id = ${input.userId}::uuid
+       GROUP BY other.user_id
+      UNION ALL
+      SELECT other.user_id, 'IP'::text, count(DISTINCT mine.ip)::int
+        FROM identity.sessions mine
+        JOIN identity.sessions other ON other.ip = mine.ip AND other.user_id <> mine.user_id
+       WHERE mine.user_id = ${input.userId}::uuid AND mine.ip IS NOT NULL
+       GROUP BY other.user_id`;
+    const total = (await tx.execute<{ n: number }>(sql`SELECT count(*)::int AS n FROM (${links}) l`)).rows[0]
+      ?.n;
+    const { rows } = await tx.execute<{
+      user_id: string;
+      public_id: string;
+      username: string | null;
+      status: string;
+      via: 'DEVICE' | 'IP';
+      shared: number;
+    }>(sql`
+      SELECT l.user_id, u.public_id, u.username::text AS username, u.status::text AS status, l.via, l.shared
+        FROM (${links}) l
+        JOIN identity.users u ON u.id = l.user_id
+       ORDER BY l.shared DESC, l.via, l.user_id
+       LIMIT ${input.limit} OFFSET ${(input.page - 1) * input.limit}`);
+    await auditStaff(tx, input.actor, {
+      action: AUDIT_ACTIONS.ADMIN_LINKED_ACCOUNTS_VIEWED,
+      subjectUserId: input.userId,
+      reason: input.reason,
+      metadata: { page: input.page },
+    });
+    return {
+      items: rows.map((row) => ({
+        userId: row.user_id,
+        publicId: row.public_id,
+        username: row.username,
+        status: row.status,
+        via: row.via,
+        shared: row.shared,
+      })),
+      page: input.page,
+      limit: input.limit,
+      total: total ?? 0,
+    };
+  });
+}
+
+/**
+ * `POST /admin/usernames/reserve`. Keyed on the skeleton, with every fold of the handle, so
+ * reserving `admin` reserves `adm1n` too. Idempotent: reserving a reserved handle changes nothing.
+ */
+export async function reserveUsername(
+  db: Db,
+  input: {
+    actor: StaffActor;
+    username: string;
+    category: ReservedCategory;
+    note?: string | undefined;
+    reason: string;
+  },
+): Promise<{ username: string; skeletons: number }> {
+  const username = input.username.trim().replace(/^@/, '').toLowerCase();
+  const skeletons = skeletonVariants(username);
+  return db.transaction(async (tx) => {
+    await tx
+      .insert(reservedUsernames)
+      .values(
+        skeletons.map((usernameSkeleton) => ({
+          usernameSkeleton,
+          category: input.category,
+          ...(input.note ? { note: input.note } : {}),
+        })),
+      )
+      .onConflictDoNothing();
+    await auditStaff(tx, input.actor, {
+      action: AUDIT_ACTIONS.USERNAME_RESERVED,
+      reason: input.reason,
+      metadata: { username, category: input.category, skeletons: skeletons.length },
+    });
+    return { username, skeletons: skeletons.length };
+  });
 }

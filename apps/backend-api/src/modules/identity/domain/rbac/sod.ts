@@ -34,12 +34,24 @@ export const MAX_ROLE_GRANT_DAYS = 365;
  * approval; the others are consumed by the module that owns the action (`consumeApproval`).
  */
 export const TWO_STEP_ACTIONS = {
-  MFA_RESET: { permission: 'mfa.reset', identityOwned: true },
-  USERNAME_FORCE_CHANGE: { permission: 'username.force_change', identityOwned: true },
-  VERIFICATION_OVERRIDE: { permission: 'verification.override', identityOwned: false },
+  // M1 section 12.3 note 3: the identity challenge with the user comes first, and is attested.
+  MFA_RESET: { permission: 'mfa.reset', identityOwned: true, identityChallenge: true },
+  USERNAME_FORCE_CHANGE: {
+    permission: 'username.force_change',
+    identityOwned: true,
+    identityChallenge: false,
+  },
+  VERIFICATION_OVERRIDE: {
+    permission: 'verification.override',
+    identityOwned: false,
+    identityChallenge: false,
+  },
   // M8 section 10 sets no threshold for "large", so every refund is two-step until it does.
-  LARGE_REFUND: { permission: 'payment.refund', identityOwned: false },
-} as const satisfies Record<string, { permission: PermissionCode; identityOwned: boolean }>;
+  LARGE_REFUND: { permission: 'payment.refund', identityOwned: false, identityChallenge: false },
+} as const satisfies Record<
+  string,
+  { permission: PermissionCode; identityOwned: boolean; identityChallenge: boolean }
+>;
 
 export type TwoStepAction = keyof typeof TWO_STEP_ACTIONS;
 
@@ -99,16 +111,36 @@ export interface AdminActionInput {
 const holds = (roles: readonly string[], permission: PermissionCode): boolean =>
   roles.some((role) => isKnownRole(role) && grantFor(role, permission) !== 'DENY');
 
-const approvalIsValid = (input: AdminActionInput, permission: PermissionCode): boolean => {
-  const proof = input.approval;
+/**
+ * Whether `proof` is a valid second signature on `permission` for an action the requester started on
+ * `subjectUserId`: a different person from both, holding the permission, and having completed the
+ * identity challenge where the action's registry entry asks for one.
+ */
+export function approvalSatisfies(input: {
+  permission: PermissionCode;
+  requesterUserId: string;
+  subjectUserId?: string | undefined;
+  proof?: ApprovalProof | undefined;
+}): boolean {
+  const { proof } = input;
+  if (proof === undefined) return false;
+  const action = twoStepActionFor(input.permission);
+  const challengeRequired = action !== undefined && TWO_STEP_ACTIONS[action].identityChallenge;
   return (
-    proof !== undefined &&
-    proof.identityChallengeConfirmed &&
-    proof.approvedByUserId !== input.actorUserId &&
+    (!challengeRequired || proof.identityChallengeConfirmed) &&
+    proof.approvedByUserId !== input.requesterUserId &&
     proof.approvedByUserId !== input.subjectUserId &&
-    holds(proof.approvedByRoles, permission)
+    holds(proof.approvedByRoles, input.permission)
   );
-};
+}
+
+const approvalIsValid = (input: AdminActionInput, permission: PermissionCode): boolean =>
+  approvalSatisfies({
+    permission,
+    requesterUserId: input.actorUserId,
+    subjectUserId: input.subjectUserId,
+    proof: input.approval,
+  });
 
 const conditionHolds = (condition: GrantCondition, input: AdminActionInput): boolean => {
   switch (condition) {

@@ -3,6 +3,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   DUAL_APPROVAL_ROLES,
+  approvalSatisfies,
   MAX_ROLE_GRANT_DAYS,
   TWO_STEP_ACTIONS,
   authorizeAdminAction,
@@ -155,6 +156,23 @@ describe('authorizeAdminAction: two-step actions', () => {
     ).toEqual({ allowed: true });
   });
 
+  it('asks for the identity challenge only where the registry does (MFA reset, note 3)', () => {
+    const unchallenged = approval({ identityChallengeConfirmed: false });
+    expect(authorizeAdminAction({ ...request, approval: unchallenged })).toEqual({
+      allowed: false,
+      reason: 'APPROVAL_REQUIRED',
+    });
+    expect(
+      authorizeAdminAction({
+        ...request,
+        roles: ['FRAUD_ANALYST'],
+        permission: 'username.force_change',
+        approval: unchallenged,
+      }),
+    ).toEqual({ allowed: true });
+    expect(TWO_STEP_ACTIONS.MFA_RESET.identityChallenge).toBe(true);
+  });
+
   it('checks self-dealing even when the approval is valid', () => {
     expect(
       authorizeAdminAction({
@@ -242,6 +260,16 @@ describe('the two-step registry', () => {
       expect(needsApproval(permission)).toBe(true);
     expect(needsApproval('username.force_change')).toBe(true);
     expect(needsApproval('user.view')).toBe(false);
+  });
+});
+
+describe('approvalSatisfies', () => {
+  it('is what the approval service asks, apart from the permission check on the requester', () => {
+    const input = { permission: 'mfa.reset' as const, requesterUserId: 'a', subjectUserId: 's' };
+    expect(approvalSatisfies({ ...input, proof: approval() })).toBe(true);
+    expect(approvalSatisfies({ ...input })).toBe(false);
+    expect(approvalSatisfies({ ...input, proof: approval({ approvedByUserId: 'a' }) })).toBe(false);
+    expect(approvalSatisfies({ ...input, proof: approval({ approvedByUserId: 's' }) })).toBe(false);
   });
 });
 
