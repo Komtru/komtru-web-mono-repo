@@ -119,7 +119,9 @@ jobs:
           AUTH_TYPE: scram-sha-256
           POOL_MODE: transaction
           MAX_CLIENT_CONN: '200'
-          DEFAULT_POOL_SIZE: '20'
+          DEFAULT_POOL_SIZE: '10'
+          MAX_DB_CONNECTIONS: '15'
+          SERVER_LOGIN_RETRY: '0'
           ADMIN_USERS: komtru
           LISTEN_PORT: '5432'
         ports:
