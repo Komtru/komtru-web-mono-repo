@@ -20,7 +20,7 @@ Spec: `docs/specs/module-06-trust-and-verification.md`. Provider credentials do 
 
 ### T-051 — Business verification, bank name-match, address, social proof
 
-- **Status (2026-11-06): in progress** — implemented and verified; awaiting review
+- **Status:** Done (2026-11-06). Review: 8 items fixed (officer name from verified identity, bank-account HMAC key, social-proof races, submission guards). Verified names are now stored on NIN/BVN verification rows; D1 still holds (no raw NIN/BVN).
 - **Touches:** `trust/services/{business,bankMatch,address,socialProof}.service.ts`
 - **Depends on:** T-050
 - **Acceptance criteria:**
