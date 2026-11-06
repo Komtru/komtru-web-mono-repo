@@ -52,7 +52,8 @@ export function configAdminRoutes(deps: ConfigHttpDeps): RouteDefinition[] {
       scope: 'STAFF',
       permission: 'config.manage',
       summary: 'Change one setting; a reason is required',
-      // Setting a value to what it already is changes nothing, so a repeat is harmless.
+      // A repeat is safe without an idempotency key: setting a value to what it already is writes
+      // nothing (no change-log row, no audit row, no event), which is deliberate.
       retryable: false,
       rateLimit: WRITE_BUDGET,
       schema: { params: settingParams, body: settingBody, response: settingResponse },

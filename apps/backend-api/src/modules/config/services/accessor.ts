@@ -33,8 +33,15 @@ export interface ConfigAccessor {
   getDecimal(namespace: string, key: string): Promise<string>;
   /** An unknown flag is off: a capability nobody has switched on is not available. */
   isEnabled(code: string): Promise<boolean>;
+  /** Best-effort, for the request path: the TTL bounds a miss. Never throws. */
   invalidateSetting(namespace: string, key: string): Promise<void>;
   invalidateFlag(code: string): Promise<void>;
+  /**
+   * For the event subscribers: the same delete, but a Redis failure is thrown so the outbox
+   * redelivers the event. Deleting an absent key is fine, so delivering twice is too.
+   */
+  purgeSetting(namespace: string, key: string): Promise<void>;
+  purgeFlag(code: string): Promise<void>;
 }
 
 export function createConfigAccessor(
@@ -122,5 +129,11 @@ export function createConfigAccessor(
 
     invalidateSetting: (namespace, key) => cacheDelete(settingKey(namespace, key)),
     invalidateFlag: (code) => cacheDelete(flagKey(code)),
+    purgeSetting: async (namespace, key) => {
+      await redis.del(settingKey(namespace, key));
+    },
+    purgeFlag: async (code) => {
+      await redis.del(flagKey(code));
+    },
   };
 }

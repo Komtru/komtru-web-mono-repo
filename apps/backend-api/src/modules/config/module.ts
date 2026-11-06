@@ -39,14 +39,14 @@ export function createConfigModule(): KomtruModule {
         name: 'config.on-setting-changed',
         event: settingChanged,
         handler: async (envelope) => {
-          await accessor.invalidateSetting(envelope.payload.namespace, envelope.payload.key);
+          await accessor.purgeSetting(envelope.payload.namespace, envelope.payload.key);
         },
       });
       ctx.events.subscribe({
         name: 'config.on-feature-flag-toggled',
         event: featureFlagToggled,
         handler: async (envelope) => {
-          await accessor.invalidateFlag(envelope.payload.flagCode);
+          await accessor.purgeFlag(envelope.payload.flagCode);
         },
       });
       return Promise.resolve();

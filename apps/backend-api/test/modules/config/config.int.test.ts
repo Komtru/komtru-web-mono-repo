@@ -16,7 +16,18 @@ import { actorFor, type Actor } from '../../../src/platform/http/principal.js';
 import { infraEnabled } from '../../support/db-urls.js';
 import { useTestDatabase } from '../../support/db.js';
 import { testPrincipal } from '../../support/actors.js';
-import { createTestRedis, outboxEventTypes, redisReady, seedUser, testLogger } from '../identity/support.js';
+import { createIdentityAuth } from '../../../src/modules/identity/index.js';
+import { createConfigModule } from '../../../src/modules/config/module.js';
+import {
+  createTestRedis,
+  outboxEventTypes,
+  redisReady,
+  seedUser,
+  testConfig,
+  testLogger,
+} from '../identity/support.js';
+import type { KomtruModule, ModuleContext } from '../../../src/platform/module.js';
+import type { EventEnvelope } from '@komtru/shared-types';
 
 const countOf = async (pool: { query: (q: string) => Promise<{ rows: { n: number }[] }> }, table: string) =>
   (await pool.query(`SELECT count(*)::int AS n FROM ${table}`)).rows[0]?.n;
@@ -49,12 +60,17 @@ describe.runIf(infraEnabled)('config (M17)', () => {
     return actorFor(testPrincipal(userId, { scope: 'STAFF', permissions: new Set(permissions) }));
   };
 
-  const appFor = (actor: Actor) => {
+  /** Identity's own hook, so a refused staff call is audited exactly as it is in production. */
+  const onDenied = () =>
+    createIdentityAuth({ db: db(), redis, config: testConfig(), logger: testLogger }).onAccessDenied;
+
+  const appFor = (actor: Actor, accessorOverride?: () => ReturnType<typeof accessor>) => {
     const app = express();
     app.use(express.json());
     const router = express.Router();
-    mountRoutes(configAdminRoutes({ db, accessor: () => accessor() }), {
+    mountRoutes(configAdminRoutes({ db, accessor: accessorOverride ?? (() => accessor()) }), {
       logger: testLogger,
+      onDenied: onDenied(),
       resolveActor: () => Promise.resolve(actor),
       rateLimit: () => Promise.resolve(),
     })(router);
@@ -63,6 +79,12 @@ describe.runIf(infraEnabled)('config (M17)', () => {
     app.use(errorHandler(testLogger, () => undefined));
     return app;
   };
+
+  const put = (
+    app: express.Express,
+    body: Record<string, unknown>,
+    path = '/v1/admin/config/settings/disputes/appeal_window_days',
+  ) => request(app).put(path).send(body);
 
   describe('seed', () => {
     it('writes every seeded default, once, and never overwrites an edit', async () => {
@@ -125,29 +147,9 @@ describe.runIf(infraEnabled)('config (M17)', () => {
         .expect(200);
       expect(await settings.getInteger('disputes', 'evidence_window_days')).toBe(6);
     });
-
-    it('invalidates on the event too, for a change another instance made', async () => {
-      const settings = accessor();
-      expect(await settings.getInteger('tickets', 'reopen_window_days')).toBe(14);
-      await t
-        .owner()
-        .query(
-          `UPDATE config.platform_settings SET value = '3' WHERE namespace = 'tickets' AND key = 'reopen_window_days'`,
-        );
-      // Still the cached value until the subscriber runs.
-      expect(await settings.getInteger('tickets', 'reopen_window_days')).toBe(14);
-      await settings.invalidateSetting('tickets', 'reopen_window_days');
-      expect(await settings.getInteger('tickets', 'reopen_window_days')).toBe(3);
-    });
   });
 
   describe('admin routes', () => {
-    const put = (
-      app: express.Express,
-      body: Record<string, unknown>,
-      path = '/v1/admin/config/settings/disputes/appeal_window_days',
-    ) => request(app).put(path).send(body);
-
     it('lists a namespace for config.view and refuses without it', async () => {
       const viewer = await staffActor(['config.view']);
       const res = await request(appFor(viewer)).get('/v1/admin/config/settings/disputes').expect(200);
@@ -172,6 +174,56 @@ describe.runIf(infraEnabled)('config (M17)', () => {
         testPrincipal(userId, { scope: 'CONSUMER', permissions: new Set(['config.manage']) }),
       );
       await put(appFor(consumer), { value: 8, reason: REASON }).expect(403);
+    });
+
+    it('audits a refused write: DENIED row naming the route, the permission and the stated reason', async () => {
+      const viewer = await staffActor(['config.view']);
+      await put(appFor(viewer), { value: 8, reason: REASON }).expect(403);
+      const { userId } = await seedUser(t.app());
+      const consumer = actorFor(
+        testPrincipal(userId, { scope: 'CONSUMER', permissions: new Set(['config.manage']) }),
+      );
+      await put(appFor(consumer), { value: 8, reason: REASON }).expect(403);
+
+      const { rows } = await t
+        .app()
+        .query<{ actor_user_id: string; outcome: string; metadata: Record<string, unknown> }>(
+          `SELECT actor_user_id, outcome, metadata FROM identity.identity_audit_log
+          WHERE action = 'ADMIN_ACTION_DENIED' ORDER BY id`,
+        );
+      expect(rows).toHaveLength(2);
+      expect(rows[0]).toMatchObject({
+        actor_user_id: (viewer.principal as { userId: string }).userId,
+        outcome: 'DENIED',
+        metadata: {
+          route: 'PUT /admin/config/settings/:namespace/:key',
+          permission: 'config.manage',
+          denied: 'ROUTE_PERMISSION',
+          reason: REASON,
+        },
+      });
+      expect(rows[1]).toMatchObject({
+        actor_user_id: userId,
+        outcome: 'DENIED',
+        metadata: { permission: 'config.manage', denied: 'ROUTE_SCOPE', reason: REASON },
+      });
+      expect(await countOf(t.app(), 'config.config_change_log')).toBe(0);
+    });
+
+    it('prefers the body reason to the header, and refuses a reason that is not a string', async () => {
+      const admin = await staffActor(['config.manage']);
+      const app = appFor(admin);
+      await request(app)
+        .put('/v1/admin/config/settings/disputes/appeal_window_days')
+        .set('X-Admin-Reason', 'from the header')
+        .send({ value: 4, reason: 'from the body' })
+        .expect(200);
+      const { rows } = await t.app().query<{ reason: string }>('SELECT reason FROM config.config_change_log');
+      expect(rows.map((r) => r.reason)).toEqual(['from the body']);
+
+      await put(app, { value: 5, reason: 42 }).expect(422);
+      await put(app, { value: 5, reason: { text: 'x' } }).expect(422);
+      expect(await countOf(t.app(), 'config.config_change_log')).toBe(1);
     });
 
     it('requires a reason, from the body, the header, and never blank', async () => {
@@ -329,6 +381,173 @@ describe.runIf(infraEnabled)('config (M17)', () => {
       await expect(
         t.app().query('UPDATE config.config_change_log SET reason = $1', ['edited']),
       ).rejects.toThrow();
+    });
+  });
+
+  describe("event subscribers (the module's own registration)", () => {
+    type Handler = (envelope: EventEnvelope, tx: unknown) => Promise<unknown>;
+
+    /** Starts the real module against a recording bus, and returns the handlers it registered. */
+    const startModule = async (
+      redisClient: Redis,
+    ): Promise<{ module: KomtruModule; handlers: Map<string, Handler> }> => {
+      const handlers = new Map<string, Handler>();
+      const module = createConfigModule();
+      await module.start?.({
+        db: db(),
+        redis: redisClient,
+        logger: testLogger,
+        events: {
+          subscribe: (subscription: { name: string; handler: Handler }) => {
+            handlers.set(subscription.name, subscription.handler);
+          },
+        },
+      } as unknown as ModuleContext);
+      return { module, handlers };
+    };
+
+    const envelope = (payload: unknown): EventEnvelope => ({ payload }) as unknown as EventEnvelope;
+
+    it('registers both subscribers', async () => {
+      const { handlers } = await startModule(redis);
+      expect([...handlers.keys()].sort()).toEqual([
+        'config.on-feature-flag-toggled',
+        'config.on-setting-changed',
+      ]);
+    });
+
+    it('deletes the cached setting when the event is delivered, and delivering it twice is fine', async () => {
+      const { handlers } = await startModule(redis);
+      const settings = accessor();
+      expect(await settings.getInteger('tickets', 'reopen_window_days')).toBe(14);
+      await t
+        .owner()
+        .query(
+          `UPDATE config.platform_settings SET value = '3' WHERE namespace = 'tickets' AND key = 'reopen_window_days'`,
+        );
+      // Still the cached value until the subscriber runs.
+      expect(await settings.getInteger('tickets', 'reopen_window_days')).toBe(14);
+
+      const handler = handlers.get('config.on-setting-changed');
+      const event = envelope({ namespace: 'tickets', key: 'reopen_window_days', oldValue: 14, newValue: 3 });
+      await handler?.(event, {});
+      expect(await redis.get('config:setting:tickets.reopen_window_days')).toBeNull();
+      await handler?.(event, {});
+      expect(await settings.getInteger('tickets', 'reopen_window_days')).toBe(3);
+    });
+
+    it('deletes the cached flag on a toggle event, twice over', async () => {
+      const { handlers } = await startModule(redis);
+      const settings = accessor();
+      expect(await settings.isEnabled('some.flag')).toBe(false);
+      expect(await redis.get('config:flag:some.flag')).toBe('0');
+      await t
+        .owner()
+        .query(
+          `INSERT INTO config.feature_flags (code, description, enabled) VALUES ('some.flag', 'x', true)`,
+        );
+      const handler = handlers.get('config.on-feature-flag-toggled');
+      const event = envelope({ flagCode: 'some.flag', enabled: true });
+      await handler?.(event, {});
+      await handler?.(event, {});
+      expect(await settings.isEnabled('some.flag')).toBe(true);
+    });
+
+    it('throws when Redis is down, so the outbox redelivers', async () => {
+      const { handlers } = await startModule(brokenRedis());
+      await expect(
+        handlers.get('config.on-setting-changed')?.(
+          envelope({ namespace: 'tickets', key: 'reopen_window_days', oldValue: 14, newValue: 3 }),
+          {},
+        ),
+      ).rejects.toThrow(/redis down/);
+      await expect(
+        handlers.get('config.on-feature-flag-toggled')?.(
+          envelope({ flagCode: 'some.flag', enabled: true }),
+          {},
+        ),
+      ).rejects.toThrow(/redis down/);
+    });
+  });
+
+  /** A Redis whose every command fails, as it would during an outage. */
+  const brokenRedis = (): Redis => {
+    const fail = () => Promise.reject(new Error('redis down'));
+    return { get: fail, set: fail, del: fail } as unknown as Redis;
+  };
+
+  describe('a Redis outage', () => {
+    it('falls back to Postgres on reads and still lets a PUT succeed', async () => {
+      const broken = createConfigAccessor(db(), brokenRedis(), testLogger);
+      expect(await broken.getInteger('park', 'pin_max_attempts')).toBe(3);
+      expect(await broken.isEnabled('no.such_flag')).toBe(false);
+
+      const admin = await staffActor(['config.manage']);
+      const res = await request(appFor(admin, () => broken))
+        .put('/v1/admin/config/settings/park/pin_max_attempts')
+        .send({ value: 4, reason: REASON })
+        .expect(200);
+      expect(res.body).toMatchObject({ value: 4 });
+      expect(await broken.getInteger('park', 'pin_max_attempts')).toBe(4);
+    });
+  });
+
+  describe('flag creation races', () => {
+    it('lets two concurrent creates of one code both succeed, as a create and an update', async () => {
+      const a = await staffActor(['config.manage']);
+      const b = await staffActor(['config.manage']);
+      const send = (actor: Actor, enabled: boolean) =>
+        request(appFor(actor))
+          .put('/v1/admin/config/flags/race.flag')
+          .send({ enabled, description: 'A raced flag', reason: REASON });
+      const [first, second] = await Promise.all([send(a, true), send(b, false)]);
+      expect([first.status, second.status]).toEqual([200, 200]);
+      expect(await countOf(t.app(), 'config.feature_flags')).toBe(1);
+      // One creation and, unless both asked for the same state, one change on top of it.
+      const logged =
+        (await t.app().query<{ n: number }>('SELECT count(*)::int AS n FROM config.config_change_log'))
+          .rows[0]?.n ?? 0;
+      expect(logged).toBeGreaterThanOrEqual(1);
+      expect(logged).toBeLessThanOrEqual(2);
+    });
+  });
+
+  describe('atomicity', () => {
+    const rows = async () => ({
+      value: (
+        await t
+          .app()
+          .query<{ value: unknown }>(
+            `SELECT value FROM config.platform_settings WHERE namespace = 'disputes' AND key = 'appeal_window_days'`,
+          )
+      ).rows[0]?.value,
+      log: await countOf(t.app(), 'config.config_change_log'),
+      audit: (
+        await t
+          .app()
+          .query<{ n: number }>(
+            `SELECT count(*)::int AS n FROM identity.identity_audit_log WHERE action = 'ADMIN_CONFIG_SETTING_CHANGED'`,
+          )
+      ).rows[0]?.n,
+      outbox: (await outboxEventTypes(t.app())).length,
+    });
+
+    it.each([
+      ['the outbox', 'platform.outbox'],
+      ['the admin audit row', 'identity.identity_audit_log'],
+      ['the change log', 'config.config_change_log'],
+    ])('leaves the setting, log, audit row and outbox untouched when %s fails', async (_label, table) => {
+      const before = await rows();
+      const admin = await staffActor(['config.manage']);
+      // A CHECK that rejects every new row: NOT VALID keeps the (empty) existing rows out of it.
+      await t.owner().query(`ALTER TABLE ${table} ADD CONSTRAINT t048_force_fail CHECK (false) NOT VALID`);
+      try {
+        await put(appFor(admin), { value: 2, reason: REASON }).expect(500);
+      } finally {
+        await t.owner().query(`ALTER TABLE ${table} DROP CONSTRAINT t048_force_fail`);
+      }
+      expect(await rows()).toEqual(before);
+      expect(before.value).toBe(7);
     });
   });
 });

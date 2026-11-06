@@ -72,7 +72,7 @@
 - **Touches:** `src/modules/config/**`, migration `config_*`
 - **Depends on:** T-024, T-037
 - **Acceptance criteria:**
-  - `platform_settings` (namespace, key), `feature_flags`, append-only `config_change_log`; typed accessor with Redis cache invalidated by `config.setting_changed`.
+  - `platform_settings` (namespace, key), `feature_flags`, append-only `config_change_log`; typed accessor with Redis cache invalidated by `config.setting.changed` (the platform requires three-segment event names, so M17 §5's `config.setting_changed` and `config.feature_flag_toggled` are `config.setting.changed` and `config.feature_flag.toggled`).
   - Seeds: every M17 §4 default, plus `disputes.mediation_window_hours = 48`, `park.custody_ageing_hours = 48`, `park.pin_max_attempts = 3`, `trades.payment_deadline_hours`, `trades.delivery_deadline_days`.
   - Admin endpoints per M17 §6 behind permissions; every change requires a reason and writes the change log and admin action log.
   - No fee or cut is stored here; those live only in the fee file (T-047, design §6.5). A test asserts no `platform_settings` key looks like a fee.

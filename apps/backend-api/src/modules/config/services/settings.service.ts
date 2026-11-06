@@ -223,7 +223,9 @@ const boundsOf = (namespace: string, key: string): { min?: number; max?: number;
   };
 };
 
-const toFlag = (row: typeof featureFlags.$inferSelect): FlagView => ({
+type FlagRow = typeof featureFlags.$inferSelect;
+
+const toFlag = (row: FlagRow): FlagView => ({
   code: row.code,
   description: row.description,
   enabled: row.enabled,
@@ -275,11 +277,8 @@ export async function changeFlag(
   if (looksLikeFee(input.code)) throw feeRefused(input.code);
 
   return db.transaction(async (tx) => {
-    const [current] = await tx
-      .select()
-      .from(featureFlags)
-      .where(eq(featureFlags.code, input.code))
-      .for('update');
+    const lock = () => tx.select().from(featureFlags).where(eq(featureFlags.code, input.code)).for('update');
+    let [current] = await lock();
     if (!current && !input.description) {
       throw new ApiError(
         422,
@@ -289,22 +288,45 @@ export async function changeFlag(
         [{ path: 'description', message: 'Required to create a flag' }],
       );
     }
-    const note = input.rolloutNote === undefined ? (current?.rolloutNote ?? null) : input.rolloutNote;
-    if (current && current.enabled === input.enabled && current.rolloutNote === note) {
-      return { flag: toFlag(current), changed: false };
-    }
+    const noteFor = (existing: FlagRow | undefined) =>
+      input.rolloutNote === undefined ? (existing?.rolloutNote ?? null) : input.rolloutNote;
 
-    const values = {
-      code: input.code,
-      description: current?.description ?? input.description ?? '',
-      enabled: input.enabled,
-      rolloutNote: note,
-      updatedAt: new Date(),
-      updatedByAdminId: input.actor.userId,
-    };
-    const [written] = current
-      ? await tx.update(featureFlags).set(values).where(eq(featureFlags.code, input.code)).returning()
-      : await tx.insert(featureFlags).values(values).returning();
+    let written: FlagRow | undefined;
+    if (!current) {
+      // Two admins creating the same code at once: the loser's insert waits for the winner to commit,
+      // does nothing, and carries on down the update path against the winner's row.
+      [written] = await tx
+        .insert(featureFlags)
+        .values({
+          code: input.code,
+          description: input.description ?? '',
+          enabled: input.enabled,
+          rolloutNote: noteFor(undefined),
+          updatedAt: new Date(),
+          updatedByAdminId: input.actor.userId,
+        })
+        .onConflictDoNothing()
+        .returning();
+      if (!written) [current] = await lock();
+    }
+    const created = written !== undefined;
+    if (!written) {
+      if (!current) throw new Error('config: the flag vanished between insert and select');
+      const note = noteFor(current);
+      if (current.enabled === input.enabled && current.rolloutNote === note) {
+        return { flag: toFlag(current), changed: false };
+      }
+      [written] = await tx
+        .update(featureFlags)
+        .set({
+          enabled: input.enabled,
+          rolloutNote: note,
+          updatedAt: new Date(),
+          updatedByAdminId: input.actor.userId,
+        })
+        .where(eq(featureFlags.code, input.code))
+        .returning();
+    }
     if (!written) throw new Error('config: the flag write returned no row');
 
     await tx.insert(configChangeLog).values({
@@ -322,7 +344,7 @@ export async function changeFlag(
       outcome: 'SUCCESS',
       metadata: {
         code: input.code,
-        created: !current,
+        created,
         wasEnabled: current?.enabled ?? null,
         enabled: written.enabled,
         reason: input.reason,
