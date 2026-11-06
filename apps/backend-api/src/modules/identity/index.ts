@@ -34,6 +34,7 @@ import { seedIdentityCatalogue } from './infrastructure/postgres/seed.js';
 export * from './infrastructure/postgres/schema/index.js';
 export * from './domain/events.js';
 export * from './domain/rbac/catalog.js';
+export * from './domain/rbac/sod.js';
 export * from './domain/username/policy.js';
 export * from './domain/username/reserved.js';
 export * from './domain/username/skeleton.js';
@@ -124,6 +125,12 @@ export {
 
 // T-035. Appended at the end of the block so a parallel ticket's additions do not collide with it.
 export * from './domain/capability.js';
+export {
+  createCapabilityService,
+  postgresMerchantStatus,
+  type CapabilityService,
+  type MerchantStatusLookup,
+} from './services/capability.service.js';
 export * from './domain/party/card.js';
 export * from './domain/party/lookup.js';
 export * from './domain/invitation.js';
