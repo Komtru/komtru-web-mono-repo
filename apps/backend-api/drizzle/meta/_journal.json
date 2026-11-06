@@ -239,6 +239,13 @@
       "when": 1793985692372,
       "tag": "0033_config_change_log_append_only",
       "breakpoints": true
+    },
+    {
+      "idx": 34,
+      "version": "7",
+      "when": 1793987828366,
+      "tag": "0034_trade_standards",
+      "breakpoints": true
     }
   ]
 }

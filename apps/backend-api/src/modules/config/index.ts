@@ -19,6 +19,15 @@ export * from './infrastructure/postgres/schema/index.js';
 export * from './domain/events.js';
 export { SettingMissingError, SettingTypeError } from './domain/errors.js';
 export { SEED_SETTINGS, looksLikeFee, type SettingValue } from './domain/settings.js';
+// T-049: trade creation reads a standard (and snapshots its version id) through these.
+export {
+  checkBuyerWindowChange,
+  getCurrentStandard,
+  getStandardVersion,
+  listCurrentStandards,
+  type StandardView,
+} from './services/standards.service.js';
+export { resolveWindowExtension, validateItemSpec, type StandardContent } from './domain/standards.js';
 export { createConfigAccessor, type ConfigAccessor } from './services/accessor.js';
 export { createConfigModule };
 

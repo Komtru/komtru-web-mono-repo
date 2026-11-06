@@ -131,6 +131,16 @@ export const SEED_SETTINGS: readonly SettingDefinition[] = [
     description: 'Days a seller has to deliver a funded trade before the buyer can cancel.',
     ...days(),
   },
+  // T-049.
+  {
+    namespace: 'trades',
+    key: 'inspection_window_max_extension_hours',
+    valueType: 'INTEGER',
+    value: 48,
+    description:
+      'Most hours a buyer can extend an inspection window beyond its category standard (HTML BEI1).',
+    ...hours(24 * 14),
+  },
 ];
 
 export function findDefinition(namespace: string, key: string): SettingDefinition | undefined {

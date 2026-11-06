@@ -4,9 +4,11 @@ import type { Db } from '../../db/index.js';
 import { defineModule, type KomtruModule, type ModuleContext } from '../../platform/module.js';
 import { featureFlagToggled, settingChanged } from './domain/events.js';
 import { configAdminRoutes } from './http/admin.routes.js';
+import { standardsAdminRoutes, standardsPublicRoutes } from './http/standards.routes.js';
 import { feesRoute } from './routes.js';
 import { createConfigAccessor, type ConfigAccessor } from './services/accessor.js';
 import { seedSettings } from './services/settings.service.js';
+import { seedStandards } from './services/standards.service.js';
 
 interface ConfigRuntime {
   db: Db;
@@ -22,11 +24,21 @@ export function createConfigModule(): KomtruModule {
     return runtime;
   };
 
+  const httpDeps = { db: () => need().db, accessor: () => need().accessor };
+
   return defineModule({
     name: 'config',
-    routes: [feesRoute, ...configAdminRoutes({ db: () => need().db, accessor: () => need().accessor })],
+    routes: [
+      feesRoute,
+      ...configAdminRoutes(httpDeps),
+      ...standardsPublicRoutes(httpDeps),
+      ...standardsAdminRoutes(httpDeps),
+    ],
     // Reference data, not schema: M17 section 4's defaults. Insert-only, so an operator's edit survives.
-    seed: (db) => seedSettings(db),
+    seed: async (db) => {
+      await seedSettings(db);
+      await seedStandards(db);
+    },
 
     start: (ctx: ModuleContext) => {
       const accessor = createConfigAccessor(ctx.db, ctx.redis, ctx.logger);

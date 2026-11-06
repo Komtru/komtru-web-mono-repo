@@ -23,3 +23,14 @@ export const featureFlagToggled = defineEvent(
   1,
   z.object({ flagCode: z.string().min(1), enabled: z.boolean() }),
 );
+
+/** T-049: a new trade standard version was published. */
+export const tradeStandardChanged = defineEvent(
+  'config.trade_standard.changed',
+  1,
+  z.object({
+    categoryCode: z.string().min(1),
+    versionId: z.uuid(),
+    versionNumber: z.int().min(1),
+  }),
+);
