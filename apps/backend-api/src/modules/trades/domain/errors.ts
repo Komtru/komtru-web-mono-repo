@@ -40,3 +40,56 @@ export const sellerNotVerifiedError = (): ApiError =>
     'The seller is not identity-verified yet',
     'A trade cannot be funded until the seller has completed identity verification.',
   );
+
+/** T-061: a trade needs a saved address from each side; the client sends the user to add one. */
+export const addressRequiredError = (side: 'BUYER' | 'SELLER'): ApiError =>
+  new ApiError(
+    422,
+    'ADDRESS_REQUIRED',
+    'Add a saved address first',
+    side === 'BUYER'
+      ? 'A trade needs a saved delivery address from the buyer.'
+      : 'A trade needs a saved ships-from address from the seller.',
+  );
+
+/** W1: Accept stays disabled until media is attached; the server says what is still missing. */
+export const proofMediaRequiredError = (missing: {
+  missingPhotos: number;
+  missingVideo: boolean;
+}): ApiError => {
+  const parts = [
+    ...(missing.missingPhotos > 0
+      ? [`${missing.missingPhotos} more photo${missing.missingPhotos === 1 ? '' : 's'}`]
+      : []),
+    ...(missing.missingVideo ? ['a video'] : []),
+  ];
+  return new ApiError(
+    422,
+    'VALIDATION_FAILED',
+    'The seller must attach proof of the item first',
+    `Attach ${parts.join(' and ')} before this trade can move to payment.`,
+    [{ path: 'proofFileIds', message: 'Seller proof media is required' }],
+  );
+};
+
+export const itemSpecInvalidError = (missing: string[]): ApiError =>
+  new ApiError(
+    422,
+    'VALIDATION_FAILED',
+    'The item details are incomplete',
+    `This category requires: ${missing.join(', ')}.`,
+    missing.map((key) => ({ path: `itemSpec.${key}`, message: 'This detail is required' })),
+  );
+
+export const tradeNotFoundError = (): ApiError => new ApiError(404, 'NOT_FOUND', 'Trade not found');
+
+export const notYourTurnError = (): ApiError =>
+  new ApiError(
+    409,
+    'CONFLICT',
+    'It is not your turn on this trade',
+    'The latest terms are waiting on the other party; you cannot answer your own proposal.',
+  );
+
+export const selfTradeError = (): ApiError =>
+  new ApiError(422, 'VALIDATION_FAILED', 'You cannot trade with yourself');
