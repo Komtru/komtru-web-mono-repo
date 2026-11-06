@@ -44,3 +44,6 @@ docs/ui-review/**/*.png
 
 # Ticket index tooling scratch output
 tools/tickets/.tickets.json
+
+# Build-manager run lock (docs/manager/MANAGER.md)
+.claude/manager.lock

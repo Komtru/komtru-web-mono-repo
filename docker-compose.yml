@@ -7,6 +7,9 @@ name: komtru
 services:
   postgres:
     image: postgres:16-alpine
+    # One database per vitest worker, each with its own PgBouncer pool, so a parallel infra run
+    # needs more headroom than the default 100 backends (T-029).
+    command: ['postgres', '-c', 'max_connections=300']
     environment:
       POSTGRES_USER: komtru
       POSTGRES_PASSWORD: komtru
@@ -35,7 +38,15 @@ services:
       AUTH_TYPE: scram-sha-256
       POOL_MODE: transaction
       MAX_CLIENT_CONN: '200'
-      DEFAULT_POOL_SIZE: '20'
+      # Sized so every parallel test database can fill its pool without overcommitting Postgres:
+      # the suite ran 12 databases at a pool of 20, asking for up to 240 backends against 100.
+      DEFAULT_POOL_SIZE: '10'
+      MAX_DB_CONNECTIONS: '15'
+      # 0, not the default 15s. PgBouncer otherwise caches a failed server login and serves that
+      # error to every client for the retry window, so one exhaustion event surfaces as "password
+      # authentication failed for user komtru" across unrelated test files — a message that reads
+      # as a credentials fault and is not one (T-029).
+      SERVER_LOGIN_RETRY: '0'
       ADMIN_USERS: komtru
       LISTEN_PORT: '5432'
     ports:

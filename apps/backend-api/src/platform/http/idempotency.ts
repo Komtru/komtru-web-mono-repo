@@ -32,6 +32,7 @@ export const STALE_IN_FLIGHT_MS = 60_000;
 export const IDEMPOTENCY_TTL_HOURS = 24;
 /** The owner's lease. Renewed while the handler runs, so only a dead owner's lease lapses. */
 export const LEASE_TTL_MS = 30_000;
+
 const LEASE_RENEW_MS = 10_000;
 const POLL_MS = 25;
 /** A key is a client-chosen token: bounded, printable, and never a place to smuggle bytes. */
@@ -197,9 +198,6 @@ export function createIdempotencyGate({
       return result;
     };
 
-    const expired = (completedAt: Date | null): boolean =>
-      completedAt !== null && Date.now() - completedAt.getTime() > ttlHours * 60 * 60 * 1000;
-
     const reused = () =>
       new ApiError(
         422,
@@ -219,15 +217,16 @@ export function createIdempotencyGate({
     if (await claim()) return runOwned();
 
     const existing = await stored();
-    // A different request under the same key is a client bug whether or not the first has finished.
-    if (existing && existing.requestHash !== requestHash && !expired(existing.completedAt)) {
-      throw reused();
-    }
-    if (existing?.completedAt && !expired(existing.completedAt)) return replay(existing);
 
-    // Spent record, or a claim whose owner is gone: this attempt owns it now. The predicate is the
-    // age, evaluated in Postgres — comparing a JS Date to a timestamptz loses microseconds and would
-    // never match.
+    // Whether a completed record is spent is decided in exactly ONE place: the retake predicate
+    // below, in Postgres. It used to be decided twice — here in JS against `Date.now()`, and again
+    // in the retake — and the two could disagree, because the driver truncates the timestamptz to
+    // milliseconds before JS ever sees it and the app clock is not the database's. Either way of
+    // disagreeing lost: JS calling a record live when Postgres called it spent replayed a response
+    // that should have been re-run (the T-029 flake), and JS calling it spent when Postgres called
+    // it live vetoed the replay, matched no row to retake, and sent a settled request into the
+    // mid-flight poll and then a spurious 409 — whose "retry in a moment" advice would have run
+    // the handler a second time. One clock, one answer. Do not add a second predicate here.
     if (existing?.completedAt) {
       const retaken = await db
         .update(idempotencyKeys)
@@ -241,12 +240,21 @@ export function createIdempotencyGate({
           completedAt: null,
           createdAt: sql`now()`,
         })
-        .where(and(where, sql`${idempotencyKeys.completedAt} < now() - make_interval(hours => ${ttlHours})`))
+        .where(and(where, sql`${idempotencyKeys.completedAt} <= now() - make_interval(hours => ${ttlHours})`))
         .returning({ key: idempotencyKeys.key });
+      // Spent: the record is this attempt's now, and it runs the handler again.
       if (retaken.length) return runOwned();
-    } else if (await takeOverIfStale()) {
-      return runOwned();
+      // Nothing matched, so Postgres says the record is still live. Honour that: a different
+      // request under a live key is a client bug, and the same request gets the stored answer.
+      if (existing.requestHash !== requestHash) throw reused();
+      return replay(existing);
     }
+
+    // Not completed, so the first attempt is still in flight. A different request under the same
+    // key is a client bug either way.
+    if (existing && existing.requestHash !== requestHash) throw reused();
+    // A claim whose owner is gone can be taken; a slow-but-alive owner keeps it.
+    if (await takeOverIfStale()) return runOwned();
 
     // Someone else is mid-flight: wait for their lease to drop or their response to land.
     const deadline = Date.now() + lockWaitMs;
@@ -254,14 +262,16 @@ export function createIdempotencyGate({
       await sleep(POLL_MS);
       if (await leaseHeld()) continue;
       const row = await stored();
-      if (row?.completedAt && !expired(row.completedAt)) {
+      // No expiry check: a response that landed while this request was waiting is the answer it
+      // was waiting for, however short the ttl.
+      if (row?.completedAt) {
         if (row.requestHash !== requestHash) throw reused();
         return replay(row);
       }
     }
 
     const row = await stored();
-    if (row?.completedAt && !expired(row.completedAt)) {
+    if (row?.completedAt) {
       if (row.requestHash !== requestHash) throw reused();
       return replay(row);
     }
@@ -278,6 +288,10 @@ export function createIdempotencyGate({
 /**
  * Deletes spent records. Nothing else bounds this table: an anonymous caller on a public retryable
  * route would otherwise write rows into Postgres forever.
+ *
+ * This is housekeeping, not the expiry rule: it reads `created_at` to bound table growth, while
+ * whether a retry replays or re-runs is decided only by the `completed_at` predicate in the gate
+ * above. A retake resets `created_at`, so a retaken row's prune clock restarts with it.
  */
 export async function pruneIdempotencyKeys(db: Db, ttlHours = IDEMPOTENCY_TTL_HOURS): Promise<number> {
   const { rowCount } = await db.execute(

@@ -26,7 +26,8 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "prepare": "husky",
-    "progress": "python3 tools/tickets/progress.py"
+    "progress": "python3 tools/tickets/progress.py",
+    "progress:write": "python3 tools/tickets/progress.py --write && prettier --write docs/PROGRESS.md"
   },
   "lint-staged": {
     "*": "secretlint --secretlintignore .secretlintignore",

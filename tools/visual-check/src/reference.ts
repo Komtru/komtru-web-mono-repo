@@ -261,7 +261,7 @@ export function carveScreen(html: string, row: ScreenRow): CarvedScreen {
   const caption = html.indexOf('<div class="screen-num">', lineStart);
   const lineEnd = html.indexOf('\n', lineStart);
   if (caption === -1 || (lineEnd !== -1 && caption > lineEnd)) {
-    throw new Error(`No screen-num header on line ${row.line} — SCREEN_INDEX.md is stale for ${row.id}`);
+    throw new Error(`No screen-num header on line ${row.line} — SCREEN_INDEX-v1.md is stale for ${row.id}`);
   }
 
   const ancestors = openElements(html, caption);

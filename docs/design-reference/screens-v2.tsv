@@ -1,0 +1,438 @@
+line	section	heading	screen	status_vs_v1
+2294	Entry — Mobile Web	Nothing in v1.1 shows how someone actually gets in	E1 Welcome First screen, ever	carried
+2318	Entry — Mobile Web	Nothing in v1.1 shows how someone actually gets in	E2 Sign Up Phone-first, not email-first	carried
+2346	Entry — Mobile Web	What's your number?	E3 Verify Phone OTP — feeds directly into the onboarding wizard's Step 1	carried
+2371	Entry — Mobile Web	Enter the 6-digit code	E4 Log In Returning users	carried
+2397	Entry — Mobile Web	Enter the 6-digit code	E3b Wrong Code New — Entry's E3 only ever showed the correct code being typed	carried
+2435	Terms of Service & Privacy Acceptance — Mobile Web · Complete Flow	Referenced by every signup since Entry was built, never actually shown	TOS1 Review Terms & Privacy During Sign Up — before the account is created	carried
+2469	Terms of Service & Privacy Acceptance — Mobile Web · Complete Flow	Referenced by every signup since Entry was built, never actually shown	TOS2 Terms Updated Existing user — a different moment than TOS1, not the same screen	carried
+2507	First-Time Onboarding Walkthrough — Mobile Web · Complete Flow	Between Verify Phone and Home — a gap that's existed since Entry was first built	OB1 Walkthrough — Protection 1 of 3 — the core proposition, first	carried
+2533	First-Time Onboarding Walkthrough — Mobile Web · Complete Flow	Your money stays protected	OB2 Walkthrough — Transparency 2 of 3	carried
+2559	First-Time Onboarding Walkthrough — Mobile Web · Complete Flow	Always know where things stand	OB3 Walkthrough — Trust Profile 3 of 3	carried
+2585	First-Time Onboarding Walkthrough — Mobile Web · Complete Flow	Every trade builds your history	OB4 Enable Notifications Asked last, once the value is already clear	carried
+2606	First-Time Onboarding Walkthrough — Mobile Web · Complete Flow	Don't miss a status change	OB5 You're All Set First action prompt — leads straight into Home	carried
+2637	Empty State & Password Reset — Mobile Web	Two threads left dangling since the very first pass	AC1 My Trades — Empty State First-time user, before any Trade exists	carried
+2662	Empty State & Password Reset — Mobile Web	Two threads left dangling since the very first pass	AC2 Forgot Password Behind E4's "Forgot password?" link	carried
+2682	Empty State & Password Reset — Mobile Web	What's your number?	AC3 Set New Password After the OTP — reuses E3's exact otp-cell pattern	carried
+2702	Empty State & Password Reset — Mobile Web	What's your number?	OF1 My Trades — Offline New — the pattern the Design System calls first-class for this market, never actually shown	carried
+2751	Home — Mobile Web · Extends the existing My Trades screen	The hero metric and progress visualization Screen 1's spec called for	Z1 Home — Protected Balance Buyer — the approved Home: Buy/Sell switch, protected balance, attention, active trades and recent activity	carried
+2780	Home — Mobile Web · Extends the existing My Trades screen	The hero metric and progress visualization Screen 1's spec called for	SE1 Search New — Find a Trade only ever covered the Trade Code, never a plain product/seller search	carried
+2808	Home — Mobile Web · Extends the existing My Trades screen	The hero metric and progress visualization Screen 1's spec called for	SE2 No Results Empty state, following the same explain-benefit-action pattern as My Trades	carried
+2837	Discovery — Mobile Web	The anti-scam mechanism v1.1 named but never built	F1 Find a Trade Trade Code search — the alternative to clicking a link	carried
+2863	Discovery — Mobile Web	The anti-scam mechanism v1.1 named but never built	F2 Trade Found Verified inside Komtru, not on the seller's word	carried
+2912	Browse Categories — Mobile Web	The two launch categories, browsable without a Trade Code	K1 Browse Categories Electronics & Fashion — the two launch verticals	carried
+2937	Browse Categories — Mobile Web	The two launch categories, browsable without a Trade Code	K2 Category Results Electronics — Lagos	carried
+2975	Seller / Business Discovery Profile — Mobile Web	Cold discovery — not a Trade already in motion	I1 Seller Profile Overview — public, cold discovery entry point	carried
+3008	Seller / Business Discovery Profile — Mobile Web	Cold discovery — not a Trade already in motion	I2 Seller Profile — Listings Browsing what they actually sell	carried
+3048	Seller / Business Discovery Profile — Mobile Web	Cold discovery — not a Trade already in motion	MI1 Cart Review New — bundling multiple items into one Trade, reached from I2's cart icon	carried
+3091	Seller / Business Discovery Profile — Mobile Web	Cold discovery — not a Trade already in motion	MI2 Agreement — Multiple Items Same Agreement Summary pattern, repeated item-cards instead of one	carried
+3121	Seller / Business Discovery Profile — Mobile Web	Cold discovery — not a Trade already in motion	I3 Start Trade — From Listing Discovery flows straight into a real proposal	carried
+3158	Seller / Business Discovery Profile — Mobile Web	Cold discovery — not a Trade already in motion	I4 Report or Block New — behind I1's ••• menu, reachable before any Trade exists	carried
+3183	Seller / Business Discovery Profile — Mobile Web	Cold discovery — not a Trade already in motion	MI3 Ship Order — Multiple Items New — Ship Order only ever handled one item at a time	carried
+3207	Seller / Business Discovery Profile — Mobile Web	Cold discovery — not a Trade already in motion	MI4 Inspect — Multiple Items New — confirm per item, not all-or-nothing	carried
+3283	Create a Trade · Buyer starts	Create a Trade — buyer starts	CT-B1 Start a trade — About Buyer, stage 1 · plain language kept from the original Propose a Trade; the category is detected, never asked	new
+3300	Create a Trade · Buyer starts	Create a Trade — buyer starts	CT-B2 Item & delivery — Courier Buyer, stage 2 · you supply intent and a destination; the seller supplies the item truth	new
+3318	Create a Trade · Buyer starts	Create a Trade — buyer starts	CT-B2P Item & delivery — Park Buyer, stage 2 · choosing a Park replaces the address form; no delivery address is asked	new
+3336	Create a Trade · Buyer starts	Create a Trade — buyer starts	CT-B3 Trade terms Buyer, stage 3 · protection terms are Komtru’s and cannot be edited; delivery commitments are the seller’s	new
+3351	Create a Trade · Buyer starts	Create a Trade — buyer starts	CT-B4 Review & send Buyer, stage 4 · the live contract preview, with the seller’s part visibly outstanding	new
+3369	Create a Trade · Buyer starts	Create a Trade — buyer starts	CT-B5 Sent — waiting for the seller Buyer · the Trade can’t be finished alone, and the screen says exactly what is outstanding; keeps the Trade Code card from the original Sent to Seller	new
+3392	Create a Trade · Seller completes	Create a Trade — seller completes a buyer’s request	CT-B6 Trade request — complete the details Seller · what the buyer asked for, and exactly what only you can provide	new
+3410	Create a Trade · Seller completes	Create a Trade — seller completes a buyer’s request	CT-B7 Item details (seller) Seller · category-driven specification; the seller is the only author; built on the original item specification	new
+3425	Create a Trade · Seller completes	Create a Trade — seller completes a buyer’s request	CT-B8 Delivery (seller) — Courier Seller · you pick the partner and the promise; the buyer sees the cost before accepting	new
+3440	Create a Trade · Seller completes	Create a Trade — seller completes a buyer’s request	CT-B8P Delivery (seller) — Park Seller · for Park delivery you set the charge yourself	new
+3457	Create a Trade · Seller completes	Create a Trade — seller completes a buyer’s request	CT-B9 Confirm & send to the buyer Seller · the completed Trade as the buyer will see it; built on the live contract preview (CT-B4)	new
+3475	Create a Trade · Seller completes	Create a Trade — seller completes a buyer’s request	CT-B10 Review & accept (buyer) Buyer · the seller finished the Trade; now the full cost is visible and the choice is yours	new
+3497	Create a Trade · Seller starts	Create a Trade — seller starts	CT-S1 Create Trade — About Seller, stage 1 · the buyer’s phone number is their Komtru ID; the item comes from a listing	new
+3514	Create a Trade · Seller starts	Create a Trade — seller starts	CT-S2 Item details — Electronics Seller, stage 2 · you are the authoritative source of the specification	new
+3532	Create a Trade · Seller starts	Create a Trade — seller starts	CT-S2F Item details — Fashion & Luxury Seller, stage 2 · a different category loads a different specification, not the Electronics form	new
+3547	Create a Trade · Seller starts	Create a Trade — seller starts	CT-S3 Trade terms (seller) Seller, stage 3 · you set delivery cost and promise; protection terms are shown, not editable	new
+3562	Create a Trade · Seller starts	Create a Trade — seller starts	CT-S4 Review & send to the buyer Seller, stage 4 · the live preview; the buyer’s delivery choice is the one thing left	new
+3580	Create a Trade · Seller starts	Create a Trade — seller starts	CT-S5 Sent — waiting for the buyer Seller · what is outstanding, and whose it is	new
+3603	Create a Trade · Buyer completes	Create a Trade — buyer completes a seller’s Trade	CT-S6 Choose how to receive it (buyer) Buyer · the seller’s specification is locked; you choose delivery with the cost in view	new
+3620	Create a Trade · Buyer completes	Create a Trade — buyer completes a seller’s Trade	CT-S7 Review & accept (buyer) Buyer · the completed agreement from the seller-started Trade	new
+3650	Trade Standards by Category — Mobile Web	Set by Komtru, the same for every seller in a category	CTS1 Trade Standards New — the policy source every category-specific term now points back to	carried
+3688	Trade Standards by Category — Mobile Web	Set by Komtru, the same for every seller in a category	BEI1 Request More Inspection Time Buyer — the only direction a standard window can move	carried
+3715	Trade Standards by Category — Mobile Web	Set by Komtru, the same for every seller in a category	BEI2 Buyer Wants More Time Seller — shown alongside the rest of the proposed terms, not hidden	carried
+3749	IMEI Verification — Mobile Web · Extends Create Trade	A real device lookup behind the Serial/IMEI field	AC4 IMEI Verification Extends the seller’s item details (CT-B7) — a real lookup, not just a text field	carried
+3775	IMEI Verification — Mobile Web · Extends Create Trade	A real device lookup behind the Serial/IMEI field	IF1 Device Flagged New — the entire reason IMEI verification exists, never actually shown	carried
+3814	TrustOps — Mobile Check-in	A glance at flagged proposals, not a way to triage them from a thumb	P1 Proposal Queue — Mobile Check-in Condensed, priority-first, same phone frame as the Design System's Trust Overview	carried
+3840	Buyer — Held for Review — Mobile Web	What the Sent-to-Seller screen was missing: the non-instant path	G3 Proposal Held for Review Replaces the instant-success Sent state (CT-B5) when TrustOps flags a proposal	carried
+3882	Proposal Follow-Through — Mobile Web	The two threads v1.5 left hanging	Q1 My Trades — Pending Verification Where G3's "Do this later" proposal actually lives	carried
+3910	Proposal Follow-Through — Mobile Web	Your Trades	R1 New Trade Request — Cleared Seller's view once a held proposal finally arrives	carried
+3961	Customer (Buyer) — Mobile Web	Discover happens off-platform. This flow starts at "Agree."	1 My Trades Home — no discovery feed, by design	new
+3994	Customer (Buyer) — Mobile Web	Your Trades	2 Agreement Summary Terms visible before funding — Product Principles #4	new
+4033	Customer (Buyer) — Mobile Web	Your Trades	3 Active Trade Visibility before, during, and after	new
+4061	Customer (Buyer) — Mobile Web	Your Trades	4 Confirm Delivery Buyer holds control at the one irreversible moment	new
+4087	Customer (Buyer) — Mobile Web	Your Trades	5 Trade Complete A real moment, not just a toast	new
+4109	Customer (Buyer) — Mobile Web	Trade complete	6 My Trust Passport What compounds after every trade	new
+4140	Customer (Buyer) — Mobile Web	Trade complete	7 Report an Issue Filing a dispute, not just tapping a button	new
+4164	Customer (Buyer) — Mobile Web	Trade complete	8 Dispute Status Visibility doesn't stop once it's filed	new
+4186	Customer (Buyer) — Mobile Web	Trade complete	9 Messaging Trade-scoped, not a general inbox	new
+4207	Customer (Buyer) — Mobile Web	Trade complete	10 Settings The full page, not just the component swatch	new
+4243	Cancel a Trade — Mobile Web	The cancellation policy every Agreement Summary has promised, with no screen behind it	CT1 Cancel This Trade? Only offered while a Trade is still unfunded	carried
+4275	Cancel a Trade — Mobile Web	The cancellation policy every Agreement Summary has promised, with no screen behind it	CT2 Trade Cancelled Confirmation, and TechEdge NG is notified automatically	carried
+4294	Cancel a Trade — Mobile Web	Trade cancelled	AR1 Trade Auto-Released New — distinct from manually tapping Confirm & Release	carried
+4328	Cancel After Funding — Mobile Web	What "free before shipment" actually means once money has moved	CR1 Request Cancellation Buyer — funded, not yet shipped	carried
+4354	Cancel After Funding — Mobile Web	What "free before shipment" actually means once money has moved	CR2 Buyer Wants to Cancel Seller — approve triggers an automatic refund, no manual transfer needed	carried
+4378	Cancel After Funding — Mobile Web	What "free before shipment" actually means once money has moved	CR3 Refund Issued Buyer — cancellation approved	carried
+4400	Cancel After Funding — Mobile Web	Refund issued in full	SC1 Cancel — Can't Fulfill New — the seller's own reason to cancel, distinct from a buyer's request	carried
+4424	Cancel After Funding — Mobile Web	Refund issued in full	SC2 Seller Couldn't Fulfill Buyer's view — automatic refund, no action needed from them	carried
+4455	Escrow Funding — Mobile Web	The screen missing between "Fund this trade" and "funded"	V1 Fund Trade — Payment Method Fee breakdown made explicit, not folded into one total	carried
+4491	Escrow Funding — Mobile Web	The screen missing between "Fund this trade" and "funded"	V2 Virtual Account Transfer A real bank account, not a suspicious link	carried
+4519	Escrow Funding — Mobile Web	The screen missing between "Fund this trade" and "funded"	V3 Funds Protected The moment that unlocks everything downstream	carried
+4550	Escrow Funding — Loading & Failure States — Mobile Web	V1–V3 only ever showed the happy path	AB3 Verifying Payment Node-pulse + skeleton — identical pattern to the Design System's §07 loading states	carried
+4573	Escrow Funding — Loading & Failure States — Mobile Web	V1–V3 only ever showed the happy path	AB4 Payment Not Confirmed Reuses the exact TrustVoice reassurance pattern: "nothing has been charged"	carried
+4611	Active Trade — Mobile Web · Extends Confirm Delivery (C4)	"Verified Seller Item Proof" — comparing against the item in hand, not just courier photos	Z4 Inspect — Compare Seller's Proof Seller's pre-shipment photos, right next to delivery evidence	carried
+4649	Active Trade — Mobile Web · Extends Confirm Delivery (C4)	"Verified Seller Item Proof" — comparing against the item in hand, not just courier photos	Z5 Confirm & Release — Modal Explicit acknowledgment before the irreversible action, as a bottom sheet	carried
+4690	Active Trade — Live Logistics & Buyer Handover PIN — Mobile Web	The Customer-side screen the architecture doc named but was never built	AB1 Active Trade — Live Logistics Courier, driver contact, waybill or Park Hub address — extends C3	carried
+4729	Active Trade — Live Logistics & Buyer Handover PIN — Mobile Web	The Customer-side screen the architecture doc named but was never built	AB2 Your Pickup PIN Present this at the park — closes the loop with U4's agent-side validation	carried
+4770	Delivery Extension — Mobile Web	What happens when a seller is running late, in either direction	DE1 Request More Time Seller — reached from the Ship Order screen when a deadline is close	carried
+4799	Delivery Extension — Mobile Web	What happens when a seller is running late, in either direction	DE2 Seller Needs More Time Buyer — accept keeps the Trade protected exactly as before, just on a new date	carried
+4824	Delivery Extension — Mobile Web	What happens when a seller is running late, in either direction	DE3 Delivery Overdue Buyer — the deadline passed with no extension request on file	carried
+4850	Delivery Extension — Mobile Web	What happens when a seller is running late, in either direction	DE4 Refund Issued Automatic — a missed delivery deadline is the seller's SLA to keep, not the buyer's to chase	carried
+4886	Resolution — Mobile Web	v1.1's Dispute Status (C8) stopped at "awaiting decision." Here's after.	H1 Dispute Resolved Buyer view — continues from C8's timeline	carried
+4917	Resolution — Mobile Web	v1.1's Dispute Status (C8) stopped at "awaiting decision." Here's after.	H2 Dispute Resolved Seller view — Corrective, not Negative, per the Trust Model	carried
+4950	Resolution Execution — Mobile Web	A decision is only real when money and goods actually move	RX-01 Return Approved Buyer — a return outcome, built on Dispute Resolved (H1)	new
+4973	Resolution Execution — Mobile Web	A decision is only real when money and goods actually move	RX-02 Send It Back Buyer — step 1 of 3 · method choice, same pattern as Waybill & Handover (X2)	new
+4993	Resolution Execution — Mobile Web	A decision is only real when money and goods actually move	RX-03 Hand It Over Buyer — step 2 of 3 · photos and Return Code, built on Proof Required (W1) and Pickup PIN (AB2)	new
+5013	Resolution Execution — Mobile Web	A decision is only real when money and goods actually move	RX-04 Return in Transit Buyer — status, built on Active Trade — Live Logistics (AB1)	new
+5039	Resolution Execution — Mobile Web	A decision is only real when money and goods actually move	RX-05 Return Incoming Seller — heads-up, built on Dispute Notice (S7)	new
+5056	Resolution Execution — Mobile Web	A decision is only real when money and goods actually move	RX-06 Check the Return Seller — the check that releases or pauses the refund, built on Physical Inspection (U3)	new
+5074	Resolution Execution — Mobile Web	A decision is only real when money and goods actually move	RX-07 Refund Released Buyer — success state, built on Refund Issued (CR3)	new
+5091	Resolution Execution — Mobile Web	Refund released	RX-08 Return Under Review Buyer — the seller reported a problem; built on Dispute Status (C8)	new
+5111	Resolution Execution — Mobile Web	Refund released	RX-09 Return Window Closed Buyer — the lapse state, built on Delivery Overdue (DE3)	new
+5134	Track B — Replacement	Refund released	RX-10 Replacement Approved Buyer — the alternative outcome, built on Dispute Resolved (H1)	new
+5158	Track B — Replacement	Refund released	RX-11 Ship the Replacement Seller — built on Waybill & Handover (X2)	new
+5175	Track C — Mutual settlement	Refund released	RX-12 Propose a Settlement Buyer — the 48h mutual-agreement window, built on Withdraw Funds (AB5)	new
+5193	Track C — Mutual settlement	Refund released	RX-13 Settlement Offer Seller — accept, counter once, or hand it to TrustOps; built on Buyer Wants to Cancel (CR2)	new
+5212	Track C — Mutual settlement	Refund released	RX-14 Counter-Offer Buyer — final offer, built on Seller Proposed Changes (BR1)	new
+5231	Track C — Mutual settlement	Refund released	RX-15 Settlement Agreed Both — built on Refund Issued (CR3) · shown for the ₦40,000 offer; the countered path shows ₦25,000 and ₦170,000	new
+5250	Track D — Return custody	Settlement agreed	RX-16 Log a Return Park agent — creates the hub intake record; built on Log Parcel Arrival (U2)	new
+5266	Track D — Return custody	Settlement agreed	RX-17 Return Logged Park agent — confirmation, built on Damage Logged (U6)	new
+5284	Track D — Return custody	Return logged	RX-18 Return Receipt Buyer — proof the return entered tracked custody; built on Payout Receipt (PR1)	new
+5302	Track D — Return custody	Return logged	RX-19 Pickup Booked Buyer — step 2 of 3 · the courier variant of RX-03, built on Live Logistics (AB1)	new
+5333	Dispute Evidence Comparison — Mobile Web	Seller's pre-shipment proof next to the buyer's unboxing photos	Y1 Evidence Comparison Pre-shipment proof vs. unboxing — plus the 48h auto-mediation window	carried
+5375	File an Appeal — Mobile Web	Behind three separate "File an appeal" buttons across dispute screens	AC6 File an Appeal Behind three separate "File an appeal" buttons across dispute screens	carried
+5411	Become a Seller — Mobile Web · Complete Flow	Every seller screen in this file assumed TechEdge NG already existed	SO1 Tell Us About Your Business 1 of 5 — your identity is already verified from the buyer side	carried
+5431	Become a Seller — Mobile Web · Complete Flow	Every seller screen in this file assumed TechEdge NG already existed	SO2 What Do You Sell? 2 of 5 — sets the Trade Standards that apply to every listing	carried
+5456	Become a Seller — Mobile Web · Complete Flow	Every seller screen in this file assumed TechEdge NG already existed	SO3 Business Verification 3 of 5 — optional now, required for the Verified Merchant badge	carried
+5480	Become a Seller — Mobile Web · Complete Flow	Every seller screen in this file assumed TechEdge NG already existed	SO4 Where Should We Send Payouts? 4 of 5 — never charged, only credited	carried
+5500	Become a Seller — Mobile Web · Complete Flow	Every seller screen in this file assumed TechEdge NG already existed	SO5 Your Shop Is Live 5 of 5 — lands directly on My Shop, ready to create the first listing	carried
+5527	Seller — Mobile Web	Same trust language, opposite job — accept, ship, get paid	1 My Shop Money and what needs shipping, first	new
+5553	Seller — Mobile Web	Same trust language, opposite job — accept, ship, get paid	2 New Trade Request New — the accept moment didn't exist before this pass	new
+5589	Seller — Mobile Web	Same trust language, opposite job — accept, ship, get paid	3 Ship Order New — where "to ship" actually gets closed out	new
+5614	Seller — Mobile Web	Same trust language, opposite job — accept, ship, get paid	4 Create Listing Where a seller enters the trade loop	new
+5639	Seller — Mobile Web	Add photos	5 My Listings New — managing what's actually for sale	new
+5668	Seller — Mobile Web	Add photos	6 Payouts Where "funds released" actually lands	new
+5689	Seller — Mobile Web	Add photos	7 Dispute Notice Constitutional Principle VIII — neutral, not accusatory	new
+5711	Seller — Mobile Web	Add photos	8 Submit Evidence Evidence over opinion — Constitutional Principle II	new
+5733	Seller — Mobile Web	Add photos	9 Messaging Same pattern as customer — same trust, either direction	new
+5754	Seller — Mobile Web	Add photos	10 Settings Business + payout info alongside notifications	new
+5788	Edit Listing & Manage Stock — Mobile Web	Sellers could create a listing but never change one afterward	EL1 Edit Listing Same fields as Create Listing, pre-filled — not a separate form to relearn	carried
+5817	Edit Listing & Manage Stock — Mobile Web	Sellers could create a listing but never change one afterward	EL2 Quick Stock Toggle For the common case — no need to open the full edit form	carried
+5858	Seller — Mandatory Proof, Counter-Proposal, Post-Acceptance — Mobile Web	Three rules the original New Trade Request screen didn't enforce	W1 Accept Trade — Proof Required Accept stays disabled until real media is attached	carried
+5890	Seller — Mandatory Proof, Counter-Proposal, Post-Acceptance — Mobile Web	Three rules the original New Trade Request screen didn't enforce	W2 Propose Changes Counter-proposal — not just accept or decline	carried
+5918	Seller — Mandatory Proof, Counter-Proposal, Post-Acceptance — Mobile Web	Three rules the original New Trade Request screen didn't enforce	W3 Trade Accepted — Do Not Ship Yet The guidance that prevents a seller jumping the gun	carried
+5948	Seller — Mandatory Proof, Counter-Proposal, Post-Acceptance — Mobile Web	Trade accepted	BR1 Seller Proposed Changes New — the buyer-side half of W2's counter-proposal, missing until now	carried
+5985	Seller — Mandatory Proof, Counter-Proposal, Post-Acceptance — Mobile Web	Trade accepted	BVR1 Business Verification Rejected New — the seller-facing outcome of KYB Review's Reject action	carried
+6015	Seller — Mandatory Proof, Counter-Proposal, Post-Acceptance — Mobile Web	Trade accepted	SD1 Decline Trade Request New — S2's Decline button had no confirmation behind it	carried
+6052	Seller — Dispatch Guard, Park Hub Waybill & Handover OTP — Mobile Web	Ship Order can no longer be tapped before escrow is actually funded	X1 Ship Order — Dispatch Locked Guard state: escrow not yet funded	carried
+6079	Seller — Dispatch Guard, Park Hub Waybill & Handover OTP — Mobile Web	Ship Order can no longer be tapped before escrow is actually funded	X2 Waybill & Handover Unlocked once funded — Park Hub as a first-class option, not a fallback	carried
+6125	Active Orders — Mobile Web	Full custody pipeline — fuller than My Shop's short attention list	AC8 Active Orders Full custody pipeline — the fuller view behind My Shop's short list	carried
+6160	Seller Insights & Analytics — Mobile & Desktop · Complete Flow	Beyond My Shop's balance summary — real performance trends	AN1 Insights — Overview Reached from My Shop, not a replacement for it	carried
+6211	Seller — Trust History · Verification · Alerts — Mobile Web	The seller side of what v1.3 only built for buyers	M1 Seller Trust History Business-side Trust Event log — mirrors buyer's J1	carried
+6234	Seller — Trust History · Verification · Alerts — Mobile Web	The seller side of what v1.3 only built for buyers	M2 Business Verification CAC & KYB — mirrors buyer's J2 with business fields	carried
+6271	Seller — Trust History · Verification · Alerts — Mobile Web	The seller side of what v1.3 only built for buyers	M3 Seller Alerts Behind My Shop's bell icon — mirrors buyer's J4	carried
+6319	Seller Payouts — Mobile Web	Withdraw Funds and the bank account it lands in	AB5 Withdraw Funds Seller — behind S6's "Withdraw" button	carried
+6348	Seller Payouts — Mobile Web	Withdraw Funds and the bank account it lands in	AB6 Payout Bank Account Referenced from Settings, never had a screen	carried
+6369	Seller Payouts — Mobile Web	Withdraw Funds and the bank account it lands in	WF1 Withdrawal Failed New — AB5/seller-payouts-setup only ever showed the money leaving successfully	carried
+6398	Seller Payouts — Mobile Web	This withdrawal didn't go through	PR1 Payout Receipt New — every payout history row has been tappable-looking with nothing behind it since Payouts was first built	carried
+6441	Wallet Top-Up — Mobile Web	Behind the "Komtru Wallet" payment option in Escrow Funding	AB7 Top Up Wallet Buyer — behind V1's "Komtru Wallet" option	carried
+6477	Supporting · Shop settings	Running the shop	SP-M25 Shop profile & address Seller · the shop address buyers see on the About screen, with a check so it can be trusted	new
+6492	Supporting · Shop settings	Running the shop	SP-M26 Pause my shop Seller · stop new requests when away, without breaking Trades already running	new
+6507	Supporting · Shop settings	Running the shop	SP-M27 Delivery settings Seller · defaults that pre-fill every Trade: which couriers, the Park charge, and the usual promise	new
+6522	Supporting · Shop settings	Running the shop	SP-M28 Shop team Seller · staff get exactly the access their job needs, and only the owner moves money	new
+6543	Supporting · Shop settings	Running the shop	SP-M29 Fee statement Seller · what Komtru charged and for which Trade, so the books add up	new
+6563	Supporting · Catalogue import	Bringing a stock list across	SP-M34 Import your stock — choose a source Seller · start from a list you already have; the screen says up front that photos and video are not imported	new
+6581	Supporting · Catalogue import	Bringing a stock list across	SP-M35 Import — check what we found Seller · the list as Komtru understood it, with each problem named and fixable before anything is created	new
+6599	Supporting · Catalogue import	Bringing a stock list across	SP-M36 Import — drafts need proof Seller · imported items are drafts; each shows exactly how much proof it still needs before it can be published	new
+6627	Supporting · Customers	Knowing who you sell to	SP-M37 Customers Seller · the people you have traded with, as a business asset, not a follower count	new
+6641	Supporting · Customers	Knowing who you sell to	SP-M38 Customer Seller · what you’ve done together, your own private note, and a one-tap way to trade again	new
+6663	Supporting · Tax & badges	Documents and recognition	SP-M39 Tax documents Seller · invoices for Komtru’s own fees, an annual summary, and the one detail that goes on them	new
+6679	Supporting · Tax & badges	Documents and recognition	SP-M40 Tax details Seller · the registered details on invoices, pre-filled from the business check	new
+6694	Supporting · Tax & badges	Documents and recognition	SP-M41 My badges Seller · badges earned from what you’ve done, how close the next one is, and what could pause one	new
+6710	Supporting · Tax & badges	Documents and recognition	SP-M42 What this badge means Both · the explainer behind every badge ⓘ, in the same four parts used for every Komtru term	new
+6739	Park Agent / Hub Mode — Mobile Web · New Persona	The third lens Komtru TrustOS needs — not just Buyer and Seller	U1 Hub Dashboard Parcels in transit — a terminal, not a shop	carried
+6761	Park Agent / Hub Mode — Mobile Web · New Persona	The third lens Komtru TrustOS needs — not just Buyer and Seller	U2 Log Parcel Arrival Trade Code confirms it's a real Komtru parcel, not a random box	carried
+6789	Park Agent / Hub Mode — Mobile Web · New Persona	The third lens Komtru TrustOS needs — not just Buyer and Seller	U3 Physical Inspection Seal condition, logged before pickup is even possible	carried
+6815	Park Agent / Hub Mode — Mobile Web · New Persona	The third lens Komtru TrustOS needs — not just Buyer and Seller	U4 Safe Handover — Validate PIN The one action that actually releases the parcel	carried
+6841	Park Agent / Hub Mode — Mobile Web · New Persona	The third lens Komtru TrustOS needs — not just Buyer and Seller	U5 PIN Doesn't Match New — the failure path this checkpoint exists for	carried
+6866	Park Agent / Hub Mode — Mobile Web · New Persona	The third lens Komtru TrustOS needs — not just Buyer and Seller	U6 Damage Logged — Trade Frozen New — U3 let the agent flag damage with no follow-up until now	carried
+6892	Park Agent / Hub Mode — Mobile Web · New Persona	Damage logged	PE1 Hub Earnings New — PH4 established a per-parcel fee with nowhere to see or withdraw it	carried
+6920	Park Agent / Hub Mode — Mobile Web · New Persona	Damage logged	RX-20 Hand Return to Courier Park agent — releases a sealed return only to a matching courier; built on Safe Handover (U4)	new
+6940	Park Agent / Hub Mode — Mobile Web · New Persona	Damage logged	RX-21 Return Dispatched Park agent — custody ends, tracking continues; built on Damage Logged (U6)	new
+6966	Park Hub Registration & Onboarding — Mobile Web · Complete Flow	The "+ Register a Park Hub" button, followed through to a live hub	PH1 Register a Park Hub 1 of 5 — which motor park you're representing	carried
+6989	Park Hub Registration & Onboarding — Mobile Web · Complete Flow	The "+ Register a Park Hub" button, followed through to a live hub	PH2 Verify Your Identity 2 of 5 — same rule as any other Komtru participant	carried
+7007	Park Hub Registration & Onboarding — Mobile Web · Complete Flow	The "+ Register a Park Hub" button, followed through to a live hub	PH3 Proof of Park Authorization 3 of 5 — mandatory, same gate the seller's Accept Trade uses	carried
+7032	Park Hub Registration & Onboarding — Mobile Web · Complete Flow	The "+ Register a Park Hub" button, followed through to a live hub	PH4 Handling Fee & Payout 4 of 5 — what you earn per parcel, and where it lands	carried
+7057	Park Hub Registration & Onboarding — Mobile Web · Complete Flow	The "+ Register a Park Hub" button, followed through to a live hub	PH5 Review & Submit 5 of 5 — everything in one place before it goes to TrustOps	carried
+7082	Park Hub Registration & Onboarding — Mobile Web · Complete Flow	The "+ Register a Park Hub" button, followed through to a live hub	PH6 Submitted — Pending Review The gap between submit and going live	carried
+7120	Trust History · Account · Notifications — Mobile Web	Screens §26 names under Trust and Account that never got built	J1 Trust History Full Trust Event log — behind the Passport summary	carried
+7140	Trust History · Account · Notifications — Mobile Web	Screens §26 names under Trust and Account that never got built	J2 Verification Details What "Identity Verified" actually consists of	carried
+7173	Trust History · Account · Notifications — Mobile Web	Screens §26 names under Trust and Account that never got built	J3 Personal Info Editable account details	carried
+7192	Trust History · Account · Notifications — Mobile Web	Screens §26 names under Trust and Account that never got built	J4 Notifications The "Alerts" tab bar item, finally opened	carried
+7232	Trust History · Account · Notifications — Mobile Web	Screens §26 names under Trust and Account that never got built	AS1 Account Suspended New — the actual consequence of a Fraud Signal decision, buyer side	carried
+7258	Trust History · Account · Notifications — Mobile Web	Your account is suspended	AS2 Account Suspended — Seller Same consequence, seller-specific wording	carried
+7284	Trust History · Account · Notifications — Mobile Web	Your shop is suspended	VF1 Verification Failed New — J2 only ever showed the success path	carried
+7312	Trust History · Account · Notifications — Mobile Web	Your shop is suspended	CA1 Close Your Account New — Settings' "Close account" button had nothing behind it	carried
+7338	Trust History · Account · Notifications — Mobile Web	Your shop is suspended	CA2 Confirm Closure Once no Trade is active — the actual irreversible step	carried
+7367	Trust History · Account · Notifications — Mobile Web	Your shop is suspended	LS1 Language New — the Design System names five languages explicitly but never gave the switcher a screen	carried
+7402	Trust History · Account · Notifications — Mobile Web	Your shop is suspended	TF1 Set Up Two-Factor New — the toggle in Security has always been bare, no setup behind it	carried
+7424	Trust History · Account · Notifications — Mobile Web	Your shop is suspended	TF2 Save Your Backup Codes The step every real 2FA setup needs and this one never had	carried
+7459	Role Switcher — Mobile Web	One account, three lenses — Buyer, Merchant, Park Agent	Y2 Role Switcher One account, three lenses — Buyer, Merchant, Park Agent	carried
+7492	Supporting · System states	When something is off, say so plainly	SP-M14 Service notice System · what the user sees during an incident: plain, reassuring, and specific about what to do and not do	new
+7507	Supporting · System states	When something is off, say so plainly	SP-M15 Update required System · when the app version is no longer supported; says plainly that money and Trades are unaffected	new
+7525	Supporting · System states	Please update Komtru	SP-M16 Session expired System · being signed out is explained, and the phone number is remembered so it takes one step	new
+7543	Supporting · System states	Please sign in again	SP-M17 Too many attempts System · a lockout that says how long, why, and what to do instead	new
+7562	Supporting · System states	Too many tries	SP-M18 Camera permission System · asked just before it’s needed, with the reason in the user’s terms	new
+7580	Supporting · System states	Allow the camera	SP-M19 Link expired or Trade not found System · a dead link is turned into a safety message, because fake links are the real risk	new
+7606	Leave a Review — Mobile Web	Behind the button that has appeared on Trade Complete since the very first pass	AC5 Leave a Review Behind the button on Trade Complete — only reachable from a finished Trade	carried
+7635	Leave a Review — Mobile Web	Behind the button that has appeared on Trade Complete since the very first pass	SR1 Rate This Buyer New — reviews only ever flowed buyer-to-seller until now, in a system built on mutual trust	carried
+7667	Leave a Review — Mobile Web	Behind the button that has appeared on Trade Complete since the very first pass	SR2 Respond to a Review New — matches the Design System's "Issue resolved by seller" tag pattern, which implied this all along	carried
+7699	Notification Preferences — Mobile Web	Channel-level control, promised by Settings but never built	NP1 Notify Me By Channel Push · Email · SMS — matched to the locked rows already on Settings	carried
+7754	Messaging Inbox — Mobile Web	An "all conversations" list — every prior Messaging screen opened directly into one Trade	AC7 Messages All Trade-scoped conversations, one list	carried
+7789	Messaging Inbox — Mobile Web	An "all conversations" list — every prior Messaging screen opened directly into one Trade	MC1 Message TechEdge NG New — the empty-history state the Seller Profile's Message button never actually opened	carried
+7816	Help & Support — Mobile Web	Closes the Account surface from the MVP architecture	L1 Help & Support Closes the Account surface from §26	carried
+7845	Supporting · Account & settings	The settings people look for	SP-M01 Saved addresses Account · where you receive items; the default is what a seller uses to estimate courier cost	new
+7864	Supporting · Account & settings	The settings people look for	SP-M02 Add or edit an address Account · landmark and phone matter more than a postcode; the pin confirms where couriers should go	new
+7879	Supporting · Account & settings	The settings people look for	SP-M03 Privacy & data Account · permissions in plain words, and your data kept in your hands	new
+7893	Supporting · Account & settings	The settings people look for	SP-M04 Security & devices Account · everything that protects the account in one place, including sessions and the app lock	new
+7907	Supporting · Account & settings	The settings people look for	SP-M05 Change phone number Account · your phone number is your Komtru ID, so both numbers are verified and the old one is told	new
+7929	Supporting · Account & settings	The settings people look for	SP-M33 Display & accessibility Account · text size, contrast, motion and a low-data mode, because low bandwidth is a first-class case	new
+7947	Supporting · Help & contact	Getting help without leaving the app	SP-M06 Contact Komtru Help · every way to reach us, the hours we answer, and the status of what you already asked	new
+7961	Supporting · Help & contact	Getting help without leaving the app	SP-M07 Support chat Help · a conversation tied to the Trade it is about, with the request number visible	new
+7976	Supporting · Help & contact	Getting help without leaving the app	SP-M08 How inspection works Help · a plain-language explainer with the steps, the clock, and what to do if something is wrong	new
+7996	Supporting · Help & contact	Getting help without leaving the app	SP-M09 What it costs Help · fees shown with a real example, so no one is surprised at payment	new
+8014	Supporting · Money & documents	Proof and tracking for the money	SP-M10 Wallet Money · what is in the wallet, what moved, and what you can do with it	new
+8028	Supporting · Money & documents	Proof and tracking for the money	SP-M11 Receipt & documents Money · proof of a completed Trade: the agreement, the receipt and the delivery proof, ready to download or share	new
+8050	Supporting · Money & documents	Proof and tracking for the money	SP-M12 Where’s my refund? Money · a refund shown as a journey with dates, so there is no need to ask	new
+8070	Supporting · Money & documents	Proof and tracking for the money	SP-M13 Statements Money · a statement for any period, in the format an accountant or a bank will accept	new
+8121	Desktop · 01 · Arrive & verify	Getting in, and proving who you are	DX-01 Welcome — Log in No sidebar yet: brand story and Trade Code entry beside the form, so a returning visitor can start from a code without an account	new
+8129	Desktop · 01 · Arrive & verify	Getting in, and proving who you are	DX-02 Verify your identity Step list stays visible beside the form; what is verified, why, and who can see it sit in the right column	new
+8145	Desktop · 02 · Home	One home for buying and selling	DX-03 Home — Buyer Buy mode · everything that needs attention first, with the global search and Trade Code bar always on top	new
+8167	Desktop · 02 · Home	One home for buying and selling	DX-04 Home — Merchant Sell mode · adds a shop KPI strip a phone would not have room for	new
+8189	Desktop · 02 · Home	One home for buying and selling	DX-05 Home — New user Buy mode · an empty state that offers three ways in: start, find, or enter a code	new
+8200	Desktop · 03 · Discover	Finding the right seller and the right trade	DX-06 Search results Filters stay open on the left; each result carries the seller evidence a buyer needs to decide	new
+8208	Desktop · 03 · Discover	Finding the right seller and the right trade	DX-07 Browse categories Categories, what is trending near the buyer, and recently viewed, side by side	new
+8216	Desktop · 03 · Discover	Finding the right seller and the right trade	DX-08 Seller profile (public) Evidence first: verification, completed trades by category, then listings. The Start a Trade panel stays in view while scrolling	new
+8224	Desktop · 03 · Discover	Finding the right seller and the right trade	DX-09 Find a trade by code Trade Codes replace payment links: type the code, see exactly what you are being asked to agree to	new
+8236	Desktop · 04 · Propose & agree	Writing the agreement before any money moves	DX-10 Create a trade — item & delivery (buyer) Buy mode · stage 2 of 4 in the working column; the assembly rail shows who owes what; the contract preview updates beside it	new
+8250	Desktop · 04 · Propose & agree	Writing the agreement before any money moves	DX-11 Create a trade — review & send (buyer) Buy mode · stage 4: the whole contract with its outstanding parts named, and the send action beside it	new
+8258	Desktop · 04 · Propose & agree	Writing the agreement before any money moves	DX-10B Complete a trade — item & delivery (seller) Sell mode · the seller’s part of a buyer-started Trade: specification, delivery charge and promise, with the contract preview beside it	new
+8273	Desktop · 04 · Propose & agree	Writing the agreement before any money moves	DX-12 Seller reviews an offer Sell mode · the offer next to the listing it came from, with the buyer’s evidence, so the decision needs no other tab	new
+8281	Desktop · 04 · Propose & agree	Writing the agreement before any money moves	DX-13 Counter-proposal comparison Three versions in three columns: what was asked, what was countered, what the agreement will be if accepted	new
+8292	Desktop · 04 · Propose & agree	Writing the agreement before any money moves	DX-14 Terms agreed The trade now exists: its code is shareable, the funding clock is visible, and the history is locked	new
+8307	Desktop · 05 · Fund & protect	Paying inside Komtru, with the money state always explicit	DX-15 Fund & protect — checkout Methods on the left; the order, the fee and what happens after payment stay visible on the right	new
+8319	Desktop · 05 · Fund & protect	Paying inside Komtru, with the money state always explicit	DX-16 Verifying payment A named, timed waiting state with the one instruction that matters: do not pay again	new
+8331	Desktop · 05 · Fund & protect	Paying inside Komtru, with the money state always explicit	DX-17 Funds protected Confirmation plus what the seller was told, so the buyer knows the next move is theirs to wait for	new
+8347	Desktop · 06 · Fulfil & dispatch	The merchant’s working day	DX-18 Orders — table with bulk actions Sell mode · a table beats cards at this volume: sort, filter, select several, act once	new
+8355	Desktop · 06 · Fulfil & dispatch	The merchant’s working day	DX-19 Dispatch workspace Sell mode · checklist, proof photos and courier choice in one view; dispatch stays locked until payment is protected	new
+8363	Desktop · 06 · Fulfil & dispatch	The merchant’s working day	DX-20 Create listing — live preview Sell mode · what buyers will see updates beside the form, including the standards Komtru applies to the category	new
+8374	Desktop · 07 · Deliver & inspect	From the courier to the buyer’s decision	DX-21 Trades workspace Buy mode · left pane collapsed to icons (click the arrow to expand) · the list never leaves; the detail carries timeline, custody and a context rail with next action, money and evidence	new
+8398	Desktop · 07 · Deliver & inspect	From the courier to the buyer’s decision	DX-22 Park pickup Buy mode · the PIN, the place and the checks before collecting, with the inspection clock starting automatically 12 hours after arrival	new
+8408	Desktop · 07 · Deliver & inspect	From the courier to the buyer’s decision	DX-23 Inspect & compare Buy mode · what the seller showed beside what you received, so the decision is a comparison, not a memory	new
+8415	Desktop · 07 · Deliver & inspect	From the courier to the buyer’s decision	DX-38 Evidence across the Trade Buy mode · the same media in three states: changeable while it’s an offer, fixed during the Trade, archived when it’s done	new
+8426	Desktop · 08 · Issues & resolution	When something is wrong	DX-24 Report an issue — slide-over Buy mode · the trade stays visible behind the panel, so nobody has to leave the context to describe the problem	new
+8434	Desktop · 08 · Issues & resolution	When something is wrong	DX-25 Case status & evidence Both sides’ evidence in two columns with the deadline and the money state in the rail	new
+8447	Desktop · 08 · Issues & resolution	When something is wrong	DX-26 Decision — return approved Buy mode · every case and its outcome in one list; the detail shows the basis and the whole execution path	new
+8460	Desktop · 08 · Issues & resolution	When something is wrong	DX-27 Return — status Buy mode · progress, custody and money on one screen, with the receipt that proves what was sent	new
+8479	Desktop · 08 · Issues & resolution	When something is wrong	DX-28 Check the return Sell mode · the check that releases or pauses the refund, with the record to compare against beside it	new
+8487	Desktop · 08 · Issues & resolution	When something is wrong	DX-29 Settlement negotiation Sell mode · the whole exchange as a timeline, the current offer, and the three choices, with the 48h window visible	new
+8499	Desktop · 08 · Issues & resolution	When something is wrong	DX-30 File an appeal Buy mode · one appeal per case: the decision, the grounds and new evidence, with the case timeline kept in view	new
+8515	Desktop · 09 · Complete & grow	After the trade	DX-31 Trade complete & review Buy mode · the result, the review (only after a completed trade), and what it added to the buyer’s record	new
+8528	Desktop · 09 · Complete & grow	After the trade	DX-32 Payouts & performance Sell mode · balance, payout history and the reliability numbers that earn trust, together	new
+8536	Desktop · 09 · Complete & grow	After the trade	DX-33 Insights Sell mode · trends over time and what is converting, which a phone has no room to show	new
+8547	Desktop · 10 · Messages, trust & account	Everything around the trade	DX-34 Messages with trade context Three panes: conversations, the thread, and the trade it belongs to; chat is scoped to a trade, not a general inbox	new
+8555	Desktop · 10 · Messages, trust & account	Everything around the trade	DX-35 Notifications centre Grouped by what needs action, with a preview pane so triage does not mean opening each one	new
+8563	Desktop · 10 · Messages, trust & account	Everything around the trade	DX-36 Trust Passport Evidence, not a score: facts about behaviour, with a shareable card beside them	new
+8575	Desktop · 10 · Messages, trust & account	Everything around the trade	DX-37 Account & security Settings with its own sub-navigation, devices as a table, and critical alerts that cannot be switched off	new
+8585	Desktop · 11 · Help, documents & settings	Everything around the Trade	SP-D01 Help & contact Buy mode · answers first, a person second, and the state of what you already asked, all beside the search	new
+8592	Desktop · 11 · Help, documents & settings	Everything around the Trade	SP-D02 Statements & exports Buy mode · a statement for any period in the format a bank or an accountant accepts, with past exports listed	new
+8599	Desktop · 11 · Help, documents & settings	Everything around the Trade	SP-D03 Address book Buy mode · saved addresses as a table; the default is what a seller uses to estimate courier cost	new
+8606	Desktop · 11 · Help, documents & settings	Everything around the Trade	SP-D04 Trade history & documents Buy mode · every Trade with its agreement and receipt one click away	new
+8613	Desktop · 11 · Help, documents & settings	Everything around the Trade	SP-D05 Shop profile & settings Sell mode · the shop’s profile, verified address, pause and delivery defaults on one page	new
+8620	Desktop · 11 · Help, documents & settings	Everything around the Trade	SP-D06 Shop team Sell mode · staff with only the access their job needs; the owner alone moves money	new
+8684	Tablet · 01 · Arrive	Signing in on a tablet	TX-01 Log in Centered card on a calm background; the Trade Code entry stays one tap away	new
+8695	Tablet · 02 · Home	Home for buying and selling	TX-02 Home — Buyer Buy mode · top navigation with five tabs; hero and tiles stack, panels sit in two columns	new
+8717	Tablet · 02 · Home	Home for buying and selling	TX-03 Home — Merchant Sell mode · the merchant tabs and the shop KPI strip	new
+8739	Tablet · 02 · Home	Home for buying and selling	TX-04 Home — New user Buy mode · start, find or enter a code	new
+8750	Tablet · 03 · Discover	Finding the right seller	TX-05 Search results Buy mode · filters collapse to a chip row; results are a two-column grid of large cards	new
+8758	Tablet · 03 · Discover	Finding the right seller	TX-06 Seller profile Buy mode · evidence first; Start a trade lives in a sticky bottom bar within thumb reach	new
+8770	Tablet · 04 · Propose & agree	Agreeing terms on a tablet	TX-07 Create a trade — item & delivery (buyer) Buy mode · four stages as a touch stepper; the preview folds into a card beside the working stage	new
+8778	Tablet · 04 · Propose & agree	Agreeing terms on a tablet	TX-07B Complete a trade (seller) Sell mode · specification and delivery in two columns; large controls for use at the packing table	new
+8786	Tablet · 04 · Propose & agree	Agreeing terms on a tablet	TX-08 Seller reviews an offer Sell mode · requests on the left, the decision on the right; large buttons, no hover-only actions	new
+8794	Tablet · 04 · Propose & agree	Agreeing terms on a tablet	TX-09 Terms agreed Both · the trade exists; the next valid step is large and obvious	new
+8805	Tablet · 05 · Fund & protect	Paying inside Komtru	TX-10 Fund & protect Buy mode · methods and the order summary side by side, with a large pay button in a sticky bar	new
+8820	Tablet · 06 · Fulfil & dispatch	The merchant at the packing table	TX-11 Orders Sell mode · a list with a detail pane instead of a wide table; filters are a chip row	new
+8828	Tablet · 06 · Fulfil & dispatch	The merchant at the packing table	TX-12 Dispatch workspace Sell mode · the checklist and the proof photos, designed for a tablet used at the packing table	new
+8839	Tablet · 07 · Deliver & inspect	From dispatch to decision	TX-13 Trade workspace Buy mode · a narrow list beside the detail; the timeline and the next action stay together	new
+8857	Tablet · 07 · Deliver & inspect	From dispatch to decision	TX-14 Inspect & compare Buy mode · a segmented control swaps between the seller’s proof and what arrived, instead of two cramped panes	new
+8864	Tablet · 07 · Deliver & inspect	From dispatch to decision	TX-22 Evidence across the Trade Buy mode · a segmented control moves between the three states; the same rules, one column at a time	new
+8875	Tablet · 08 · Issues & resolution	When something is wrong	TX-15 Report an issue Buy mode · a modal sheet over the dimmed trade, sized for thumbs	new
+8883	Tablet · 08 · Issues & resolution	When something is wrong	TX-16 Return — status Buy mode · progress, custody and the receipt, in two columns	new
+8898	Tablet · 08 · Issues & resolution	When something is wrong	TX-17 Check the return Sell mode · the decision with large radio targets and one primary action per outcome	new
+8906	Tablet · 08 · Issues & resolution	When something is wrong	TX-18 Settlement offer Sell mode · accept, counter once, or hand it to TrustOps	new
+8917	Tablet · 09 · Complete & grow	After the trade	TX-19 Payouts & performance Sell mode · balance, KPIs and history in one scroll	new
+8928	Tablet · 10 · Messages & account	Everything around the trade	TX-20 Messages Buy mode · conversation list beside the thread; the trade context is a header, not a third pane	new
+8936	Tablet · 10 · Messages & account	Everything around the trade	TX-21 Account Buy mode · settings list on the left, the open setting on the right	new
+8946	Tablet · 11 · Help & settings	Help, statements and shop settings	SP-T01 Help & contact Buy mode · answers beside the ways to reach us, with touch-sized rows	new
+8953	Tablet · 11 · Help & settings	Help, statements and shop settings	SP-T02 Statements Buy mode · the statement builder and past exports in two columns	new
+8960	Tablet · 11 · Help & settings	Help, statements and shop settings	SP-T03 Shop settings Sell mode · profile and delivery defaults together	new
+9008	TrustOps · 01 · Orient	Starting the shift	OP-01 Today Reviewer · start of shift: what is waiting for you, where the work is, and what was just decided	new
+9020	TrustOps · 01 · Orient	Starting the shift	OP-02 My work One list for everything assigned to you, across every area, with the reason and the clock on each row	new
+9028	TrustOps · 01 · Orient	Starting the shift	OP-03 Team queue Everything nobody owns yet, with who has capacity, so work is picked up and not left	new
+9036	TrustOps · 01 · Orient	Starting the shift	OP-04 Alerts & escalations What the console tells you, and the rules that decide who is told and when	new
+9047	TrustOps · 02 · People & network	Deciding who joins	OP-05 People Verification queue: who is waiting to be verified, what the provider said, and how long they have waited	new
+9055	TrustOps · 02 · People & network	Deciding who joins	OP-06 Verification case The same case layout as every other case: evidence, what Komtru suggests, your decision, the trail	new
+9063	TrustOps · 02 · People & network	Deciding who joins	OP-07 Park network applications Hub and agent applications in one queue; every row says what is missing	new
+9071	TrustOps · 02 · People & network	Deciding who joins	OP-08 Hub application review Approving turns an applicant into a live hub, and the permissions it gets are chosen here, not assumed	new
+9079	TrustOps · 02 · People & network	Deciding who joins	OP-09 All hubs The network at a glance: which hubs are healthy, what each is holding, and where the exceptions are	new
+9090	TrustOps · 03 · Proposals	Reviewing trade proposals	OP-10 Trade proposals The first decision on a Trade, ranked by risk so the urgent ones are at the top	new
+9098	TrustOps · 03 · Proposals	Reviewing trade proposals	OP-11 Proposal review The agreement exactly as both parties see it, the risk signals, and the decision	new
+9109	TrustOps · 04 · Trades & money	Following a Trade and its money	OP-12 Trade 360 One Trade across every area: its stages, the people, the money, the parcel and any case, all in one place	new
+9130	TrustOps · 04 · Trades & money	Following a Trade and its money	OP-13 Money Protected funds and what is due to settle today; the exceptions come first	new
+9138	TrustOps · 04 · Trades & money	Following a Trade and its money	OP-14 Payment reconciliation The provider’s record beside Komtru’s ledger, so a mismatch is something you can see and fix	new
+9149	TrustOps · 05 · Custody	Following the parcel	OP-15 Hub detail One hub: what it is holding, including returns, and every exception, with the clock on each parcel	new
+9157	TrustOps · 05 · Custody	Following the parcel	OP-16 Parcel detail The custody chain of one parcel, item or return, and the few actions a reviewer can take on it	new
+9174	TrustOps · 06 · Risk	Investigating risk	OP-17 Risk signals Patterns Komtru noticed, ranked, each with the reason it matters and what it touches	new
+9182	TrustOps · 06 · Risk	Investigating risk	OP-18 Risk case Evidence first; any restriction needs a reason and, above a limit, a second person	new
+9197	TrustOps · 07 · Disputes & appeals	Deciding, and following through	OP-19 Cases Disputes, appeals and risk in one list, with the clock that matters on each	new
+9205	TrustOps · 07 · Disputes & appeals	Deciding, and following through	OP-20 Dispute case Both sides’ evidence together, the settle-directly window, and the decision with what happens next	new
+9223	TrustOps · 07 · Disputes & appeals	Deciding, and following through	OP-21 Returns & settlements Everything running after a decision: returns, replacements and settlements, with the next deadline and what needs you	new
+9231	TrustOps · 07 · Disputes & appeals	Deciding, and following through	OP-22 Appeal review One appeal per case, reviewed by someone who wasn’t part of the first decision	new
+9242	TrustOps · 08 · Search & audit	Finding anything, and proving what happened	OP-23 Search results Search by anything a person would quote: a Trade Code, a phone number, a name, a parcel. Results are grouped by what they are	new
+9250	TrustOps · 08 · Search & audit	Finding anything, and proving what happened	OP-24 Trust Trail Every action on a Trade, by whom, why and when. It can be read but never changed	new
+9258	TrustOps · 08 · Search & audit	Finding anything, and proving what happened	OP-25 Tiers & approvals How much each tier can decide, and what needs a second person. A role says what you work on; a tier says how much you can decide	new
+9269	TrustOps · 09 · Team & access	Bringing people in and keeping access right	OP-26 Team Everyone with access: their role, tier and status, so who can do what is never a guess	new
+9277	TrustOps · 09 · Team & access	Bringing people in and keeping access right	OP-27 Invite a team member Pick a role and see exactly what it allows before sending; roles that touch money or access need a second approver	new
+9285	TrustOps · 09 · Team & access	Bringing people in and keeping access right	OP-28 Welcome — set up your account The new team member’s first day: six steps in order, nothing opens until the last is signed off	new
+9300	TrustOps · 09 · Team & access	Bringing people in and keeping access right	OP-29 Onboarding progress Where each new team member is, what is blocking them, and who signs them off	new
+9308	TrustOps · 09 · Team & access	Bringing people in and keeping access right	OP-30 Roles & privileges What each role can do in each area, on one page, so a role is understood at a glance	new
+9316	TrustOps · 09 · Team & access	Bringing people in and keeping access right	OP-31 Role — Finance Officer (Accountant) One role in full: what it does, its limits, what it can see, and who holds it	new
+9324	TrustOps · 09 · Team & access	Bringing people in and keeping access right	OP-32 Access review Every quarter someone confirms each person still needs their access, and the dormant ones stand out	new
+9332	TrustOps · 09 · Team & access	Bringing people in and keeping access right	OP-33 My account A team member’s own page: role, security, devices and shift, in one place	new
+9343	TrustOps · 10 · Money operations	Moving and reporting money safely	OP-34 Settlement batches Payouts are prepared by one person and approved by another; the screen makes the two roles explicit	new
+9351	TrustOps · 10 · Money operations	Moving and reporting money safely	OP-35 Finance reports The reports an accountant needs, with every export recorded	new
+9362	TrustOps · 11 · Audit & assurance	Proving the process works	OP-36 Audit log Who changed access, who looked at personal data, who decided what. Read-only, searchable and exportable	new
+9370	TrustOps · 11 · Audit & assurance	Proving the process works	OP-37 Audit review An auditor samples decisions, checks each against policy, and records findings, all without being able to change anything	new
+9381	TrustOps · 12 · Rules & policies	The rules everything runs on	OP-38 Policies & templates The rules decisions are based on, with versions, and the wording that goes to people	new
+9389	TrustOps · 12 · Rules & policies	The rules everything runs on	OP-39 Queues & clocks How long each kind of work is allowed to take, who is told when it slips, and how work is handed out	new
+9397	TrustOps · 12 · Rules & policies	The rules everything runs on	OP-40 Proof media review A person looks at the uploads that the automatic check couldn’t be sure about, and the seller can always ask	new
+9408	TrustOps · 13 · Customer success	Helping people, with the whole picture	OP-41 Person 360 Everything about one person in one place, so no decision needs five screens	new
+9420	TrustOps · 13 · Customer success	Helping people, with the whole picture	OP-42 Support inbox People contact us in the app, on WhatsApp or by phone; each contact is tied to the person and their Trade	new
+9428	TrustOps · 13 · Customer success	Helping people, with the whole picture	OP-43 Account recovery Lost phone or a suspected SIM swap: recovery never relies on an SMS code alone	new
+9439	TrustOps · 14 · Risk & compliance	Meeting the obligations, protecting the network	OP-44 Compliance & legal Screening hits, suspicious activity, data requests and legal requests, in restricted cases with their own clocks	new
+9452	TrustOps · 14 · Risk & compliance	Meeting the obligations, protecting the network	OP-45 Watchlists & blocklists Devices, numbers, accounts and hubs that deserve a closer look or a stop, each with a reason and an end date	new
+9463	TrustOps · 15 · Operations control	Running the operation itself	OP-46 Incident command One person in charge, named roles, the controls that stop harm, and the words people see	new
+9476	TrustOps · 15 · Operations control	Running the operation itself	OP-47 Provider & partner health Providers fail first as stuck Trades; this shows it early and says what to do	new
+9489	TrustOps · 15 · Operations control	Running the operation itself	OP-48 Shift handover Clocks and promises are handed over in writing, and the incoming lead has to acknowledge them	new
+9501	TrustOps · 15 · Operations control	Running the operation itself	OP-49 Operations performance How the operation is doing against its own standards, by area, and whether there is enough capacity	new
+9509	TrustOps · 15 · Operations control	Running the operation itself	OP-52 Automation log The automated tier made visible: what it decided, which rule it used, what a person overrode, and a sample to check	new
+9520	TrustOps · 16 · Money & fulfilment exceptions	When money or a parcel goes wrong in transit	OP-50 Reversals & chargebacks Taking money back or correcting the ledger, always with a reason and a second person	new
+9528	TrustOps · 16 · Money & fulfilment exceptions	When money or a parcel goes wrong in transit	OP-51 Courier claims When a parcel is lost or damaged in transit, the buyer is made whole first and the courier is pursued after	new
+9544	TrustOps · 17 · Knowledge & quality	Making decisions consistent	OP-53 Knowledge base & playbooks The how-to for every kind of case, next to the policy it relies on, so a new officer isn’t guessing	new
+9557	TrustOps · 17 · Knowledge & quality	Making decisions consistent	OP-54 Quality & calibration A sample of decisions from every area is scored against a rubric, and reviewers compare themselves on the same case	new
+9568	TrustOps · 18 · Governance	Changing rules and records safely	OP-55 Policy change request A change is drafted, tested on past cases, reviewed, signed by two people, and published with a version and a date	new
+9582	TrustOps · 18 · Governance	Changing rules and records safely	OP-56 Retention & legal holds How long each kind of data is kept, and the holds that stop anything being deleted	new
+9590	TrustOps · 18 · Governance	Changing rules and records safely	OP-57 Break-glass access An emergency valve for when the normal rules would stop the right action; time-limited, approved by someone else, and always reviewed	new
+9603	TrustOps · 18 · Governance	Changing rules and records safely	OP-58 Trust Event correction A wrongly recorded event is fixed in the open: the original stays, the correction is labelled, and two people sign it	new
+9614	TrustOps · 19 · Network & merchants	Looking after hubs and shops	OP-59 Hub commissions & audits Paying the people who hold parcels, and making sure the hubs are what they say they are	new
+9622	TrustOps · 19 · Network & merchants	Looking after hubs and shops	OP-60 Regions & calendars Where work is routed, in which languages, and when the calendar changes how clocks run	new
+9630	TrustOps · 19 · Network & merchants	Looking after hubs and shops	OP-61 Seller 360 The shop as a business: how healthy it is, what has gone wrong, and how Komtru can help it do better	new
+9648	TrustOps · 20 · Communications & treasury	What we say, and the money behind it	OP-62 Message templates The words people receive, in every channel and language, kept in one place with versions	new
+9656	TrustOps · 20 · Communications & treasury	What we say, and the money behind it	OP-63 Announcements Telling many people something at once, only after a second person has approved the wording	new
+9664	TrustOps · 20 · Communications & treasury	What we say, and the money behind it	OP-64 Treasury & float Is every naira we owe covered, where is it held, and could we pay everyone due this week	new
+9675	TrustOps · 21 · Insight & reporting	Answering your own questions	OP-65 Reports Answering a question without waiting for an engineer: saved reports, scheduled ones, and plain-language starting points	new
+9683	TrustOps · 21 · Insight & reporting	Answering your own questions	OP-66 Build a report A report is a question in four steps, with a live preview and a plain statement of whether it contains personal data	new
+9694	TrustOps · 22 · Partners & configuration	The partners we rely on, and the rules we run on	OP-67 Courier partners How each courier is actually performing, so choosing them is evidence-based and a slipping one is noticed	new
+9702	TrustOps · 22 · Partners & configuration	The partners we rely on, and the rules we run on	OP-68 Partner review One courier against its targets and terms, with the claims it caused, and a decision that’s reasoned like any other	new
+9710	TrustOps · 22 · Partners & configuration	The partners we rely on, and the rules we run on	OP-69 Onboard a courier partner A new courier proves itself on test shipments before it touches a real Trade	new
+9725	TrustOps · 22 · Partners & configuration	The partners we rely on, and the rules we run on	OP-70 Categories & standards The rules that make protection mean the same thing on every Trade, in one place and under change control	new
+9733	TrustOps · 22 · Partners & configuration	The partners we rely on, and the rules we run on	OP-71 Fee schedule Every charge in one table, with the effect of a change shown before anyone approves it	new
+9745	TrustOps · 23 · Field audits	Checking the hubs in person	AU-1 Hub audit — start Auditor · arrive, prove you are there, and see what will be checked before anything starts	new
+9762	TrustOps · 23 · Field audits	Checking the hubs in person	AU-2 Hub audit — checklist Auditor · one section at a time, each item pass, fail or not applicable, with a photo and a finding where it fails	new
+9780	TrustOps · 23 · Field audits	Checking the hubs in person	AU-3 Hub audit — add a finding Auditor · what was wrong, how serious, the evidence, and when it must be fixed	new
+9795	TrustOps · 23 · Field audits	Checking the hubs in person	AU-4 Hub audit — summary & sign-off Auditor · the result, the findings, and the agent’s acknowledgement before it is submitted	new
+9815	TrustOps · 23 · Field audits	Checking the hubs in person	OP-72 Audit results & follow-ups What each audit found, what has been fixed, and what is overdue, so findings don’t sit	new
+9830	TrustOps · 24 · People development	Knowing how, and proving it	OP-73 Training & certification What you must know to do your job, what you’ve completed, and what is about to lapse	new
+9838	TrustOps · 24 · People development	Knowing how, and proving it	OP-74 Module & assessment Practice on realistic cases with no real money, then see how an experienced reviewer would have decided	new
+9852	TrustOps · 24 · People development	Knowing how, and proving it	OP-75 Certification matrix Who can do what because they have proved they know how, and where cover is thin	new
+9863	TrustOps · 25 · Tablet	Reviewing away from a desk	OP-T1 Today Touch-first: the same “what is waiting for me” view, with large rows and the clock on each	new
+9871	TrustOps · 25 · Tablet	Reviewing away from a desk	OP-T2 My work A list and a case side by side; the suggestion is labelled, the decision stays with you	new
+9879	TrustOps · 25 · Tablet	Reviewing away from a desk	OP-T3 Proposal review Evidence first, then the decision, in a sticky bar	new
+9887	TrustOps · 25 · Tablet	Reviewing away from a desk	OP-T4 Dispute decision Both sides summarised, the outcome chosen from the allowed set, and what happens next	new
+9895	TrustOps · 25 · Tablet	Reviewing away from a desk	OP-T5 Hub application Approving makes an applicant a live hub; permissions are chosen, not assumed	new
+9904	TrustOps · 25 · Tablet	Reviewing away from a desk	OP-T6 Approvals For approvers away from a desk: what is being asked, by whom, and the one decision, without opening anything else	new
+9960	Park Agent / Hub — TrustOps-owned onboarding, activation & lifecycle	Park Hub registration is now a TrustOps case from first claim to every later re-verification	PA7 Application Status Applicant-side control centre after PH6	carried
+9985	Park Agent / Hub — TrustOps-owned onboarding, activation & lifecycle	Park Hub registration is now a TrustOps case from first claim to every later re-verification	PA8 Changes Requested Missing today: a safe loop between submit and reject	carried
+10006	Park Agent / Hub — TrustOps-owned onboarding, activation & lifecycle	Park Hub registration is now a TrustOps case from first claim to every later re-verification	PA9 Hub & Agent Profile Separate the hub entity from the person operating it	carried
+10030	Park Agent / Hub — TrustOps-owned onboarding, activation & lifecycle	Park Hub registration is now a TrustOps case from first claim to every later re-verification	PA10 Custody Incident Every exception needs a structured handoff to TrustOps	carried
+10113	Supporting · Hub tools	What a Park agent needs day to day	SP-M30 Scan a parcel Agent · scan the waybill instead of typing; the match is shown before anything is logged	new
+10133	Supporting · Hub tools	What a Park agent needs day to day	SP-M31 Shift & hours Agent · when the hub is open, so buyers know when to come and Komtru knows when not to expect scans	new
+10148	Supporting · Hub tools	What a Park agent needs day to day	SP-M32 Commission statement Agent · what was handled, what it earned, and when it’s paid	new
+10167	Supporting · Hub count	Proving what the hub holds	SP-M43 Count the hub — start Agent · a weekly check of what is physically held against what Komtru expects	new
+10186	Supporting · Hub count	Proving what the hub holds	SP-M44 Count the hub — scanning Agent · progress against the expected list; a frozen parcel is counted without being touched	new
+10210	Supporting · Hub count	Proving what the hub holds	SP-M45 Count the hub — summary Agent · differences are named and explained, and sent to Komtru as they are	new
+10234	Home — Additional States	Home actions and role-aware trade attention	H-01 Home — Buyer Buy mode · attention first, then trades and activity; the approved Home design	new
+10263	Home — Additional States	Home actions and role-aware trade attention	H-02 Home — Merchant Sell mode · same layout, merchant context and the merchant navigation	new
+10292	Home — Additional States	Home actions and role-aware trade attention	H-03 Home — New User Buy mode · an empty state that starts a trade or enters a Trade Code	new
+10315	Trade Creation — Agreement	Create, review and accept the recorded terms	TC-05 Propose a Change Seller — only the changed terms differ; built on Propose Changes (W2)	new
+10332	Trade Creation — Agreement	Create, review and accept the recorded terms	TC-06 Terms Agreed Both — locked terms and the next valid step; built on Refund Issued (CR3) and the trade timeline	new
+10355	Trade Workspace — Funding & Terms	One trade record, role-aware actions and authoritative payment state	TW-01 Trade Workspace — Awaiting Funding Buyer — one shared trade record, role-aware actions; built on Active Trade (AB1/C3)	new
+10380	Trade Workspace — Funding & Terms	One trade record, role-aware actions and authoritative payment state	TW-02 Fulfilment Terms Both — inputs drive the agreement summary; built on Create a Trade (CT-B3) and Request More Time (BEI1)	new
+10395	Trade Workspace — Funding & Terms	One trade record, role-aware actions and authoritative payment state	TW-03 Secure Checkout Buyer — funding counts only when the provider confirms; built on Fund Trade (V1)	new
+10410	Trade Workspace — Funding & Terms	One trade record, role-aware actions and authoritative payment state	TW-04 Trade Policies Both — cancellation, return and refund in one place; built on Category Trade Standards (CTS1)	new
+10438	Lifecycle Exceptions	Expiry, withdrawal, inspection and issue-intake states	EX-01 Trade Expired Both — six-hour funding window elapsed; built on Delivery Overdue (DE3)	new
+10459	Lifecycle Exceptions	Expiry, withdrawal, inspection and issue-intake states	WD-01 Withdrawal Recorded Either party — a clear result; built on Refund Issued (CR3)	new
+10473	Lifecycle Exceptions	Your withdrawal is recorded	IE-03 Inspection Update Seller — record a decision on the request; built on Request More Time (BEI1)	new
+10488	Lifecycle Exceptions	Your withdrawal is recorded	DI-01 Report an Issue Buyer — structured intake before evidence; built on Report an Issue (C7)	new
+10607	Canonical Mobile Architecture — Trade Workspace · Tabbed	One Trade Workspace across the full transaction lifecycle	CWT-01 Workspace — Awaiting Funding Buyer — the next action is to protect the amount; built on Active Trade (AB1/C3)	new
+10637	Canonical Mobile Architecture — Trade Workspace · Tabbed	One Trade Workspace across the full transaction lifecycle	CWT-02 Workspace — Funds Protected Seller — the next action is fulfilment, not payout; built on Active Trade (AB1/C3)	new
+10667	Canonical Mobile Architecture — Trade Workspace · Tabbed	One Trade Workspace across the full transaction lifecycle	CWT-03 Workspace — In Transit Buyer — the trade stays active while the parcel moves; built on Active Trade — Live Logistics (AB1)	new
+10701	Canonical Mobile Architecture — Trade Workspace · Tabbed	One Trade Workspace across the full transaction lifecycle	CWT-04 Workspace — Inspection Buyer — your decision determines the next trade path; built on Inspect — Confirm Delivery (C4)	new
+10731	Canonical Mobile Architecture — Trade Workspace · Tabbed	One Trade Workspace across the full transaction lifecycle	CWT-05 Workspace — Disputed Both — protected funds stay separate from the case decision; built on Dispute Status (C8)	new
+10761	Canonical Mobile Architecture — Trade Workspace · Tabbed	One Trade Workspace across the full transaction lifecycle	CWT-06 Workspace — Settlement Both — the outcome is known; the financial instruction is still being confirmed	new
+10791	Canonical Mobile Architecture — Trade Workspace · Tabbed	One Trade Workspace across the full transaction lifecycle	CWT-07 Agreed Terms Both — the accepted version is the reference; built on Agreement Summary (C2)	new
+10809	Canonical Mobile Architecture — Trade Workspace · Tabbed	One Trade Workspace across the full transaction lifecycle	CWT-08 Trade Activity Both — a chronological, read-only record; built on the trade timeline (C3)	new
+10832	Canonical Mobile Architecture — Trade Workspace · Tabbed	One Trade Workspace across the full transaction lifecycle	CWT-09 Trade Actions Both — actions derive from state, role and policy; built on the Active Trade link rows (AB1)	new
+10861	Trade Workspace — Supporting Screens	Focused actions behind the five Trade Workspace tabs	CWT-S01 Agreement — Accepted Terms Both — the authoritative agreement; built on Agreement Summary (C2)	new
+10879	Trade Workspace — Supporting Screens	Focused actions behind the five Trade Workspace tabs	CWT-S02 Agreement — Version History Both — earlier proposals stay visible; built on the trade timeline (C3)	new
+10901	Trade Workspace — Supporting Screens	Focused actions behind the five Trade Workspace tabs	CWT-S03 Payment — Funding Method Buyer — choose how to protect the amount; built on Fund Trade (V1)	new
+10919	Trade Workspace — Supporting Screens	Focused actions behind the five Trade Workspace tabs	CWT-S04 Payment — Review & Confirm Buyer — confirm before leaving for the provider; built on Fund Trade (V1)	new
+10937	Trade Workspace — Supporting Screens	Focused actions behind the five Trade Workspace tabs	CWT-S05 Payment — Processing Buyer — waiting is not the same as protected; built on Verifying Payment (AB3)	new
+10954	Trade Workspace — Supporting Screens	Focused actions behind the five Trade Workspace tabs	CWT-S06 Payment — Protected Buyer — funds confirmed; built on Funds Protected (V3)	new
+10971	Trade Workspace — Supporting Screens	Funds are protected	CWT-S07 Payment — Failed or Expired Buyer — no protected state exists; built on Payment States (AB4)	new
+10990	Trade Workspace — Supporting Screens	Funds are protected	CWT-S08 Delivery — Dispatch Readiness Seller — payment protected, dispatch allowed; built on Dispatch Guard (X1)	new
+11008	Trade Workspace — Supporting Screens	Funds are protected	CWT-S09 Delivery — Waybill & Handover Seller — courier handover; built on Waybill & Handover (X2)	new
+11029	Trade Workspace — Supporting Screens	Funds are protected	CWT-S10 Delivery — Tracking & Custody Buyer — updates as the parcel moves; built on Live Logistics (AB1)	new
+11055	Trade Workspace — Supporting Screens	Funds are protected	CWT-S11 Delivery — Park Pickup Buyer — collect with the release PIN; built on Your Pickup PIN (AB2)	new
+11073	Trade Workspace — Supporting Screens	Funds are protected	CWT-S12 Evidence — Trade Media Both — media by event; built on Compare Seller's Proof (Z4)	new
+11091	Trade Workspace — Supporting Screens	Funds are protected	CWT-S13 Evidence — Submit Both — attach media to the trade record or case; built on Report an Issue (C7)	new
+11110	Trade Workspace — Supporting Screens	Funds are protected	CWT-S14 Resolution — Report an Issue Buyer — whole-trade intake; built on Report an Issue (C7)	new
+11128	Trade Workspace — Supporting Screens	Funds are protected	CWT-S15 Resolution — Case Status & Settlement Both — built on Dispute Status (C8)	new
+11152	Trade Workspace — Supporting Screens	Funds are protected	CWT-S16 Resolution — Choose the Item Buyer — multi-item orders only; built on Inspect — Multiple Items (MI4)	new
+11170	Trade Workspace — Supporting Screens	Funds are protected	CWT-S17 Resolution — Report One Item Buyer — item-level intake; built on Report an Issue (C7)	new
+11188	Trade Workspace — Supporting Screens	Funds are protected	CWT-S18 Resolution — Case Status, Mixed Order Both — payment tracked per item; built on Dispute Status (C8)	new
+11211	Trade execution · Proof media	Proof media — from the first photo to the archive	PM-1 Proof of the item — add media Seller · the requirement is visible before anything is uploaded: 3 photos, 1 video, taken on your own camera	new
+11229	Trade execution · Proof media	Proof media — from the first photo to the archive	PM-2 Camera — guided shots Seller · taking the shots in Komtru marks them as taken on this device, and the guide says what each shot is for	new
+11244	Trade execution · Proof media	Proof media — from the first photo to the archive	PM-3 Photo check — needs another look Seller · plain, non-accusing wording; one clear way forward, and a way to ask for a human review	new
+11264	Trade execution · Proof media	Proof media — from the first photo to the archive	PM-4 Proof of the item — ready Seller · requirements met; says what happens to the media next, so the seller knows it will be locked	new
+11283	Trade execution · Proof media	Proof media — from the first photo to the archive	PM-5 Request stage — the buyer reviews the proof Buyer · before accepting: the seller’s own media leads the offer, with where it came from stated plainly	new
+11301	Trade execution · Proof media	Proof media — from the first photo to the archive	PM-6 Active trade — the evidence trail Both · what was shown, what was added, and by whom; the agreed proof is fixed and everything new is added beside it	new
+11316	Trade execution · Proof media	Proof media — from the first photo to the archive	PM-7 Inspection — compare with the seller’s proof Buyer · the seller’s agreed proof beside your own photos, with the checks to make	new
+11334	Trade execution · Proof media	Proof media — from the first photo to the archive	PM-8 After completion — the Trade record Both · the media is kept with the Trade as an archive; later listing edits don’t change it	new
+11356	Supporting · Trade extras	The small things around a Trade	SP-M20 Scan a Trade Code Trade · a QR on a seller’s shop or chat opens the Trade inside Komtru, not a link	new
+11371	Supporting · Trade extras	The small things around a Trade	SP-M21 Trade history Trade · everything, searchable and filterable, with a way to take it out	new
+11386	Supporting · Trade extras	The small things around a Trade	SP-M22 Change delivery address Trade · after funding but before shipment; the seller confirms and any cost change is shown first	new
+11406	Supporting · Trade extras	The small things around a Trade	SP-M23 Withdraw a dispute Trade · a dispute can be closed by the person who opened it, with the consequences stated	new
+11428	Supporting · Trade extras	The small things around a Trade	SP-M24 Notifications Trade · the durable list behind the bell, with what needs a response first	new
