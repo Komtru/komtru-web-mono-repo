@@ -6,6 +6,8 @@ export interface LogoBarProps {
   /** `'ops'` gives the staff lockup; omitted gives the consumer one. */
   product?: 'ops';
   action?: TopBarAction;
+  /** Extra controls at the right, before `action`: the mobile Buy/Sell switch. */
+  tools?: React.ReactNode;
   /** The shell's own visibility, as on `<SideNav>`: an app with one shell hides this from `md` up. */
   className?: string;
 }
@@ -18,7 +20,7 @@ export interface LogoBarProps {
  * The lockup is `<KomtruLogo>` rather than a local one: `.scr-logo` never carries anything but the
  * product's own name, so there is nothing here for a caller to vary.
  */
-export function LogoBar({ product, action, className }: LogoBarProps): React.JSX.Element {
+export function LogoBar({ product, action, tools, className }: LogoBarProps): React.JSX.Element {
   return (
     <header
       className={cx(
@@ -27,7 +29,12 @@ export function LogoBar({ product, action, className }: LogoBarProps): React.JSX
       )}
     >
       <KomtruLogo product={product} />
-      {action !== undefined && <TopBarControl action={action} />}
+      {(tools !== undefined || action !== undefined) && (
+        <div className="flex items-center gap-[8px]">
+          {tools}
+          {action !== undefined && <TopBarControl action={action} />}
+        </div>
+      )}
     </header>
   );
 }

@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { fireEvent, render, screen } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   CollapsibleSideNav,
   GlobalSearch,
@@ -11,6 +11,14 @@ import {
 } from '../../src/index.js';
 import '../primitives/setup.js';
 
+afterEach(() => {
+  try {
+    window.localStorage.clear();
+  } catch {
+    // storage unavailable: nothing to clear
+  }
+});
+
 const ICON = <svg aria-hidden viewBox="0 0 24 24" />;
 const NAV = [
   { label: 'Home', icon: ICON, href: '/home', current: true },
@@ -18,29 +26,43 @@ const NAV = [
 ];
 
 describe('ModeSwitch (v2 `.role-toggle`)', () => {
-  it('is a switch that reads Buy when off and Sell when on', () => {
-    const { rerender } = render(<ModeSwitch mode="buy" onChange={() => {}} label="selling mode" />);
-    const toggle = screen.getByRole('switch', { name: 'Buy, selling mode' });
-    expect(toggle.getAttribute('aria-checked')).toBe('false');
-    expect(toggle.textContent).toBe('Buy, selling mode');
-    rerender(<ModeSwitch mode="sell" onChange={() => {}} label="selling mode" />);
-    expect(screen.getByRole('switch').getAttribute('aria-checked')).toBe('true');
-    expect(screen.getByRole('switch').textContent).toBe('Sell, selling mode');
+  it('is a two-option segmented control: a group of two buttons, one pressed', () => {
+    const { rerender } = render(<ModeSwitch mode="buy" onChange={() => {}} label="Buy or sell mode" />);
+    expect(screen.getByRole('group', { name: 'Buy or sell mode' })).toBeDefined();
+    expect(screen.getByRole('button', { name: 'Buy' }).getAttribute('aria-pressed')).toBe('true');
+    expect(screen.getByRole('button', { name: 'Sell' }).getAttribute('aria-pressed')).toBe('false');
+    rerender(<ModeSwitch mode="sell" onChange={() => {}} label="Buy or sell mode" />);
+    expect(screen.getByRole('button', { name: 'Buy' }).getAttribute('aria-pressed')).toBe('false');
+    expect(screen.getByRole('button', { name: 'Sell' }).getAttribute('aria-pressed')).toBe('true');
   });
 
-  it('asks for the other mode when pressed', () => {
+  it('asks for the mode that was pressed, and not for the one already on', () => {
     const onChange = vi.fn();
-    render(<ModeSwitch mode="buy" onChange={onChange} label="selling mode" />);
-    fireEvent.click(screen.getByRole('switch'));
+    render(<ModeSwitch mode="buy" onChange={onChange} label="Buy or sell mode" />);
+    fireEvent.click(screen.getByRole('button', { name: 'Buy' }));
+    expect(onChange).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: 'Sell' }));
     expect(onChange).toHaveBeenCalledWith('sell');
   });
 
-  it('stays readable and refuses to change when locked', () => {
+  it('stays readable, refuses to change and says why when locked', () => {
     const onChange = vi.fn();
-    render(<ModeSwitch mode="sell" onChange={onChange} locked label="selling mode" />);
-    fireEvent.click(screen.getByRole('switch'));
+    render(
+      <ModeSwitch
+        mode="sell"
+        onChange={onChange}
+        locked
+        label="Buy or sell mode"
+        lockedReason="Certified merchants sell only"
+      />,
+    );
+    const buy = screen.getByRole('button', { name: 'Buy' });
+    fireEvent.click(buy);
     expect(onChange).not.toHaveBeenCalled();
-    expect(screen.getByRole('switch').getAttribute('aria-readonly')).toBe('true');
+    expect(buy.getAttribute('aria-disabled')).toBe('true');
+    expect(screen.getByRole('button', { name: 'Sell' }).getAttribute('aria-pressed')).toBe('true');
+    expect(buy.getAttribute('aria-describedby')).toBeTruthy();
+    expect(screen.getByRole('group').textContent).toContain('Certified merchants sell only');
   });
 });
 
@@ -70,9 +92,19 @@ describe('GlobalSearch', () => {
     expect(document.activeElement).toBe(other);
   });
 
-  it('says how to reach it', () => {
+  it('ignores `/` with a modifier held', () => {
     render(<GlobalSearch placeholder="Search" label="Search" onSearch={() => {}} />);
-    expect(screen.getByText('press / to search')).toBeDefined();
+    for (const modifier of ['metaKey', 'ctrlKey', 'altKey']) {
+      fireEvent.keyDown(document.body, { key: '/', [modifier]: true });
+      expect(document.activeElement).toBe(document.body);
+    }
+  });
+
+  it('names the landmark apart from the field, and hides the hint from readers', () => {
+    render(<GlobalSearch placeholder="Search" label="Search" onSearch={() => {}} />);
+    expect(screen.getByRole('search', { name: 'Site search' })).toBeDefined();
+    expect(screen.getByRole('searchbox', { name: 'Search' })).toBeDefined();
+    expect(screen.getByText('press / to search').getAttribute('aria-hidden')).toBe('true');
   });
 });
 
@@ -84,15 +116,51 @@ describe('SideNav collapse', () => {
 
   it('narrows to an icon rail and back, keeping every destination reachable by name', () => {
     const { container } = render(<CollapsibleSideNav brandLabel="Komtru" items={NAV} />);
-    const button = screen.getByRole('button', { name: 'Collapse navigation' });
+    // One name for both states: `aria-expanded` says which one it is in.
+    const button = screen.getByRole('button', { name: 'Navigation sidebar' });
     expect(button.getAttribute('aria-expanded')).toBe('true');
     expect(container.querySelector('aside')?.className).toContain('w-[180px]');
 
     fireEvent.click(button);
-    const expand = screen.getByRole('button', { name: 'Expand navigation' });
-    expect(expand.getAttribute('aria-expanded')).toBe('false');
+    expect(screen.getByRole('button', { name: 'Navigation sidebar' })).toBe(button);
+    expect(button.getAttribute('aria-expanded')).toBe('false');
     expect(container.querySelector('aside')?.className).toContain('w-[64px]');
     expect(screen.getByRole('link', { name: 'Trades' }).getAttribute('title')).toBe('Trades');
+  });
+
+  it('keeps focus on the button after collapsing', () => {
+    render(<CollapsibleSideNav brandLabel="Komtru" items={NAV} />);
+    const button = screen.getByRole('button', { name: 'Navigation sidebar' });
+    button.focus();
+    fireEvent.click(button);
+    expect(document.activeElement).toBe(button);
+  });
+
+  it('stays collapsed on the next screen, which draws a fresh shell', () => {
+    const first = render(<CollapsibleSideNav brandLabel="Komtru" items={NAV} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Navigation sidebar' }));
+    first.unmount();
+    const { container } = render(<CollapsibleSideNav brandLabel="Komtru" items={NAV} />);
+    expect(container.querySelector('aside')?.className).toContain('w-[64px]');
+    expect(screen.getByRole('button', { name: 'Navigation sidebar' }).getAttribute('aria-expanded')).toBe(
+      'false',
+    );
+  });
+
+  it('survives storage being unavailable', () => {
+    const get = vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => {
+      throw new Error('blocked');
+    });
+    const set = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+      throw new Error('blocked');
+    });
+    render(<CollapsibleSideNav brandLabel="Komtru" items={NAV} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Navigation sidebar' }));
+    expect(screen.getByRole('button', { name: 'Navigation sidebar' }).getAttribute('aria-expanded')).toBe(
+      'false',
+    );
+    get.mockRestore();
+    set.mockRestore();
   });
 });
 
@@ -108,6 +176,7 @@ describe('TopNav and ResponsiveAppShell tools', () => {
         tabs={NAV}
         search={<input aria-label="Find" />}
         actions={<button type="button">Act</button>}
+        mobileActions={<button type="button">Mode</button>}
       >
         <h1>Page</h1>
       </ResponsiveAppShell>,
@@ -116,6 +185,20 @@ describe('TopNav and ResponsiveAppShell tools', () => {
     expect(bar?.className).toMatch(/\bhidden\b.*\blg:flex\b/);
     expect(container.querySelectorAll('main')).toHaveLength(1);
     // The same actions ride the tablet nav, so they are present twice and each is hidden at the other width.
-    expect(screen.getAllByRole('button', { name: 'Act' })).toHaveLength(2);
+    const copies = screen.getAllByRole('button', { name: 'Act' });
+    expect(copies).toHaveLength(2);
+    for (const copy of copies) {
+      expect(copy.closest('[class~="hidden"]')).not.toBeNull();
+    }
+  });
+
+  it('puts the mobile tools in the mobile header only, hidden from md up', () => {
+    render(
+      <ResponsiveAppShell tabs={NAV} mobileActions={<button type="button">Mode</button>}>
+        <h1>Page</h1>
+      </ResponsiveAppShell>,
+    );
+    const mode = screen.getByRole('button', { name: 'Mode' });
+    expect(mode.closest('header')?.className).toContain('md:hidden');
   });
 });

@@ -5,8 +5,10 @@ import { cx } from '../primitives/cx.js';
 
 export interface GlobalSearchProps {
   placeholder: string;
-  /** Names the field and the search landmark. */
+  /** Names the field. */
   label: string;
+  /** Names the search landmark, which must differ from the field's name. */
+  landmarkLabel?: string;
   onSearch: (query: string) => void;
   /** The reference's own line beside the field. */
   hint?: string;
@@ -22,6 +24,7 @@ const TYPING_IN = 'input, textarea, select, [contenteditable=""], [contenteditab
 export function GlobalSearch({
   placeholder,
   label,
+  landmarkLabel = 'Site search',
   onSearch,
   hint = 'press / to search',
   className,
@@ -43,7 +46,7 @@ export function GlobalSearch({
   return (
     <form
       role="search"
-      aria-label={label}
+      aria-label={landmarkLabel}
       onSubmit={(event) => {
         event.preventDefault();
         onSearch(value);
@@ -72,7 +75,9 @@ export function GlobalSearch({
           className="w-full rounded-[8px] border-[1.5px] border-border-hairline bg-surface-elevated pt-[9px] pr-[12px] pb-[9px] pl-[36px] text-[13px] text-midnight-text"
         />
       </div>
-      <span className="font-mono text-[10.5px] text-trust-gray">{hint}</span>
+      <span aria-hidden className="font-mono text-[10.5px] text-trust-gray">
+        {hint}
+      </span>
     </form>
   );
 }
