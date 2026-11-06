@@ -26,7 +26,7 @@ import { publish, type Tx } from '../../../platform/events/publish.js';
 import { ApiError } from '../../../platform/errors.js';
 import { cursorPage, type CursorKey } from '../../../platform/http/paginate.js';
 import { normalisePhone } from '../../../platform/identifiers.js';
-import { getCitiesByIds } from '../../geo/index.js';
+import type { CityWithState } from '../../geo/index.js';
 import {
   ADDRESS_FIELDS,
   identityAddressAddedEvent,
@@ -47,7 +47,19 @@ export interface AddressRequestContext {
 }
 
 type AddressRow = typeof userAddresses.$inferSelect;
-type CityInfo = Awaited<ReturnType<typeof getCitiesByIds>>[number];
+type CityInfo = CityWithState;
+
+/**
+ * The geo catalog's lookup, resolved when it is called and not when this file loads.
+ *
+ * Geo imports identity (its audit writer) and identity imports geo (this lookup). A static import
+ * here closes that loop, and the loop is not harmless: `geo/index.ts` runs `createGeoModule()` as it
+ * loads, which builds the admin routes, so whichever file the process happens to import first can
+ * find a constant of the other half not yet initialised. By the time an address is written every
+ * module has loaded, and the dynamic import is a cache hit.
+ */
+const getCitiesByIds = async (db: Db | Tx, ids: readonly string[]): Promise<CityInfo[]> =>
+  (await import('../../geo/index.js')).getCitiesByIds(db, ids);
 
 // ---------------------------------------------------------------------------
 // Errors
