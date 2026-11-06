@@ -1,10 +1,13 @@
+import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
-import { appSpec } from '../src/app-config';
+import { MODE_COOKIE, rootDestination } from '../src/shell/nav';
+import { resolveViewer } from '../src/shell/viewer';
 
 /**
- * The app's root. Trades is the home — the one list of every trade the person is party to, either
- * side of it (design §6.3) — so the bare origin goes there rather than drawing a second home.
+ * The app's root. v2 has no single home: Buy opens Home and Sell opens Shop, so the bare origin goes
+ * to the landing screen of the mode the person is in rather than drawing a second home.
  */
-export default function Root(): never {
-  redirect(appSpec.homePath);
+export default async function Root(): Promise<never> {
+  const viewer = await resolveViewer();
+  redirect(rootDestination(viewer, (await cookies()).get(MODE_COOKIE)?.value));
 }

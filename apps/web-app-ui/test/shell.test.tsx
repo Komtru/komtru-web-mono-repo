@@ -1,19 +1,25 @@
 // @vitest-environment jsdom
-import { cleanup, render, screen } from '@testing-library/react';
-import { afterEach, describe, expect, it } from 'vitest';
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { AccountSections } from '../src/shell/AccountSections';
 import { AppShell } from '../src/shell/AppShell';
-import { ANONYMOUS_VIEWER, type TabId, type Viewer } from '../src/shell/nav';
+import { ANONYMOUS_VIEWER, type Mode, type TabId, type Viewer } from '../src/shell/nav';
 import { expectNoAxeViolations } from './axe';
 
-afterEach(cleanup);
+const router = vi.hoisted(() => ({ push: vi.fn(), refresh: vi.fn() }));
+vi.mock('next/navigation', () => ({ useRouter: () => router }));
+
+afterEach(() => {
+  cleanup();
+  vi.clearAllMocks();
+});
 
 const viewer = (overrides: Partial<Viewer> = {}): Viewer => ({ ...ANONYMOUS_VIEWER, ...overrides });
 const links = { parkUrl: 'https://park.komtru.com' };
 
-const shell = (overrides: Partial<Viewer> = {}, tab: TabId = 'trades') =>
+const shell = (overrides: Partial<Viewer> = {}, tab: TabId = 'trades', mode: Mode = 'buy') =>
   render(
-    <AppShell tab={tab} viewer={viewer(overrides)}>
+    <AppShell tab={tab} viewer={viewer(overrides)} mode={mode}>
       <h1>My Trades</h1>
     </AppShell>,
   );
@@ -61,13 +67,125 @@ describe('AppShell', () => {
     expect(container.querySelectorAll('[aria-current="page"]')).toHaveLength(0);
   });
 
-  it('gives a certified merchant Shop where Explore was, and no extra tab', () => {
-    shell({ certifiedMerchant: true }, 'shop');
+  it('draws the five Buy destinations in all three navigations, and no Alerts tab', () => {
+    shell();
+    for (const name of ['Home', 'Trades', 'Messages', 'Discover', 'Account']) {
+      expect(screen.getAllByRole('link', { name })).toHaveLength(3);
+    }
     expect(screen.queryByRole('link', { name: 'Explore' })).toBeNull();
-    // One per navigation, again.
-    expect(screen.getAllByRole('link', { name: 'Shop' })).toHaveLength(3);
+    // Alerts is the bell, not a tab: one in the desktop bar and one in the tablet nav.
+    expect(screen.getAllByRole('link', { name: 'Alerts' })).toHaveLength(2);
   });
 
+  it('draws Shop, Orders and Listings in Sell mode, five destinations again', () => {
+    shell({}, 'shop', 'sell');
+    for (const name of ['Shop', 'Orders', 'Listings', 'Messages', 'Account']) {
+      expect(screen.getAllByRole('link', { name })).toHaveLength(3);
+    }
+    expect(screen.queryByRole('link', { name: 'Home' })).toBeNull();
+  });
+
+  it('points Discover at /browse', () => {
+    shell();
+    expect(screen.getAllByRole('link', { name: 'Discover' })[0]?.getAttribute('href')).toBe('/browse');
+  });
+
+  it('collapses the desktop sidebar to icons and expands it again', () => {
+    const { container } = shell();
+    const aside = container.querySelector('aside');
+    fireEvent.click(screen.getByRole('button', { name: 'Collapse navigation' }));
+    expect(aside?.className).toContain('w-[64px]');
+    fireEvent.click(screen.getByRole('button', { name: 'Collapse navigation' }));
+    expect(aside?.className).toContain('w-[180px]');
+  });
+});
+
+describe('the top bar tools (v2: DX-03, TX-02)', () => {
+  const pressed = (mode: 'Buy' | 'Sell') =>
+    screen.getAllByRole('button', { name: mode }).map((button) => button.getAttribute('aria-pressed'));
+
+  it('shows the Buy/Sell switch with the current mode pressed, in the mobile header too', () => {
+    const { container, unmount } = shell();
+    // Desktop bar, tablet nav and mobile header each carry one.
+    expect(screen.getAllByRole('group', { name: 'Buy or sell mode' })).toHaveLength(3);
+    expect(pressed('Buy')).toEqual(['true', 'true', 'true']);
+    expect(pressed('Sell')).toEqual(['false', 'false', 'false']);
+    const mobile = container.querySelector('header.md\\:hidden');
+    expect(mobile?.querySelector('[role="group"]')).not.toBeNull();
+    unmount();
+    shell({}, 'shop', 'sell');
+    expect(pressed('Sell')).toEqual(['true', 'true', 'true']);
+  });
+
+  it('remembers the chosen mode and opens its landing screen', () => {
+    shell();
+    fireEvent.click(screen.getAllByRole('button', { name: 'Sell' })[0] as HTMLElement);
+    expect(document.cookie).toContain('komtru_mode=sell');
+    expect(router.push).toHaveBeenCalledWith('/shop');
+    expect(router.refresh).toHaveBeenCalled();
+  });
+
+  it('opens Home when switching from Sell to Buy', () => {
+    shell({}, 'shop', 'sell');
+    fireEvent.click(screen.getAllByRole('button', { name: 'Buy' })[0] as HTMLElement);
+    expect(document.cookie).toContain('komtru_mode=buy');
+    expect(router.push).toHaveBeenCalledWith('/home');
+  });
+
+  it('works from the mobile header exactly as on desktop', () => {
+    const { container } = shell();
+    const mobile = container.querySelector('header.md\\:hidden') as HTMLElement;
+    fireEvent.click(within(mobile).getByRole('button', { name: 'Sell' }));
+    expect(router.push).toHaveBeenCalledWith('/shop');
+  });
+
+  it('locks the switch on Sell for a certified merchant, in every copy, and says why', () => {
+    shell({ certifiedMerchant: true }, 'shop', 'sell');
+    for (const buy of screen.getAllByRole('button', { name: 'Buy' })) {
+      expect(buy.getAttribute('aria-disabled')).toBe('true');
+      expect(buy.getAttribute('aria-describedby')).toBeTruthy();
+      fireEvent.click(buy);
+    }
+    expect(screen.getAllByText('Certified merchants sell only')).toHaveLength(3);
+    expect(router.push).not.toHaveBeenCalled();
+  });
+
+  it('draws each duplicated copy of the tools inside an ancestor that hides it at the other widths', () => {
+    shell();
+    for (const name of ['Alerts', 'Your account']) {
+      for (const link of screen.getAllByRole('link', { name })) {
+        expect(link.closest('[class~="hidden"]'), name).not.toBeNull();
+      }
+    }
+    for (const group of screen.getAllByRole('group', { name: 'Buy or sell mode' })) {
+      expect(group.closest('[class~="hidden"], [class~="md:hidden"]')).not.toBeNull();
+    }
+    for (const search of screen.getAllByRole('search')) {
+      expect(search.closest('[class~="hidden"]')).not.toBeNull();
+    }
+  });
+
+  it('searches by Trade Code and by words from the one bar', () => {
+    shell();
+    const search = screen.getByRole('searchbox', { name: 'Search' });
+    expect(search.getAttribute('placeholder')).toBe('Search trades or sellers — or enter a Trade Code');
+    fireEvent.change(search, { target: { value: 'KMT-88213' } });
+    fireEvent.submit(screen.getByRole('search'));
+    expect(router.push).toHaveBeenCalledWith('/trades?code=KMT-88213');
+
+    fireEvent.change(search, { target: { value: 'iphone' } });
+    fireEvent.submit(screen.getByRole('search'));
+    expect(router.push).toHaveBeenLastCalledWith('/browse?q=iphone');
+  });
+
+  it('links the bell to Alerts and the profile to Account', () => {
+    shell();
+    expect(screen.getAllByRole('link', { name: 'Alerts' })[0]?.getAttribute('href')).toBe('/alerts');
+    expect(screen.getAllByRole('link', { name: 'Your account' })[0]?.getAttribute('href')).toBe('/account');
+  });
+});
+
+describe('AppShell chrome', () => {
   it('steps the content padding from mobile through tablet to desktop', () => {
     const { container } = shell();
     const main = container.querySelector('main');

@@ -1,6 +1,6 @@
+import { CollapsibleSideNav } from '../primitives/CollapsibleSideNav.js';
 import { LogoBar } from './LogoBar.js';
 import type { NavItem } from './NavItem.js';
-import { SideNav } from './SideNav.js';
 import { TabBar } from './TabBar.js';
 import { TopNav } from './TopNav.js';
 
@@ -14,6 +14,15 @@ export interface ResponsiveAppShellProps {
   rail?: { label: string; items: readonly NavItem[] };
   /** Drawn at the top of the content, inside `<main>` — an offline banner, a flash message. */
   banner?: React.ReactNode;
+  /** v2's global search and Trade Code bar: a bar above the content at `lg` and up (DX-03). */
+  search?: React.ReactNode;
+  /**
+   * v2's right-hand tools — mode switch, bell, profile. At `lg` they sit at the right of the search
+   * bar; from `md` to `lg` they ride the top nav (TX-02). Rendered in both, hidden at the other width.
+   */
+  actions?: React.ReactNode;
+  /** The mobile header's tools: the Buy/Sell switch, which mobile has too (owner ruling, T-191). */
+  mobileActions?: React.ReactNode;
   children?: React.ReactNode;
 }
 
@@ -47,6 +56,9 @@ export function ResponsiveAppShell({
   tabs,
   rail,
   banner,
+  search,
+  actions,
+  mobileActions,
   children,
 }: ResponsiveAppShellProps): React.JSX.Element {
   const railLabel = rail?.label ?? 'Komtru';
@@ -56,13 +68,18 @@ export function ResponsiveAppShell({
     <div className="flex min-h-dvh flex-col bg-surface-secondary md:bg-surface-primary lg:flex-row">
       {/* `.scr-logo-row`, the mobile brand row. The tablet and desktop navigations carry the brand
           themselves, so from `md` up this would be a second one. */}
-      <LogoBar className="md:hidden" />
+      <LogoBar className="md:hidden" {...(mobileActions === undefined ? {} : { tools: mobileActions })} />
 
       <div className="hidden md:block lg:hidden">
-        <TopNav brandLabel={railLabel} items={railItems} label="Sections menu" />
+        <TopNav
+          brandLabel={railLabel}
+          items={railItems}
+          label="Sections menu"
+          {...(actions === undefined ? {} : { actions })}
+        />
       </div>
 
-      <SideNav
+      <CollapsibleSideNav
         brandLabel={railLabel}
         items={railItems}
         label="Sections sidebar"
@@ -70,6 +87,12 @@ export function ResponsiveAppShell({
       />
 
       <div className="flex min-w-0 flex-1 flex-col">
+        {(search !== undefined || actions !== undefined) && (
+          <div data-shell-toolbar className="hidden items-center gap-[12px] px-[24px] pt-[18px] lg:flex">
+            {search}
+            {actions !== undefined && <div className="ml-auto flex items-center gap-[8px]">{actions}</div>}
+          </div>
+        )}
         {/* `.scr-body`'s 16px and its 90px of bottom clearance for the tab bar, stepping to
             `.tweb-content`'s 20px and `.dweb-content`'s 24px where the tab bar is gone. */}
         <main className="flex-1 p-[16px] pb-[90px] md:p-[20px] lg:p-[24px]">

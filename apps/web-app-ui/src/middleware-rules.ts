@@ -28,11 +28,14 @@ export const PUBLIC_PATHS = [
  * changes when it goes: paths outside it are already gated, which is what proves the wiring works.
  */
 export const PRE_AUTH_PUBLIC_PATHS = [
+  '/home',
   '/trades',
-  '/explore',
-  '/shop',
-  '/alerts',
   '/messages',
+  '/browse',
+  '/shop',
+  '/orders',
+  '/listings',
+  '/alerts',
   '/account',
   ...HUB_APPLICATION_PATHS,
 ] as const;

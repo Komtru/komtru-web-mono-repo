@@ -25,7 +25,7 @@ things in particular have to be changed deliberately rather than waited out:
   logistics packages and the Park network console. Its definition of "end to end" spans two
   apps the MVP does not build.
 
-## Included — 76 tickets
+## Included — 77 tickets
 
 ### Identity and platform (13)
 
@@ -78,7 +78,7 @@ T-124 seller payouts · T-126 trust, account and settings
 T-140 scaffold, shell and staff auth · T-141 work queue and universal case · T-143 disputes ·
 T-144 identity review · T-154 merchant certification review
 
-### UI master v2 (16, added 2026-11-06)
+### UI master v2 (17, added 2026-11-06)
 
 T-190 remaps the screen index to Living Master v2 and re-scopes the UI tickets; every MVP UI
 ticket depends on it. It adds 30 tickets, 15 of them MVP, listed here:
@@ -95,6 +95,8 @@ ticket depends on it. It adds 30 tickets, 15 of them MVP, listed here:
 - **T-205** account security and lifecycle: MFA, suspension and closure, which T-036 and T-039 serve.
 - **T-207, T-208, T-209** desktop journeys, arrive to complete: the desktop layouts of MVP journeys.
 - **T-212, T-213** tablet journeys, arrive to complete: the tablet layouts of the same journeys.
+- **T-222** re-base `TabBar` to v2 mobile styling: the indigo-soft active pill, 20px icons and 10px labels
+  (found in the T-191 review).
 
 ### Disputes for buyers and sellers (6, added 2026-11-06 by the owner)
 

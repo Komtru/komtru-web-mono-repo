@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import { AppShell } from '../../../src/shell/AppShell';
 import { Placeholder } from '../../../src/shell/Placeholder';
-import { resolveViewer } from '../../../src/shell/viewer';
+import { resolveMode, resolveViewer } from '../../../src/shell/viewer';
 
 export const metadata: Metadata = { title: 'Trades' };
 
@@ -11,9 +11,10 @@ export const metadata: Metadata = { title: 'Trades' };
  */
 export default async function TradesPage(): Promise<React.JSX.Element> {
   const viewer = await resolveViewer();
+  const mode = await resolveMode(viewer);
 
   return (
-    <AppShell tab="trades" viewer={viewer}>
+    <AppShell tab="trades" viewer={viewer} mode={mode}>
       <Placeholder
         title="Your trades will appear here"
         body="Every trade you're part of — buying or selling — in one list, with what to do next on each."

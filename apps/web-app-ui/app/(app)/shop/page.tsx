@@ -1,34 +1,26 @@
 import type { Metadata } from 'next';
 import { AppShell } from '../../../src/shell/AppShell';
 import { Placeholder } from '../../../src/shell/Placeholder';
-import { resolveViewer } from '../../../src/shell/viewer';
+import { resolveMode, resolveViewer } from '../../../src/shell/viewer';
 
 export const metadata: Metadata = { title: 'Shop' };
 
 /**
- * A certified merchant's storefront, listings and insights (T-122, T-125). It takes Explore's place
- * in the tab bar rather than adding a tab, because a certified merchant cannot buy (design §6.3).
+ * DX-04, Sell mode's landing screen: the storefront, listings and insights (T-122, T-125, T-209).
  *
- * Someone without certification can still reach this URL, and for them Shop is not one of their
- * five destinations — so no tab is marked, and the screen says what Shop is for and what opens it.
- * Claiming a tab the person's own tab bar does not have would put `aria-current="page"` on nothing.
+ * Shop is a Sell-mode destination. In Buy mode it is not one of the person's five, so no tab is
+ * marked: claiming a tab the navigation does not have would put `aria-current="page"` on nothing.
  */
 export default async function ShopPage(): Promise<React.JSX.Element> {
   const viewer = await resolveViewer();
+  const mode = await resolveMode(viewer);
 
   return (
-    <AppShell {...(viewer.certifiedMerchant ? { tab: 'shop' as const } : {})} viewer={viewer}>
-      {viewer.certifiedMerchant ? (
-        <Placeholder
-          title="Your shop lives here"
-          body="Your storefront, your listings and how they are performing."
-        />
-      ) : (
-        <Placeholder
-          title="Shop opens with merchant certification"
-          body="Certified merchants get a storefront, listings and insights in place of Explore. Apply from Account, and we'll tell you when it's approved."
-        />
-      )}
+    <AppShell {...(mode === 'sell' ? { tab: 'shop' as const } : {})} viewer={viewer} mode={mode}>
+      <Placeholder
+        title="Your selling activity"
+        body="Your storefront, your listings and how they are performing."
+      />
     </AppShell>
   );
 }
