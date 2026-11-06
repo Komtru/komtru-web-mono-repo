@@ -6,6 +6,14 @@ cost and to find work to resume.
 
 ## Waiting on the owner
 
+- **T-049 trade-standard seed values** (placeholders): a 48h inspection window and 7-day delivery
+  for both categories. Electronics requires 4 photos plus a video; Fashion 3 photos and no video.
+  A buyer may extend the window by up to 48h more, configurable up to 336h.
+- **T-038 staff invitations:**
+  - Only a SUPER_ADMIN may invite.
+  - The invite token is shown once and has to be sent by hand until a notification template
+    exists. Should T-038 add email delivery?
+  - "Binds on verification" is record-only: the invitee still needs MFA and an explicit accept.
 - **T-048 configuration defaults** (listed in `docs/superpowers/plans/2026-11-06-t-048-config.md`):
   - `trades.payment_deadline_hours = 24`;
   - `trades.delivery_deadline_days = 7`;
@@ -142,3 +150,26 @@ cost and to find work to resume.
   - T-048 (build, review, fix): about 5h 16, week 2.
 - Next: T-072 funding (Opus) in a fresh window. Then T-038 staff invitations, T-049 trade
   standards (critical path, now unblocked by T-048), and T-039.
+
+## 2026-11-06 19:40–21:10 WAT — T-049 and T-038 in parallel (interactive, outside the schedule)
+
+- Usage at start: 5h 68%, week 45%. At end: 5h 85%, week 47%.
+- Migration sequencing: T-049 owned the run's migration (0034). T-038 built everything except its
+  table migration and stopped at "ready for migration", so the two could not collide.
+- **T-049: merged.**
+  - Trade standards with immutable versions, ETag-cached current reads, and the BEI1 rule (lengthen
+    only, capped). Migration 0034.
+  - The review found no must-fix; 7 should-fix items were fixed, including error responses being
+    publicly cached and a stale "current" read.
+  - Verified after merging main: 119/119 config tests; migrations 35/0 errors; lint and types clean.
+- **T-038: saved before its migration.** Branch `t-038-staff-invitations`; the ticket's status line
+  lists the 4 remaining steps.
+  - The 5-hour window was at 85%, so the manager did not start the migration and integration-test
+    phase.
+- **Also fixed on main:** the CI PgBouncer settings now match docker compose. b61667c had changed
+  only compose, which failed `ci-workflows.test.ts`. All 263 repo tests pass.
+- Ticket costs:
+  - T-049 (build, review, fix): about 5h 11, week 1.5.
+  - T-038 so far: about 5h 5.
+- Next: finish T-038 (resume the worktree), then T-072 funding (Opus, in a fresh window), then
+  T-039 and T-046.
