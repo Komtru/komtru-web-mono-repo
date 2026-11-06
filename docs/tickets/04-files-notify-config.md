@@ -68,6 +68,7 @@
 
 ### T-048 — Configuration (M17)
 
+- **Status (2026-11-06): in progress** — implemented and verified; awaiting review
 - **Touches:** `src/modules/config/**`, migration `config_*`
 - **Depends on:** T-024, T-037
 - **Acceptance criteria:**
