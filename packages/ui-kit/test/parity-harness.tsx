@@ -45,8 +45,12 @@ export interface ParityRow {
   node?: number;
   /** Given instead of `element` when the classes are not reachable through a rendered component. */
   classes?: readonly string[];
-  /** Set where the reference carries two designs under one class name. */
-  styleId?: string;
+  /**
+   * Set where the reference carries two designs under one class name. A list is read as a cascade:
+   * each block's rule is laid over the last, so a later block that restates a property wins, as it
+   * does in the browser (the v2 tab bar's final label size is in a later block than its rule).
+   */
+  styleId?: string | readonly string[];
   /**
    * A `class="…"` whose element carries the state inline. The reference states some states in the
    * markup rather than in a rule, and those are the only statement of them there is.
@@ -96,9 +100,18 @@ function referenceDeclarations(
 ): Map<string, string> {
   const raw = new Map<string, string>();
   for (const selector of [...(row.extends ?? []), row.selector]) {
-    for (const [property, value] of referenceRule(html, selector, row.styleId, atWidth)) {
-      raw.set(property, value);
-    }
+    const blocks = typeof row.styleId === 'string' || row.styleId === undefined ? [row.styleId] : row.styleId;
+    blocks.forEach((styleId, position) => {
+      let rule: Map<string, string>;
+      try {
+        rule = referenceRule(html, selector, styleId, atWidth);
+      } catch (error) {
+        // A later block need not restate the rule; the first one must.
+        if (position === 0) throw error;
+        return;
+      }
+      for (const [property, value] of rule) raw.set(property, value);
+    });
   }
   if (row.inline !== undefined) {
     for (const [property, value] of referenceInlineStyle(html, row.inline)) raw.set(property, value);

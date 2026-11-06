@@ -107,3 +107,5 @@ cost and to find work to resume.
   holds T-028 social login and the avatar work, so keep it until those tickets are done.
 - Next: T-072 (funding a trade; money, so an Opus implementer) or T-038 (staff invitations, now
   unblocked by T-037).
+
+## 2026-11-06 18:28 WAT — skipped: locked (lock from 2026-11-06T17:17:53Z; 5h 62%, week 44%)

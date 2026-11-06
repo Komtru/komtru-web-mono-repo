@@ -269,7 +269,9 @@ What changed, from [`screens-v2.tsv`](../design-reference/screens-v2.tsv) (437 s
 
 ### T-222 — Re-base TabBar to v2 mobile styling
 
+- **Status:** Done (2026-11-06). Re-based on v2's final cascade (9.5px labels); deviations in docs/ui-review/T-222/README.md. Reviewed by the manager.
+
 - **Depends on:** T-191
 - **Model:** sonnet
 - **Scope:** `TabBar` still draws T-110's v1 mobile styling and is parity-tested against the v1 stylesheet, so T-191 changed only its five items. Re-base it and its parity tests on v2's `.komtru-mobile-nav`. Found in the T-191 review (`docs/ui-review/T-191/README.md`).
-- **Acceptance criteria:** the mobile tab bar matches the v2 mobile tab-bar styling at `Komtru — UI Living Master v2.html` line ~7481: an indigo-soft pill behind the active item, 20px icons and 10px labels, with v2's blur and shadow; the `TabBar` parity tests assert v2's values rather than v1's; axe stays clean at four widths.
+- **Acceptance criteria:** the mobile tab bar matches the v2 mobile tab-bar styling at `Komtru — UI Living Master v2.html` line ~7481: an indigo-soft pill behind the active item, 20px icons and 9.5px labels, with v2's blur and shadow; the `TabBar` parity tests assert v2's values rather than v1's; axe stays clean at four widths.
