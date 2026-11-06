@@ -5,7 +5,7 @@
 // VERIFIED by an account that registered the normal way, and the role itself is granted at
 // acceptance, through `admin_role_assignments` like every other grant.
 import { sql } from 'drizzle-orm';
-import { index, text, timestamp, uuid } from 'drizzle-orm/pg-core';
+import { index, text, timestamp, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
 import { bytea, identity } from './columns.js';
 import { invitationStatus } from './enums.js';
 import { roles } from './rbac.js';
@@ -46,5 +46,13 @@ export const staffInvitations = identity.table(
       .on(table.destinationHash)
       .where(sql`${table.status} = 'PENDING'`),
     index('staff_invitations_invited_by_idx').on(table.invitedBy),
+    // One live invitation per address and role, enforced here because select-then-insert races.
+    uniqueIndex('staff_invitations_pending_unique')
+      .on(table.destinationHash, table.roleCode)
+      .where(sql`${table.status} = 'PENDING'`),
+    // The daily expiry sweep reads PENDING rows by `expires_at`.
+    index('staff_invitations_expiry_idx')
+      .on(table.expiresAt)
+      .where(sql`${table.status} = 'PENDING'`),
   ],
 );

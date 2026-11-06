@@ -14,7 +14,7 @@ Acceptance is by an authenticated CONSUMER session of the user who owns the addr
 delivers to a user's own contact (`identity.otp.requested` carries a `userId`, not an address):
 
 1. `POST /me/staff-invitations/start { token }`: the session user's primary email must be verified and equal the
-   invited address (hash compare); issues an OTP (`SENSITIVE_ACTION`, EMAIL) to it.
+   invited address (hash compare). Only the verified PRIMARY email is matched, never a secondary or unverified one; issues an OTP (`SENSITIVE_ACTION`, EMAIL) to it.
 2. `POST /me/staff-invitations/accept { token, challengeId, code }`: consumes the OTP (it must belong to this
    user, this purpose and this address), then grants through `insertAssignment` so every T-037 rule applies
    (second factor, 365-day box, two-holder SUPER_ADMIN cap, one live grant per role). A dual-approval role
@@ -45,3 +45,13 @@ A sweep `expireStaffInvitations` marks lapsed PENDING rows EXPIRED.
 - Email only; no phone, so no SMS channel.
 - The token is returned once to the inviting admin; nothing delivers it yet (no notify template).
 - Grant expiry is absolute; absent means 365 days from acceptance.
+
+## Review follow-ups (2026-11-06)
+
+- The acceptance OTP is issued against an invitation-bound destination hash (invitation id plus address), so a
+  `SENSITIVE_ACTION` code from any other flow cannot satisfy it. No new OTP purpose or enum migration needed.
+- One pending invitation per address and role is a partial unique index (23505 maps to 409); a lapsed but unswept
+  row is expired by the next invite for the same pair. `expires_at` has a partial index for the sweep.
+- At accept the inviter must still be SUPER_ADMIN and `users.status = 'ACTIVE'`; a dual-approval role is refused
+  before claiming when the invitee already holds it or a ROLE_GRANT for it is pending.
+- A refused grant writes a `STAFF_INVITATION_ACCEPTED` audit row with outcome `DENIED`.

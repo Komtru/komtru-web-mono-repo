@@ -1,6 +1,8 @@
 // T-038. Three STAFF routes under `/admin/staff-invitations`, all `role.grant` (SUPER_ADMIN only),
 // and two CONSUMER routes under `/me/staff-invitations`: acceptance needs a signed-in account whose
 // verified email is the invited address, because the OTP is delivered to that account's contact.
+// Matching is against the account's verified PRIMARY email only: a secondary or unverified address
+// never matches, so an invitee whose invited address is not their primary must make it primary first.
 import { defineRoute, type RouteDefinition } from '../../../../platform/http/route.js';
 import {
   acceptHandler,

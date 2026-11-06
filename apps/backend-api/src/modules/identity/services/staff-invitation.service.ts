@@ -14,6 +14,7 @@
 //      destination hash, and an invitation that does not match answers exactly like one that does
 //      not exist.
 import { and, desc, eq, isNull, sql } from 'drizzle-orm';
+import { isUniqueViolation } from '../../../db/errors.js';
 import type { Db } from '../../../db/index.js';
 import type { Encryption } from '../../../platform/crypto/encryption.js';
 import type { HmacHasher } from '../../../platform/crypto/hmac.js';
@@ -27,7 +28,6 @@ import {
   identityStaffInvitationCreatedEvent,
 } from '../domain/events.js';
 import { isSecondFactor } from '../domain/mfa/policy.js';
-import { hashDestination } from '../domain/otp/challenge.js';
 import { validateRoleGrant } from '../domain/rbac/sod.js';
 import {
   STAFF_INVITATION_DESTINATION_DOMAIN,
@@ -35,10 +35,12 @@ import {
   issueStaffInvitationToken,
   staffInvitationDestinationHash,
   staffInvitationExpiry,
+  staffInvitationOtpDestinationHash,
   staffInvitationTokenHash,
   validateStaffInvitation,
   type StaffInvitationStatus,
 } from '../domain/staff-invitation.js';
+import { adminActionApprovals } from '../infrastructure/postgres/schema/rbac.js';
 import { staffInvitations } from '../infrastructure/postgres/schema/staff-invitations.js';
 import { users } from '../infrastructure/postgres/schema/users.js';
 import { openApproval } from './approval.service.js';
@@ -124,73 +126,95 @@ export async function createStaffInvitation(
   const masked = maskEmail(input.email);
   const expiresAt = staffInvitationExpiry(now);
 
-  return deps.db.transaction(async (tx) => {
-    const owner = await findUserByVerifiedEmail(tx, canonical);
-    if (owner?.userId === actor.userId) {
-      return refuse(deps.db, actor, {
-        permission: 'role.grant',
-        reason: input.reason,
-        denied: 'SELF_GRANT',
-      });
-    }
-    if (owner && (await liveRoleCodes(tx, owner.userId)).includes(input.roleCode)) {
-      throw conflict('That person already holds that role');
-    }
+  try {
+    return await deps.db.transaction(async (tx) => {
+      const owner = await findUserByVerifiedEmail(tx, canonical);
+      if (owner?.userId === actor.userId) {
+        return refuse(deps.db, actor, {
+          permission: 'role.grant',
+          reason: input.reason,
+          denied: 'SELF_GRANT',
+        });
+      }
+      if (owner && (await liveRoleCodes(tx, owner.userId)).includes(input.roleCode)) {
+        throw conflict('That person already holds that role');
+      }
 
-    // One pending invitation per address and role. A second one would only be a second live token.
-    const duplicate = await tx
-      .select({ id: staffInvitations.id })
-      .from(staffInvitations)
-      .where(
-        and(
-          eq(staffInvitations.destinationHash, destinationHash),
-          eq(staffInvitations.roleCode, input.roleCode),
-          eq(staffInvitations.status, 'PENDING'),
-          sql`${staffInvitations.expiresAt} > now()`,
-        ),
-      )
-      .limit(1);
-    if (duplicate.length > 0) throw conflict('That address already has a pending invitation for that role');
-
-    const row = (
+      // A lapsed invitation the daily sweep has not reached yet must not block a fresh one: the
+      // partial unique index below counts every PENDING row, live or not.
       await tx
-        .insert(staffInvitations)
-        .values({
+        .update(staffInvitations)
+        .set({ status: 'EXPIRED' })
+        .where(
+          and(
+            eq(staffInvitations.destinationHash, destinationHash),
+            eq(staffInvitations.roleCode, input.roleCode),
+            eq(staffInvitations.status, 'PENDING'),
+            sql`${staffInvitations.expiresAt} <= now()`,
+          ),
+        );
+
+      // One pending invitation per address and role. A second one would only be a second live token.
+      // The unique index is the real guard (this read races); this is the readable fast path.
+      const duplicate = await tx
+        .select({ id: staffInvitations.id })
+        .from(staffInvitations)
+        .where(
+          and(
+            eq(staffInvitations.destinationHash, destinationHash),
+            eq(staffInvitations.roleCode, input.roleCode),
+            eq(staffInvitations.status, 'PENDING'),
+            sql`${staffInvitations.expiresAt} > now()`,
+          ),
+        )
+        .limit(1);
+      if (duplicate.length > 0) throw conflict('That address already has a pending invitation for that role');
+
+      const row = (
+        await tx
+          .insert(staffInvitations)
+          .values({
+            invitedBy: actor.userId,
+            roleCode: input.roleCode,
+            destinationHash,
+            destinationMasked: masked,
+            // The deliverable address as typed, as `party_invitations` does: canonicalisation is for
+            // matching, and rewriting a person's address is its own bug.
+            destinationEnc: deps.encryption.seal(input.email.trim()),
+            reason: input.reason,
+            grantExpiresAt: verdict.grantExpiresAt,
+            tokenHash,
+            expiresAt,
+          })
+          .returning({ id: staffInvitations.id })
+      )[0];
+      if (!row) throw new Error('createStaffInvitation: the insert returned no row');
+
+      await auditStaff(tx, actor, {
+        action: AUDIT_ACTIONS.STAFF_INVITATION_CREATED,
+        reason: input.reason,
+        metadata: { invitationId: row.id, roleCode: input.roleCode, maskedDestination: masked },
+      });
+      await publish(tx, identityStaffInvitationCreatedEvent, {
+        payload: {
+          invitationId: row.id,
           invitedBy: actor.userId,
           roleCode: input.roleCode,
-          destinationHash,
-          destinationMasked: masked,
-          // The deliverable address as typed, as `party_invitations` does: canonicalisation is for
-          // matching, and rewriting a person's address is its own bug.
-          destinationEnc: deps.encryption.seal(input.email.trim()),
-          reason: input.reason,
-          grantExpiresAt: verdict.grantExpiresAt,
-          tokenHash,
-          expiresAt,
-        })
-        .returning({ id: staffInvitations.id })
-    )[0];
-    if (!row) throw new Error('createStaffInvitation: the insert returned no row');
-
-    await auditStaff(tx, actor, {
-      action: AUDIT_ACTIONS.STAFF_INVITATION_CREATED,
-      reason: input.reason,
-      metadata: { invitationId: row.id, roleCode: input.roleCode, maskedDestination: masked },
+          maskedDestination: masked,
+          expiresAt: expiresAt.toISOString(),
+        },
+        aggregateType: 'identity.staff_invitation',
+        aggregateId: row.id,
+        actor: { type: 'STAFF', id: actor.userId },
+      });
+      return { invitationId: row.id, token, maskedDestination: masked, expiresAt };
     });
-    await publish(tx, identityStaffInvitationCreatedEvent, {
-      payload: {
-        invitationId: row.id,
-        invitedBy: actor.userId,
-        roleCode: input.roleCode,
-        maskedDestination: masked,
-        expiresAt: expiresAt.toISOString(),
-      },
-      aggregateType: 'identity.staff_invitation',
-      aggregateId: row.id,
-      actor: { type: 'STAFF', id: actor.userId },
-    });
-    return { invitationId: row.id, token, maskedDestination: masked, expiresAt };
-  });
+  } catch (error) {
+    if (isUniqueViolation(error, 'staff_invitations_pending_unique')) {
+      throw conflict('That address already has a pending invitation for that role');
+    }
+    throw error;
+  }
 }
 
 export interface StaffInvitationView {
@@ -329,7 +353,7 @@ export async function startStaffInvitationAcceptance(
   input: { userId: string; token: string; ip: string | null },
 ): Promise<IssuedOtp> {
   return deps.db.transaction(async (tx) => {
-    const { canonical } = await invitationForUser(tx, deps, input);
+    const { invitation, canonical } = await invitationForUser(tx, deps, input);
     return issueOtp(
       tx,
       { hasher: deps.hasher, logger: deps.logger },
@@ -337,7 +361,8 @@ export async function startStaffInvitationAcceptance(
         userId: input.userId,
         purpose: 'SENSITIVE_ACTION',
         channels: ['EMAIL'],
-        destination: canonical,
+        // Bound to this invitation, not just the address: see `staffInvitationOtpDestinationHash`.
+        destinationHash: staffInvitationOtpDestinationHash(deps.hasher, invitation.id, canonical),
         ip: input.ip,
       },
     );
@@ -374,14 +399,17 @@ export async function acceptStaffInvitation(
   return deps.db.transaction(async (tx): Promise<AcceptStaffInvitationResult> => {
     const { invitation, canonical } = await invitationForUser(tx, deps, { ...input, lock: true });
 
-    // The challenge must be this user's, for this purpose, on THIS address, checked before a
-    // single attempt is spent: a code that was sent for something else proves nothing here.
+    // The challenge must be this user's, for this purpose and for THIS invitation (its destination
+    // hash is bound to the invitation id), checked before a single attempt is spent: a code that
+    // was sent for something else, a step-up on the same address included, proves nothing here.
     const challenge = await findLiveChallenge(tx, input.challengeId);
     if (
       !challenge ||
       challenge.userId !== input.userId ||
       challenge.purpose !== 'SENSITIVE_ACTION' ||
-      !Buffer.from(challenge.destinationHash).equals(hashDestination(deps.hasher, canonical))
+      !Buffer.from(challenge.destinationHash).equals(
+        staffInvitationOtpDestinationHash(deps.hasher, invitation.id, canonical),
+      )
     ) {
       return { outcome: 'UNKNOWN' };
     }
@@ -396,7 +424,25 @@ export async function acceptStaffInvitation(
     try {
       return await tx.transaction((sp) => grantFromInvitation(sp, input, invitation));
     } catch (error) {
-      if (error instanceof ApiError) return { outcome: 'REFUSED', error };
+      if (error instanceof ApiError) {
+        // The savepoint undid the grant, not this: the refusal is on the record.
+        await writeAudit(tx, {
+          action: AUDIT_ACTIONS.STAFF_INVITATION_ACCEPTED,
+          outcome: 'DENIED',
+          actorType: 'USER',
+          actorUserId: input.userId,
+          subjectUserId: input.userId,
+          ip: input.ip,
+          userAgent: input.userAgent,
+          metadata: {
+            invitationId: invitation.id,
+            roleCode: invitation.roleCode,
+            status: error.status,
+            detail: error.detail ?? error.message,
+          },
+        });
+        return { outcome: 'REFUSED', error };
+      }
       throw error;
     }
   });
@@ -410,6 +456,12 @@ async function grantFromInvitation(
   // The inviter's authority is re-read now. An invitation outlives the day it was written, and a
   // SUPER_ADMIN who has since been revoked must not be able to bring somebody in from the grave.
   if (!(await liveRoleCodes(tx, invitation.invitedBy)).includes('SUPER_ADMIN')) {
+    throw conflict('The person who sent this invitation can no longer grant roles');
+  }
+  const inviterRow = (
+    await tx.select({ status: users.status }).from(users).where(eq(users.id, invitation.invitedBy))
+  )[0];
+  if (inviterRow?.status !== 'ACTIVE') {
     throw conflict('The person who sent this invitation can no longer grant roles');
   }
   const user = (
@@ -444,6 +496,25 @@ async function grantFromInvitation(
           )
         : new ApiError(403, 'FORBIDDEN', 'You do not have permission to do that');
     }
+    // Mirror the manual grant: nothing to open if they already hold the role or it is already asked for.
+    if ((await liveRoleCodes(tx, input.userId)).includes(invitation.roleCode)) {
+      throw conflict('That person already holds that role');
+    }
+    const pending = await tx
+      .select({ id: adminActionApprovals.id })
+      .from(adminActionApprovals)
+      .where(
+        and(
+          eq(adminActionApprovals.action, 'ROLE_GRANT'),
+          eq(adminActionApprovals.subjectUserId, input.userId),
+          isNull(adminActionApprovals.executedAt),
+          isNull(adminActionApprovals.rejectedAt),
+          sql`${adminActionApprovals.expiresAt} > now()`,
+          sql`${adminActionApprovals.payload}->>'roleCode' = ${invitation.roleCode}`,
+        ),
+      )
+      .limit(1);
+    if (pending.length > 0) throw conflict('A grant of that role is already awaiting approval');
     // Fail now, not a day later inside the approval: a role cannot be granted to a person with no
     // second factor, and an approver should not be asked to sign a grant that is bound to fail.
     const factors = await activeFactors(tx, input.userId);

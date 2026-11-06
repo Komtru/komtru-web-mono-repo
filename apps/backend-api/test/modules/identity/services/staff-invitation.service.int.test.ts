@@ -188,6 +188,19 @@ describe.runIf(infraEnabled)('staff invitations (T-038)', () => {
       await expect(invite(admin, 'dup@example.com', 'OPERATIONS_ADMIN')).resolves.toBeDefined();
     });
 
+    it('lets exactly one of two concurrent invitations through (unique index, 409 for the loser)', async () => {
+      const admin = await superAdmin();
+      const results = await Promise.allSettled([
+        invite(admin, 'race@example.com'),
+        invite(admin, 'race@example.com'),
+      ]);
+      expect(results.filter((r) => r.status === 'fulfilled')).toHaveLength(1);
+      const rejected = results.filter((r) => r.status === 'rejected');
+      expect(rejected).toHaveLength(1);
+      expect((rejected[0] as PromiseRejectedResult).reason).toBeInstanceOf(ApiError);
+      expect(((rejected[0] as PromiseRejectedResult).reason as ApiError).status).toBe(409);
+    });
+
     it('refuses an address whose owner already holds the role', async () => {
       const admin = await superAdmin();
       const holder = await seedMember(t, app, { roles: ['KYC_ANALYST'] });
@@ -368,6 +381,94 @@ describe.runIf(infraEnabled)('staff invitations (T-038)', () => {
       expect((await row(invitationId))?.status).toBe('PENDING');
     });
 
+    it('rejects a SENSITIVE_ACTION code from another flow on the same address', async () => {
+      const admin = await superAdmin();
+      const person = await invitee();
+      const { token } = await invite(admin, person.email);
+      const { issueOtp } = await import('../../../../src/modules/identity/services/otp.service.js');
+      // A step-up challenge as any other flow issues it: same user, purpose, channel and address.
+      const stepUp = await t.db().transaction((tx) =>
+        issueOtp(
+          tx,
+          { hasher, logger: testLogger },
+          {
+            userId: person.userId,
+            purpose: 'SENSITIVE_ACTION',
+            channels: ['EMAIL'],
+            destination: normaliseEmail(person.email).emailNormal,
+            ip: null,
+          },
+        ),
+      );
+      const result = await accept(person, token, stepUp.challengeId, await codeFor(stepUp.challengeId));
+      expect(result.outcome).toBe('UNKNOWN');
+      expect(await liveRoles(person.userId)).toEqual([]);
+      // The step-up code was not spent by the attempt.
+      const { rows } = await t
+        .owner()
+        .query<{ attempts: number }>(`SELECT attempts FROM identity.otp_challenges WHERE id = $1`, [
+          stepUp.challengeId,
+        ]);
+      expect(rows[0]?.attempts).toBe(0);
+    });
+
+    it('refuses when the inviter account is no longer ACTIVE', async () => {
+      const admin = await superAdmin();
+      const person = await invitee();
+      const { token } = await invite(admin, person.email);
+      await t.owner().query(`UPDATE identity.users SET status = 'SUSPENDED' WHERE id = $1`, [admin.userId]);
+
+      const result = await acceptFully(person, token);
+
+      expect(result.outcome).toBe('REFUSED');
+      expect(result.outcome === 'REFUSED' && result.error.status).toBe(409);
+      expect(await liveRoles(person.userId)).toEqual([]);
+    });
+
+    it('records a DENIED audit row when the grant is refused', async () => {
+      const admin = await superAdmin();
+      const person = await invitee(false);
+      const { token, invitationId } = await invite(admin, person.email);
+
+      const result = await acceptFully(person, token);
+
+      expect(result.outcome).toBe('REFUSED');
+      const denied = (await audits('STAFF_INVITATION_ACCEPTED')).filter((a) => a.outcome === 'DENIED');
+      expect(denied).toHaveLength(1);
+      expect(denied[0]?.metadata).toMatchObject({ invitationId, roleCode: 'KYC_ANALYST', status: 409 });
+    });
+
+    it('refuses a dual-approval invitation, before claiming, when the invitee already holds the role', async () => {
+      const admin = await superAdmin();
+      const person = await invitee();
+      const { token, invitationId } = await invite(admin, person.email, 'FINANCE_ADMIN');
+      await assignRole(t, person.userId, 'FINANCE_ADMIN');
+
+      const result = await acceptFully(person, token);
+
+      expect(result.outcome).toBe('REFUSED');
+      expect(result.outcome === 'REFUSED' && result.error.status).toBe(409);
+      expect((await row(invitationId))?.status).toBe('PENDING');
+      const { rows } = await t.owner().query(`SELECT 1 FROM identity.admin_action_approvals`);
+      expect(rows).toHaveLength(0);
+    });
+
+    it('refuses a dual-approval invitation, before claiming, when a ROLE_GRANT is already pending', async () => {
+      const admin = await superAdmin();
+      const person = await invitee();
+      const first = await invite(admin, person.email, 'FINANCE_ADMIN');
+      expect((await acceptFully(person, first.token)).outcome).toBe('PENDING_APPROVAL');
+      const second = await invite(admin, person.email, 'FINANCE_ADMIN');
+
+      const result = await acceptFully(person, second.token);
+
+      expect(result.outcome).toBe('REFUSED');
+      expect(result.outcome === 'REFUSED' && result.error.status).toBe(409);
+      expect((await row(second.invitationId))?.status).toBe('PENDING');
+      const { rows } = await t.owner().query(`SELECT 1 FROM identity.admin_action_approvals`);
+      expect(rows).toHaveLength(1);
+    });
+
     it('opens a ROLE_GRANT approval for a FINANCE_ADMIN invitation instead of granting', async () => {
       const admin = await superAdmin();
       const person = await invitee();
@@ -467,11 +568,21 @@ describe.runIf(infraEnabled)('staff invitations (T-038)', () => {
         );
 
       expect((await failure(start(person, lapsed.token))).status).toBe(404);
-      // The expired address can be invited again.
+      // The expired address can be invited again, which retires the lapsed row itself.
       await expect(invite(admin, person.email)).resolves.toBeDefined();
+      expect((await row(lapsed.invitationId))?.status).toBe('EXPIRED');
+
+      // A lapsed row nobody re-invites is left to the sweep.
+      const old = await invite(admin, 'old@example.com');
+      await t
+        .owner()
+        .query(
+          `UPDATE identity.staff_invitations SET expires_at = now() - interval '1 minute' WHERE id = $1`,
+          [old.invitationId],
+        );
 
       expect(await expireStaffInvitations(t.db())).toEqual({ expired: 1 });
-      expect((await row(lapsed.invitationId))?.status).toBe('EXPIRED');
+      expect((await row(old.invitationId))?.status).toBe('EXPIRED');
       expect((await row(fresh.invitationId))?.status).toBe('PENDING');
       expect(await expireStaffInvitations(t.db())).toEqual({ expired: 0 });
     });

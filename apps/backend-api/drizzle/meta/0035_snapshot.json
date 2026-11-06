@@ -1,5 +1,5 @@
 {
-  "id": "b83ed8bf-afc7-44a1-a0e7-0c224f745412",
+  "id": "531f86ad-1cd7-458b-8294-2443affe0c42",
   "prevId": "54169f37-81e6-4932-8aa8-33b94a5534e3",
   "version": "7",
   "dialect": "postgresql",
@@ -4546,6 +4546,44 @@
             }
           ],
           "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "staff_invitations_pending_unique": {
+          "name": "staff_invitations_pending_unique",
+          "columns": [
+            {
+              "expression": "destination_hash",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "role_code",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "\"identity\".\"staff_invitations\".\"status\" = 'PENDING'",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "staff_invitations_expiry_idx": {
+          "name": "staff_invitations_expiry_idx",
+          "columns": [
+            {
+              "expression": "expires_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "where": "\"identity\".\"staff_invitations\".\"status\" = 'PENDING'",
           "concurrently": false,
           "method": "btree",
           "with": {}

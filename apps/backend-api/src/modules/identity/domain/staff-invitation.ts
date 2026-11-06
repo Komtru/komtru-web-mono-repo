@@ -27,6 +27,19 @@ export const staffInvitationTokenHash = (token: string): Buffer => sha256(token)
 export const staffInvitationExpiry = (from: Date): Date =>
   new Date(from.getTime() + STAFF_INVITATION_TTL_DAYS * DAY_MS);
 
+export const STAFF_INVITATION_OTP_DOMAIN = 'identity:staff-invitation:otp';
+
+/**
+ * The destination the acceptance OTP is issued against. It is bound to ONE invitation as well as to
+ * the address, so a code from any other flow (a SENSITIVE_ACTION step-up on the same address, say)
+ * hashes to a different destination and can never satisfy an acceptance.
+ */
+export const staffInvitationOtpDestinationHash = (
+  hasher: HmacHasher,
+  invitationId: string,
+  canonical: string,
+): Buffer => hasher.hmac(STAFF_INVITATION_OTP_DOMAIN, `${invitationId}:${canonical}`);
+
 export const staffInvitationDestinationHash = (hasher: HmacHasher, canonical: string): Buffer =>
   hasher.hmac(STAFF_INVITATION_DESTINATION_DOMAIN, canonical);
 

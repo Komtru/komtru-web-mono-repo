@@ -26,4 +26,6 @@ ALTER TABLE "identity"."staff_invitations" ADD CONSTRAINT "staff_invitations_bou
 ALTER TABLE "identity"."staff_invitations" ADD CONSTRAINT "staff_invitations_claimed_by_user_id_users_id_fk" FOREIGN KEY ("claimed_by_user_id") REFERENCES "identity"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "identity"."staff_invitations" ADD CONSTRAINT "staff_invitations_cancelled_by_users_id_fk" FOREIGN KEY ("cancelled_by") REFERENCES "identity"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 CREATE INDEX "staff_invitations_dest_idx" ON "identity"."staff_invitations" USING btree ("destination_hash") WHERE "identity"."staff_invitations"."status" = 'PENDING';--> statement-breakpoint
-CREATE INDEX "staff_invitations_invited_by_idx" ON "identity"."staff_invitations" USING btree ("invited_by");
+CREATE INDEX "staff_invitations_invited_by_idx" ON "identity"."staff_invitations" USING btree ("invited_by");--> statement-breakpoint
+CREATE UNIQUE INDEX "staff_invitations_pending_unique" ON "identity"."staff_invitations" USING btree ("destination_hash","role_code") WHERE "identity"."staff_invitations"."status" = 'PENDING';--> statement-breakpoint
+CREATE INDEX "staff_invitations_expiry_idx" ON "identity"."staff_invitations" USING btree ("expires_at") WHERE "identity"."staff_invitations"."status" = 'PENDING';
