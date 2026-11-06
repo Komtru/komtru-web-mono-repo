@@ -6,6 +6,10 @@ cost and to find work to resume.
 
 ## Waiting on the owner
 
+- **T-048 configuration defaults** (listed in `docs/superpowers/plans/2026-11-06-t-048-config.md`):
+  - `trades.payment_deadline_hours = 24`;
+  - `trades.delivery_deadline_days = 7`;
+  - `config.manage` is SUPER_ADMIN only, so OPERATIONS_ADMIN can read settings but not change them.
 - **T-037 access-control defaults.** Each was applied deny-by-default and listed under "Owner
   decisions pending" in `docs/superpowers/plans/2026-11-06-t-037-rbac-staff-admin.md`:
   - the holders of the risk, park, cases, config, compliance, analytics, growth and moderation
@@ -109,3 +113,32 @@ cost and to find work to resume.
   unblocked by T-037).
 
 ## 2026-11-06 18:28 WAT — skipped: locked (lock from 2026-11-06T17:17:53Z; 5h 62%, week 44%)
+
+## 2026-11-06 18:40–19:40 WAT — T-048 and T-222 in parallel (interactive, outside the schedule)
+
+- Usage at start: 5h 48%, week 43%. At end: 5h 68%, week 45%.
+- Pairing:
+  - T-038 and T-048 could not run together, because both add migrations.
+  - T-072 (money, Opus throughout) was held for a fresh window.
+  - So the run paired T-048 (critical path) with T-222 (UI, no migration).
+- **T-222: merged.**
+  - The tab bar is re-based on v2's `.komtru-mobile-nav`.
+  - The manager corrected the ticket text: v2's final cascade renders 9.5px labels, not 10px.
+  - The manager reviewed the diff itself instead of running a reviewer agent; it is a small UI
+    change.
+  - Verified: ui-kit 850/850; lint and types clean.
+- **T-048: merged.**
+  - Config module: settings, flags, an append-only change log, a cached typed accessor and admin
+    endpoints. Migrations 0032 and 0033.
+  - The Sonnet review found 3 must-fixes and 6 should-fixes, all fixed. The must-fixes:
+    - the fee guard missed concatenated words such as `platformfee`;
+    - the DENIED audit row was unproven;
+    - the event subscribers were untested.
+  - Verified after merging main: 1,615 config and identity tests with infrastructure; migration
+    safety 34/0 errors; lint and types clean. Main typechecks after the merge.
+  - The §6 content proxies wait for M10, M11 and M13.
+- Ticket costs:
+  - T-222 (build plus one fix): about 5h 4, week 0.5.
+  - T-048 (build, review, fix): about 5h 16, week 2.
+- Next: T-072 funding (Opus) in a fresh window. Then T-038 staff invitations, T-049 trade
+  standards (critical path, now unblocked by T-048), and T-039.

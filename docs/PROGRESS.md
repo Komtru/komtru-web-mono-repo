@@ -5,11 +5,11 @@ after every run. The run-by-run history is [`manager/RUN_LOG.md`](manager/RUN_LO
 behind it is [`BUILD_PLAN.md`](BUILD_PLAN.md).
 
 ```
-MVP   ████████████······················  40/111  (36%)
-Total ████████··························  40/168  (24%)
+MVP   █████████████·····················  42/111  (38%)
+Total ████████··························  42/168  (25%)
 ```
 
-71 MVP tickets left, 57 deferred past it.
+69 MVP tickets left, 57 deferred past it.
 
 ## By epic
 
@@ -19,7 +19,7 @@ Total ████████·························
 | 01-shared-packages     | 8    | 8     |
 | 02-backend-platform    | 9    | 10    |
 | 03-identity            | 7    | 11    |
-| 04-files-notify-config | 3    | 7     |
+| 04-files-notify-config | 4    | 7     |
 | 05-trust               | 2    | 3     |
 | 06-merchant-search     | 0    | 3     |
 | 07-trades              | 1    | 9     |
@@ -33,7 +33,7 @@ Total ████████·························
 | 15-logistics-ops       | 0    | 3     |
 | 16-park-agent-app      | 0    | 5     |
 | 17-release             | 0    | 4     |
-| 18-ui-master-v2        | 2    | 33    |
+| 18-ui-master-v2        | 3    | 33    |
 
 ## In progress
 
@@ -49,14 +49,14 @@ Total ████████·························
 | T-038  | Staff invitations                                                 | yes |
 | T-039  | Account lifecycle, recovery and NDPA hooks                        | yes |
 | T-046  | Location catalog: states, cities and city requests                | yes |
-| T-048  | Configuration (M17)                                               | yes |
+| T-049  | Trade Standards by category                                       | yes |
 | T-072  | Funding a trade                                                   | yes |
 | T-107  | Universal case model, work queue and advisory                     | yes |
-| T-222  | Re-base TabBar to v2 mobile styling                               | yes |
 | T-034  | Social login                                                      |     |
 | T-041  | Avatars                                                           |     |
 | T-085  | Logistics schema and Park seed                                    |     |
 | T-100  | Support tickets (M10)                                             |     |
+| T-101  | Risk and fraud (M13)                                              |     |
 | T-103  | Administration: impersonation and admin action log (M14, adapted) |     |
 
 ## Blocked on an owner decision
@@ -77,7 +77,6 @@ Total ████████·························
 | T-039  | Account lifecycle, recovery and NDPA hooks                                | yes |
 | T-042  | Saved delivery addresses                                                  | yes |
 | T-046  | Location catalog: states, cities and city requests                        | yes |
-| T-048  | Configuration (M17)                                                       | yes |
 | T-049  | Trade Standards by category                                               | yes |
 | T-052  | Duplicate identity detection and KYC review queue                         | yes |
 | T-055  | Merchant applications and certification                                   | yes |
@@ -141,4 +140,3 @@ Total ████████·························
 | T-213  | Tablet: fulfil, deliver, inspect and payouts                              | yes |
 | T-214  | Tablet: issues, messages, account and help                                | yes |
 | T-221  | Desktop and tablet: issues and resolution                                 | yes |
-| T-222  | Re-base TabBar to v2 mobile styling                                       | yes |
