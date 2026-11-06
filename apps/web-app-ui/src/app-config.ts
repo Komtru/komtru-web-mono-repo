@@ -10,7 +10,8 @@ export const appSpec = {
   appName: 'web-app-ui',
   scope: 'CONSUMER',
   signInPath: '/sign-in',
-  homePath: '/trades',
+  // Buy mode's landing (`landingFor('buy')`); `app/page.tsx` sends Sell mode to `/shop`.
+  homePath: '/home',
 } as const satisfies AppSpec;
 
 /** Where the public Trust Passport pages are served. Its own host in production (design C12). */

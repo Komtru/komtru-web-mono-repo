@@ -47,9 +47,8 @@ export function CollapsibleSideNav(props: CollapsibleSideNavProps): React.JSX.El
       footer={
         <button
           type="button"
-          aria-label="Navigation sidebar"
           aria-expanded={!collapsed}
-          title={collapsed ? 'Expand navigation' : 'Collapse navigation'}
+          title="Collapse navigation"
           onClick={toggle}
           className={cx(
             'mt-[12px] flex w-full items-center gap-[9px] rounded-[8px] pt-[9px] pr-[10px] pb-[9px] pl-[10px] text-[12.5px] font-medium text-slate',
@@ -68,9 +67,9 @@ export function CollapsibleSideNav(props: CollapsibleSideNavProps): React.JSX.El
           >
             <path d={collapsed ? 'M9 6l6 6-6 6' : 'M15 6l-6 6 6 6'} />
           </svg>
-          {/* The name is constant and `aria-expanded` carries the state, so the visible word is decoration. */}
-          <span aria-hidden className={collapsed ? 'sr-only' : undefined}>
-            Collapse
+          {/* The name is constant and `aria-expanded` carries the state, so the visible word is part of it (WCAG 2.5.3). */}
+          <span className={collapsed ? 'sr-only' : undefined}>
+            Collapse <span className="sr-only">navigation</span>
           </span>
         </button>
       }

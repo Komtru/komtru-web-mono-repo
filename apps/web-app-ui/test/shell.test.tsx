@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { AccountSections } from '../src/shell/AccountSections';
 import { AppShell } from '../src/shell/AppShell';
@@ -95,38 +95,74 @@ describe('AppShell', () => {
     const aside = container.querySelector('aside');
     fireEvent.click(screen.getByRole('button', { name: 'Collapse navigation' }));
     expect(aside?.className).toContain('w-[64px]');
-    fireEvent.click(screen.getByRole('button', { name: 'Expand navigation' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Collapse navigation' }));
     expect(aside?.className).toContain('w-[180px]');
   });
 });
 
 describe('the top bar tools (v2: DX-03, TX-02)', () => {
-  it('shows the Buy/Sell switch, off in Buy mode and on in Sell', () => {
-    const { unmount } = shell();
-    for (const toggle of screen.getAllByRole('switch', { name: /selling mode/ })) {
-      expect(toggle.getAttribute('aria-checked')).toBe('false');
-    }
+  const pressed = (mode: 'Buy' | 'Sell') =>
+    screen.getAllByRole('button', { name: mode }).map((button) => button.getAttribute('aria-pressed'));
+
+  it('shows the Buy/Sell switch with the current mode pressed, in the mobile header too', () => {
+    const { container, unmount } = shell();
+    // Desktop bar, tablet nav and mobile header each carry one.
+    expect(screen.getAllByRole('group', { name: 'Buy or sell mode' })).toHaveLength(3);
+    expect(pressed('Buy')).toEqual(['true', 'true', 'true']);
+    expect(pressed('Sell')).toEqual(['false', 'false', 'false']);
+    const mobile = container.querySelector('header.md\\:hidden');
+    expect(mobile?.querySelector('[role="group"]')).not.toBeNull();
     unmount();
     shell({}, 'shop', 'sell');
-    for (const toggle of screen.getAllByRole('switch', { name: /selling mode/ })) {
-      expect(toggle.getAttribute('aria-checked')).toBe('true');
-    }
+    expect(pressed('Sell')).toEqual(['true', 'true', 'true']);
   });
 
   it('remembers the chosen mode and opens its landing screen', () => {
     shell();
-    fireEvent.click(screen.getAllByRole('switch', { name: /selling mode/ })[0] as HTMLElement);
+    fireEvent.click(screen.getAllByRole('button', { name: 'Sell' })[0] as HTMLElement);
     expect(document.cookie).toContain('komtru_mode=sell');
     expect(router.push).toHaveBeenCalledWith('/shop');
     expect(router.refresh).toHaveBeenCalled();
   });
 
-  it('locks the switch on Sell for a certified merchant', () => {
+  it('opens Home when switching from Sell to Buy', () => {
+    shell({}, 'shop', 'sell');
+    fireEvent.click(screen.getAllByRole('button', { name: 'Buy' })[0] as HTMLElement);
+    expect(document.cookie).toContain('komtru_mode=buy');
+    expect(router.push).toHaveBeenCalledWith('/home');
+  });
+
+  it('works from the mobile header exactly as on desktop', () => {
+    const { container } = shell();
+    const mobile = container.querySelector('header.md\\:hidden') as HTMLElement;
+    fireEvent.click(within(mobile).getByRole('button', { name: 'Sell' }));
+    expect(router.push).toHaveBeenCalledWith('/shop');
+  });
+
+  it('locks the switch on Sell for a certified merchant, in every copy, and says why', () => {
     shell({ certifiedMerchant: true }, 'shop', 'sell');
-    const toggle = screen.getAllByRole('switch', { name: /selling mode/ })[0] as HTMLElement;
-    expect(toggle.getAttribute('aria-readonly')).toBe('true');
-    fireEvent.click(toggle);
+    for (const buy of screen.getAllByRole('button', { name: 'Buy' })) {
+      expect(buy.getAttribute('aria-disabled')).toBe('true');
+      expect(buy.getAttribute('aria-describedby')).toBeTruthy();
+      fireEvent.click(buy);
+    }
+    expect(screen.getAllByText('Certified merchants sell only')).toHaveLength(3);
     expect(router.push).not.toHaveBeenCalled();
+  });
+
+  it('draws each duplicated copy of the tools inside an ancestor that hides it at the other widths', () => {
+    shell();
+    for (const name of ['Alerts', 'Your account']) {
+      for (const link of screen.getAllByRole('link', { name })) {
+        expect(link.closest('[class~="hidden"]'), name).not.toBeNull();
+      }
+    }
+    for (const group of screen.getAllByRole('group', { name: 'Buy or sell mode' })) {
+      expect(group.closest('[class~="hidden"], [class~="md:hidden"]')).not.toBeNull();
+    }
+    for (const search of screen.getAllByRole('search')) {
+      expect(search.closest('[class~="hidden"]')).not.toBeNull();
+    }
   });
 
   it('searches by Trade Code and by words from the one bar', () => {
@@ -135,7 +171,7 @@ describe('the top bar tools (v2: DX-03, TX-02)', () => {
     expect(search.getAttribute('placeholder')).toBe('Search trades or sellers — or enter a Trade Code');
     fireEvent.change(search, { target: { value: 'KMT-88213' } });
     fireEvent.submit(screen.getByRole('search'));
-    expect(router.push).toHaveBeenCalledWith('/trades/KMT-88213');
+    expect(router.push).toHaveBeenCalledWith('/trades?code=KMT-88213');
 
     fireEvent.change(search, { target: { value: 'iphone' } });
     fireEvent.submit(screen.getByRole('search'));

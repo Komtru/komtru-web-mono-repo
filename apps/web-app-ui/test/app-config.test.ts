@@ -4,6 +4,7 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { appSpec } from '../src/app-config';
+import { landingFor } from '../src/shell/nav';
 
 /** `.env.example` is the documented environment; a config that cannot be built from it is wrong. */
 const envExample = (): Record<string, string> => {
@@ -27,6 +28,11 @@ describe('@komtru/web-app-ui app spec', () => {
       scope: 'CONSUMER',
       appUrl: 'http://localhost:3001',
     });
+  });
+
+  it('opens on Buy mode’s landing screen, not the retired Trades-as-home', () => {
+    expect(appSpec.homePath).toBe(landingFor('buy'));
+    expect(appSpec.homePath).toBe('/home');
   });
 
   it('declares the session secret the middleware needs', () => {

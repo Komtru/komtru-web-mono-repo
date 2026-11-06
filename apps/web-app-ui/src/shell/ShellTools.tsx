@@ -2,9 +2,7 @@
 
 import { GlobalSearch, ModeSwitch, type ShellMode } from '@komtru/ui-kit';
 import { useRouter } from 'next/navigation';
-import { landingFor, MODE_COOKIE, searchDestination } from './nav';
-
-const YEAR_SECONDS = 60 * 60 * 24 * 365;
+import { landingFor, modeCookie, searchDestination } from './nav';
 
 /**
  * The Buy/Sell switch beside the profile (Y2). Switching remembers the mode in a cookie the server
@@ -19,9 +17,10 @@ export function ModeControl({ mode, locked }: { mode: ShellMode; locked: boolean
     <ModeSwitch
       mode={mode}
       locked={locked}
-      label="selling mode"
+      label="Buy or sell mode"
+      lockedReason="Certified merchants sell only"
       onChange={(next) => {
-        document.cookie = `${MODE_COOKIE}=${next}; path=/; max-age=${YEAR_SECONDS}; samesite=lax`;
+        document.cookie = modeCookie(next, window.location.protocol === 'https:');
         router.push(landingFor(next));
         router.refresh();
       }}

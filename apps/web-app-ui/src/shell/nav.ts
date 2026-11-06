@@ -77,16 +77,34 @@ export function modeFor(viewer: Viewer, chosen: string | undefined): Mode {
 /** Where switching into a mode lands: the first item of its nav. */
 export const landingFor = (mode: Mode): string => tabsFor(ANONYMOUS_VIEWER, mode)[0]?.href ?? '/home';
 
+/**
+ * Where `/` goes: the landing screen of the mode the person is in. The cookie is a view preference
+ * only (a certified merchant lands on Sell whatever it says).
+ *
+ * TODO(T-111): buyer routes must be rejected on the server when the session says
+ * `canActAsBuyer === false`. The chrome locks a certified merchant to Sell; it does not authorise.
+ */
+export const rootDestination = (viewer: Viewer, chosen: string | undefined): string =>
+  landingFor(modeFor(viewer, chosen));
+
+const YEAR_SECONDS = 60 * 60 * 24 * 365;
+
+/** The `document.cookie` string for a chosen mode: Lax, and Secure anywhere but plain-http localhost. */
+export const modeCookie = (mode: Mode, secure: boolean): string =>
+  `${MODE_COOKIE}=${mode}; path=/; max-age=${YEAR_SECONDS}; samesite=lax${secure ? '; secure' : ''}`;
+
 const TRADE_CODE = /^KMT-\d+$/i;
 
 /**
- * Where the global search and Trade Code bar sends a query: a Trade Code opens its trade, anything
- * else is Discover's results, and an empty query goes nowhere.
+ * Where the global search and Trade Code bar sends a query: a Trade Code goes to the trades list
+ * filtered by it (the trade workspace has no route yet, T-116), anything else is Discover's results,
+ * and an empty query goes nowhere. Only a strict `KMT-<digits>` is ever put in a path or query as is;
+ * everything else is encoded as a query value, so no input can name another route or host.
  */
 export function searchDestination(query: string): string | undefined {
   const text = query.trim();
   if (text === '') return undefined;
-  if (TRADE_CODE.test(text)) return `/trades/${text.toUpperCase()}`;
+  if (TRADE_CODE.test(text)) return `/trades?code=${text.toUpperCase()}`;
   return `/browse?q=${encodeURIComponent(text)}`;
 }
 

@@ -117,12 +117,12 @@ describe('SideNav collapse', () => {
   it('narrows to an icon rail and back, keeping every destination reachable by name', () => {
     const { container } = render(<CollapsibleSideNav brandLabel="Komtru" items={NAV} />);
     // One name for both states: `aria-expanded` says which one it is in.
-    const button = screen.getByRole('button', { name: 'Navigation sidebar' });
+    const button = screen.getByRole('button', { name: 'Collapse navigation' });
     expect(button.getAttribute('aria-expanded')).toBe('true');
     expect(container.querySelector('aside')?.className).toContain('w-[180px]');
 
     fireEvent.click(button);
-    expect(screen.getByRole('button', { name: 'Navigation sidebar' })).toBe(button);
+    expect(screen.getByRole('button', { name: 'Collapse navigation' })).toBe(button);
     expect(button.getAttribute('aria-expanded')).toBe('false');
     expect(container.querySelector('aside')?.className).toContain('w-[64px]');
     expect(screen.getByRole('link', { name: 'Trades' }).getAttribute('title')).toBe('Trades');
@@ -130,7 +130,7 @@ describe('SideNav collapse', () => {
 
   it('keeps focus on the button after collapsing', () => {
     render(<CollapsibleSideNav brandLabel="Komtru" items={NAV} />);
-    const button = screen.getByRole('button', { name: 'Navigation sidebar' });
+    const button = screen.getByRole('button', { name: 'Collapse navigation' });
     button.focus();
     fireEvent.click(button);
     expect(document.activeElement).toBe(button);
@@ -138,11 +138,11 @@ describe('SideNav collapse', () => {
 
   it('stays collapsed on the next screen, which draws a fresh shell', () => {
     const first = render(<CollapsibleSideNav brandLabel="Komtru" items={NAV} />);
-    fireEvent.click(screen.getByRole('button', { name: 'Navigation sidebar' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Collapse navigation' }));
     first.unmount();
     const { container } = render(<CollapsibleSideNav brandLabel="Komtru" items={NAV} />);
     expect(container.querySelector('aside')?.className).toContain('w-[64px]');
-    expect(screen.getByRole('button', { name: 'Navigation sidebar' }).getAttribute('aria-expanded')).toBe(
+    expect(screen.getByRole('button', { name: 'Collapse navigation' }).getAttribute('aria-expanded')).toBe(
       'false',
     );
   });
@@ -155,8 +155,8 @@ describe('SideNav collapse', () => {
       throw new Error('blocked');
     });
     render(<CollapsibleSideNav brandLabel="Komtru" items={NAV} />);
-    fireEvent.click(screen.getByRole('button', { name: 'Navigation sidebar' }));
-    expect(screen.getByRole('button', { name: 'Navigation sidebar' }).getAttribute('aria-expanded')).toBe(
+    fireEvent.click(screen.getByRole('button', { name: 'Collapse navigation' }));
+    expect(screen.getByRole('button', { name: 'Collapse navigation' }).getAttribute('aria-expanded')).toBe(
       'false',
     );
     get.mockRestore();

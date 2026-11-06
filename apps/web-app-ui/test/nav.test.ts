@@ -5,7 +5,9 @@ import {
   BELL_HREF,
   currentTab,
   landingFor,
+  modeCookie,
   modeFor,
+  rootDestination,
   searchDestination,
   tabsFor,
   type Viewer,
@@ -69,6 +71,29 @@ describe('the mode a person is in', () => {
     expect(modeFor(viewer({ certifiedMerchant: true }), undefined)).toBe('sell');
   });
 
+  it('gives a certified viewer the Sell tabs and the Sell landing whatever the cookie says', () => {
+    // TODO(T-111): the cookie is a view preference only. Buyer routes must be rejected on the server
+    // when the session says `canActAsBuyer === false`; nothing here enforces that.
+    const certified = viewer({ certifiedMerchant: true });
+    for (const chosen of ['buy', 'sell', 'merchant', undefined]) {
+      const mode = modeFor(certified, chosen);
+      expect(mode).toBe('sell');
+      expect(labels(tabsFor(certified, mode))).toEqual(['Shop', 'Orders', 'Listings', 'Messages', 'Account']);
+      expect(rootDestination(certified, chosen)).toBe('/shop');
+    }
+  });
+
+  it('opens the root at the landing screen of the mode the person is in', () => {
+    expect(rootDestination(viewer(), undefined)).toBe('/home');
+    expect(rootDestination(viewer(), 'buy')).toBe('/home');
+    expect(rootDestination(viewer(), 'sell')).toBe('/shop');
+  });
+
+  it('writes the mode cookie as a Lax preference, Secure everywhere but localhost', () => {
+    expect(modeCookie('sell', true)).toBe('komtru_mode=sell; path=/; max-age=31536000; samesite=lax; secure');
+    expect(modeCookie('buy', false)).toBe('komtru_mode=buy; path=/; max-age=31536000; samesite=lax');
+  });
+
   it('opens each mode at its own landing screen', () => {
     expect(landingFor('buy')).toBe('/home');
     expect(landingFor('sell')).toBe('/shop');
@@ -101,9 +126,10 @@ describe('which tab a URL is under', () => {
 });
 
 describe('the global search and Trade Code bar', () => {
-  it('sends a Trade Code to its trade', () => {
-    expect(searchDestination('KMT-88213')).toBe('/trades/KMT-88213');
-    expect(searchDestination('  kmt-88213 ')).toBe('/trades/KMT-88213');
+  it('sends a Trade Code to the trades list until the workspace route exists', () => {
+    expect(searchDestination('KMT-88213')).toBe('/trades?code=KMT-88213');
+    expect(searchDestination('  kmt-88213 ')).toBe('/trades?code=KMT-88213');
+    expect(searchDestination('kmt-9')).toBe('/trades?code=KMT-9');
   });
 
   it('sends anything else to Discover’s results, encoded', () => {
@@ -112,6 +138,20 @@ describe('the global search and Trade Code bar', () => {
 
   it('goes nowhere on an empty query', () => {
     expect(searchDestination('   ')).toBeUndefined();
+  });
+
+  it.each([
+    ['//evil.com', '/browse?q=%2F%2Fevil.com'],
+    ['https://x', '/browse?q=https%3A%2F%2Fx'],
+    ['KMT-1/../x', '/browse?q=KMT-1%2F..%2Fx'],
+    ['KMT-1?x', '/browse?q=KMT-1%3Fx'],
+    ['KMT 9', '/browse?q=KMT%209'],
+    ['100%', '/browse?q=100%25'],
+    ['KMT-1 KMT-2', '/browse?q=KMT-1%20KMT-2'],
+  ])('keeps hostile input %j inside Discover, as a query value', (query, expected) => {
+    const to = searchDestination(query);
+    expect(to).toBe(expected);
+    expect(to?.startsWith('/browse?q=')).toBe(true);
   });
 });
 

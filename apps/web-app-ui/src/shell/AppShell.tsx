@@ -67,6 +67,7 @@ export function AppShell({ tab, viewer, mode = 'buy', nav, children }: AppShellP
       banner={<OfflineStatus />}
       search={<SearchBar />}
       actions={actions}
+      mobileActions={<ModeControl mode={mode} locked={viewer.certifiedMerchant} />}
     >
       {children}
     </ResponsiveAppShell>
