@@ -35,6 +35,13 @@ cost and to find work to resume.
 - **Q16, the T-046 city seed.** It is merged with a default list: 37 states and 129 cities (the 37 capitals plus 92 commercial
   cities) in `apps/backend-api/src/modules/geo/seed/nigeria-locations.seed.ts`. Review the list. Staff can also add,
   rename or deactivate cities later through `/admin/geo`. `geo.manage` is held by SUPER_ADMIN and OPERATIONS_ADMIN.
+- **T-061 proposal-flow defaults** (in `docs/superpowers/plans/2026-11-07-t-061-proposal-flow.md`; the
+  ticket is not merged yet):
+  - seller proof media is stored as `PRIVATE_CASE` files with the buyer granted access, because files has
+    no trade-proof category;
+  - either party may cancel before funding, and the initiator may cancel before the counterparty binds;
+  - a certified merchant who asks to be the BUYER is refused (403 `MERCHANT_CANNOT_BUY`), not silently
+    switched to SELLER.
 - Q1 (hosting and the GitHub remote) still blocks T-005 and the T-183 push.
 - Q3 (wallet) still blocks T-131.
 - ~~Disputes in the MVP?~~ Answered 2026-11-06: yes. T-120, T-196, T-199, T-200 and the new T-221 are in the MVP.
@@ -219,3 +226,19 @@ cost and to find work to resume.
   - Setting `TRUST_PROXY_HOPS` at deploy time.
 - Next: T-072 funding (opus) needs a fresh window. It is not worth starting at 73%. T-107 and
   T-039 are next for a fresh window too.
+
+## 2026-11-07 00:13 WAT — run summary
+
+- Usage at start: 5h 73%, week 58%. At end: 5h 85%, week 59%.
+- Capacity: 1 (`est` 14: 73+14 ≤ 90, but 73+28 > 90). Tickets: T-061 (saved at implement).
+  - T-061 proposal flow, on the critical path. Sonnet implementer: 5 commits on
+    `t-061-proposal-flow`, migration 0039 (`trade_proof_media`, nullable terms addresses).
+    Backend unit tests 3047/3047 and trades infra tests 289/289 pass, and format and migration
+    safety are clean. Not reviewed: the window was at 85% after implementation, too close to
+    the 88% stop for a review and fix round plus the run close.
+  - Not resumed: `t-029-infra-isolation`. Its branch has no commits beyond an old `main`, and
+    it needs 20 full infra-suite runs, so it is not a cheap tail.
+- Ticket costs: T-061 implement only, 5h-cost=12 week-cost=1.
+- Next: T-061 review, then fix and merge, in a fresh window. The reviewer should check that
+  `trades.payment_deadline_hours` (T-048) is not yet applied at acceptance. Then T-072 funding
+  (opus), T-107 and T-039.

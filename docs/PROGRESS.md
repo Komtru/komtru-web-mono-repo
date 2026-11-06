@@ -40,6 +40,7 @@ Total ██████████······················
 | Ticket | Title                                                   | MVP |
 | ------ | ------------------------------------------------------- | --- |
 | T-029  | Isolate the integration suite's shared Redis and queues | yes |
+| T-061  | Proposal flow                                           | yes |
 
 ## Ready to start (MVP first)
 
