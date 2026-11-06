@@ -28,6 +28,7 @@ const TABLES = [
   'sessions',
   'social_identities',
   'staff_invitations',
+  'user_addresses',
   'user_capabilities',
   'user_credentials',
   'user_emails',
@@ -85,6 +86,9 @@ const INDEXES = [
   'staff_invitations_pending_unique',
   'staff_invitations_pkey',
   'staff_invitations_token_hash_unique',
+  'user_addresses_live_idx',
+  'user_addresses_one_default',
+  'user_addresses_pkey',
   'user_capabilities_pkey',
   'user_capabilities_unique',
   'user_credentials_pkey',
@@ -121,6 +125,9 @@ const CHECKS = [
   'phone_e164_format',
   'profile_bio_len',
   'recovery_reviewer_not_subject',
+  'user_addresses_default_is_live',
+  'user_addresses_phone_e164',
+  'user_addresses_text_not_blank',
   'users_username_format',
   'users_username_pair',
 ].sort();
@@ -157,6 +164,7 @@ const FOREIGN_KEYS = [
   'staff_invitations_claimed_by_user_id_users_id_fk',
   'staff_invitations_invited_by_users_id_fk',
   'staff_invitations_role_code_roles_code_fk',
+  'user_addresses_user_id_users_id_fk',
   'user_capabilities_granted_by_users_id_fk',
   'user_capabilities_user_id_users_id_fk',
   'user_credentials_user_id_users_id_fk',
@@ -221,7 +229,7 @@ describe.runIf(infraEnabled)('the identity schema surface', () => {
     expect(rows.map((row) => row.indexname)).toEqual([]);
   });
 
-  it('carries the four-eyes and append-only triggers and nothing else', async () => {
+  it('carries the four-eyes, append-only and no-delete triggers and nothing else', async () => {
     expect(
       await names(
         t.owner(),
@@ -230,7 +238,12 @@ describe.runIf(infraEnabled)('the identity schema surface', () => {
            JOIN pg_namespace n ON n.oid = c.relnamespace
           WHERE n.nspname = 'identity' AND NOT tg.tgisinternal`,
       ),
-    ).toEqual(['admin_role_dual_approval', 'komtru_append_only', 'roles_dual_approval_backfill']);
+    ).toEqual([
+      'admin_role_dual_approval',
+      'komtru_append_only',
+      'komtru_no_delete',
+      'roles_dual_approval_backfill',
+    ]);
   });
 
   // One privilege per call: has_table_privilege('SELECT, INSERT') is OR, so a table that lost
