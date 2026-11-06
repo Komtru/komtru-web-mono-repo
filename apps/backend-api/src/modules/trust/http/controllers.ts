@@ -1,11 +1,19 @@
 // The HTTP layer's own job: turn a request into a submission, and enqueue the work AFTER the row
 // that work depends on is committed.
+import type { Paged } from '@komtru/shared-types';
 import type { QueueFactory } from '../../../platform/queue/factory.js';
 import type { Encryption } from '../../../platform/crypto/encryption.js';
 import type { HmacHasher } from '../../../platform/crypto/hmac.js';
 import type { Logger } from '../../../platform/logger.js';
-import { TRUST_QUEUES, type IdentityCheckJob, type LivenessCheckJob } from '../domain/queues.js';
-import type { IdentifierType } from '../infrastructure/postgres/schema/enums.js';
+import {
+  TRUST_QUEUES,
+  type BankMatchJob,
+  type BusinessCheckJob,
+  type IdentityCheckJob,
+  type LivenessCheckJob,
+  type SocialProofCheckJob,
+} from '../domain/queues.js';
+import type { IdentifierType, SocialProofPlatform } from '../infrastructure/postgres/schema/enums.js';
 import type { TrustStore } from '../infrastructure/postgres/store.js';
 import {
   readVerificationStatus,
@@ -14,6 +22,15 @@ import {
   type VerificationDeps,
   type VerificationStatus,
 } from '../services/verification.service.js';
+import { submitAddressCheck, type AddressSubmission } from '../services/address.service.js';
+import { submitBankMatchCheck } from '../services/bankMatch.service.js';
+import { submitBusinessCheck } from '../services/business.service.js';
+import {
+  claimSocialHandle,
+  listSocialProof,
+  requestSocialProofCheck,
+  type SocialProofClaimView,
+} from '../services/socialProof.service.js';
 
 /** Lazily resolved: the module's routes exist before `start()` has given it a database. */
 export interface TrustHttpDeps {
@@ -37,6 +54,9 @@ export interface SubmissionResponse {
   requestId: string;
   status: string;
 }
+
+/** Everything this module puts on a queue. Each one is a request (or claim) id plus a sealed claim. */
+type TrustJob = IdentityCheckJob | LivenessCheckJob | BusinessCheckJob | BankMatchJob | SocialProofCheckJob;
 
 export async function submitNin(
   deps: TrustHttpDeps,
@@ -104,16 +124,11 @@ export async function submitLiveness(
  *
  * The job id is the request id, so a redelivery cannot queue a second provider call.
  */
-async function enqueue(
-  deps: TrustHttpDeps,
-  queue: string,
-  requestId: string,
-  job: IdentityCheckJob | LivenessCheckJob,
-): Promise<void> {
+async function enqueue(deps: TrustHttpDeps, queue: string, requestId: string, job: TrustJob): Promise<void> {
   try {
     await deps
       .queues()
-      .producer<IdentityCheckJob | LivenessCheckJob>(queue)
+      .producer<TrustJob>(queue)
       .add('check', job, {
         jobId: requestId,
         /**
@@ -133,3 +148,86 @@ async function enqueue(
 
 export const status = (deps: TrustHttpDeps, userId: string): Promise<VerificationStatus> =>
   readVerificationStatus({ store: deps.store() }, userId);
+
+// --- T-051 -------------------------------------------------------------------------------------
+
+export async function submitBusiness(
+  deps: TrustHttpDeps,
+  input: { userId: string; body: { rcNumber: string } },
+): Promise<SubmissionResponse> {
+  const submitted = await submitBusinessCheck(
+    {
+      store: deps.store(),
+      encryption: deps.encryption(),
+      requestTtlMinutes: deps.requestTtlMinutes(),
+      logger: deps.logger(),
+    },
+    { userId: input.userId, ...input.body },
+  );
+  await enqueue(deps, TRUST_QUEUES.BUSINESS_CHECK, submitted.requestId, submitted.job);
+  return { requestId: submitted.requestId, status: submitted.status };
+}
+
+export async function submitBankAccount(
+  deps: TrustHttpDeps,
+  input: { userId: string; body: { accountNumber: string; bankCode: string } },
+): Promise<SubmissionResponse> {
+  const submitted = await submitBankMatchCheck(
+    {
+      store: deps.store(),
+      encryption: deps.encryption(),
+      requestTtlMinutes: deps.requestTtlMinutes(),
+      logger: deps.logger(),
+    },
+    { userId: input.userId, ...input.body },
+  );
+  await enqueue(deps, TRUST_QUEUES.BANK_MATCH, submitted.requestId, submitted.job);
+  return { requestId: submitted.requestId, status: submitted.status };
+}
+
+/**
+ * The one submission with no enqueue.
+ *
+ * §6.6 gives `address_checks` no provider columns, which is the spec saying a proof of address is a
+ * document a person weighs rather than a verdict a vendor returns — so there is no job to queue and
+ * no provider to wait for. The store parks the request in MANUAL_REVIEW for T-052's reviewer.
+ */
+export const submitAddress = (
+  deps: TrustHttpDeps,
+  input: {
+    userId: string;
+    body: {
+      addressLine1: string;
+      city: string;
+      state: string;
+      method: 'UTILITY_BILL' | 'BANK_STATEMENT';
+      documentFileId: string;
+    };
+  },
+): Promise<AddressSubmission> =>
+  submitAddressCheck(
+    { store: deps.store(), requestTtlMinutes: deps.requestTtlMinutes(), logger: deps.logger() },
+    { userId: input.userId, ...input.body },
+  );
+
+const socialDeps = (deps: TrustHttpDeps) => ({ store: deps.store(), logger: deps.logger() });
+
+export const claimSocialProof = (
+  deps: TrustHttpDeps,
+  input: { userId: string; body: { platform: SocialProofPlatform; handle: string } },
+): Promise<SocialProofClaimView> =>
+  claimSocialHandle(socialDeps(deps), { userId: input.userId, ...input.body });
+
+export async function confirmSocialProof(
+  deps: TrustHttpDeps,
+  input: { userId: string; claimId: string },
+): Promise<{ claimId: string }> {
+  const requested = await requestSocialProofCheck(socialDeps(deps), input);
+  await enqueue(deps, TRUST_QUEUES.SOCIAL_PROOF_CHECK, requested.claimId, requested.job);
+  return { claimId: requested.claimId };
+}
+
+export const listSocialProofClaims = (
+  deps: TrustHttpDeps,
+  input: { userId: string; page: number; limit: number },
+): Promise<Paged<SocialProofClaimView>> => listSocialProof(socialDeps(deps), input);

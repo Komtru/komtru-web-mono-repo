@@ -82,6 +82,11 @@
       "definition": "CREATE UNIQUE INDEX trade_holds_one_active ON trade.trade_holds USING btree (trade_id, source) WHERE (released_at IS NULL)"
     },
     {
+      "table": "trust.business_verifications",
+      "name": "business_verifications_user_active_unique",
+      "definition": "CREATE UNIQUE INDEX business_verifications_user_active_unique ON trust.business_verifications USING btree (user_id) WHERE (verified_at IS NOT NULL)"
+    },
+    {
       "table": "trust.bvn_verifications",
       "name": "bvn_verifications_hash_active_unique",
       "definition": "CREATE UNIQUE INDEX bvn_verifications_hash_active_unique ON trust.bvn_verifications USING btree (bvn_hash) WHERE (verified_at IS NOT NULL)"
@@ -90,6 +95,16 @@
       "table": "trust.nin_verifications",
       "name": "nin_verifications_hash_active_unique",
       "definition": "CREATE UNIQUE INDEX nin_verifications_hash_active_unique ON trust.nin_verifications USING btree (nin_hash) WHERE (verified_at IS NOT NULL)"
+    },
+    {
+      "table": "trust.social_proof_claims",
+      "name": "social_proof_claims_platform_handle",
+      "definition": "CREATE UNIQUE INDEX social_proof_claims_platform_handle ON trust.social_proof_claims USING btree (platform, handle) WHERE (verified = true)"
+    },
+    {
+      "table": "trust.social_proof_claims",
+      "name": "social_proof_claims_user_platform",
+      "definition": "CREATE UNIQUE INDEX social_proof_claims_user_platform ON trust.social_proof_claims USING btree (user_id, platform) WHERE (verified = true)"
     },
     {
       "table": "trust.verification_requests",

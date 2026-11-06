@@ -3,13 +3,18 @@
 // make it useful: it is reproducible, and it does not always say yes.
 import { createHash } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
+import { createDojahClient } from '../../../src/modules/trust/infrastructure/providers/dojah.client.js';
 import { createFakeKycClient } from '../../../src/modules/trust/infrastructure/providers/fake-kyc.client.js';
 import {
+  bankMatchScriptFor,
+  businessScriptFor,
   livenessScriptFor,
+  registeredNameFor,
   scriptFor,
 } from '../../../src/modules/trust/infrastructure/providers/fake-script.js';
 
 const claim = (identifier: string) => ({ identifier, firstName: 'Ada', lastName: 'Obi' });
+const identityClaim = claim;
 
 describe('scriptFor', () => {
   it('scripts a distinct outcome per trailing digit, so every branch is reachable by hand', () => {
@@ -99,5 +104,181 @@ describe('createFakeKycClient', () => {
     });
     expect(result.livenessPassed).toBe(false);
     expect(result.failureReason).toBeTruthy();
+  });
+});
+
+describe('businessScriptFor', () => {
+  /**
+   * The first four endings are `scriptFor`'s, deliberately: one convention across the adapter means
+   * a developer who knows `...3` throws for a NIN does not have to learn a second table for a CAC.
+   * The three after them are the branches only a KYB check has.
+   */
+  it('keeps the shared endings and adds the three only a CAC check has', () => {
+    expect(businessScriptFor('RC0')).toBe('PENDING');
+    expect(businessScriptFor('RC1')).toBe('NOT_FOUND');
+    expect(businessScriptFor('RC2')).toBe('LOW_CONFIDENCE');
+    expect(businessScriptFor('RC3')).toBe('ERROR');
+    expect(businessScriptFor('RC4')).toBe('INACTIVE');
+    expect(businessScriptFor('RC5')).toBe('OFFICER_MISMATCH');
+    expect(businessScriptFor('RC6')).toBe('OFFICER_UNKNOWN');
+    expect(businessScriptFor('RC7')).toBe('ACTIVE');
+  });
+
+  it('reaches every branch the business decision has to handle', () => {
+    const outcomes = new Set(Array.from({ length: 100 }, (_, i) => businessScriptFor(`RC${String(i)}`)));
+    expect(outcomes).toEqual(
+      new Set([
+        'PENDING',
+        'NOT_FOUND',
+        'LOW_CONFIDENCE',
+        'ERROR',
+        'INACTIVE',
+        'OFFICER_MISMATCH',
+        'OFFICER_UNKNOWN',
+        'ACTIVE',
+      ]),
+    );
+  });
+});
+
+describe('registeredNameFor', () => {
+  it('is stable for one RC number, so a bank match can be run against it afterwards', () => {
+    expect(registeredNameFor('1487322')).toBe(registeredNameFor('1487322'));
+    expect(registeredNameFor('1487322')).not.toBe(registeredNameFor('1487323'));
+  });
+
+  it('says FAKE in the name, so a seeded merchant is never mistaken for a real company', () => {
+    expect(registeredNameFor('1487322')).toMatch(/FAKE/);
+  });
+});
+
+describe('bankMatchScriptFor', () => {
+  it('scripts an outcome per trailing digit of the account number', () => {
+    expect(bankMatchScriptFor('0000000000')).toBe('PENDING');
+    expect(bankMatchScriptFor('0000000001')).toBe('ACCOUNT_NOT_FOUND');
+    expect(bankMatchScriptFor('0000000002')).toBe('FUZZY');
+    expect(bankMatchScriptFor('0000000003')).toBe('ERROR');
+    expect(bankMatchScriptFor('0000000005')).toBe('NAME_MISMATCH');
+    expect(bankMatchScriptFor('0000000007')).toBe('EXACT');
+  });
+});
+
+const business = (rcNumber: string) => ({ rcNumber, firstName: 'Ada', lastName: 'Obi' });
+
+describe('createFakeKycClient.verifyBusiness', () => {
+  it('passes an active registration whose submitter is an officer', async () => {
+    const result = await createFakeKycClient().verifyBusiness(business('1487327'));
+    expect(result).toMatchObject({
+      verdict: 'PASSED',
+      cacStatus: 'active',
+      officersMatch: true,
+      registeredBusinessName: registeredNameFor('1487327'),
+    });
+    expect(result.providerReference).toMatch(/^fake_cac_/);
+  });
+
+  /**
+   * The case `decideBusinessOutcome` exists for: a PASSED verdict on a registration that is real and
+   * not active. `decideIdentityOutcome`'s verdict-only switch would have approved it.
+   */
+  it('returns a PASSED verdict on an inactive registration, with the status that refuses it', async () => {
+    const result = await createFakeKycClient().verifyBusiness(business('1487324'));
+    expect(result).toMatchObject({ verdict: 'PASSED', cacStatus: 'inactive', failureCode: 'CAC_INACTIVE' });
+  });
+
+  it('reports an officer mismatch as a real registration the submitter does not own', async () => {
+    const result = await createFakeKycClient().verifyBusiness(business('1487325'));
+    expect(result).toMatchObject({
+      verdict: 'PASSED',
+      cacStatus: 'active',
+      officersMatch: false,
+      failureCode: 'CAC_OFFICER_MISMATCH',
+    });
+  });
+
+  it('leaves officersMatch undefined when the registry does not say, rather than guessing false', async () => {
+    const result = await createFakeKycClient().verifyBusiness(business('1487326'));
+    expect(result.verdict).toBe('PASSED');
+    expect(result.officersMatch).toBeUndefined();
+  });
+
+  it('maps a missing registration onto the code BVR1 renders', async () => {
+    const result = await createFakeKycClient().verifyBusiness(business('1487321'));
+    expect(result).toMatchObject({ verdict: 'FAILED', failureCode: 'CAC_NOT_FOUND' });
+    expect(result.registeredBusinessName).toBeUndefined();
+  });
+
+  it('throws on the scripted error, so the job retry path is exercised', async () => {
+    await expect(createFakeKycClient().verifyBusiness(business('1487323'))).rejects.toThrow(/fake kyc/i);
+  });
+
+  it('never echoes the submitter’s name back, which this module stores nowhere', async () => {
+    const result = await createFakeKycClient().verifyBusiness(business('1487327'));
+    expect(JSON.stringify(result)).not.toMatch(/Ada|Obi/);
+  });
+});
+
+const account = (accountNumber: string, expectedName = registeredNameFor('1487327')) => ({
+  accountNumber,
+  bankCode: '058',
+  expectedName,
+});
+
+describe('createFakeKycClient.verifyBankAccountName', () => {
+  it('resolves an exact match to the expected name itself', async () => {
+    const expectedName = registeredNameFor('1487327');
+    const result = await createFakeKycClient().verifyBankAccountName(account('0123456787', expectedName));
+    expect(result).toMatchObject({
+      verdict: 'PASSED',
+      matchResult: 'EXACT',
+      resolvedAccountName: expectedName,
+    });
+    expect(result.providerReference).toMatch(/^fake_bank_/);
+  });
+
+  it('returns a near-miss the decision sends to a human, not a pass', async () => {
+    const result = await createFakeKycClient().verifyBankAccountName(account('0123456782'));
+    expect(result.matchResult).toBe('FUZZY_MATCH');
+    expect(result.resolvedAccountName).not.toBe(registeredNameFor('1487327'));
+    expect(result.resolvedAccountName).toBeTruthy();
+  });
+
+  it('distinguishes an unresolvable account from one held by somebody else', async () => {
+    const fake = createFakeKycClient();
+    const missing = await fake.verifyBankAccountName(account('0123456781'));
+    expect(missing).toMatchObject({ matchResult: 'MISMATCH', failureCode: 'BANK_ACCOUNT_NOT_FOUND' });
+    expect(missing.resolvedAccountName).toBeUndefined();
+
+    const other = await fake.verifyBankAccountName(account('0123456785'));
+    expect(other).toMatchObject({ matchResult: 'MISMATCH', failureCode: 'BANK_NAME_MISMATCH' });
+    expect(other.resolvedAccountName).toBeTruthy();
+  });
+
+  it('never echoes the account number, which §6.5 keeps only four digits of', async () => {
+    const result = await createFakeKycClient().verifyBankAccountName(account('0123456787'));
+    expect(JSON.stringify(result)).not.toContain('0123456787');
+  });
+
+  it('throws on the scripted error', async () => {
+    await expect(createFakeKycClient().verifyBankAccountName(account('0123456783'))).rejects.toThrow(
+      /fake kyc/i,
+    );
+  });
+});
+
+describe('createDojahClient', () => {
+  it('refuses every one of D3’s five methods rather than pretending to answer', async () => {
+    const dojah = createDojahClient({} as never);
+    // Awaited one at a time rather than built into an array first: five pending rejections sitting
+    // in a list are five unhandled rejections until the loop reaches them, which vitest reports as
+    // errors on the file rather than as the assertion passing.
+    const calls: (() => Promise<unknown>)[] = [
+      () => dojah.verifyNin(identityClaim('12345678904')),
+      () => dojah.verifyBvn(identityClaim('12345678904')),
+      () => dojah.checkLiveness({ selfieStorageRef: 'x', matchedAgainst: 'NIN' }),
+      () => dojah.verifyBusiness(business('1487327')),
+      () => dojah.verifyBankAccountName(account('0123456787')),
+    ];
+    for (const call of calls) await expect(call()).rejects.toThrow(/DOJAH/);
   });
 });

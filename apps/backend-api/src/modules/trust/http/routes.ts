@@ -5,11 +5,26 @@
 // No permission on any of them: these are a user acting on their own account, which is what the
 // CONSUMER scope already proves. The §11 admin surface — the review queue and the duplicate flags —
 // is T-052's, and it needs the RBAC rows T-037 adds.
+import { pageRequestSchema } from '@komtru/shared-types';
 import { requireUserId } from '../../../platform/http/principal.js';
 import { defineRoute, type RouteDefinition } from '../../../platform/http/route.js';
 import * as controllers from './controllers.js';
 import type { TrustHttpDeps } from './controllers.js';
-import { bvnBody, livenessBody, ninBody, statusResponse, submissionResponse } from './validations.js';
+import {
+  addressBody,
+  bankAccountBody,
+  businessBody,
+  bvnBody,
+  claimIdParam,
+  livenessBody,
+  ninBody,
+  socialProofBody,
+  socialProofCheckResponse,
+  socialProofListResponse,
+  socialProofResponse,
+  statusResponse,
+  submissionResponse,
+} from './validations.js';
 
 const VERIFY_YOURSELF = 'Sign in to verify your identity';
 const SEE_YOUR_STATUS = 'Sign in to see your verification status';
@@ -70,6 +85,107 @@ export function trustRoutes(deps: TrustHttpDeps): RouteDefinition[] {
       schema: { body: livenessBody, response: submissionResponse },
       handler: ({ actor, body }) =>
         controllers.submitLiveness(deps, { userId: requireUserId(actor, VERIFY_YOURSELF), body }),
+    }),
+
+    defineRoute({
+      method: 'post',
+      path: '/verification/business',
+      scope: 'CONSUMER',
+      summary: 'Submit a CAC registration number; the registry check runs in the background',
+      // Same reasoning as the identity submissions: `verification_requests_one_in_flight` makes a
+      // repeat a 409 rather than a second billed call, and the job id is the request id.
+      retryable: false,
+      rateLimit: { ...SUBMISSION_LIMIT, by: [...SUBMISSION_LIMIT.by] },
+      status: 202,
+      schema: { body: businessBody, response: submissionResponse },
+      handler: ({ actor, body }) =>
+        controllers.submitBusiness(deps, { userId: requireUserId(actor, VERIFY_YOURSELF), body }),
+    }),
+
+    defineRoute({
+      method: 'post',
+      path: '/verification/bank-account',
+      scope: 'CONSUMER',
+      summary: 'Name-match a settlement account against the CAC-registered business name',
+      retryable: false,
+      rateLimit: { ...SUBMISSION_LIMIT, by: [...SUBMISSION_LIMIT.by] },
+      status: 202,
+      schema: { body: bankAccountBody, response: submissionResponse },
+      handler: ({ actor, body }) =>
+        controllers.submitBankAccount(deps, { userId: requireUserId(actor, VERIFY_YOURSELF), body }),
+    }),
+
+    defineRoute({
+      method: 'post',
+      path: '/verification/address',
+      scope: 'CONSUMER',
+      summary: 'Submit a proof of address for review; no provider is called',
+      retryable: false,
+      rateLimit: { ...SUBMISSION_LIMIT, by: [...SUBMISSION_LIMIT.by] },
+      // 202 like the rest, and for a stronger reason: this one is waiting on a person, not a
+      // provider, so a 201 claiming the check is done would be doubly wrong.
+      status: 202,
+      schema: { body: addressBody, response: submissionResponse },
+      handler: ({ actor, body }) =>
+        controllers.submitAddress(deps, { userId: requireUserId(actor, VERIFY_YOURSELF), body }),
+    }),
+
+    defineRoute({
+      method: 'post',
+      path: '/verification/social-proof',
+      scope: 'CONSUMER',
+      summary: 'Claim an Instagram or X handle and get the one-time code to publish',
+      /**
+       * The one submission in this module that DOES want an idempotency key.
+       *
+       * The others are protected by `verification_requests_one_in_flight`. This one is not: the
+       * unique indexes on `social_proof_claims` are partial on `verified = true`, deliberately, so a
+       * user may abandon a mistyped claim and start another. A retry on a flaky connection would
+       * therefore succeed twice — issuing a second code and silently invalidating the one the user
+       * has just gone and put in their bio.
+       */
+      retryable: true,
+      rateLimit: { ...SUBMISSION_LIMIT, by: [...SUBMISSION_LIMIT.by] },
+      // 201: unlike every other route here, this one really has created the thing it returns.
+      status: 201,
+      schema: { body: socialProofBody, response: socialProofResponse },
+      handler: ({ actor, body }) =>
+        controllers.claimSocialProof(deps, { userId: requireUserId(actor, VERIFY_YOURSELF), body }),
+    }),
+
+    defineRoute({
+      method: 'post',
+      path: '/verification/social-proof/:id/confirm',
+      scope: 'CONSUMER',
+      summary: 'Ask us to look for the challenge code on the claimed profile',
+      // A repeat enqueues the same claim id, which the job treats as a redelivery, and the one-minute
+      // `last_checked_at` interval refuses it anyway. Genuinely harmless.
+      retryable: false,
+      rateLimit: { ...SUBMISSION_LIMIT, by: [...SUBMISSION_LIMIT.by] },
+      status: 202,
+      schema: { params: claimIdParam, response: socialProofCheckResponse },
+      handler: ({ actor, params }) =>
+        controllers.confirmSocialProof(deps, {
+          userId: requireUserId(actor, VERIFY_YOURSELF),
+          claimId: params.id,
+        }),
+    }),
+
+    defineRoute({
+      method: 'get',
+      path: '/verification/social-proof',
+      scope: 'CONSUMER',
+      summary: 'The handle claims on this account and whether each one is proved',
+      // Paginated for real, not just declared: only the VERIFIED claims are capped at one per
+      // platform, and the abandoned unverified ones beside them are not capped by anything.
+      paginated: 'page',
+      schema: { query: pageRequestSchema, response: socialProofListResponse },
+      handler: ({ actor, query }) =>
+        controllers.listSocialProofClaims(deps, {
+          userId: requireUserId(actor, SEE_YOUR_STATUS),
+          page: query.page,
+          limit: query.limit,
+        }),
     }),
 
     defineRoute({

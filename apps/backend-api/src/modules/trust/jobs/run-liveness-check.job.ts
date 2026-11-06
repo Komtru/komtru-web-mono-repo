@@ -1,6 +1,6 @@
 // The liveness check. It holds no secret: the selfie is an M20 file reference and the request row
 // carries it, so the job payload is a request id and nothing else.
-import { decideLivenessOutcome } from '../domain/decision.js';
+import { classifyLivenessFailure, decideLivenessOutcome } from '../domain/decision.js';
 import type { LivenessCheckJob } from '../domain/queues.js';
 import { claimRequest, evaluateLevel, pushOutcome, recordCall, timeProviderCall } from './outcome.js';
 import type { TrustJobDeps } from './deps.js';
@@ -20,7 +20,9 @@ export async function runLivenessCheck(deps: TrustJobDeps, data: LivenessCheckJo
   const facts = await deps.store.identityFacts(request.userId);
   const matchedAgainst = facts.latestVerifiedIdentifier;
   if (!matchedAgainst) {
-    const reason = 'There is no verified NIN or BVN to match this photo against';
+    // The one refusal in this file with exactly one cause, and the one VF1's copy must not blame on
+    // lighting — see `describeRejection('LIVENESS_NO_IDENTIFIER')`.
+    const reason = 'LIVENESS_NO_IDENTIFIER';
     await deps.store.applyLivenessOutcome({
       request,
       // The row still records WHICH document was expected, so the refusal is legible later. NIN is
@@ -58,6 +60,8 @@ export async function runLivenessCheck(deps: TrustJobDeps, data: LivenessCheckJo
   );
 
   const decision = decideLivenessOutcome(result.verdict, result.livenessPassed);
+  // A code, not the provider's sentence — see the note in run-identity-check.job.ts.
+  const rejectionReason = decision.markVerified ? undefined : classifyLivenessFailure(result);
   const applied = await deps.store.applyLivenessOutcome({
     request,
     matchedAgainst,
@@ -66,7 +70,7 @@ export async function runLivenessCheck(deps: TrustJobDeps, data: LivenessCheckJo
     provider: deps.adapter.provider,
     providerReference: result.providerReference,
     requestStatus: decision.requestStatus,
-    ...(result.failureReason === undefined ? {} : { rejectionReason: result.failureReason }),
+    ...(rejectionReason === undefined ? {} : { rejectionReason }),
   });
 
   // Decided elsewhere while the provider answered: grant nothing, and say nothing (see the

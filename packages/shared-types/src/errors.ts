@@ -53,6 +53,32 @@ export const PROBLEM_CODES = [
   // "verify your contact details first" and links to that screen, which it cannot do from a bare
   // CONFLICT — and the user's next action is a different one from every other 409 on this surface.
   'CONTACT_VERIFICATION_REQUIRED',
+  /**
+   * T-051. M6 §4's level-3 ladder, as the two refusals a client can act on.
+   *
+   * `IDENTITY_VERIFICATION_REQUIRED` is "a business is operated by a verified human" — the CAC
+   * submission refuses until level 2 is held. `BUSINESS_VERIFICATION_REQUIRED` is the next rung: the
+   * bank name-match has nothing to match the account against until a CAC-registered business name
+   * is on file. Both are 409s on the happy path of a real user in the wrong order, and each one
+   * sends the client to a DIFFERENT screen — which a bare CONFLICT cannot do, and which is the whole
+   * reason they are not one code.
+   */
+  'IDENTITY_VERIFICATION_REQUIRED',
+  'BUSINESS_VERIFICATION_REQUIRED',
+  /**
+   * T-051. A social-proof challenge code whose 24 hours are up (M6 §6.6).
+   *
+   * Distinct from `NOT_FOUND` and from a plain `CONFLICT` because the client's next action is
+   * specific and automatable: claim the handle again for a fresh code. A code that stayed valid
+   * indefinitely would mean a bio edited once, months ago, by someone who has since sold the
+   * account, still proving ownership today.
+   */
+  'CHALLENGE_EXPIRED',
+  // Deliberately NOT added: `TOO_MANY_REQUESTS`. `RATE_LIMITED` above is already this platform's
+  // 429, used by the route limiter, by identity's party-lookup budget and by the OTP resend
+  // throttle, and it already carries `retryAfter` as an extension member. The social-proof
+  // re-check interval is the same fact — "you did this too recently" — and a second spelling of it
+  // would force every client to branch on two codes to render one message.
 ] as const;
 
 export const problemCodeSchema = z.enum(PROBLEM_CODES);

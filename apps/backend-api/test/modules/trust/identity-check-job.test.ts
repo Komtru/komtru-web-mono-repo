@@ -145,13 +145,15 @@ describe('runIdentityCheck', () => {
     });
   });
 
-  it('rejects terminally on FAILED, carrying the provider’s reason', async () => {
+  it('rejects terminally on FAILED, carrying a rejection CODE and not the provider’s sentence', async () => {
+    // The provider's prose used to be written straight into `rejection_reason`, which made every
+    // rejection render as NEEDS_HUMAN_REVIEW on VF1. See rejection-codes.test.ts for the full case.
     const { store } = await run({
       result: { verdict: 'FAILED', providerReference: 'r', failureReason: 'no record matched' },
     });
     expect(store.identityOutcomes[0]).toMatchObject({
       requestStatus: 'REJECTED',
-      rejectionReason: 'no record matched',
+      rejectionReason: 'ID_NOT_FOUND',
     });
   });
 

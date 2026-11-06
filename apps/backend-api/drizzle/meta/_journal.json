@@ -218,6 +218,13 @@
       "when": 1791291365808,
       "tag": "0030_trust_level_changes_append_only",
       "breakpoints": true
+    },
+    {
+      "idx": 31,
+      "version": "7",
+      "when": 1793978504633,
+      "tag": "0031_trust_business_and_social_proof",
+      "breakpoints": true
     }
   ]
 }

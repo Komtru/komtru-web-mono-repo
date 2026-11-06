@@ -9,13 +9,27 @@
 // It signs its work as `FAKE`, which is a value in the `kyc_provider` enum, so "which levels were
 // granted by nobody" stays a single query the day real credentials arrive.
 import type {
+  BankAccountClaim,
+  BankMatchCheckResult,
+  BusinessClaim,
+  BusinessCheckResult,
   IdentityClaim,
   IdentityCheckResult,
   KycProviderAdapter,
   LivenessCheckInput,
   LivenessCheckResult,
 } from '../../domain/provider.js';
-import { livenessScriptFor, referenceFor, scoreFor, scriptFor } from './fake-script.js';
+import {
+  bankMatchScriptFor,
+  businessScriptFor,
+  fuzzyVariantOf,
+  livenessScriptFor,
+  referenceFor,
+  registeredNameFor,
+  scoreFor,
+  scriptFor,
+  UNRELATED_ACCOUNT_NAME,
+} from './fake-script.js';
 
 /** Scripted for a number ending in 3: the adapter throwing, which the job's retry budget absorbs. */
 class FakeProviderError extends Error {
@@ -48,6 +62,131 @@ const identityCheck = (operation: 'nin' | 'bvn', claim: IdentityClaim): Identity
   return result;
 };
 
+/**
+ * A scripted CAC lookup.
+ *
+ * Note what is NOT on the result: the submitter's name. It travels in on the claim so the officer
+ * question can be answered and is persisted nowhere in this module (§6.5), so echoing it back would
+ * put it on the one object the job then writes rows from.
+ */
+const businessCheck = (claim: BusinessClaim): BusinessCheckResult => {
+  const outcome = businessScriptFor(claim.rcNumber);
+  if (outcome === 'ERROR') throw new FakeProviderError('cac');
+
+  const providerReference = referenceFor('cac');
+  if (outcome === 'PENDING') return { verdict: 'PENDING', providerReference };
+  if (outcome === 'NOT_FOUND') {
+    return {
+      verdict: 'FAILED',
+      providerReference,
+      cacStatus: 'not found',
+      failureReason: 'No registration matched that number',
+      failureCode: 'CAC_NOT_FOUND',
+    };
+  }
+  if (outcome === 'LOW_CONFIDENCE') {
+    return {
+      verdict: 'LOW_CONFIDENCE',
+      providerReference,
+      registeredBusinessName: registeredNameFor(claim.rcNumber),
+      businessType: 'BUSINESS_NAME',
+      cacStatus: 'active',
+      failureReason: 'The registration matched only weakly',
+    };
+  }
+
+  const shared = {
+    // A PASSED verdict throughout the rest: the registration WAS found. Whether it is a business
+    // this person may trade as is `decideBusinessOutcome`'s call, not the registry's, and
+    // collapsing the two here is the mistake that decision function exists to prevent.
+    verdict: 'PASSED' as const,
+    providerReference,
+    registeredBusinessName: registeredNameFor(claim.rcNumber),
+    businessType: 'LIMITED_LIABILITY',
+  };
+  if (outcome === 'INACTIVE') {
+    return {
+      ...shared,
+      cacStatus: 'inactive',
+      officersMatch: true,
+      failureReason: 'The registration is not active at the CAC',
+      failureCode: 'CAC_INACTIVE',
+    };
+  }
+  if (outcome === 'OFFICER_MISMATCH') {
+    return {
+      ...shared,
+      cacStatus: 'active',
+      officersMatch: false,
+      failureReason: 'The submitter is not a registered officer',
+      failureCode: 'CAC_OFFICER_MISMATCH',
+    };
+  }
+  // OFFICER_UNKNOWN leaves `officersMatch` off entirely rather than setting it false: §8 is honest
+  // that much of the KYB suite is implied rather than confirmed, and "we did not check" is a
+  // different fact from "it did not match". `decideBusinessOutcome` sends the first to a human.
+  if (outcome === 'OFFICER_UNKNOWN') return { ...shared, cacStatus: 'active' };
+  return { ...shared, cacStatus: 'active', officersMatch: true };
+};
+
+/**
+ * A scripted bank name-match.
+ *
+ * The account number is read and never returned: §6.5 keeps four digits of it and M8's
+ * `payout_accounts` is the account of record, so a full number on this object would be a second copy
+ * of it travelling through the job.
+ */
+const bankMatchCheck = (claim: BankAccountClaim): BankMatchCheckResult => {
+  const outcome = bankMatchScriptFor(claim.accountNumber);
+  if (outcome === 'ERROR') throw new FakeProviderError('bank name-match');
+
+  const providerReference = referenceFor('bank');
+  const seed = `bank:${claim.bankCode}:${claim.accountNumber}`;
+  if (outcome === 'PENDING') {
+    return { verdict: 'PENDING', providerReference, matchResult: 'MISMATCH' };
+  }
+  if (outcome === 'ACCOUNT_NOT_FOUND') {
+    // No `resolvedAccountName` at all — which is how `classifyBankMatchFailure` tells an account the
+    // bank does not recognise from one that is real and held by somebody else.
+    return {
+      verdict: 'FAILED',
+      providerReference,
+      matchResult: 'MISMATCH',
+      matchScore: scoreFor('FAILED', seed),
+      failureReason: 'The bank did not recognise that account number',
+      failureCode: 'BANK_ACCOUNT_NOT_FOUND',
+    };
+  }
+  if (outcome === 'FUZZY') {
+    return {
+      verdict: 'PASSED',
+      providerReference,
+      resolvedAccountName: fuzzyVariantOf(claim.expectedName),
+      matchResult: 'FUZZY_MATCH',
+      matchScore: scoreFor('LOW_CONFIDENCE', seed),
+      failureReason: 'The account name is close to the registered name but not identical',
+    };
+  }
+  if (outcome === 'NAME_MISMATCH') {
+    return {
+      verdict: 'FAILED',
+      providerReference,
+      resolvedAccountName: UNRELATED_ACCOUNT_NAME,
+      matchResult: 'MISMATCH',
+      matchScore: scoreFor('FAILED', seed),
+      failureReason: 'The account is held in a different name',
+      failureCode: 'BANK_NAME_MISMATCH',
+    };
+  }
+  return {
+    verdict: 'PASSED',
+    providerReference,
+    resolvedAccountName: claim.expectedName,
+    matchResult: 'EXACT',
+    matchScore: scoreFor('PASSED', seed),
+  };
+};
+
 export function createFakeKycClient(): KycProviderAdapter {
   return {
     provider: 'FAKE',
@@ -74,5 +213,8 @@ export function createFakeKycClient(): KycProviderAdapter {
         }
         return result;
       }),
+
+    verifyBusiness: (claim) => Promise.resolve().then(() => businessCheck(claim)),
+    verifyBankAccountName: (claim) => Promise.resolve().then(() => bankMatchCheck(claim)),
   };
 }

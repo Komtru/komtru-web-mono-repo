@@ -15,6 +15,16 @@ export const LEVEL_NAMES: readonly VerificationLevelName[] = VERIFICATION_LEVELS
 /** The first level this module may grant (§4): below it is identity's business alone. */
 export const MIN_TRUST_LEVEL = 2;
 export const IDENTITY_VERIFIED_LEVEL = 2;
+export const BUSINESS_VERIFIED_LEVEL = 3;
+/**
+ * §4's level 4, reserved and deliberately not granted by anything in this module.
+ *
+ * "Enhanced due diligence" is a human compliance process, and the spec says outright that
+ * over-specifying it now would guess at requirements that should come from a compliance function
+ * that does not exist yet. A proof-of-address check declares this as its `target_level` because that
+ * is the tier the evidence is FOR; no code path turns it into a grant.
+ */
+export const ENHANCED_LEVEL = 4;
 
 /**
  * Takes a plain `string` on purpose: it is fed by `users.verification_level` read back out of the
@@ -79,3 +89,36 @@ export interface IdentityFacts {
  */
 export const earnedIdentityLevel = (facts: IdentityFacts): boolean =>
   facts.identifierVerified && facts.livenessPassed;
+
+export interface BusinessFacts {
+  /**
+   * The user's level right now, read from `users.verification_level`.
+   *
+   * It is a parameter rather than something this function infers from the other two, because §4's
+   * level-3 rule is "level 2 **plus** CAC plus bank match" and the level-2 half is not re-derivable
+   * here: a user can hold a verified CAC and a matched business account while their identity level
+   * has since been revoked (D6), and the honest answer then is no.
+   */
+  currentLevel: number;
+  /** A `business_verifications` row with a `verified_at` — the CAC check passed. */
+  cacVerified: boolean;
+  /**
+   * A `bank_account_name_matches` row whose result was `EXACT`, on an approved request.
+   *
+   * `FUZZY_MATCH` deliberately does not count. See `decideBankMatchOutcome`: a near-miss between a
+   * registered business name and an account holder's name is exactly the ambiguity a human should
+   * settle, and auto-granting a level on it is how a payout ends up going to a name nobody checked.
+   */
+  businessBankMatched: boolean;
+}
+
+/**
+ * §4's level-3 rule, stated once: level 2, plus a CAC registration check, plus a business bank
+ * account name-match.
+ *
+ * All three, and the first one is not a formality. A business is operated by a verified human, so a
+ * user at level 1 holding a real CAC number must not jump to `BUSINESS_VERIFIED` — the CAC proves a
+ * company exists, not that the person submitting it is who they say they are.
+ */
+export const earnedBusinessLevel = (facts: BusinessFacts): boolean =>
+  facts.currentLevel >= IDENTITY_VERIFIED_LEVEL && facts.cacVerified && facts.businessBankMatched;

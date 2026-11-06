@@ -154,6 +154,11 @@
       "tag": "0030_trust_level_changes_append_only",
       "when": 1791291365808,
       "sha256": "9be12311087223d9e8e2d6d35e41960fa0dfc278d72139d436398c6d8395858d"
+    },
+    {
+      "tag": "0031_trust_business_and_social_proof",
+      "when": 1793978504633,
+      "sha256": "facc1b7724df1e028c6e665407f46b2dcaa22ffd32555387cdb018a19752aa2f"
     }
   ]
 }

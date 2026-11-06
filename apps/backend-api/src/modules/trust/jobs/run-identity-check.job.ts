@@ -6,7 +6,7 @@
 // the one time it is not.
 import { z } from 'zod';
 import { identifierHash, maskIdentifier } from '../domain/identifiers.js';
-import { decideIdentityOutcome } from '../domain/decision.js';
+import { classifyIdentityFailure, decideIdentityOutcome } from '../domain/decision.js';
 import type { IdentityCheckJob } from '../domain/queues.js';
 import type { IdentityCheckResult } from '../domain/provider.js';
 import type { IdentifierType } from '../infrastructure/postgres/schema/enums.js';
@@ -62,17 +62,29 @@ export async function runIdentityCheck(deps: TrustJobDeps, data: IdentityCheckJo
     timed,
   );
 
-  await applyOutcome(deps, request, type, claim.identifier, result);
+  await applyOutcome(deps, request, type, claim, result);
 }
 
 async function applyOutcome(
   deps: TrustJobDeps,
   request: VerificationRequest,
   type: IdentifierType,
-  identifier: string,
+  claim: z.infer<typeof claimSchema>,
   result: IdentityCheckResult,
 ): Promise<void> {
+  const identifier = claim.identifier;
   const decision = decideIdentityOutcome(result.verdict);
+  /**
+   * The CODE, never the provider's sentence.
+   *
+   * `verification_requests.rejection_reason` is read back by `describeRejection`, which turns a code
+   * into VF1's heading, body and remedy. An earlier version wrote `result.failureReason` here — the
+   * vendor's own prose — and because `describeRejection` is deliberately forgiving on a code it does
+   * not know, EVERY rejection then rendered as `NEEDS_HUMAN_REVIEW`: a seller with a blurry photo
+   * was told a person was reviewing it when nobody was, and offered a wait where the screen offers a
+   * resubmit. The provider's words stay in `kyc_provider_calls` and the log, for support.
+   */
+  const rejectionReason = decision.markVerified ? undefined : classifyIdentityFailure(result);
   const hash = identifierHash(deps.hasher, type, identifier);
   const shared = {
     request,
@@ -90,9 +102,12 @@ async function applyOutcome(
       ...shared,
       ...(result.dobMatch === undefined ? {} : { dobMatch: result.dobMatch }),
       ...(result.phoneMatch === undefined ? {} : { phoneMatch: result.phoneMatch }),
+      // The name that PASSED the provider's match, kept for the CAC officer match (T-051).
+      verifiedFirstName: claim.firstName,
+      verifiedLastName: claim.lastName,
       requestStatus: decision.requestStatus,
       markVerified: decision.markVerified,
-      ...(result.failureReason === undefined ? {} : { rejectionReason: result.failureReason }),
+      ...(rejectionReason === undefined ? {} : { rejectionReason }),
     });
   } catch (error) {
     if (!isDuplicateIdentifier(error, type)) throw error;

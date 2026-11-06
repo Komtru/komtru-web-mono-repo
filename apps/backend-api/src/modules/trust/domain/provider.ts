@@ -5,9 +5,16 @@
 // question is *which* licensed reseller, and that answer will change — the vendor space is young and
 // price-competitive. One interface, one implementation per vendor, and switching is a config flip.
 //
-// T-051 adds `verifyBusiness` and `verifyBankAccountName` to this same interface; D3 names five
-// methods and this ticket uses three. The two absent ones are a scope boundary, not an omission.
-import type { IdentifierType, KycProvider } from '../infrastructure/postgres/schema/enums.js';
+// T-051 added `verifyBusiness` and `verifyBankAccountName`, so all five of D3's methods are now
+// here and the interface is complete as the spec describes it. Address proof is NOT a sixth: §6.6
+// gives `address_checks` no provider columns at all, which is the spec saying a proof of address is
+// a document a person weighs rather than a verdict a vendor returns.
+import type { RejectionCode } from './rejection.js';
+import type {
+  BankMatchResult,
+  IdentifierType,
+  KycProvider,
+} from '../infrastructure/postgres/schema/enums.js';
 
 /**
  * What a provider can say about a check.
@@ -41,8 +48,24 @@ export interface IdentityCheckResult {
   dobMatch?: boolean;
   /** BVN only: the BVN-registered phone against M1's verified one. */
   phoneMatch?: boolean;
-  /** Why the provider said no, in the provider's terms. Shown to the user through §11's status. */
+  /**
+   * Why the provider said no, in the provider's own terms.
+   *
+   * For logs and for whoever is reading a vendor's documentation beside a failing call. It is NOT
+   * what the user is shown and it is NOT what is persisted — `failureCode` is both (see
+   * `domain/rejection.ts`), because a provider's error string cannot tell VF1 whether to offer a
+   * resubmit or a support link.
+   */
   failureReason?: string;
+  /**
+   * The adapter's own mapping of its answer onto this platform's rejection taxonomy.
+   *
+   * It belongs to the adapter because only the adapter knows which of its vendor's twelve failure
+   * strings mean "blurry photo" and which mean "no such record" — that is the one piece of
+   * provider-specific knowledge the rest of the module must not contain. Absent means "it failed and
+   * I cannot say why", and `classifyIdentityFailure` supplies the honest default.
+   */
+  failureCode?: RejectionCode;
 }
 
 export interface LivenessCheckInput {
@@ -58,6 +81,62 @@ export interface LivenessCheckResult {
   matchScore: number;
   livenessPassed: boolean;
   failureReason?: string;
+  failureCode?: RejectionCode;
+}
+
+/**
+ * What goes to a CAC check. Transient, like `IdentityClaim` — but only half of it is sensitive.
+ *
+ * The RC number is public record and IS persisted (§6.5). The submitter's name is not persisted
+ * anywhere in this module and travels only so the provider can answer the question that decides
+ * `officers_match`: is this person listed as an officer of that registration?
+ */
+export interface BusinessClaim {
+  /** The normalised RC number (see `normaliseRcNumber`). */
+  rcNumber: string;
+  /** The submitter, for the officer check. Not stored. */
+  firstName: string;
+  lastName: string;
+}
+
+export interface BusinessCheckResult {
+  verdict: CheckVerdict;
+  providerReference: string;
+  /** What CAC has on file. This becomes the `expected_name` of the bank match that follows. */
+  registeredBusinessName?: string;
+  /** `BUSINESS_NAME`, `LIMITED_LIABILITY`, … — whatever the registry calls it. */
+  businessType?: string;
+  /** The registry's own status string: `active`, `inactive`, `not found`. */
+  cacStatus?: string;
+  /** Whether the submitter is a registered officer. Undefined when the provider does not say. */
+  officersMatch?: boolean;
+  failureReason?: string;
+  failureCode?: RejectionCode;
+}
+
+/**
+ * What goes to a bank name-match.
+ *
+ * `accountNumber` is the whole number and is held for exactly one call, the same contract
+ * `IdentityClaim.identifier` has: §6.5 keeps only the last four digits, because M8's
+ * `payout_accounts` is the account of record and a second copy here is a second thing to leak.
+ */
+export interface BankAccountClaim {
+  accountNumber: string;
+  bankCode: string;
+  /** The name the account must match — the CAC-registered business name, never a typed one. */
+  expectedName: string;
+}
+
+export interface BankMatchCheckResult {
+  verdict: CheckVerdict;
+  providerReference: string;
+  /** What the bank returned for that account. Absent when the account could not be resolved. */
+  resolvedAccountName?: string;
+  matchResult: BankMatchResult;
+  matchScore?: number;
+  failureReason?: string;
+  failureCode?: RejectionCode;
 }
 
 export interface KycProviderAdapter {
@@ -66,4 +145,6 @@ export interface KycProviderAdapter {
   verifyNin(claim: IdentityClaim): Promise<IdentityCheckResult>;
   verifyBvn(claim: IdentityClaim): Promise<IdentityCheckResult>;
   checkLiveness(input: LivenessCheckInput): Promise<LivenessCheckResult>;
+  verifyBusiness(claim: BusinessClaim): Promise<BusinessCheckResult>;
+  verifyBankAccountName(claim: BankAccountClaim): Promise<BankMatchCheckResult>;
 }

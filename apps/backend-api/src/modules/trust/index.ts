@@ -14,4 +14,20 @@ export * from './infrastructure/postgres/schema/index.js';
 
 export { createTrustModule, EXPIRE_STALE_CRON, type TrustModuleOptions } from './module.js';
 export * from './domain/events.js';
-export { TRUST_QUEUES, TRUST_SCHEDULES, VERIFICATION_SOCKET_EVENT } from './domain/queues.js';
+export {
+  TRUST_QUEUES,
+  TRUST_SCHEDULES,
+  SOCIAL_PROOF_SOCKET_EVENT,
+  VERIFICATION_SOCKET_EVENT,
+} from './domain/queues.js';
+/**
+ * T-073's read, and the one function another module is meant to call into this one by name.
+ *
+ * Exported as a question about an ACCOUNT rather than about a verification request, because that is
+ * what T-073 holds: a `payout_accounts` row has a bank code and a masked number and no request id,
+ * and should not have to acquire one. M6 answers "does the name match"; M8 owns the account.
+ */
+export { readBankNameMatch } from './services/bankMatch.service.js';
+export type { BankNameMatchRecord } from './infrastructure/postgres/store.js';
+/** What VF1 and BVR1 render, so a consumer can describe a stored code without re-deriving the copy. */
+export { describeRejection, isRejectionCode, type RejectionReason } from './domain/rejection.js';

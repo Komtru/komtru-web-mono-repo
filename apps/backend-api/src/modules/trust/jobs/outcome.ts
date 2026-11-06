@@ -8,7 +8,12 @@
 // one import away from a request handler that can reach the adapter itself. Nothing on the request
 // path calls any of this.
 import { isUniqueViolation } from '../../../db/errors.js';
-import { earnedIdentityLevel, IDENTITY_VERIFIED_LEVEL } from '../domain/levels.js';
+import {
+  BUSINESS_VERIFIED_LEVEL,
+  earnedBusinessLevel,
+  earnedIdentityLevel,
+  IDENTITY_VERIFIED_LEVEL,
+} from '../domain/levels.js';
 import type { CheckVerdict } from '../domain/provider.js';
 import type { IdentifierType, VerificationRequestStatus } from '../infrastructure/postgres/schema/enums.js';
 import type { VerificationRequest } from '../infrastructure/postgres/schema/requests.js';
@@ -114,6 +119,33 @@ export async function evaluateLevel(deps: TrustJobDeps, request: VerificationReq
     userId: request.userId,
     toLevel: IDENTITY_VERIFIED_LEVEL,
     reason: 'A verified identity number and a passed liveness check',
+    actorType: 'PROVIDER_AUTO',
+    triggeringRequestId: request.id,
+    provider: deps.adapter.provider,
+  });
+}
+
+/**
+ * §4's level-3 rule, applied: level 2, plus a verified CAC, plus an EXACT business bank match.
+ *
+ * Re-read rather than inferred from the outcome just written, for the two reasons `evaluateLevel`
+ * gives and one more that is specific to level 3: the level-2 half is not derivable from the other
+ * two at all. A user can hold a verified CAC and a matched business account while their identity
+ * level has since been revoked (D6), and the honest answer then is no — which is why
+ * `BusinessFacts.currentLevel` is a field rather than a calculation.
+ *
+ * Called from BOTH the CAC job and the bank-match job, because either one can be the last of the
+ * three to land and neither knows which it is. Granting is idempotent (`decideLevelChange` only
+ * ever moves up), so the duplicate call is free.
+ */
+export async function evaluateBusinessLevel(deps: TrustJobDeps, request: VerificationRequest): Promise<void> {
+  const facts = await deps.store.businessFacts(request.userId);
+  if (!earnedBusinessLevel(facts)) return;
+
+  await deps.store.grantLevel({
+    userId: request.userId,
+    toLevel: BUSINESS_VERIFIED_LEVEL,
+    reason: 'A verified CAC registration and a business bank account in its name',
     actorType: 'PROVIDER_AUTO',
     triggeringRequestId: request.id,
     provider: deps.adapter.provider,
