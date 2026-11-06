@@ -159,6 +159,16 @@
       "tag": "0031_trust_business_and_social_proof",
       "when": 1793978504633,
       "sha256": "facc1b7724df1e028c6e665407f46b2dcaa22ffd32555387cdb018a19752aa2f"
+    },
+    {
+      "tag": "0032_config_schema",
+      "when": 1793985691614,
+      "sha256": "4fefb1a1e3ee7352bdc43747fa73fe62f98331740cc95436eb1be2db8f2db5d8"
+    },
+    {
+      "tag": "0033_config_change_log_append_only",
+      "when": 1793985692372,
+      "sha256": "d565d0691bf885f477067ea1764c8ea48fdb80412bd9510cc341deb307d56853"
     }
   ]
 }
