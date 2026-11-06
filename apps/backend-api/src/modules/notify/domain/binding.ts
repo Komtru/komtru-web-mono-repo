@@ -10,6 +10,7 @@
 // event definition through that module's index.ts barrel.
 import type { EventDefinition, NotificationChannel } from '@komtru/shared-types';
 import type { z } from 'zod';
+import { cityRequestDecided } from '../../geo/index.js';
 import {
   identityDeviceSignedInEvent,
   identityOtpRequestedEvent,
@@ -71,6 +72,27 @@ const whenFor = (iso: string): string =>
     timeZone: 'Africa/Lagos',
   }).format(new Date(iso));
 
+/**
+ * The sentence for each outcome of a city request. A rejection's reason is staff-written copy shown
+ * to the requester as written, which is what the ticket asks for ("reject with reason").
+ */
+export function cityRequestOutcomeLine(input: {
+  status: 'ADDED' | 'MERGED' | 'REJECTED';
+  stateName: string;
+  requestedName: string;
+  cityName: string | null;
+  reason: string | null;
+}): string {
+  switch (input.status) {
+    case 'ADDED':
+      return `Good news: ${input.cityName ?? input.requestedName} is now on Komtru. Pick it in ${input.stateName}.`;
+    case 'MERGED':
+      return `We already list this place as ${input.cityName ?? input.requestedName}. Pick that in ${input.stateName}.`;
+    case 'REJECTED':
+      return `We could not add it.${input.reason ? ` ${input.reason}` : ''}`;
+  }
+}
+
 export const BINDINGS: NotificationBinding[] = [
   defineBinding({
     subscriber: 'notify.on-otp-requested',
@@ -129,6 +151,22 @@ export const BINDINGS: NotificationBinding[] = [
       // detected, so the envelope's `occurredAt` and "now" differ by the relay's latency. Close
       // enough for copy that says "we signed you out at".
       { userId: payload.userId, variables: { detectedAt: whenFor(new Date().toISOString()) } },
+    ],
+  }),
+
+  defineBinding({
+    subscriber: 'notify.on-city-request-decided',
+    event: cityRequestDecided,
+    templateKey: 'geo.city_request.decided',
+    recipients: (payload) => [
+      {
+        userId: payload.requesterUserId,
+        variables: {
+          requestedName: payload.requestedName,
+          stateName: payload.stateName,
+          outcomeLine: cityRequestOutcomeLine(payload),
+        },
+      },
     ],
   }),
 ];
