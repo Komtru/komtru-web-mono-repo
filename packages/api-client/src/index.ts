@@ -5,6 +5,7 @@
 //
 //   @komtru/api-client/browser   the IndexedDB store for the durable retry queue
 //   @komtru/api-client/react     TanStack Query helpers and the Socket.IO provider
+export * from './addresses.js';
 export * from './auth/session.js';
 export * from './client.js';
 export * from './contracts.js';
