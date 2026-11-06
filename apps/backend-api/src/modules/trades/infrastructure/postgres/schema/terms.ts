@@ -25,11 +25,11 @@ import { trades } from './trades.js';
  * addresses have no landmark worth writing, and an empty one is honest where a made-up one is not.
  */
 const addressShape = (column: PgColumn): SQL =>
-  sql`${column} ?& array['street', 'landmark', 'recipient', 'state_id', 'city_id']
+  sql`${column} IS NULL OR (${column} ?& array['street', 'landmark', 'recipient', 'state_id', 'city_id']
       AND length(coalesce(${column} ->> 'street', '')) > 0
       AND length(coalesce(${column} ->> 'recipient', '')) > 0
       AND length(coalesce(${column} ->> 'state_id', '')) > 0
-      AND length(coalesce(${column} ->> 'city_id', '')) > 0`;
+      AND length(coalesce(${column} ->> 'city_id', '')) > 0)`;
 
 export const tradeTermsVersions = trade.table(
   'trade_terms_versions',

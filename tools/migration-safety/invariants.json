@@ -321,12 +321,12 @@
     {
       "table": "trade.trade_terms_versions",
       "name": "trade_terms_delivery_address_shape",
-      "definition": "CHECK (((delivery_address ?& ARRAY['street'::text, 'landmark'::text, 'recipient'::text, 'state_id'::text, 'city_id'::text]) AND (length(COALESCE((delivery_address ->> 'street'::text), ''::text)) > 0) AND (length(COALESCE((delivery_address ->> 'recipient'::text), ''::text)) > 0) AND (length(COALESCE((delivery_address ->> 'state_id'::text), ''::text)) > 0) AND (length(COALESCE((delivery_address ->> 'city_id'::text), ''::text)) > 0)))"
+      "definition": "CHECK (((delivery_address IS NULL) OR ((delivery_address ?& ARRAY['street'::text, 'landmark'::text, 'recipient'::text, 'state_id'::text, 'city_id'::text]) AND (length(COALESCE((delivery_address ->> 'street'::text), ''::text)) > 0) AND (length(COALESCE((delivery_address ->> 'recipient'::text), ''::text)) > 0) AND (length(COALESCE((delivery_address ->> 'state_id'::text), ''::text)) > 0) AND (length(COALESCE((delivery_address ->> 'city_id'::text), ''::text)) > 0)))) NOT VALID"
     },
     {
       "table": "trade.trade_terms_versions",
       "name": "trade_terms_ships_from_address_shape",
-      "definition": "CHECK (((ships_from_address ?& ARRAY['street'::text, 'landmark'::text, 'recipient'::text, 'state_id'::text, 'city_id'::text]) AND (length(COALESCE((ships_from_address ->> 'street'::text), ''::text)) > 0) AND (length(COALESCE((ships_from_address ->> 'recipient'::text), ''::text)) > 0) AND (length(COALESCE((ships_from_address ->> 'state_id'::text), ''::text)) > 0) AND (length(COALESCE((ships_from_address ->> 'city_id'::text), ''::text)) > 0)))"
+      "definition": "CHECK (((ships_from_address IS NULL) OR ((ships_from_address ?& ARRAY['street'::text, 'landmark'::text, 'recipient'::text, 'state_id'::text, 'city_id'::text]) AND (length(COALESCE((ships_from_address ->> 'street'::text), ''::text)) > 0) AND (length(COALESCE((ships_from_address ->> 'recipient'::text), ''::text)) > 0) AND (length(COALESCE((ships_from_address ->> 'state_id'::text), ''::text)) > 0) AND (length(COALESCE((ships_from_address ->> 'city_id'::text), ''::text)) > 0)))) NOT VALID"
     },
     {
       "table": "trade.trade_terms_versions",

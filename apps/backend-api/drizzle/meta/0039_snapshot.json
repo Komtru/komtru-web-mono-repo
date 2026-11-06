@@ -1,5 +1,5 @@
 {
-  "id": "2c674fdb-e34d-466e-a860-53dd903302f4",
+  "id": "90b476fa-ff40-4aa8-a535-0067cd716ea6",
   "prevId": "0fd11209-d71a-4a5f-90e5-f5c52bec7e6d",
   "version": "7",
   "dialect": "postgresql",
@@ -7634,11 +7634,11 @@
         },
         "trade_terms_delivery_address_shape": {
           "name": "trade_terms_delivery_address_shape",
-          "value": "\"trade\".\"trade_terms_versions\".\"delivery_address\" ?& array['street', 'landmark', 'recipient', 'state_id', 'city_id']\n      AND length(coalesce(\"trade\".\"trade_terms_versions\".\"delivery_address\" ->> 'street', '')) > 0\n      AND length(coalesce(\"trade\".\"trade_terms_versions\".\"delivery_address\" ->> 'recipient', '')) > 0\n      AND length(coalesce(\"trade\".\"trade_terms_versions\".\"delivery_address\" ->> 'state_id', '')) > 0\n      AND length(coalesce(\"trade\".\"trade_terms_versions\".\"delivery_address\" ->> 'city_id', '')) > 0"
+          "value": "\"trade\".\"trade_terms_versions\".\"delivery_address\" IS NULL OR (\"trade\".\"trade_terms_versions\".\"delivery_address\" ?& array['street', 'landmark', 'recipient', 'state_id', 'city_id']\n      AND length(coalesce(\"trade\".\"trade_terms_versions\".\"delivery_address\" ->> 'street', '')) > 0\n      AND length(coalesce(\"trade\".\"trade_terms_versions\".\"delivery_address\" ->> 'recipient', '')) > 0\n      AND length(coalesce(\"trade\".\"trade_terms_versions\".\"delivery_address\" ->> 'state_id', '')) > 0\n      AND length(coalesce(\"trade\".\"trade_terms_versions\".\"delivery_address\" ->> 'city_id', '')) > 0)"
         },
         "trade_terms_ships_from_address_shape": {
           "name": "trade_terms_ships_from_address_shape",
-          "value": "\"trade\".\"trade_terms_versions\".\"ships_from_address\" ?& array['street', 'landmark', 'recipient', 'state_id', 'city_id']\n      AND length(coalesce(\"trade\".\"trade_terms_versions\".\"ships_from_address\" ->> 'street', '')) > 0\n      AND length(coalesce(\"trade\".\"trade_terms_versions\".\"ships_from_address\" ->> 'recipient', '')) > 0\n      AND length(coalesce(\"trade\".\"trade_terms_versions\".\"ships_from_address\" ->> 'state_id', '')) > 0\n      AND length(coalesce(\"trade\".\"trade_terms_versions\".\"ships_from_address\" ->> 'city_id', '')) > 0"
+          "value": "\"trade\".\"trade_terms_versions\".\"ships_from_address\" IS NULL OR (\"trade\".\"trade_terms_versions\".\"ships_from_address\" ?& array['street', 'landmark', 'recipient', 'state_id', 'city_id']\n      AND length(coalesce(\"trade\".\"trade_terms_versions\".\"ships_from_address\" ->> 'street', '')) > 0\n      AND length(coalesce(\"trade\".\"trade_terms_versions\".\"ships_from_address\" ->> 'recipient', '')) > 0\n      AND length(coalesce(\"trade\".\"trade_terms_versions\".\"ships_from_address\" ->> 'state_id', '')) > 0\n      AND length(coalesce(\"trade\".\"trade_terms_versions\".\"ships_from_address\" ->> 'city_id', '')) > 0)"
         }
       },
       "isRLSEnabled": false
