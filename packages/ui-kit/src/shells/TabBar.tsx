@@ -51,7 +51,7 @@ export function TabBar({ items, label = 'Sections', className }: TabBarProps): R
         // `tabbar-parity.test.tsx` holds it to the reference.
         const tabClass = cx(
           'flex min-h-[48px] min-w-0 flex-col items-center justify-center gap-[4px] rounded-[12px] no-underline',
-          'text-[10px] font-semibold tracking-[.01em] transition-[background-color,color] duration-150 ease-[ease]',
+          'text-[9.5px] font-semibold tracking-[.01em] transition-[background-color,color] duration-150 ease-[ease]',
           'motion-reduce:transition-none',
           // eslint-disable-next-line komtru-design/no-raw-hex -- v2's #7A8496 has no token; see above.
           active ? 'bg-trust-indigo-soft text-trust-indigo' : 'bg-transparent text-[#7A8496]',

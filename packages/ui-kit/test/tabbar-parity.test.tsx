@@ -1,12 +1,11 @@
 /**
  * `TabBar` against v2's `.komtru-mobile-nav` (T-222). T-110 built it from v1's `.scr-tabbar`; the
- * v2 master draws a different bar — an indigo-soft pill behind the current item, 20px icons, 10px
+ * v2 master draws a different bar — an indigo-soft pill behind the current item, 20px icons, 9.5px
  * labels, a blurred translucent surface and a lifted shadow — so it gets its own suite and reads
  * the v2 file, not the v1 file `shells-parity.test.tsx` reads.
  *
- * The rules come from `<style id="komtru-mobile-ia-v2">`. A later block (`komtru-layout-reconcile`,
- * about l.11957) turns the grid into five columns and the label into 9.5px; see
- * docs/ui-review/T-222/README.md for why neither is asserted here.
+ * The rules come from `<style id="komtru-mobile-ia-v2">`, with `komtru-layout-reconcile` (about
+ * l.11957) laid over them: it makes the grid five columns and the label 9.5px, and it wins.
  */
 import { readFileSync } from 'node:fs';
 import { TabBar } from '../src/index.js';
@@ -16,7 +15,8 @@ import { declarationsAtWidth } from './responsive-css.js';
 const V2_HTML = new URL('../../../docs/design-reference/Komtru — UI Living Master v2.html', import.meta.url);
 const html = readFileSync(V2_HTML, 'utf8');
 
-const STYLE = 'komtru-mobile-ia-v2';
+/** The rules, then the block that later makes the bar five columns and the label 9.5px. */
+const STYLE = ['komtru-mobile-ia-v2', 'komtru-layout-reconcile'] as const;
 /** A phone wider than the reference's `max-width:380px` squeeze (5px padding, 2px gap, 9px label). */
 const PHONE = 390;
 

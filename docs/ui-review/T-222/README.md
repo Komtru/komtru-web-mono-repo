@@ -2,16 +2,17 @@
 
 ## What was compared
 
-`docs/design-reference/Komtru — UI Living Master v2.html`, `<style id="komtru-mobile-ia-v2">`:
+`docs/design-reference/Komtru — UI Living Master v2.html`, `<style id="komtru-mobile-ia-v2">`, with `komtru-layout-reconcile` laid over it:
 
-| Lines (v2) | Rule                                                                                                                                                                                  |
-| ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 1936       | `.komtru-mobile-nav`: sticky bottom bar, grid, 4px gap, `8px 8px calc(8px + safe-area)` padding, `rgba(255,255,255,.97)`, 1px hairline top border, `0 -6px 18px` shadow, `blur(12px)` |
-| 1937       | `.kmn-item`: 48px min-height, centred column, 4px gap, 12px radius, `#7A8496`, 10px / 600 / `.01em`, 150ms background and colour transition                                           |
-| 1938       | `.kmn-item svg`: 20px                                                                                                                                                                 |
-| 1939       | `.kmn-item.is-active`: `#4552D6` text on `#EDEFFC` (the indigo-soft pill)                                                                                                             |
-| 1940       | `:focus-visible`: 2px indigo outline, 2px offset                                                                                                                                      |
-| 1950, 1951 | `max-width:380px` squeeze; reduced-motion                                                                                                                                             |
+| Lines (v2)  | Rule                                                                                                                                                                                  |
+| ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1936        | `.komtru-mobile-nav`: sticky bottom bar, grid, 4px gap, `8px 8px calc(8px + safe-area)` padding, `rgba(255,255,255,.97)`, 1px hairline top border, `0 -6px 18px` shadow, `blur(12px)` |
+| 1937        | `.kmn-item`: 48px min-height, centred column, 4px gap, 12px radius, `#7A8496`, 10px / 600 (superseded below) / `.01em`, 150ms background and colour transition                        |
+| 1938        | `.kmn-item svg`: 20px                                                                                                                                                                 |
+| 1939        | `.kmn-item.is-active`: `#4552D6` text on `#EDEFFC` (the indigo-soft pill)                                                                                                             |
+| 1940        | `:focus-visible`: 2px indigo outline, 2px offset                                                                                                                                      |
+| 11957-11958 | `komtru-layout-reconcile`: five columns and `.kmn-item{font-size:9.5px}`. Later in the cascade, so this is what v2 renders                                                            |
+| 1950, 1951  | `max-width:380px` squeeze; reduced-motion                                                                                                                                             |
 
 The frame at l.7481 uses the same markup.
 
@@ -22,11 +23,6 @@ and `(prefers-reduced-motion:reduce)` counts as not holding.
 
 ## Deviations
 
-- **Label size is 10px, not v2's final 9.5px.** `komtru-layout-reconcile` (v2 l.11957-11958) later
-  makes the bar five columns and sets `.kmn-item{font-size:9.5px}`, which wins over l.1937 in the
-  browser (and over the 9px rule at <=380px). The ticket asks for 10px, so the parity row reads the
-  `komtru-mobile-ia-v2` block only. Owner call: if the 9.5px is intended, change `text-[10px]` and
-  add the later block to the row.
 - **Columns:** `grid-flow-col auto-cols-fr` (equal `minmax(0,1fr)` tracks) instead of
   `repeat(4|5,...)`, because `TabBar` takes any number of items. Recorded in `DEVIATIONS`.
 - **Resting colour `#7A8496` has no token** (`trust-gray` is `#9AA5B8`, `slate` is `#4C5568`). It is
@@ -48,3 +44,10 @@ ui-kit lint, typecheck and tests; `@komtru/web-app-ui` typecheck and tests; pret
 `packages/ui-kit/src` and `docs`. The four-widths test still passes (the bar carries no responsive
 variant). axe at four widths is covered by the existing four-widths suite; contrast of the resting
 grey is noted above.
+
+## Ticket text corrected
+
+The ticket first said "10px labels", read from the earlier `komtru-mobile-ia-v2` rule. v2's final
+cascade is 9.5px (l.11958), so the acceptance criteria now say 9.5px and the parity rows read both
+blocks, asserting what v2 renders. The harness accepts a list of style ids, laid over each other in
+order.
