@@ -32,6 +32,9 @@ cost and to find work to resume.
   - the two initial SUPER_ADMINs are created with `pnpm db:bootstrap-super-admins`.
 - ~~Mobile Buy/Sell switch (T-191).~~ Answered 2026-11-06: use the same Buy/Sell switch as desktop,
   in the mobile header, not Y2's role list.
+- **Q16, the T-046 city seed.** It is merged with a default list: 37 states and 129 cities (the 37 capitals plus 92 commercial
+  cities) in `apps/backend-api/src/modules/geo/seed/nigeria-locations.seed.ts`. Review the list. Staff can also add,
+  rename or deactivate cities later through `/admin/geo`. `geo.manage` is held by SUPER_ADMIN and OPERATIONS_ADMIN.
 - Q1 (hosting and the GitHub remote) still blocks T-005 and the T-183 push.
 - Q3 (wallet) still blocks T-131.
 - ~~Disputes in the MVP?~~ Answered 2026-11-06: yes. T-120, T-196, T-199, T-200 and the new T-221 are in the MVP.
@@ -180,3 +183,17 @@ cost and to find work to resume.
 - In-flight, not a cheap tail, so not resumed: `t-038-staff-invitations` (migration and
   integration tests left) and `t-029-infra-isolation`.
 - Next: finish T-038 from its worktree, then T-072 funding (Opus), then T-039 and T-046.
+
+## 2026-11-06 23:02 WAT — run summary (interactive, owner picked T-038 + T-046)
+
+- Usage at start: 5h 9%, week 49%. At end: 5h 36%, week 53%.
+- Capacity: 2. Tickets: T-038 (merged), T-046 (merged).
+  - T-038 added migration 0035. Review: 0 must-fix, 7 should-fix items, all fixed, including
+    acceptance OTPs bound to the invitation, a partial unique index on pending invites, and an
+    active-inviter check.
+  - T-046 waited for T-038 to merge, then added migrations 0036 and 0037 (geo catalog, no-delete
+    trigger). Review: 1 must-fix (the decision sweep missed requests made during a decision, so
+    their notifications were lost) and 6 should-fix items, all fixed.
+- Ticket costs, for the two together: 5h-cost=27 week-cost=4, so about 14 and 2 each.
+- Next: T-072 funding (opus) in a fresh window, or T-107 and T-039. The lock is released, so
+  the 00:07 scheduled run can start.
