@@ -5,11 +5,11 @@ after every run. The run-by-run history is [`manager/RUN_LOG.md`](manager/RUN_LO
 behind it is [`BUILD_PLAN.md`](BUILD_PLAN.md).
 
 ```
-MVP   ██████████████····················  36/87  (41%)
-Total █████████·························  36/137  (26%)
+MVP   ████████████······················  37/102  (36%)
+Total ████████··························  37/166  (22%)
 ```
 
-51 MVP tickets left, 50 deferred past it.
+65 MVP tickets left, 64 deferred past it.
 
 ## By epic
 
@@ -33,7 +33,7 @@ Total █████████·······················�
 | 15-logistics-ops       | 0    | 3     |
 | 16-park-agent-app      | 0    | 5     |
 | 17-release             | 0    | 4     |
-| 18-ui-master-v2        | 0    | 2     |
+| 18-ui-master-v2        | 1    | 31    |
 
 ## In progress
 
@@ -43,16 +43,16 @@ Total █████████·······················�
 
 ## Ready to start (MVP first)
 
-| Ticket | Title                                                                  | MVP |
-| ------ | ---------------------------------------------------------------------- | --- |
-| T-029  | Isolate the integration suite's shared Redis and queues                | yes |
-| T-037  | RBAC catalog, staff login and admin endpoints                          | yes |
-| T-051  | Business verification, bank name-match, address, social proof          | yes |
-| T-072  | Funding a trade                                                        | yes |
-| T-190  | Remap the screen index to Living Master v2 and re-scope the UI tickets | yes |
-| T-034  | Social login                                                           |     |
-| T-041  | Avatars                                                                |     |
-| T-085  | Logistics schema and Park seed                                         |     |
+| Ticket | Title                                                         | MVP |
+| ------ | ------------------------------------------------------------- | --- |
+| T-029  | Isolate the integration suite's shared Redis and queues       | yes |
+| T-037  | RBAC catalog, staff login and admin endpoints                 | yes |
+| T-051  | Business verification, bank name-match, address, social proof | yes |
+| T-072  | Funding a trade                                               | yes |
+| T-191  | Rework T-110 shells to the v2 desktop, tablet and mode switch | yes |
+| T-034  | Social login                                                  |     |
+| T-041  | Avatars                                                       |     |
+| T-085  | Logistics schema and Park seed                                |     |
 
 ## Blocked on an owner decision
 
@@ -64,56 +64,70 @@ Total █████████·······················�
 
 ## Remaining MVP
 
-| Ticket | Title                                                                  | MVP |
-| ------ | ---------------------------------------------------------------------- | --- |
-| T-005  | Hosting confirmation and real deploy jobs                              | yes |
-| T-029  | Isolate the integration suite's shared Redis and queues                | yes |
-| T-037  | RBAC catalog, staff login and admin endpoints                          | yes |
-| T-038  | Staff invitations                                                      | yes |
-| T-039  | Account lifecycle, recovery and NDPA hooks                             | yes |
-| T-042  | Saved delivery addresses                                               | yes |
-| T-046  | Location catalog: states, cities and city requests                     | yes |
-| T-048  | Configuration (M17)                                                    | yes |
-| T-049  | Trade Standards by category                                            | yes |
-| T-051  | Business verification, bank name-match, address, social proof          | yes |
-| T-052  | Duplicate identity detection and KYC review queue                      | yes |
-| T-055  | Merchant applications and certification                                | yes |
-| T-056  | Listings lifecycle, images and stock                                   | yes |
-| T-057  | Search and discovery (M19)                                             | yes |
-| T-061  | Proposal flow                                                          | yes |
-| T-063  | Orders and multi-item trades (M9)                                      | yes |
-| T-064  | Fulfilment: ship step, delivery signals, deadlines                     | yes |
-| T-065  | Inspection and completion                                              | yes |
-| T-066  | Post-funding cancellation and can't-fulfil refunds                     | yes |
-| T-068  | Trade realtime, notifications and deep links                           | yes |
-| T-072  | Funding a trade                                                        | yes |
-| T-073  | Payout accounts, preferences and payouts                               | yes |
-| T-074  | Release and settlement                                                 | yes |
-| T-075  | Refunds                                                                | yes |
-| T-080  | Disputes core                                                          | yes |
-| T-081  | Evidence comparison and dispute read models                            | yes |
-| T-102  | Reputation and ratings (M12)                                           | yes |
-| T-107  | Universal case model, work queue and advisory                          | yes |
-| T-111  | Entry and authentication                                               | yes |
-| T-112  | First-time onboarding                                                  | yes |
-| T-113  | Home and discovery                                                     | yes |
-| T-114  | Seller profile and Trust Passport                                      | yes |
-| T-115  | Create and propose a trade                                             | yes |
-| T-116  | Buyer trade core and canonical trade detail                            | yes |
-| T-117  | Escrow funding                                                         | yes |
-| T-118  | Delivery, pickup PIN and inspection                                    | yes |
-| T-119  | Cancellation and refunds                                               | yes |
-| T-121  | Apply for merchant certification                                       | yes |
-| T-122  | Shop and listings                                                      | yes |
-| T-123  | Seller trade handling and shipping                                     | yes |
-| T-124  | Seller payouts                                                         | yes |
-| T-126  | Trust, account and settings                                            | yes |
-| T-140  | Console scaffold, shell and staff auth                                 | yes |
-| T-141  | Work queue and universal case                                          | yes |
-| T-143  | Disputes                                                               | yes |
-| T-144  | Identity review                                                        | yes |
-| T-154  | Merchant certification review                                          | yes |
-| T-180  | End-to-end critical paths                                              | yes |
-| T-182  | Security review                                                        | yes |
-| T-183  | Definition-of-done audit and first push                                | yes |
-| T-190  | Remap the screen index to Living Master v2 and re-scope the UI tickets | yes |
+| Ticket | Title                                                                     | MVP |
+| ------ | ------------------------------------------------------------------------- | --- |
+| T-005  | Hosting confirmation and real deploy jobs                                 | yes |
+| T-029  | Isolate the integration suite's shared Redis and queues                   | yes |
+| T-037  | RBAC catalog, staff login and admin endpoints                             | yes |
+| T-038  | Staff invitations                                                         | yes |
+| T-039  | Account lifecycle, recovery and NDPA hooks                                | yes |
+| T-042  | Saved delivery addresses                                                  | yes |
+| T-046  | Location catalog: states, cities and city requests                        | yes |
+| T-048  | Configuration (M17)                                                       | yes |
+| T-049  | Trade Standards by category                                               | yes |
+| T-051  | Business verification, bank name-match, address, social proof             | yes |
+| T-052  | Duplicate identity detection and KYC review queue                         | yes |
+| T-055  | Merchant applications and certification                                   | yes |
+| T-056  | Listings lifecycle, images and stock                                      | yes |
+| T-057  | Search and discovery (M19)                                                | yes |
+| T-061  | Proposal flow                                                             | yes |
+| T-063  | Orders and multi-item trades (M9)                                         | yes |
+| T-064  | Fulfilment: ship step, delivery signals, deadlines                        | yes |
+| T-065  | Inspection and completion                                                 | yes |
+| T-066  | Post-funding cancellation and can't-fulfil refunds                        | yes |
+| T-068  | Trade realtime, notifications and deep links                              | yes |
+| T-072  | Funding a trade                                                           | yes |
+| T-073  | Payout accounts, preferences and payouts                                  | yes |
+| T-074  | Release and settlement                                                    | yes |
+| T-075  | Refunds                                                                   | yes |
+| T-080  | Disputes core                                                             | yes |
+| T-081  | Evidence comparison and dispute read models                               | yes |
+| T-102  | Reputation and ratings (M12)                                              | yes |
+| T-107  | Universal case model, work queue and advisory                             | yes |
+| T-111  | Entry and authentication                                                  | yes |
+| T-112  | First-time onboarding                                                     | yes |
+| T-113  | Home and discovery                                                        | yes |
+| T-114  | Seller profile and Trust Passport                                         | yes |
+| T-115  | Create and propose a trade                                                | yes |
+| T-116  | Buyer trade core and canonical trade detail                               | yes |
+| T-117  | Escrow funding                                                            | yes |
+| T-118  | Delivery, pickup PIN and inspection                                       | yes |
+| T-119  | Cancellation and refunds                                                  | yes |
+| T-121  | Apply for merchant certification                                          | yes |
+| T-122  | Shop and listings                                                         | yes |
+| T-123  | Seller trade handling and shipping                                        | yes |
+| T-124  | Seller payouts                                                            | yes |
+| T-126  | Trust, account and settings                                               | yes |
+| T-140  | Console scaffold, shell and staff auth                                    | yes |
+| T-141  | Work queue and universal case                                             | yes |
+| T-143  | Disputes                                                                  | yes |
+| T-144  | Identity review                                                           | yes |
+| T-154  | Merchant certification review                                             | yes |
+| T-180  | End-to-end critical paths                                                 | yes |
+| T-182  | Security review                                                           | yes |
+| T-183  | Definition-of-done audit and first push                                   | yes |
+| T-191  | Rework T-110 shells to the v2 desktop, tablet and mode switch             | yes |
+| T-192  | Create a trade: buyer starts, seller completes                            | yes |
+| T-193  | Create a trade: seller starts, buyer completes                            | yes |
+| T-194  | Trade workspace supporting screens: funding, terms, agreement and payment | yes |
+| T-195  | Trade workspace supporting screens: delivery and evidence                 | yes |
+| T-197  | Proof media: capture, check and compare                                   | yes |
+| T-198  | Lifecycle exceptions and trade extras                                     | yes |
+| T-202  | Seller shop settings and catalogue import                                 | yes |
+| T-204  | Account basics, money documents and system states                         | yes |
+| T-205  | Account security and lifecycle                                            | yes |
+| T-207  | Desktop: arrive, home and discover                                        | yes |
+| T-208  | Desktop: propose, agree and fund                                          | yes |
+| T-209  | Desktop: fulfil, deliver, inspect and complete                            | yes |
+| T-212  | Tablet: arrive, home, discover, propose and fund                          | yes |
+| T-213  | Tablet: fulfil, deliver, inspect and payouts                              | yes |

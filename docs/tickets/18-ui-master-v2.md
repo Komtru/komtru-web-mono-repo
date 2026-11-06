@@ -27,6 +27,7 @@ What changed, from [`screens-v2.tsv`](../design-reference/screens-v2.tsv) (437 s
 
 ### T-190 — Remap the screen index to Living Master v2 and re-scope the UI tickets
 
+- **Status:** Done (2026-11-06). Plan: inline in this ticket. Review: pending.
 - **Depends on:** none
 - **Model:** sonnet (planning and documentation, no product code)
 - **Files:** `docs/design-reference/SCREEN_INDEX.md`, `docs/tickets/13-web-app-ui.md`,
