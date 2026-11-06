@@ -66,7 +66,7 @@ describe.runIf(infraEnabled)('proposal flow (T-061)', () => {
 
   const deps = (): TradeDeps => ({
     db: t.db(),
-    cities: async (_db, ids) => ids.map((id) => ({ id, active: true })) as never,
+    cities: (_db, ids) => Promise.resolve(ids.map((id) => ({ id, active: true })) as never),
     party: { db: t.db(), budget: NO_LOOKUP_BUDGET },
     invitations: {
       db: t.db(),
@@ -74,15 +74,17 @@ describe.runIf(infraEnabled)('proposal flow (T-061)', () => {
       encryption: createEncryption(testConfig({ ENCRYPTION_KEY: randomBytes(32).toString('hex') })),
       logger: testLogger,
     },
-    standards: { current: async () => standard, pinned: async () => standard },
-    proofFiles: async (_tx, ids) =>
-      ids.flatMap((id) => {
-        const f = files.get(id);
-        return f ? [{ id, ...f }] : [];
-      }),
-    grantProofAccess: async (fileIds, buyer) => void granted.push({ fileIds, buyer }),
+    standards: { current: () => Promise.resolve(standard), pinned: () => Promise.resolve(standard) },
+    proofFiles: (_tx, ids) =>
+      Promise.resolve(
+        ids.flatMap((id) => {
+          const f = files.get(id);
+          return f ? [{ id, ...f }] : [];
+        }),
+      ),
+    grantProofAccess: (fileIds, buyer) => Promise.resolve(void granted.push({ fileIds, buyer })),
     snapshotFees,
-    graceHours: async () => 48,
+    graceHours: () => Promise.resolve(48),
   });
 
   const person = async (username: string, overrides: Record<string, unknown> = {}) => {

@@ -146,7 +146,7 @@ export function assertTheirTurn(terms: TermsRow, userId: string): void {
 
 const asString = (value: bigint | null): string | null => (value === null ? null : value.toString());
 
-export interface TradeView {
+export type TradeView = {
   id: string;
   tradeCode: string;
   status: TradeStatus;
@@ -180,7 +180,7 @@ export interface TradeView {
   sentAt: string | null;
   acceptedAt: string | null;
   createdAt: string;
-}
+};
 
 export async function viewTrade(tx: Tx, trade: TradeRow, userId: string): Promise<TradeView> {
   const role = requireParty(trade, userId);
