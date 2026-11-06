@@ -31,6 +31,8 @@ import { usernameRoutes } from './http/username.controller.js';
 import { partyRoutes } from './http/routes/party.routes.js';
 import type { PartyControllerDeps } from './http/controllers/party.controller.js';
 import { expireInvitations } from './services/invitation.service.js';
+import { expireStaffInvitations } from './services/staff-invitation.service.js';
+import { staffInvitationRoutes } from './http/routes/staff-invitation.routes.js';
 import { createLookupBudget } from './infrastructure/redis/lookup-budget.js';
 import { createTokenSigner, type TokenSigner } from './infrastructure/jwt/access-token.js';
 import { createEpochCache, type EpochCache } from './infrastructure/redis/epoch-cache.js';
@@ -172,6 +174,8 @@ export {
  * working day starts rather than at the end of it. */
 export const PARTY_INVITATIONS_EXPIRE_CRON = '5 2 * * *';
 export const PARTY_INVITATIONS_EXPIRE_SCHEDULE = 'identity.party-invitations-expire';
+export const STAFF_INVITATIONS_EXPIRE_CRON = '15 2 * * *';
+export const STAFF_INVITATIONS_EXPIRE_SCHEDULE = 'identity.staff-invitations-expire';
 
 export interface IdentityAuthOptions {
   db: Db;
@@ -294,6 +298,7 @@ export function createIdentityAuth(options: IdentityAuthOptions): IdentityAuth {
       ...passwordRoutes(account),
       ...staffAuthRoutes(account),
       ...adminRoutes({ db, epochs }),
+      ...staffInvitationRoutes({ db, hasher: account.otpHasher, encryption, logger }),
       ...usernameRoutes({ db }),
       ...partyRoutes(party),
       ...deviceRoutes({ db, logger }),
@@ -305,6 +310,12 @@ export function createIdentityAuth(options: IdentityAuthOptions): IdentityAuth {
         cron: PARTY_INVITATIONS_EXPIRE_CRON,
         description: 'Expires party invitations unclaimed after 14 days (M1 §8.5 step 7).',
         handler: () => expireInvitations(db),
+      },
+      {
+        name: STAFF_INVITATIONS_EXPIRE_SCHEDULE,
+        cron: STAFF_INVITATIONS_EXPIRE_CRON,
+        description: 'Expires staff invitations unaccepted after 7 days (T-038).',
+        handler: () => expireStaffInvitations(db),
       },
     ],
   };

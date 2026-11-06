@@ -103,6 +103,7 @@ Spec: `docs/specs/module-01-identity-and-user-management.md`. Decision C2 (desig
 
 ### T-038 — Staff invitations
 
+- **Status:** Done (2026-11-06). Plan: `docs/superpowers/plans/2026-11-06-t-038-staff-invitations.md`. Review: 0 must-fix, 7 should-fix items fixed. Invitation delivery of the token (the sealed destination) is not wired yet; acceptance matches the verified primary email only.
 - **Touches:** `identity/services/staffInvitation.service.ts`, `identity/http/staffInvitation.controller.ts`
 - **Depends on:** T-037
 - **Acceptance criteria:**

@@ -8,6 +8,9 @@ import {
   identityPartyInvitationClaimedEvent,
   identityPartyInvitationCreatedEvent,
   identityPartyInvitationExpiredEvent,
+  identityStaffInvitationAcceptedEvent,
+  identityStaffInvitationCancelledEvent,
+  identityStaffInvitationCreatedEvent,
   identityPartyLookupPerformedEvent,
   identityPasswordChangedEvent,
   identityPhoneVerifiedEvent,
@@ -124,6 +127,39 @@ describe("identity's account events (M1 §11)", () => {
     for (const event of [identityUserRegisteredEvent, identityOtpRequestedEvent]) {
       expect(event.version).toBe(1);
     }
+  });
+});
+
+describe('T-038 staff invitation events', () => {
+  it('names the three events at version 1', () => {
+    expect(
+      [
+        identityStaffInvitationCreatedEvent,
+        identityStaffInvitationAcceptedEvent,
+        identityStaffInvitationCancelledEvent,
+      ].map((event) => [event.eventType, event.version]),
+    ).toEqual([
+      ['identity.staff_invitation.created', 1],
+      ['identity.staff_invitation.accepted', 1],
+      ['identity.staff_invitation.cancelled', 1],
+    ]);
+  });
+
+  it('refuses to carry a token or an address', () => {
+    const base = {
+      invitationId: randomUUID(),
+      invitedBy: randomUUID(),
+      roleCode: 'SUPPORT_AGENT',
+      maskedDestination: 'j••••@example.com',
+      expiresAt: new Date().toISOString(),
+    };
+    expect(identityStaffInvitationCreatedEvent.payload.safeParse(base).success).toBe(true);
+    expect(
+      identityStaffInvitationCreatedEvent.payload.safeParse({ ...base, email: 'jane@example.com' }).success,
+    ).toBe(false);
+    expect(identityStaffInvitationCreatedEvent.payload.safeParse({ ...base, token: 'x' }).success).toBe(
+      false,
+    );
   });
 });
 

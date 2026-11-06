@@ -5,11 +5,11 @@ after every run. The run-by-run history is [`manager/RUN_LOG.md`](manager/RUN_LO
 behind it is [`BUILD_PLAN.md`](BUILD_PLAN.md).
 
 ```
-MVP   █████████████·····················  43/111  (39%)
-Total █████████·························  43/168  (26%)
+MVP   █████████████·····················  44/111  (40%)
+Total █████████·························  44/168  (26%)
 ```
 
-68 MVP tickets left, 57 deferred past it.
+67 MVP tickets left, 57 deferred past it.
 
 ## By epic
 
@@ -18,7 +18,7 @@ Total █████████·······················�
 | 00-foundations         | 5    | 6     |
 | 01-shared-packages     | 8    | 8     |
 | 02-backend-platform    | 9    | 10    |
-| 03-identity            | 7    | 11    |
+| 03-identity            | 8    | 11    |
 | 04-files-notify-config | 5    | 7     |
 | 05-trust               | 2    | 3     |
 | 06-merchant-search     | 0    | 3     |
@@ -46,11 +46,11 @@ Total █████████·······················�
 | Ticket | Title                                                             | MVP |
 | ------ | ----------------------------------------------------------------- | --- |
 | T-029  | Isolate the integration suite's shared Redis and queues           | yes |
-| T-038  | Staff invitations                                                 | yes |
 | T-039  | Account lifecycle, recovery and NDPA hooks                        | yes |
 | T-046  | Location catalog: states, cities and city requests                | yes |
 | T-072  | Funding a trade                                                   | yes |
 | T-107  | Universal case model, work queue and advisory                     | yes |
+| T-140  | Console scaffold, shell and staff auth                            | yes |
 | T-034  | Social login                                                      |     |
 | T-041  | Avatars                                                           |     |
 | T-085  | Logistics schema and Park seed                                    |     |
@@ -72,7 +72,6 @@ Total █████████·······················�
 | ------ | ------------------------------------------------------------------------- | --- |
 | T-005  | Hosting confirmation and real deploy jobs                                 | yes |
 | T-029  | Isolate the integration suite's shared Redis and queues                   | yes |
-| T-038  | Staff invitations                                                         | yes |
 | T-039  | Account lifecycle, recovery and NDPA hooks                                | yes |
 | T-042  | Saved delivery addresses                                                  | yes |
 | T-046  | Location catalog: states, cities and city requests                        | yes |
