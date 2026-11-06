@@ -39,7 +39,10 @@ function definesEventHandler(source: string): boolean {
 
 /** Only these keep state, so only these need a client boundary when a Next app renders them. */
 const CLIENT_COMPONENTS = new Set([
+  'CollapsibleSideNav.tsx',
   'FileDropzone.tsx',
+  'GlobalSearch.tsx',
+  'ModeSwitch.tsx',
   'OtpInput.tsx',
   'Select.tsx',
   'Sheet.tsx',

@@ -22,3 +22,6 @@ export * from './Toast.js';
 export * from './Toggle.js';
 export * from './TradeProgress.js';
 export * from './TradeRow.js';
+export * from './CollapsibleSideNav.js';
+export * from './GlobalSearch.js';
+export * from './ModeSwitch.js';

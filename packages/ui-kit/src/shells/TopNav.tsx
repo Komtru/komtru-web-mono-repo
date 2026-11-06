@@ -10,6 +10,8 @@ export interface TopNavProps {
   /** Omitted draws the brand alone, which is what T3, T4 and T5 do. */
   items?: readonly NavItem[];
   label?: string;
+  /** v2's right-hand tools on the tablet bar: the mode switch, the bell and the profile. */
+  actions?: React.ReactNode;
   className?: string;
 }
 
@@ -25,6 +27,7 @@ export function TopNav({
   brandIcon,
   items,
   label = 'Sections',
+  actions,
   className,
 }: TopNavProps): React.JSX.Element {
   const current = items === undefined ? undefined : soleCurrent(items, 'TopNav');
@@ -74,6 +77,7 @@ export function TopNav({
           })}
         </nav>
       )}
+      {actions !== undefined && <div className="ml-auto flex items-center gap-[8px]">{actions}</div>}
     </header>
   );
 }
