@@ -46,7 +46,7 @@ export const sessionBodySchema = z.strictObject({
  * STRICT objects and the union refuses a body carrying members of both. That is a type-level
  * guarantee rather than a convention somebody has to keep.
  */
-const loginChallengeSchema = z.strictObject({
+export const loginChallengeSchema = z.strictObject({
   mfaRequired: z.literal(true),
   /** `<challengeId>.<secret>`; 256 bits, five minutes, five attempts. */
   mfaToken: z.string().min(1).max(512),

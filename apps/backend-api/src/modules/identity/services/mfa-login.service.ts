@@ -42,7 +42,14 @@ import { users } from '../infrastructure/postgres/schema/users.js';
 import { AUDIT_ACTIONS, writeAudit } from './audit.service.js';
 import { onboarding, type PublicUser } from './auth.service.js';
 import { deviceLabel, signInLocation, upsertDevice } from './device.service.js';
-import { activeFactors, findOwnFactor, verifyFactor, type FactorRow, type MfaDeps } from './mfa.service.js';
+import {
+  activeFactors,
+  findOwnFactor,
+  holdsLiveAdminRole,
+  verifyFactor,
+  type FactorRow,
+  type MfaDeps,
+} from './mfa.service.js';
 import { createSession, type IssuedSession } from './session.service.js';
 
 const PURPOSE = 'MFA_CHALLENGE' as const;
@@ -105,11 +112,11 @@ const challengeViews = async (tx: Tx, factors: FactorRow[]): Promise<MfaChalleng
 export async function issueMfaToken(
   tx: Tx,
   deps: MfaDeps,
-  input: { userId: string; factors: FactorRow[]; ip?: string | null },
+  input: { userId: string; factors: FactorRow[]; ip?: string | null; scope?: 'CONSUMER' | 'STAFF' },
 ): Promise<IssuedMfaToken> {
   const secret = randomToken(MFA_TOKEN_BYTES);
   const challengeId = uuidv7();
-  const destinationHash = mfaSubjectHash(deps.otpHasher, input.userId);
+  const destinationHash = mfaSubjectHash(deps.otpHasher, input.userId, input.scope ?? 'CONSUMER');
   const expiresAt = new Date(Date.now() + MFA_TOKEN_TTL_SECONDS * 1000);
 
   // One live challenge per account. A user who tried to sign in twice should not be left holding
@@ -167,6 +174,8 @@ export interface CompleteMfaLoginInput {
   deviceFingerprint?: string;
   ip: string | null;
   userAgent: string | null;
+  /** The scope the token was issued for, and the one the session opens with. CONSUMER by default. */
+  scope?: 'CONSUMER' | 'STAFF';
 }
 
 /**
@@ -206,7 +215,8 @@ export async function completeMfaLogin(
     if (challenge.attempts >= challenge.maxAttempts) return { outcome: 'REJECTED' };
 
     const userId = challenge.userId;
-    const destinationHash = mfaSubjectHash(deps.otpHasher, userId);
+    const scope = input.scope ?? 'CONSUMER';
+    const destinationHash = mfaSubjectHash(deps.otpHasher, userId, scope);
     // The `destination_hash` is derived from the OWNER of the row, so a challenge whose id was
     // guessed still has to carry the matching subject hash — one more thing a forged token cannot
     // supply, and free.
@@ -259,6 +269,9 @@ export async function completeMfaLogin(
     // this one must stop the login, and checking it earlier would be work on the rejected path.
     const user = (await tx.select({ status: users.status }).from(users).where(eq(users.id, userId)))[0];
     if (!user || !sessionUsableUnder(user.status)) return { outcome: 'REJECTED' };
+    // A staff session needs a role that is live NOW: it may have been revoked or have expired
+    // between the password step and this one, and the session must not outlive the grant it rests on.
+    if (scope === 'STAFF' && !(await holdsLiveAdminRole(tx, userId))) return { outcome: 'REJECTED' };
 
     await tx
       .update(otpChallenges)
@@ -277,10 +290,10 @@ export async function completeMfaLogin(
 
     const session = await createSession(tx, deps, {
       userId,
-      // CONSUMER and only CONSUMER, as `login` does. Staff and logistics sign in through their own
-      // routes (T-037, T-086); the scope is chosen where the session is created and a refresh can
-      // never change it.
-      scope: 'CONSUMER',
+      // The scope is chosen where the session is created and a refresh can never change it. It is
+      // CONSUMER here unless this is the staff route (T-037), which the token's own hash domain
+      // already proved it was issued for.
+      scope,
       amr: ['pwd', factorAmr(factor.factorType)],
       deviceId: device.deviceId,
       ip: input.ip,
@@ -300,7 +313,7 @@ export async function completeMfaLogin(
         },
         aggregateType: 'identity.user',
         aggregateId: userId,
-        actor: { type: 'CONSUMER', id: userId },
+        actor: { type: scope, id: userId },
       });
     }
 
@@ -312,7 +325,7 @@ export async function completeMfaLogin(
     await writeAudit(tx, {
       action: AUDIT_ACTIONS.LOGIN,
       outcome: 'SUCCESS',
-      actorType: 'USER',
+      actorType: scope === 'STAFF' ? 'STAFF' : 'USER',
       actorUserId: userId,
       subjectUserId: userId,
       ip: input.ip,
@@ -320,6 +333,7 @@ export async function completeMfaLogin(
       sessionId: session.sessionId,
       deviceId: device.deviceId,
       metadata: {
+        scope,
         amr: ['pwd', factorAmr(factor.factorType)],
         factorId: factor.id,
         factorType: factor.factorType,
@@ -362,8 +376,14 @@ export async function resolveMfaToken(
   if (challenge.expiresAt.getTime() <= Date.now()) return null;
   if (challenge.attempts >= challenge.maxAttempts) return null;
 
-  const destinationHash = mfaSubjectHash(deps.otpHasher, challenge.userId);
-  if (!Buffer.from(challenge.destinationHash).equals(destinationHash)) return null;
+  // Either scope may ask for its factor's code to be sent; only the verify routes are scope-bound.
+  const scope = (['CONSUMER', 'STAFF'] as const).find((candidate) =>
+    Buffer.from(challenge.destinationHash).equals(
+      mfaSubjectHash(deps.otpHasher, challenge.userId!, candidate),
+    ),
+  );
+  if (!scope) return null;
+  const destinationHash = mfaSubjectHash(deps.otpHasher, challenge.userId, scope);
   const matched = matchesCode(
     deps.otpHasher,
     { purpose: PURPOSE, destinationHash, code: parts.secret },

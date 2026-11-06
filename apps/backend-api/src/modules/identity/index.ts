@@ -18,6 +18,7 @@ import { authRoutes } from './http/routes/auth.routes.js';
 import { deviceRoutes } from './http/routes/device.routes.js';
 import { mfaRoutes } from './http/routes/mfa.routes.js';
 import { passwordRoutes } from './http/routes/password.routes.js';
+import { staffAuthRoutes } from './http/routes/staff-auth.routes.js';
 import { registrationRoutes } from './http/routes/registration.routes.js';
 import type { MfaDeps } from './services/mfa.service.js';
 import { createRelyingParty } from './infrastructure/webauthn/relying-party.js';
@@ -259,6 +260,7 @@ export function createIdentityAuth(options: IdentityAuthOptions): IdentityAuth {
       ...authRoutes({ db, signer, epochs, logger }),
       ...registrationRoutes(account),
       ...passwordRoutes(account),
+      ...staffAuthRoutes(account),
       ...usernameRoutes({ db }),
       ...partyRoutes(party),
       ...deviceRoutes({ db, logger }),

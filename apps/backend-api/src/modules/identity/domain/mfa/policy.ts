@@ -36,6 +36,17 @@ export const STEP_UP_TTL_SECONDS = 300;
 export const MFA_SUBJECT_DOMAIN = 'identity.mfa.subject';
 
 /**
+ * The same challenge under a domain of its own for a STAFF sign-in (T-037).
+ *
+ * The scope a session opens with is decided where the `mfaToken` is spent, so the token has to be
+ * bound to the scope it was issued for. Binding it through the hash domain costs no column and no
+ * migration, and it means a consumer `mfaToken` presented to `/auth/staff/mfa/verify` finds no
+ * challenge with a matching `destination_hash` (and the other way round): a CONSUMER password check
+ * can never be traded for a STAFF session, and a staff check does not open a consumer one either.
+ */
+export const MFA_STAFF_SUBJECT_DOMAIN = 'identity.mfa.subject.staff';
+
+/**
  * The same shape for an ENROLMENT ceremony, under a domain of its own.
  *
  * From review, and it is not decoration. Both families are `otp_challenges` rows of purpose
@@ -48,8 +59,11 @@ export const MFA_SUBJECT_DOMAIN = 'identity.mfa.subject';
 export const MFA_ENROLMENT_DOMAIN = 'identity.mfa.enrolment';
 
 /** `otp_challenges.destination_hash` for a challenge bound to an account rather than an address. */
-export const mfaSubjectHash = (hasher: HmacHasher, userId: string): Buffer =>
-  hasher.hmac(MFA_SUBJECT_DOMAIN, userId);
+export const mfaSubjectHash = (
+  hasher: HmacHasher,
+  userId: string,
+  scope: 'CONSUMER' | 'STAFF' = 'CONSUMER',
+): Buffer => hasher.hmac(scope === 'STAFF' ? MFA_STAFF_SUBJECT_DOMAIN : MFA_SUBJECT_DOMAIN, userId);
 
 export const mfaEnrolmentHash = (hasher: HmacHasher, userId: string): Buffer =>
   hasher.hmac(MFA_ENROLMENT_DOMAIN, userId);

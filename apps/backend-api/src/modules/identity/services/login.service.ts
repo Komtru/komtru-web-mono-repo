@@ -26,7 +26,7 @@ import { AUDIT_ACTIONS, writeAudit } from './audit.service.js';
 import { onboarding, type PublicUser } from './auth.service.js';
 import { mfaRequirement } from '../domain/mfa/policy.js';
 import { issueMfaToken, type MfaChallengeView } from './mfa-login.service.js';
-import { activeFactors, type MfaDeps } from './mfa.service.js';
+import { activeFactors, holdsLiveAdminRole, type MfaDeps } from './mfa.service.js';
 import { verifyAndRecord } from './credential.service.js';
 import { deviceLabel, signInLocation, upsertDevice } from './device.service.js';
 import { createSession, type IssuedSession } from './session.service.js';
@@ -126,7 +126,21 @@ const safeEmailNormal = (value: string): string | null => {
 const identifierDigest = (identifier: string): string =>
   sha256(identifier.trim().toLowerCase()).toString('hex');
 
-export async function login(db: Db, deps: MfaDeps, input: LoginInput): Promise<LoginResult> {
+export interface LoginOptions {
+  /**
+   * CONSUMER by default. STAFF is `POST /auth/staff/login` (T-037): password and a second factor
+   * only, never a session from the password alone, and only for an account holding a live role.
+   */
+  scope?: 'CONSUMER' | 'STAFF';
+}
+
+export async function login(
+  db: Db,
+  deps: MfaDeps,
+  input: LoginInput,
+  options: LoginOptions = {},
+): Promise<LoginResult> {
+  const scope = options.scope ?? 'CONSUMER';
   return db.transaction(async (tx): Promise<LoginResult> => {
     const candidate = await resolveLoginCandidate(tx, input.identifier);
 
@@ -158,13 +172,61 @@ export async function login(db: Db, deps: MfaDeps, input: LoginInput): Promise<L
     // what §17 literally asks for, and a COUNT of the statements the rejected path issues, which a
     // fast machine cannot hide an extra indexed lookup inside.
     // ───────────────────────────────────────────────────────────────────────────────────────────
+    // The staff gate. Reached only with the password proved, so what it refuses on cannot tell a
+    // stranger anything about an account: no live role, or no second factor enrolled, is the same
+    // `REJECTED` as a wrong password. An admin who has not yet enrolled MFA signs in as a consumer,
+    // enrols on the `/me` routes, and then comes back here (D2 C4's forced setup, without a
+    // half-privileged session in between).
+    if (scope === 'STAFF') {
+      const factors = await activeFactors(tx, candidate.userId);
+      const holdsRole = await holdsLiveAdminRole(tx, candidate.userId);
+      const requirement = mfaRequirement({
+        scope: 'STAFF',
+        activeFactorTypes: factors.map((factor) => factor.factorType),
+        holdsAdminRole: holdsRole,
+        staffRequireMfa: deps.staffRequireMfa,
+      });
+      if (!holdsRole || !requirement.required || requirement.enrolmentRequired) {
+        await recordFailure(
+          tx,
+          input,
+          candidate,
+          !holdsRole ? 'no_staff_role' : 'staff_mfa_not_enrolled',
+          true,
+        );
+        return { outcome: 'REJECTED' };
+      }
+      const challenge = await issueMfaToken(tx, deps, {
+        userId: candidate.userId,
+        factors,
+        ip: input.ip,
+        scope: 'STAFF',
+      });
+      await writeAudit(tx, {
+        action: AUDIT_ACTIONS.MFA_CHALLENGED,
+        outcome: 'SUCCESS',
+        actorType: 'STAFF',
+        actorUserId: candidate.userId,
+        subjectUserId: candidate.userId,
+        ip: input.ip,
+        userAgent: input.userAgent,
+        metadata: { scope, challengeId: challenge.challengeId, factorCount: challenge.factors.length },
+      });
+      return {
+        outcome: 'MFA_REQUIRED',
+        mfaToken: challenge.mfaToken,
+        expiresAt: challenge.expiresAt,
+        factors: challenge.factors,
+      };
+    }
+
     const factors = await activeFactors(tx, candidate.userId);
     const requirement = mfaRequirement({
       scope: 'CONSUMER',
       activeFactorTypes: factors.map((factor) => factor.factorType),
       // Not a lookup, deliberately. `mfaRequirement` makes this inert for CONSUMER (D2 C4's forced
       // setup is about STAFF sessions, §S13), so querying the role grants here would be a round
-      // trip on the success path that cannot change the answer. T-037's staff login passes the
+      // trip on the success path that cannot change the answer. The staff branch above passes the
       // real value.
       holdsAdminRole: false,
       staffRequireMfa: deps.staffRequireMfa,
