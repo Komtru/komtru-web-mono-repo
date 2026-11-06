@@ -4,18 +4,11 @@ import { WelcomeFlow } from '../../src/components/WelcomeFlow';
 
 export const metadata: Metadata = { title: 'Welcome' };
 
-type Search = Promise<Record<string, string | string[] | undefined>>;
-
-export default async function WelcomePage({
-  searchParams,
-}: {
-  searchParams: Search;
-}): Promise<React.JSX.Element> {
-  const { token } = await searchParams;
-  const value = Array.isArray(token) ? token[0] : token;
+/** The invitation token is in the URL fragment, which only the browser sees; the flow reads it there. */
+export default function WelcomePage(): React.JSX.Element {
   return (
     <AuthPage width={920}>
-      <WelcomeFlow token={value === undefined || value === '' ? undefined : value} />
+      <WelcomeFlow />
     </AuthPage>
   );
 }

@@ -54,7 +54,7 @@ export function defaultFactor(factors: readonly Factor[]): Factor | undefined {
 export const needsSend = (factor: Factor): boolean =>
   factor.type === 'SMS_OTP' || factor.type === 'EMAIL_OTP';
 
-const readBody = async (response: Response): Promise<Record<string, unknown>> => {
+export const readBody = async (response: Response): Promise<Record<string, unknown>> => {
   try {
     const body: unknown = await response.json();
     return typeof body === 'object' && body !== null ? (body as Record<string, unknown>) : {};
@@ -63,15 +63,20 @@ const readBody = async (response: Response): Promise<Record<string, unknown>> =>
   }
 };
 
-const post = (path: string, body: unknown, fetchImpl: typeof fetch): Promise<Response> =>
+export const post = (
+  path: string,
+  body: unknown,
+  fetchImpl: typeof fetch,
+  headers: Record<string, string> = {},
+): Promise<Response> =>
   fetchImpl(path, {
     method: 'POST',
-    headers: { 'content-type': 'application/json' },
+    headers: { 'content-type': 'application/json', ...headers },
     body: JSON.stringify(body),
   });
 
 /** One voice for a wrong password and an account that is not staff: the platform says the same. */
-const messageFor = (status: number, code: unknown): string => {
+export const messageFor = (status: number, code: unknown): string => {
   if (status === 429) return 'Too many attempts. Wait a minute and try again.';
   if (status === 403 && code === 'WRONG_SCOPE') return 'This account cannot sign in to the console.';
   if (status === 401) return 'That sign-in did not match. Check it and try again.';
@@ -79,7 +84,7 @@ const messageFor = (status: number, code: unknown): string => {
   return UNAVAILABLE;
 };
 
-const isChallenge = (body: Record<string, unknown>): body is Record<string, unknown> & Challenge =>
+export const isChallenge = (body: Record<string, unknown>): body is Record<string, unknown> & Challenge =>
   body.mfaRequired === true &&
   typeof body.mfaToken === 'string' &&
   typeof body.expiresAt === 'number' &&
@@ -108,9 +113,10 @@ export async function submitPassword(
 export async function sendCode(
   input: { mfaToken: string; factorId: string },
   fetchImpl: typeof fetch = fetch,
+  path: string = authRoutePaths().mfaChallenge,
 ): Promise<SendResult> {
   try {
-    const response = await post(authRoutePaths().mfaChallenge, input, fetchImpl);
+    const response = await post(path, input, fetchImpl);
     const body = await readBody(response);
     if (!response.ok) return { kind: 'error', message: messageFor(response.status, body.code) };
     if (body.delivered === false) {

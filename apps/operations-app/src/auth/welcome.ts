@@ -64,3 +64,14 @@ export function messageForError(error: unknown): string {
   }
   return 'Something went wrong on our side. Try again in a moment.';
 }
+
+/**
+ * Whether a refused acceptance ends the flow. A wrong code that says how many tries are left is the
+ * only retry; an exhausted or expired code, a used invitation and a lapsed sign-in all are final,
+ * and the consumer session behind the page goes with them.
+ */
+export function isTerminalAcceptError(error: unknown): boolean {
+  if (!(error instanceof ProblemError)) return false;
+  const left = (error.problem as unknown as { attemptsRemaining?: unknown }).attemptsRemaining;
+  return !(error.status === 422 && typeof left === 'number' && left > 0);
+}

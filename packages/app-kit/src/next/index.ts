@@ -2,3 +2,4 @@
 // so a React Server Component or a test can import the config and session helpers on their own.
 export * from './middleware.js';
 export * from './auth-routes.js';
+export * from './auth-guards.js';
