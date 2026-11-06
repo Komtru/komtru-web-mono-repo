@@ -197,3 +197,25 @@ cost and to find work to resume.
 - Ticket costs, for the two together: 5h-cost=27 week-cost=4, so about 14 and 2 each.
 - Next: T-072 funding (opus) in a fresh window, or T-107 and T-039. The lock is released, so
   the 00:07 scheduled run can start.
+
+## 2026-11-07 00:08 WAT — run summary (interactive, owner asked for two cheap non-funding tickets)
+
+- Usage at start: 5h 36%, week 53%. At end: 5h 73%, week 58%.
+- Capacity: 2. Tickets: T-042 (merged), T-140 (merged).
+  - T-042 added migration 0038 `identity_addresses`, with a no-delete trigger. Review: 0
+    must-fix, 6 should-fix items fixed. Geo is now injected as a `CityLookup` port, and
+    `anonymiseUserAddresses` is ready for T-039.
+  - T-140: the operations-app Next.js console, staff sign-in plus MFA, invitation acceptance,
+    and a sidebar filtered by permission. No migration. Review: 4 must-fix items, all fixed:
+    the invitation flow told users to turn MFA off, the sign-in proxy was open, the consumer
+    session was never revoked, and the auth POSTs had no CSRF check. 2 should-fix items also
+    fixed.
+- Ticket costs, together: 5h-cost=37 week-cost=5. T-140 cost most, because of its security fix
+  round.
+- Follow-ups T-140 needs from the backend:
+  - `GET /admin/me`, for roles and permissions. The sidebar stays empty until it exists.
+  - Staff-scoped MFA routes.
+  - The auth rate limiter moved to Redis.
+  - Setting `TRUST_PROXY_HOPS` at deploy time.
+- Next: T-072 funding (opus) needs a fresh window. It is not worth starting at 73%. T-107 and
+  T-039 are next for a fresh window too.
