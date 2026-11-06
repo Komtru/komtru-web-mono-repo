@@ -103,22 +103,7 @@ Spec: `docs/specs/module-01-identity-and-user-management.md`. Decision C2 (desig
 
 ### T-038 — Staff invitations
 
-- **Status (2026-11-06): in progress** — the domain, schema TS, service, routes and unit tests are done; review not yet run. Next steps:
-  1. `git merge main`. T-049's migration 0034 is now on main.
-  2. Generate the migration (0035) for `identity.staff_invitations`, then run `pnpm migration:safety` (lock and invariants for 0035 only).
-  3. Write `test/modules/identity/services/staff-invitation.service.int.test.ts` and an HTTP int test covering:
-     - no plaintext stored; SUPER_ADMIN only; DENIED rows;
-     - self, duplicate and already-holds-role invites refused;
-     - accept for an existing user, and for a new user via bind;
-     - a wrong code is charged;
-     - no MFA gives 409; the SUPER_ADMIN cap;
-     - a revoked inviter;
-     - a FINANCE_ADMIN invite opens a ROLE_GRANT approval;
-     - a non-matching email gives 404;
-     - expiry and cancel.
-  4. Then review, fix and merge.
-
-  The plan is `docs/superpowers/plans/2026-11-06-t-038-staff-invitations.md`.
+- **Status (2026-11-06): in progress** — implementation and tests complete; next: review.
 
 - **Touches:** `identity/services/staffInvitation.service.ts`, `identity/http/staffInvitation.controller.ts`
 - **Depends on:** T-037
