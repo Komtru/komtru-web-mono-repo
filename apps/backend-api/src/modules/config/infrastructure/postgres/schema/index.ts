@@ -2,3 +2,4 @@
 // src/modules/config/index.ts.
 export * from './columns.js';
 export * from './settings.js';
+export * from './standards.js';

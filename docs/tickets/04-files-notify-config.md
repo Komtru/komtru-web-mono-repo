@@ -79,6 +79,8 @@
 
 ### T-049 — Trade Standards by category
 
+- **Status:** Done (2026-11-06). Plan: docs/superpowers/plans/2026-11-06-t-049-trade-standards.md. Review: no must-fix; 7 should-fix items fixed. Seed values are placeholders pending the owner. Trade creation must snapshot `getCurrentStandard` in-process.
+
 - **Touches:** `config` schema `trade_standards`, `trade_categories`; `config/http/standards.controller.ts`
 - **Depends on:** T-048
 - **Acceptance criteria:**
