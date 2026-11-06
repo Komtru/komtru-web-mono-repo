@@ -5,6 +5,8 @@ import { z } from 'zod';
 import { looksLikeFee } from './settings.js';
 
 export const INSPECTION_WINDOW_MAX_HOURS = 24 * 30;
+/** The column is an int32; a request beyond it is a typo or an attack, not a window. */
+export const INT32_MAX = 2_147_483_647;
 export const IMEI_FIELD_KEY = 'serial_imei';
 
 const FIELD_KEY = /^[a-z][a-z0-9_]{0,40}$/;
@@ -14,7 +16,11 @@ export const itemSpecFieldSchema = z.strictObject({
     .string()
     .regex(FIELD_KEY)
     .refine((key) => !looksLikeFee(key), 'A fee is not an item-spec field'),
-  label: z.string().min(1).max(80),
+  label: z
+    .string()
+    .min(1)
+    .max(80)
+    .refine((label) => !looksLikeFee(label), 'A fee is not an item-spec field'),
   required: z.boolean(),
 });
 
@@ -38,11 +44,12 @@ export function checkStandardRules(
   if (new Set(keys).size !== keys.length) {
     ctx.addIssue({ code: 'custom', path: ['itemSpecFields'], message: 'Field keys must be unique' });
   }
-  if (value.imeiVerification && !keys.includes(IMEI_FIELD_KEY)) {
+  const imei = value.itemSpecFields.find((f) => f.key === IMEI_FIELD_KEY);
+  if (value.imeiVerification && !imei?.required) {
     ctx.addIssue({
       code: 'custom',
       path: ['imeiVerification'],
-      message: `IMEI verification needs a ${IMEI_FIELD_KEY} item-spec field`,
+      message: `IMEI verification needs a required ${IMEI_FIELD_KEY} item-spec field`,
     });
   }
 }
@@ -113,7 +120,7 @@ export function resolveWindowExtension(input: {
   maxExtensionHours: number;
 }): WindowExtension {
   const { standardHours, currentHours, requestedHours, maxExtensionHours } = input;
-  if (!Number.isSafeInteger(requestedHours) || requestedHours <= 0) {
+  if (!Number.isSafeInteger(requestedHours) || requestedHours <= 0 || requestedHours > INT32_MAX) {
     return { ok: false, reason: 'INVALID', message: 'The window must be a whole number of hours' };
   }
   if (requestedHours <= currentHours) {

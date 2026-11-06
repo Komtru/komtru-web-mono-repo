@@ -1,6 +1,8 @@
 // T-049 routes. The reads are public, like the fee schedule: CTS1 shows a standard before a buyer has a
 // session, and trade creation reads the same body. The writes are STAFF with `config.manage`, a reason on
 // every change, and a strict body so no fee member can ride along.
+import { createHash } from 'node:crypto';
+import type { Response } from 'express';
 import { z } from 'zod';
 import { defineRoute, type RouteDefinition } from '../../../platform/http/route.js';
 import { checkStandardRules, itemSpecFieldSchema, standardObject } from '../domain/standards.js';
@@ -40,6 +42,24 @@ const putBodySchema = standardObject
   .extend({ reason: z.string().max(1000).optional() })
   .superRefine(checkStandardRules);
 
+/**
+ * Cache-Control is set only after the lookup succeeds; an error is never cacheable. The "current" reads
+ * are `no-cache` (always revalidate) with an ETag on the version id(s), which Express turns into a 304
+ * for a matching If-None-Match: a new version is visible at once, an unchanged one costs no body.
+ */
+async function cached<T>(res: Response, control: string, lookup: () => Promise<T>): Promise<T> {
+  try {
+    const value = await lookup();
+    res.setHeader('Cache-Control', control);
+    return value;
+  } catch (error) {
+    res.setHeader('Cache-Control', 'no-store');
+    throw error;
+  }
+}
+
+const etagOf = (versionIds: string[]) => `"${createHash('sha1').update(versionIds.join(',')).digest('hex')}"`;
+
 /** The category list is a handful of rows, so it is paged in memory. */
 const paginate = <T>(all: T[], { page, limit }: { page: number; limit: number }) => ({
   items: all.slice((page - 1) * limit, page * limit),
@@ -49,7 +69,6 @@ const paginate = <T>(all: T[], { page, limit }: { page: number; limit: number })
 });
 
 export function standardsPublicRoutes(deps: ConfigHttpDeps): RouteDefinition[] {
-  const cacheable = { 'Cache-Control': 'public, max-age=60' };
   return [
     defineRoute({
       method: 'get',
@@ -60,8 +79,8 @@ export function standardsPublicRoutes(deps: ConfigHttpDeps): RouteDefinition[] {
       rateLimit: PUBLIC_BUDGET,
       schema: { query: listQuery, response: pagedSchema(publicView) },
       handler: async ({ res, query }) => {
-        res.setHeader('Cache-Control', cacheable['Cache-Control']);
-        const all = (await listCurrentStandards(deps.db())).map(toPublicView);
+        const all = (await cached(res, 'no-cache', () => listCurrentStandards(deps.db()))).map(toPublicView);
+        res.setHeader('ETag', etagOf(all.map((s) => s.versionId)));
         return paginate(all, query);
       },
     }),
@@ -74,8 +93,10 @@ export function standardsPublicRoutes(deps: ConfigHttpDeps): RouteDefinition[] {
       schema: { params: versionParams, response: publicView },
       handler: async ({ res, params }) => {
         // A version never changes, so it can be cached for longer than the "current" reads.
-        res.setHeader('Cache-Control', 'public, max-age=3600, immutable');
-        return toPublicView(await getStandardVersion(deps.db(), params.id));
+        const version = await cached(res, 'public, max-age=3600, immutable', () =>
+          getStandardVersion(deps.db(), params.id),
+        );
+        return toPublicView(version);
       },
     }),
     defineRoute({
@@ -86,8 +107,11 @@ export function standardsPublicRoutes(deps: ConfigHttpDeps): RouteDefinition[] {
       rateLimit: PUBLIC_BUDGET,
       schema: { params: categoryParams, response: publicView },
       handler: async ({ res, params }) => {
-        res.setHeader('Cache-Control', cacheable['Cache-Control']);
-        return toPublicView(await getCurrentStandard(deps.db(), params.categoryCode));
+        const current = toPublicView(
+          await cached(res, 'no-cache', () => getCurrentStandard(deps.db(), params.categoryCode)),
+        );
+        res.setHeader('ETag', `"${current.versionId}"`);
+        return current;
       },
     }),
   ];

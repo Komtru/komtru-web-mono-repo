@@ -57,6 +57,22 @@ describe('standardBodySchema', () => {
     expect(standardBodySchema.safeParse({ ...base, imeiVerification: true }).success).toBe(false);
   });
 
+  it('refuses a fee-like item-spec label', () => {
+    const bad = { ...base, itemSpecFields: [{ key: 'extra', label: 'Seller commission', required: false }] };
+    expect(standardBodySchema.safeParse(bad).success).toBe(false);
+  });
+
+  it('refuses IMEI verification when the serial_imei field is not required', () => {
+    const optional = {
+      ...base,
+      imeiVerification: true,
+      itemSpecFields: [{ key: 'serial_imei', label: 'Serial number or IMEI', required: false }],
+    };
+    expect(standardBodySchema.safeParse(optional).success).toBe(false);
+    const required = { ...optional, itemSpecFields: [{ ...optional.itemSpecFields[0], required: true }] };
+    expect(standardBodySchema.safeParse(required).success).toBe(true);
+  });
+
   it('refuses duplicate field keys and out-of-range windows', () => {
     const dup = { ...base, itemSpecFields: [base.itemSpecFields[0], base.itemSpecFields[0]] };
     expect(standardBodySchema.safeParse(dup).success).toBe(false);
@@ -85,6 +101,11 @@ describe('resolveWindowExtension (BEI1)', () => {
   it('refuses anything beyond the cap', () => {
     const result = resolveWindowExtension({ ...input, requestedHours: 73 });
     expect(result).toMatchObject({ ok: false });
+  });
+
+  it('refuses a request beyond the int32 range', () => {
+    expect(resolveWindowExtension({ ...input, requestedHours: 2_147_483_648 }).ok).toBe(false);
+    expect(resolveWindowExtension({ ...input, requestedHours: Number.MAX_SAFE_INTEGER }).ok).toBe(false);
   });
 
   it('refuses a non-integer or non-positive request', () => {
@@ -120,5 +141,6 @@ describe('the window-extension cap setting', () => {
     );
     expect(s?.valueType).toBe('INTEGER');
     expect(s?.value).toBeGreaterThan(0);
+    expect(s?.max).toBe(336);
   });
 });

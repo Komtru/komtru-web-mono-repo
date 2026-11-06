@@ -24,7 +24,15 @@ import { ANONYMOUS_ACTOR, actorFor, type Actor } from '../../../src/platform/htt
 import { infraEnabled } from '../../support/db-urls.js';
 import { useTestDatabase } from '../../support/db.js';
 import { testPrincipal } from '../../support/actors.js';
-import { createTestRedis, outboxEventTypes, redisReady, seedUser, testLogger } from '../identity/support.js';
+import { createIdentityAuth } from '../../../src/modules/identity/index.js';
+import {
+  createTestRedis,
+  testConfig,
+  outboxEventTypes,
+  redisReady,
+  seedUser,
+  testLogger,
+} from '../identity/support.js';
 
 interface Body {
   versionId: string;
@@ -67,7 +75,8 @@ describe.runIf(infraEnabled)('trade standards (T-049)', () => {
     const deps = { db, accessor };
     mountRoutes([...standardsPublicRoutes(deps), ...standardsAdminRoutes(deps)], {
       logger: testLogger,
-      onDenied: () => Promise.resolve(),
+      onDenied: createIdentityAuth({ db: db(), redis, config: testConfig(), logger: testLogger })
+        .onAccessDenied,
       resolveActor: () => Promise.resolve(actor),
       rateLimit: () => Promise.resolve(),
     })(router);
@@ -201,6 +210,76 @@ describe.runIf(infraEnabled)('trade standards (T-049)', () => {
         .expect(404);
     });
 
+    it('audits a refused write (config.view only, and a non-staff caller) and creates no version', async () => {
+      const body = { ...(await electronicsBody()), inspectionWindowHours: 96, reason: REASON };
+      const viewer = await staffActor(['config.view']);
+      await request(appFor(viewer))
+        .put('/v1/admin/config/trade-standards/electronics')
+        .send(body)
+        .expect(403);
+      const { userId } = await seedUser(t.app());
+      const consumer = actorFor(
+        testPrincipal(userId, { scope: 'CONSUMER', permissions: new Set(['config.manage']) }),
+      );
+      await request(appFor(consumer))
+        .put('/v1/admin/config/trade-standards/electronics')
+        .send(body)
+        .expect(403);
+
+      const { rows } = await t
+        .app()
+        .query<{ actor_user_id: string; outcome: string; metadata: Record<string, unknown> }>(
+          `SELECT actor_user_id, outcome, metadata FROM identity.identity_audit_log
+            WHERE action = 'ADMIN_ACTION_DENIED' ORDER BY id`,
+        );
+      expect(rows).toHaveLength(2);
+      expect(rows[0]).toMatchObject({
+        actor_user_id: (viewer.principal as { userId: string }).userId,
+        outcome: 'DENIED',
+        metadata: {
+          route: 'PUT /admin/config/trade-standards/:categoryCode',
+          permission: 'config.manage',
+          denied: 'ROUTE_PERMISSION',
+          reason: REASON,
+        },
+      });
+      expect(rows[1]).toMatchObject({
+        actor_user_id: userId,
+        metadata: { permission: 'config.manage', denied: 'ROUTE_SCOPE' },
+      });
+      expect((await getCurrentStandard(db(), 'electronics')).versionNumber).toBe(1);
+    });
+
+    it('rolls the version back when the audit insert fails', async () => {
+      const admin = await staffActor(['config.manage']);
+      await t
+        .owner()
+        .query(
+          `CREATE OR REPLACE FUNCTION config.t049_fail() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'forced audit failure'; END $$`,
+        );
+      await t
+        .owner()
+        .query(
+          `CREATE TRIGGER t049_fail BEFORE INSERT ON identity.identity_audit_log FOR EACH ROW WHEN (NEW.action = 'ADMIN_CONFIG_TRADE_STANDARD_CHANGED') EXECUTE FUNCTION config.t049_fail()`,
+        );
+      try {
+        const res = await request(appFor(admin))
+          .put('/v1/admin/config/trade-standards/electronics')
+          .send({ ...(await electronicsBody()), inspectionWindowHours: 96, reason: REASON });
+        expect(res.status).toBeGreaterThanOrEqual(500);
+      } finally {
+        await t.owner().query(`DROP TRIGGER t049_fail ON identity.identity_audit_log`);
+        await t.owner().query(`DROP FUNCTION config.t049_fail()`);
+      }
+      const { rows } = await t
+        .owner()
+        .query<{ n: number }>(
+          `SELECT count(*)::int AS n FROM config.trade_standards s JOIN config.trade_categories c ON c.id = s.category_id WHERE c.code = 'electronics'`,
+        );
+      expect(rows[0]?.n).toBe(1);
+      expect(await outboxEventTypes(t.app())).toEqual([]);
+    });
+
     it('lists the standards for config.view', async () => {
       const viewer = await staffActor(['config.view']);
       const res = await request(appFor(viewer)).get('/v1/admin/config/trade-standards').expect(200);
@@ -236,12 +315,49 @@ describe.runIf(infraEnabled)('trade standards (T-049)', () => {
       expect(json(byId)).toEqual(json(one));
     });
 
-    it('404s an unknown category and an unknown version', async () => {
+    it('404s an unknown category and an unknown version, and never lets an error be cached', async () => {
       const app = appFor(anon);
-      await request(app).get('/v1/config/trade-standards/furniture').expect(404);
-      await request(app)
+      const a = await request(app).get('/v1/config/trade-standards/furniture').expect(404);
+      expect(a.headers['cache-control']).toBe('no-store');
+      const b = await request(app)
         .get('/v1/config/trade-standards/versions/7f3c1c5e-0000-4000-8000-000000000000')
         .expect(404);
+      expect(b.headers['cache-control']).toBe('no-store');
+    });
+
+    it('serves current reads as no-cache with an ETag on the version id, and answers 304 to a match', async () => {
+      const app = appFor(anon);
+      const one = await request(app).get('/v1/config/trade-standards/electronics').expect(200);
+      expect(one.headers['cache-control']).toBe('no-cache');
+      const etag = one.headers.etag ?? '';
+      expect(etag).toContain(json(one).versionId);
+      await request(app).get('/v1/config/trade-standards/electronics').set('If-None-Match', etag).expect(304);
+
+      const list = await request(app).get('/v1/config/trade-standards').expect(200);
+      expect(list.headers['cache-control']).toBe('no-cache');
+      const listTag = list.headers.etag ?? '';
+      await request(app).get('/v1/config/trade-standards').set('If-None-Match', listTag).expect(304);
+
+      const admin = await staffActor(['config.manage']);
+      await request(appFor(admin))
+        .put('/v1/admin/config/trade-standards/electronics')
+        .send({ ...(await electronicsBody()), inspectionWindowHours: 96, reason: REASON })
+        .expect(200);
+      const after = await request(app)
+        .get('/v1/config/trade-standards/electronics')
+        .set('If-None-Match', etag)
+        .expect(200);
+      expect(json(after).versionNumber).toBe(2);
+      await request(app).get('/v1/config/trade-standards').set('If-None-Match', listTag).expect(200);
+    });
+
+    it('keeps a version by id immutable-cacheable', async () => {
+      const app = appFor(anon);
+      const one = await request(app).get('/v1/config/trade-standards/electronics').expect(200);
+      const byId = await request(app)
+        .get(`/v1/config/trade-standards/versions/${json(one).versionId}`)
+        .expect(200);
+      expect(byId.headers['cache-control']).toContain('immutable');
     });
   });
 

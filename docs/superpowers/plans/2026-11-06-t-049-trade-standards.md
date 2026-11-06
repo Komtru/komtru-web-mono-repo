@@ -25,3 +25,15 @@ Scope: `apps/backend-api/src/modules/config/**`, one migration (0034), tests. No
 - Window cap: `trades.inspection_window_max_extension_hours` (seeded 48) limits the extension over the standard
   window of the version the trade snapshotted, so repeated requests cannot creep past it.
 - Both category lists are paged (route invariant) even though there are two categories.
+
+## Owner decisions pending
+
+- **Seed values** (placeholders, no spec states them): 48h window and 7-day delivery deadline for both
+  categories; Electronics needs 4 photos plus a video, Fashion 3 photos and no video.
+- **Caching (1):** an error response is `no-store`; `Cache-Control` is set only after a successful lookup.
+- **Caching (2):** the "current" reads (`GET /config/trade-standards[/:categoryCode]`) are `no-cache` with an
+  ETag on the version id(s) and answer 304 to a matching `If-None-Match`, so a new version is visible at once.
+  The by-id route stays immutable. **Trade creation must call `getCurrentStandard` in-process** (never the HTTP
+  route) and store the returned `versionId`.
+- **Hardening:** item-spec `label` is fee-guarded as well as `key`; `serial_imei` must be `required` when IMEI
+  verification is on; a requested window above int32 is refused; the cap setting is bounded at 336 hours.
