@@ -51,7 +51,7 @@ What changed, from [`screens-v2.tsv`](../design-reference/screens-v2.tsv) (437 s
 
 ### T-191 — Rework T-110 shells to the v2 desktop, tablet and mode switch
 
-- **Status (2026-11-06): in progress** — review fixed; awaiting manager verification
+- **Status:** Done (2026-11-06). Plan: docs/superpowers/plans/2026-11-06-t-191-v2-shell-rework.md. Review: 12 items fixed. Owner ruling 2026-11-06: mobile uses the same Buy/Sell switch in its header, not Y2's role list.
 - **Depends on:** T-110, T-190
 - **Model:** sonnet
 - **Scope:** The one rework ticket. T-110 is the only UI on `main`; it built the app scaffold and the shells against v1's D9 (sidebar shell, Account, Personal Info) and tablet top nav. v2 redraws the shell: a five-item nav (Home, Trades, Messages, Discover, Account) in a sidebar with Collapse and `/` to search on desktop, the same five items as top navigation on tablet, and a Buy/Sell mode switch beside the profile (Y2). T-110's OF1 offline screen is unchanged (the v2 text and markup match v1), so it needs no rework. Update the sidebar and top-nav items, add the mode switch and the global search and Trade Code bar, and re-run the T-110 visual checks against v2 (DX-03, DX-37, TX-02 frames). Mobile tab bar: confirm against the v2 mobile frames and change only if they differ. Definition of done as epic 13 (frontend-design per screen, ui-kit only, all states, e2e and axe).
