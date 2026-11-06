@@ -6,10 +6,8 @@ cost and to find work to resume.
 
 ## Waiting on the owner
 
-- **Mobile Buy/Sell switch (T-191).** v2's Y2 is a mobile Role Switcher list (Buyer, Merchant
-  Shop, Park Agent), and the mobile frames draw no Buy/Sell control. The default applied by the
-  fix pass is to put the same Buy/Sell switch from desktop and tablet in the mobile header.
-  Overrule it here if you want Y2's role list instead.
+- ~~Mobile Buy/Sell switch (T-191).~~ Answered 2026-11-06: use the same Buy/Sell switch as desktop,
+  in the mobile header, not Y2's role list.
 - Q1 (hosting and the GitHub remote) still blocks T-005 and the T-183 push.
 - Q3 (wallet) still blocks T-131.
 - ~~Disputes in the MVP?~~ Answered 2026-11-06: yes. T-120, T-196, T-199, T-200 and the new T-221 are in the MVP.
