@@ -4,12 +4,12 @@ A fresh reviewer read the branch at its fourth commit. `web-app-ui` tests (100) 
 `test/shells` (251) pass, and no security defect was found. **The build manager hands this file
 to the fixer.**
 
-## Owner ruling needed, with the default applied meanwhile
+## Owner ruling (2026-11-06): Buy/Sell switch on mobile
 
 **Y2 / mobile Buy/Sell.** In v2, Y2 is an older mobile Role Switcher list, and the mobile frames
-show no Buy/Sell control. Until the owner rules otherwise, the default is to render the same
+show no Buy/Sell control. The owner ruled to render the same
 `ModeSwitch` in the mobile LogoBar, so mobile users can change mode exactly as on desktop. A
-certified merchant stays locked to Sell. Record the default in the ticket as an owner question.
+certified merchant stays locked to Sell. Record the ruling in the ticket.
 
 ## Must fix
 
