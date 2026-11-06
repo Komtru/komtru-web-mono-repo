@@ -34,6 +34,19 @@ export const createTrade = defineEndpoint({
 const trade = await api.call(createTrade, { body: { initiatorRole: 'BUYER' /* ... */ } });
 ```
 
+## Shared dropdowns: `useStates()` and `useCities(stateId)`
+
+The location catalog (T-046) is the one endpoint set every app reads, so its hooks live here. Mount
+`ApiClientProvider` once beside your `QueryClientProvider`, then:
+
+```tsx
+const states = useStates(); // every state, all pages, flat
+const cities = useCities(stateId); // idle until a state is chosen; keyed by state
+```
+
+Both ask the backend for its largest page (100) and follow `nextCursor`, so a dropdown holds the whole
+list. Typeahead and "My city isn't listed" are endpoints (`searchCities`, `submitCityRequest`).
+
 `retryable` is load-bearing: it is the only thing that makes this client send an `Idempotency-Key`,
 and the only condition under which it will retry a mutation.
 

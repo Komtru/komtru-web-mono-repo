@@ -26,7 +26,8 @@ describe('CATALOGUE', () => {
   });
 
   it('seeds the four identity templates T-045 owes', () => {
-    expect(new Set(CATALOGUE.templates.map((t) => t.templateKey))).toEqual(
+    const identity = CATALOGUE.templates.filter((t) => t.templateKey.startsWith('identity.'));
+    expect(new Set(identity.map((t) => t.templateKey))).toEqual(
       new Set([
         'identity.otp.requested',
         'identity.device.new_sign_in',
@@ -37,7 +38,8 @@ describe('CATALOGUE', () => {
   });
 
   it('marks every seeded identity template security critical', () => {
-    expect(CATALOGUE.templates.every((t) => t.isSecurityCritical && t.category === 'SECURITY')).toBe(true);
+    const identity = CATALOGUE.templates.filter((t) => t.templateKey.startsWith('identity.'));
+    expect(identity.every((t) => t.isSecurityCritical && t.category === 'SECURITY')).toBe(true);
   });
 
   it('keeps every SMS body inside one segment', () => {

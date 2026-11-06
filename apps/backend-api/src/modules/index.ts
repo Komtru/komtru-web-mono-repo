@@ -11,6 +11,7 @@ import type { Logger } from '../platform/logger.js';
 import type { KomtruModule, SeedableModule } from '../platform/module.js';
 import { configModule } from './config/index.js';
 import { filesModule, filesSeed } from './files/index.js';
+import { geoModule } from './geo/index.js';
 import { createIdentityAuth, identityModule, identitySeed, resolvePrincipal } from './identity/index.js';
 import { ledgerModule } from './ledger/index.js';
 import { notifyModule } from './notify/index.js';
@@ -53,6 +54,8 @@ export const createModules: ModuleBuilder = (deps) => {
     // and pushed from there, and the Redis adapter carries it to whichever API instance holds the
     // user's socket.
     createTrustModule({ gateway: socket.gateway }),
+    // After identity, whose audit log every staff change to the catalog writes.
+    geoModule,
     ledgerModule,
     notifyModule,
     socket,
@@ -66,6 +69,7 @@ export const moduleSeeds: SeedableModule[] = [
   configModule,
   identitySeed,
   filesSeed,
+  geoModule,
   ledgerModule,
   notifyModule,
 ];

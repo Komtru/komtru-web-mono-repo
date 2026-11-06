@@ -129,9 +129,37 @@ const IDENTITY_MAPPINGS: unknown[] = [
   { eventName: 'identity.session.reuse_detected', templateKey: 'identity.session.reuse_detected' },
 ];
 
+/**
+ * T-046: the outcome of a "My city isn't listed" request. One template, because the three outcomes
+ * (added, merged into an existing city, rejected) differ only in the sentence the binding renders
+ * into `outcomeLine`: a template has no conditionals (M11 D5). An ACCOUNT notification, so a user can
+ * opt out of it; nothing about it is security critical.
+ */
+const GEO_TEMPLATES: unknown[] = [
+  {
+    templateKey: 'geo.city_request.decided',
+    channel: 'IN_APP',
+    category: 'ACCOUNT',
+    body: 'Your request for {{requestedName}} in {{stateName}}: {{outcomeLine}}',
+    variables: ['requestedName', 'stateName', 'outcomeLine'],
+  },
+  {
+    templateKey: 'geo.city_request.decided',
+    channel: 'EMAIL',
+    category: 'ACCOUNT',
+    subject: 'An update on your Komtru city request',
+    body: 'You asked us to add {{requestedName}} in {{stateName}}.\n\n{{outcomeLine}}',
+    variables: ['requestedName', 'stateName', 'outcomeLine'],
+  },
+];
+
+const GEO_MAPPINGS: unknown[] = [
+  { eventName: 'geo.city_request.decided', templateKey: 'geo.city_request.decided' },
+];
+
 export const CATALOGUE: NotificationCatalogue = {
-  templates: IDENTITY_TEMPLATES.map((t) => templateSchema.parse(t)),
-  mappings: IDENTITY_MAPPINGS.map((m) => mappingSchema.parse(m)),
+  templates: [...IDENTITY_TEMPLATES, ...GEO_TEMPLATES].map((t) => templateSchema.parse(t)),
+  mappings: [...IDENTITY_MAPPINGS, ...GEO_MAPPINGS].map((m) => mappingSchema.parse(m)),
 };
 
 const sameSet = (a: string[], b: string[]): boolean =>
