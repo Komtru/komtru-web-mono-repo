@@ -60,8 +60,10 @@ export async function listStatesAdmin(
       code: states.code,
       name: states.name,
       normalisedName: states.normalisedName,
-      cityCount: sql<number>`(SELECT count(*)::int FROM ${cities} WHERE ${cities.stateId} = ${states.id})`,
-      activeCityCount: sql<number>`(SELECT count(*)::int FROM ${cities} WHERE ${cities.stateId} = ${states.id} AND ${cities.active})`,
+      // Written out in full: drizzle renders a column inside a subquery unqualified, so
+      // `cities.state_id = states.id` would compare the inner table's id with itself.
+      cityCount: sql<number>`(SELECT count(*)::int FROM geo.cities c WHERE c.state_id = geo.states.id)`,
+      activeCityCount: sql<number>`(SELECT count(*)::int FROM geo.cities c WHERE c.state_id = geo.states.id AND c.active)`,
     })
     .from(states)
     .where(

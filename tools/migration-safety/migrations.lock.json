@@ -179,6 +179,16 @@
       "tag": "0035_staff_invitations",
       "when": 1794001602903,
       "sha256": "64a7a0ea490091d5fe5c2bdfbcfa6b5c004514c5ba5505512907b92f02a45df5"
+    },
+    {
+      "tag": "0036_geo_catalog",
+      "when": 1794001860854,
+      "sha256": "c1389429da7f36047c39d913a5c5bcb5558cb8a79c4d54821ec7060d1daf16d9"
+    },
+    {
+      "tag": "0037_geo_no_delete",
+      "when": 1794001874943,
+      "sha256": "a3dec87cbb53a423b5da2af9bdef8966601ef0297afa0e2b56d05b7d0e34d9d2"
     }
   ]
 }

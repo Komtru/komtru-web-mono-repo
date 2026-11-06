@@ -22,6 +22,11 @@
       "definition": "CREATE UNIQUE INDEX storage_accounts_singleton_pool ON files.storage_accounts USING btree (pool) WHERE ((pool = ANY (ARRAY['PROFILE'::files.storage_pool, 'CHAT_ATTACHMENT'::files.storage_pool])) AND (status <> 'DISABLED'::files.storage_account_status))"
     },
     {
+      "table": "geo.city_requests",
+      "name": "city_requests_pending_per_user",
+      "definition": "CREATE UNIQUE INDEX city_requests_pending_per_user ON geo.city_requests USING btree (requested_by_user_id, state_id, normalised_name) WHERE (status = 'PENDING'::text)"
+    },
+    {
       "table": "identity.admin_role_assignments",
       "name": "admin_role_active_unique",
       "definition": "CREATE UNIQUE INDEX admin_role_active_unique ON identity.admin_role_assignments USING btree (user_id, role_code) WHERE (revoked_at IS NULL)"
@@ -157,6 +162,21 @@
       "table": "files.storage_accounts",
       "name": "storage_accounts_credits_pct_range",
       "definition": "CHECK (((credits_used_pct >= (0)::numeric) AND (credits_used_pct <= (100)::numeric)))"
+    },
+    {
+      "table": "geo.cities",
+      "name": "cities_normalised_name_not_blank",
+      "definition": "CHECK ((length(normalised_name) > 0))"
+    },
+    {
+      "table": "geo.city_requests",
+      "name": "city_requests_decision_shape",
+      "definition": "CHECK ((((status = 'PENDING'::text) AND (decided_at IS NULL) AND (decided_by_admin_id IS NULL) AND (resolved_city_id IS NULL)) OR ((status = ANY (ARRAY['ADDED'::text, 'MERGED'::text])) AND (decided_at IS NOT NULL) AND (decided_by_admin_id IS NOT NULL) AND (resolved_city_id IS NOT NULL)) OR ((status = 'REJECTED'::text) AND (decided_at IS NOT NULL) AND (decided_by_admin_id IS NOT NULL) AND (decision_reason IS NOT NULL))))"
+    },
+    {
+      "table": "geo.city_requests",
+      "name": "city_requests_status",
+      "definition": "CHECK ((status = ANY (ARRAY['PENDING'::text, 'ADDED'::text, 'MERGED'::text, 'REJECTED'::text])))"
     },
     {
       "table": "identity.account_recovery_requests",
@@ -364,6 +384,16 @@
       "table": "files.file_access_log",
       "name": "komtru_append_only",
       "definition": "[O] CREATE TRIGGER komtru_append_only BEFORE DELETE OR UPDATE ON files.file_access_log FOR EACH ROW EXECUTE FUNCTION platform.reject_mutation()"
+    },
+    {
+      "table": "geo.cities",
+      "name": "komtru_no_delete",
+      "definition": "[O] CREATE TRIGGER komtru_no_delete BEFORE DELETE ON geo.cities FOR EACH ROW EXECUTE FUNCTION geo.reject_delete()"
+    },
+    {
+      "table": "geo.states",
+      "name": "komtru_no_delete",
+      "definition": "[O] CREATE TRIGGER komtru_no_delete BEFORE DELETE ON geo.states FOR EACH ROW EXECUTE FUNCTION geo.reject_delete()"
     },
     {
       "table": "identity.admin_role_assignments",

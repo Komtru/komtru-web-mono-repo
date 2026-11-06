@@ -40,6 +40,7 @@
 
 ### T-046 — Location catalog: states, cities and city requests
 
+- **Status (2026-11-06): in progress** — implementation and tests complete; next: review.
 - **Touches:** `src/modules/geo/**`, migration `geo_*`, `packages/shared-types/src/geo.ts`, `packages/api-client` geo hooks
 - **Depends on:** T-021, T-025, T-037
 - **Acceptance criteria:**
