@@ -214,11 +214,12 @@ export async function changeSetting(
   });
 }
 
-const boundsOf = (namespace: string, key: string): { min?: number; max?: number } => {
+const boundsOf = (namespace: string, key: string): { min?: number; max?: number; maxScale?: number } => {
   const definition = findDefinition(namespace, key);
   return {
     ...(definition?.min !== undefined ? { min: definition.min } : {}),
     ...(definition?.max !== undefined ? { max: definition.max } : {}),
+    ...(definition?.maxScale !== undefined ? { maxScale: definition.maxScale } : {}),
   };
 };
 

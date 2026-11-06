@@ -60,6 +60,17 @@ describe('looksLikeFee', () => {
     ['merchant', 'commission_rate'],
     ['fees', 'anything'],
     ['trades', 'markup'],
+    ['trades', 'platformfee'],
+    ['trades', 'sellercommission'],
+    ['trades', 'feeschedule'],
+    ['trades', 'PlatformFee'],
+    ['trades', 'platform-fee-bps'],
+    ['trades', 'take_rate'],
+    ['payouts', 'payout_share'],
+    ['trades', 'royalty_pool'],
+    ['trades', 'margin'],
+    ['trades', 'seller_discount'],
+    ['trades', 'rate_limit_per_minute'],
   ])('flags %s.%s', (namespace, key) => {
     expect(looksLikeFee(namespace, key)).toBe(true);
   });
@@ -69,6 +80,11 @@ describe('looksLikeFee', () => {
     ['reputation', 'rating_submission_window_days'],
     ['notifications', 'max_retry_attempts'],
     ['park', 'pin_max_attempts'],
+    ['trades', 'delivery_deadline_days'],
+    ['trades', 'payment_deadline_hours'],
+    ['park', 'custody_ageing_hours'],
+    ['trades', 'crate_size'],
+    ['trades', 'share_link_ttl_hours'],
   ])('does not flag %s.%s', (namespace, key) => {
     expect(looksLikeFee(namespace, key)).toBe(false);
   });
@@ -95,6 +111,23 @@ describe('validateSettingValue', () => {
     expect(validateSettingValue(def!, 0).ok).toBe(false);
     expect(validateSettingValue(def!, 3).ok).toBe(true);
     expect(validateSettingValue(def!, 1000).ok).toBe(false);
+  });
+});
+
+describe('validateSettingValue, strings and decimals', () => {
+  it('trims a string and refuses an empty one', () => {
+    expect(validateSettingValue({ valueType: 'STRING' }, '  hello ')).toEqual({ ok: true, value: 'hello' });
+    expect(validateSettingValue({ valueType: 'STRING' }, '   ').ok).toBe(false);
+    expect(validateSettingValue({ valueType: 'STRING' }, '').ok).toBe(false);
+  });
+
+  it('enforces a decimal min, max and scale', () => {
+    const def = { valueType: 'DECIMAL' as const, min: 0, max: 10, maxScale: 2 };
+    expect(validateSettingValue(def, '1.25').ok).toBe(true);
+    expect(validateSettingValue(def, '1.255').ok).toBe(false);
+    expect(validateSettingValue(def, '-0.5').ok).toBe(false);
+    expect(validateSettingValue(def, '10.01').ok).toBe(false);
+    expect(validateSettingValue(def, '10').ok).toBe(true);
   });
 });
 

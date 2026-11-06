@@ -19,9 +19,11 @@ export interface SettingDefinition {
   valueType: ValueType;
   value: SettingValue;
   description: string;
-  /** Inclusive bounds for an INTEGER. A window of 0 or of ten years is a typo, not a decision. */
+  /** Inclusive bounds for an INTEGER or a DECIMAL. A window of 0 or of ten years is a typo, not a decision. */
   min?: number;
   max?: number;
+  /** The most digits after the point a DECIMAL may carry. */
+  maxScale?: number;
 }
 
 const days = (max = 90) => ({ min: 1, max });
@@ -136,39 +138,64 @@ export function findDefinition(namespace: string, key: string): SettingDefinitio
 }
 
 /**
- * Words that mean a price. Matched on whole tokens of the namespace and key, because "rate" inside
- * "rating_submission_window_days" is not a fee and a substring match would make the guard noisy
- * enough to switch off.
+ * Long words that are unambiguous: they are a fee wherever they appear, so they are also looked for
+ * in the key with its separators removed. That catches `platformfee`, `sellercommission` and
+ * `feeschedule`, which a token match alone would wave through.
+ */
+const FEE_SUBSTRINGS = [
+  'fee',
+  'commission',
+  'bps',
+  'kobo',
+  'markup',
+  'surcharge',
+  'levy',
+  'tariff',
+  'pricing',
+  'royalty',
+];
+
+/**
+ * Short words that are only a fee as a whole token: a substring match would flag `rating`, `delivery`
+ * or `crate`. By design this is blunt: a future `rate_limit_*` key would be refused too, and has to be
+ * named differently (`throttle_*`) or live outside this table.
  */
 const FEE_TOKENS = new Set([
-  'fee',
-  'fees',
-  'commission',
-  'commissions',
   'cut',
   'cuts',
   'rate',
   'rates',
-  'bps',
   'percent',
   'percentage',
   'pct',
   'charge',
   'charges',
-  'markup',
   'margin',
-  'surcharge',
-  'levy',
-  'tariff',
   'price',
   'prices',
-  'pricing',
-  'kobo',
+  'spread',
+  'discount',
+  'discounts',
+  'toll',
 ]);
 
-/** True when any token of the namespace, key or flag code names a fee, commission or cut. */
+/** Two-word phrases whose parts are innocent alone. Compared on the token string, `_`-joined. */
+const FEE_PHRASES = ['take_rate', 'payout_share'];
+
+/** True when the namespace, key or flag code names a fee, commission or cut. */
 export function looksLikeFee(...parts: string[]): boolean {
-  return parts.some((part) => part.split(/[^a-z0-9]+/i).some((token) => FEE_TOKENS.has(token.toLowerCase())));
+  return parts.some((part) => {
+    const tokens = part
+      .toLowerCase()
+      .split(/[^a-z0-9]+/)
+      .filter((token) => token !== '');
+    const joined = tokens.join('_');
+    return (
+      tokens.some((token) => FEE_TOKENS.has(token)) ||
+      FEE_SUBSTRINGS.some((word) => joined.replaceAll('_', '').includes(word)) ||
+      FEE_PHRASES.some((phrase) => `_${joined}_`.includes(`_${phrase}_`))
+    );
+  });
 }
 
 export type Validation = { ok: true; value: SettingValue } | { ok: false; message: string };
@@ -177,7 +204,7 @@ const DECIMAL = /^-?\d+(\.\d+)?$/;
 
 /** The stored type is the contract; the seeded bounds, where there are any, narrow it. */
 export function validateSettingValue(
-  definition: { valueType: ValueType; min?: number; max?: number },
+  definition: { valueType: ValueType; min?: number; max?: number; maxScale?: number },
   value: unknown,
 ): Validation {
   switch (definition.valueType) {
@@ -197,11 +224,27 @@ export function validateSettingValue(
       return typeof value === 'boolean'
         ? { ok: true, value }
         : { ok: false, message: 'Expected true or false' };
-    case 'STRING':
-      return typeof value === 'string' ? { ok: true, value } : { ok: false, message: 'Expected a string' };
-    case 'DECIMAL':
-      return typeof value === 'string' && DECIMAL.test(value)
-        ? { ok: true, value }
-        : { ok: false, message: 'Expected a decimal as a string, such as "1.25"' };
+    case 'STRING': {
+      if (typeof value !== 'string') return { ok: false, message: 'Expected a string' };
+      const trimmed = value.trim();
+      return trimmed === '' ? { ok: false, message: 'Must not be empty' } : { ok: true, value: trimmed };
+    }
+    case 'DECIMAL': {
+      if (typeof value !== 'string' || !DECIMAL.test(value)) {
+        return { ok: false, message: 'Expected a decimal as a string, such as "1.25"' };
+      }
+      const scale = value.split('.')[1]?.length ?? 0;
+      if (definition.maxScale !== undefined && scale > definition.maxScale) {
+        return { ok: false, message: `At most ${definition.maxScale} digits after the point` };
+      }
+      const number = Number(value);
+      if (definition.min !== undefined && number < definition.min) {
+        return { ok: false, message: `Must be at least ${definition.min}` };
+      }
+      if (definition.max !== undefined && number > definition.max) {
+        return { ok: false, message: `Must be at most ${definition.max}` };
+      }
+      return { ok: true, value };
+    }
   }
 }
