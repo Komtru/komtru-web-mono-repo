@@ -4,7 +4,7 @@
 import express from 'express';
 import request from 'supertest';
 import { beforeEach, describe, expect, it } from 'vitest';
-import { seedLocations } from '../../../../src/modules/geo/index.js';
+import { getCitiesByIds, seedLocations } from '../../../../src/modules/geo/index.js';
 import { addressRoutes } from '../../../../src/modules/identity/http/routes/address.routes.js';
 import { errorHandler, notFound } from '../../../../src/platform/errors.js';
 import { mountRoutes } from '../../../../src/platform/http/mount.js';
@@ -53,7 +53,7 @@ describe.runIf(infraEnabled)('/me/addresses (T-042)', () => {
     const app = express();
     app.use(express.json());
     const router = express.Router();
-    mountRoutes(addressRoutes({ db: t.db() }), {
+    mountRoutes(addressRoutes({ db: t.db(), cities: getCitiesByIds }), {
       logger: testLogger,
       resolveActor: () => Promise.resolve(actor),
       rateLimit: () => Promise.resolve(),

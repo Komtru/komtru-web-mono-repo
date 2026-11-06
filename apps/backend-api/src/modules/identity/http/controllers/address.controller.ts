@@ -5,7 +5,6 @@
 // route and the status, and the fields of an address are PII (M1 §12).
 import type { Request } from 'express';
 import type { z } from 'zod';
-import type { Db } from '../../../../db/index.js';
 import { requireUserId, type Actor } from '../../../../platform/http/principal.js';
 import type { CursorKey } from '../../../../platform/http/paginate.js';
 import {
@@ -14,14 +13,13 @@ import {
   listAddresses,
   makeDefaultAddress,
   updateAddress,
+  type AddressDeps,
   type AddressRequestContext,
 } from '../../services/address.service.js';
 import type { createAddressBodySchema, updateAddressBodySchema } from '../validations/address.validation.js';
 import { callerAgent, callerIp } from './request.js';
 
-export interface AddressControllerDeps {
-  db: Db;
-}
+export type AddressControllerDeps = AddressDeps;
 
 const SIGN_IN = 'Sign in to manage your delivery addresses';
 
@@ -37,7 +35,7 @@ export function getAddresses(
   query: { limit?: number | undefined },
   cursor: CursorKey | undefined,
 ) {
-  return listAddresses(deps.db, { userId: requireUserId(actor, SIGN_IN), limit: query.limit ?? 20, cursor });
+  return listAddresses(deps, { userId: requireUserId(actor, SIGN_IN), limit: query.limit ?? 20, cursor });
 }
 
 export function postAddress(
@@ -46,7 +44,7 @@ export function postAddress(
   actor: Actor,
   body: z.output<typeof createAddressBodySchema>,
 ) {
-  return createAddress(deps.db, {
+  return createAddress(deps, {
     userId: requireUserId(actor, SIGN_IN),
     body,
     request: requestContext(req, actor),
@@ -60,7 +58,7 @@ export function patchAddress(
   params: { id: string },
   body: z.output<typeof updateAddressBodySchema>,
 ) {
-  return updateAddress(deps.db, {
+  return updateAddress(deps, {
     userId: requireUserId(actor, SIGN_IN),
     addressId: params.id,
     body,
@@ -74,7 +72,7 @@ export function postAddressArchive(
   actor: Actor,
   params: { id: string },
 ) {
-  return archiveAddress(deps.db, {
+  return archiveAddress(deps, {
     userId: requireUserId(actor, SIGN_IN),
     addressId: params.id,
     request: requestContext(req, actor),
@@ -87,7 +85,7 @@ export function postAddressDefault(
   actor: Actor,
   params: { id: string },
 ) {
-  return makeDefaultAddress(deps.db, {
+  return makeDefaultAddress(deps, {
     userId: requireUserId(actor, SIGN_IN),
     addressId: params.id,
     request: requestContext(req, actor),

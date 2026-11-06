@@ -11,7 +11,7 @@ import type { Logger } from '../platform/logger.js';
 import type { KomtruModule, SeedableModule } from '../platform/module.js';
 import { configModule } from './config/index.js';
 import { filesModule, filesSeed } from './files/index.js';
-import { geoModule } from './geo/index.js';
+import { geoModule, getCitiesByIds } from './geo/index.js';
 import { createIdentityAuth, identityModule, identitySeed, resolvePrincipal } from './identity/index.js';
 import { ledgerModule } from './ledger/index.js';
 import { notifyModule } from './notify/index.js';
@@ -34,7 +34,7 @@ export type ModuleBuilder = (deps: ProcessDeps) => KomtruModule[];
 // trust after files, because a liveness selfie is a file record it resolves through M20's barrel.
 // notify after those: it only subscribes to what the others publish.
 export const createModules: ModuleBuilder = (deps) => {
-  const auth = createIdentityAuth(deps);
+  const auth = createIdentityAuth({ ...deps, cities: getCitiesByIds });
   // Built before the array so trust can be handed its gateway, and placed LAST in the array so the
   // start order is unchanged: it produces nothing of its own, it only pushes what the others
   // produce. It takes identity's own resolver so a socket's handshake and its re-validation sweep

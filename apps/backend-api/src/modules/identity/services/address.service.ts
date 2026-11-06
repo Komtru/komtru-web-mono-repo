@@ -50,16 +50,18 @@ type AddressRow = typeof userAddresses.$inferSelect;
 type CityInfo = CityWithState;
 
 /**
- * The geo catalog's lookup, resolved when it is called and not when this file loads.
- *
- * Geo imports identity (its audit writer) and identity imports geo (this lookup). A static import
- * here closes that loop, and the loop is not harmless: `geo/index.ts` runs `createGeoModule()` as it
- * loads, which builds the admin routes, so whichever file the process happens to import first can
- * find a constant of the other half not yet initialised. By the time an address is written every
- * module has loaded, and the dynamic import is a cache hit.
+ * The catalog lookup this service needs, handed in rather than imported: geo imports identity (its
+ * audit writer), so identity importing geo back would close a loop in which `createGeoModule()` runs
+ * while geo's own route file is half evaluated. The registry (`modules/index.ts`) wires geo's
+ * `getCitiesByIds` in; cities come back active or not.
  */
-const getCitiesByIds = async (db: Db | Tx, ids: readonly string[]): Promise<CityInfo[]> =>
-  (await import('../../geo/index.js')).getCitiesByIds(db, ids);
+export type CityLookup = (db: Db | Tx, ids: readonly string[]) => Promise<CityInfo[]>;
+
+/** Everything the address functions reach for, in the repo's deps-object style. */
+export interface AddressDeps {
+  db: Db;
+  cities: CityLookup;
+}
 
 // ---------------------------------------------------------------------------
 // Errors
@@ -109,8 +111,13 @@ const toE164 = (raw: string): string => {
  * its own: a city that belongs to it proves it exists, and a state id that is nobody's fails the same
  * comparison.
  */
-async function assertDeliverable(db: Db | Tx, stateId: string, cityId: string): Promise<void> {
-  const [city] = await getCitiesByIds(db, [cityId]);
+async function assertDeliverable(
+  deps: AddressDeps,
+  db: Db | Tx,
+  stateId: string,
+  cityId: string,
+): Promise<void> {
+  const [city] = await deps.cities(db, [cityId]);
   if (!city) throw invalidField('cityId', 'Choose a city from the list');
   if (city.stateId !== stateId) throw invalidField('cityId', 'That city is not in the state you chose');
   if (!city.active) throw invalidField('cityId', 'We cannot deliver to that city yet');
@@ -136,14 +143,14 @@ const toView = (row: AddressRow, city: CityInfo | undefined): AddressView => ({
   updatedAt: row.updatedAt.toISOString(),
 });
 
-async function views(db: Db, rows: AddressRow[]): Promise<AddressView[]> {
-  const found = await getCitiesByIds(db, [...new Set(rows.map((row) => row.cityId))]);
+async function views(deps: AddressDeps, rows: AddressRow[]): Promise<AddressView[]> {
+  const found = await deps.cities(deps.db, [...new Set(rows.map((row) => row.cityId))]);
   const byId = new Map(found.map((city) => [city.id, city]));
   return rows.map((row) => toView(row, byId.get(row.cityId)));
 }
 
-async function viewOne(db: Db, row: AddressRow): Promise<AddressView> {
-  const [view] = await views(db, [row]);
+async function viewOne(deps: AddressDeps, row: AddressRow): Promise<AddressView> {
+  const [view] = await views(deps, [row]);
   if (!view) throw new Error('identity: an address row produced no view');
   return view;
 }
@@ -206,13 +213,29 @@ interface AddressCursor {
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
+const CURSOR_TIME = /^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})\.\d{6}Z$/;
+
+/**
+ * Exactly the text `createdKey` produces. The shape is checked with a regex and the calendar by a
+ * round trip, because `Date.parse` is lenient about shape and some engines roll `02-30` over to
+ * March: either would let a forged value reach `::timestamptz`, where Postgres says 22008 and the
+ * caller says 500.
+ */
+function isCursorTime(value: string): boolean {
+  const match = CURSOR_TIME.exec(value);
+  const head = match?.[1];
+  if (!head) return false;
+  const parsed = new Date(`${head}Z`);
+  return !Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 19) === head;
+}
+
 function readCursor(cursor: CursorKey | undefined): AddressCursor | undefined {
   if (cursor === undefined) return undefined;
   const { d, t, id } = cursor;
   if (
     (d !== 0 && d !== 1) ||
     typeof t !== 'string' ||
-    Number.isNaN(Date.parse(t)) ||
+    !isCursorTime(t) ||
     typeof id !== 'string' ||
     !UUID.test(id)
   ) {
@@ -228,13 +251,16 @@ const createdKey = sql<string>`to_char(${userAddresses.createdAt} at time zone '
  * The caller's live addresses: the default first, then newest first. Archived addresses are not
  * listed; they exist for the trades that snapshotted them.
  */
-export async function listAddresses(db: Db, input: ListAddressesInput): Promise<Paginated<AddressView>> {
+export async function listAddresses(
+  deps: AddressDeps,
+  input: ListAddressesInput,
+): Promise<Paginated<AddressView>> {
   const after = readCursor(input.cursor);
   const keyset: SQL | undefined = after
     ? sql`(${userAddresses.isDefault}, ${userAddresses.createdAt}, ${userAddresses.id}) < (${after.isDefault}::boolean, ${after.at}::timestamptz, ${after.id}::uuid)`
     : undefined;
 
-  const rows = await db
+  const rows = await deps.db
     .select({ row: userAddresses, key: createdKey })
     .from(userAddresses)
     .where(and(eq(userAddresses.userId, input.userId), isNull(userAddresses.archivedAt), keyset))
@@ -248,7 +274,7 @@ export async function listAddresses(db: Db, input: ListAddressesInput): Promise<
   }));
   return {
     items: await views(
-      db,
+      deps,
       page.items.map(({ row }) => row),
     ),
     nextCursor: page.nextCursor,
@@ -257,17 +283,24 @@ export async function listAddresses(db: Db, input: ListAddressesInput): Promise<
 
 /**
  * The trade gates' question (T-061): can this user be asked to ship to, or receive at, a saved
- * address? True when they hold a live address whose city is still in the catalog's active set; a
- * city staff deactivated is a place Komtru no longer serves, so the address cannot take a new trade.
+ * address?
+ *
+ * True when the user holds at least one LIVE address (not archived) whose city is still ACTIVE in
+ * the geo catalog. Nothing else counts: the default flag is irrelevant, and an address in a city staff
+ * have deactivated is a place Komtru no longer serves, so it cannot take a new trade even though it
+ * stays readable. Trades that already snapshotted an address are unaffected. It reads, never writes.
  */
-export async function hasUsableAddress(db: Db | Tx, userId: string): Promise<boolean> {
-  const held = await db
+export async function hasUsableAddress(
+  deps: { db: Db | Tx; cities: CityLookup },
+  userId: string,
+): Promise<boolean> {
+  const held = await deps.db
     .selectDistinct({ cityId: userAddresses.cityId })
     .from(userAddresses)
     .where(and(eq(userAddresses.userId, userId), isNull(userAddresses.archivedAt)));
   if (held.length === 0) return false;
-  const found = await getCitiesByIds(
-    db,
+  const found = await deps.cities(
+    deps.db,
     held.map((row) => row.cityId),
   );
   return found.some((city) => city.active);
@@ -283,12 +316,12 @@ export interface CreateAddressInput {
   request: AddressRequestContext;
 }
 
-export async function createAddress(db: Db, input: CreateAddressInput): Promise<AddressView> {
+export async function createAddress(deps: AddressDeps, input: CreateAddressInput): Promise<AddressView> {
   const { userId, body, request } = input;
   const phone = toE164(body.recipientPhone);
-  await assertDeliverable(db, body.stateId, body.cityId);
+  await assertDeliverable(deps, deps.db, body.stateId, body.cityId);
 
-  const row = await db.transaction(async (tx) => {
+  const row = await deps.db.transaction(async (tx) => {
     await lockUser(tx, userId);
     const live = await tx
       .select({ id: userAddresses.id, isDefault: userAddresses.isDefault })
@@ -337,7 +370,7 @@ export async function createAddress(db: Db, input: CreateAddressInput): Promise<
     return created;
   });
 
-  return viewOne(db, row);
+  return viewOne(deps, row);
 }
 
 export interface UpdateAddressInput {
@@ -347,19 +380,22 @@ export interface UpdateAddressInput {
   request: AddressRequestContext;
 }
 
-export async function updateAddress(db: Db, input: UpdateAddressInput): Promise<AddressView> {
+export async function updateAddress(deps: AddressDeps, input: UpdateAddressInput): Promise<AddressView> {
   const { userId, addressId, body, request } = input;
   const phone = body.recipientPhone === undefined ? undefined : toE164(body.recipientPhone);
 
-  const row = await db.transaction(async (tx) => {
+  const row = await deps.db.transaction(async (tx) => {
     await lockUser(tx, userId);
     const existing = await ownAddress(tx, userId, addressId);
     if (existing.archivedAt) throw addressArchived();
 
-    // Only an edit that moves the state or the city is checked against the catalog, against the half it
-    // did not move: a label change must not fail because staff deactivated the city since.
-    if (body.stateId !== undefined || body.cityId !== undefined) {
-      await assertDeliverable(tx, body.stateId ?? existing.stateId, body.cityId ?? existing.cityId);
+    // Only an edit that changes the resulting state/city pair is checked against the catalog (against the
+    // half it did not name): a label change, or restating the pair already held, must not fail because
+    // staff deactivated the city since.
+    const stateId = body.stateId ?? existing.stateId;
+    const cityId = body.cityId ?? existing.cityId;
+    if (stateId !== existing.stateId || cityId !== existing.cityId) {
+      await assertDeliverable(deps, tx, stateId, cityId);
     }
 
     const changed = ADDRESS_FIELDS.filter((field) => body[field] !== undefined);
@@ -389,7 +425,7 @@ export async function updateAddress(db: Db, input: UpdateAddressInput): Promise<
     return updated;
   });
 
-  return viewOne(db, row);
+  return viewOne(deps, row);
 }
 
 export interface AddressTarget {
@@ -403,10 +439,10 @@ export interface AddressTarget {
  * account that still has addresses always has a default; with none left there is no default, and the
  * next one added takes it. Archiving twice is a no-op, not an error: the client's retry is harmless.
  */
-export async function archiveAddress(db: Db, input: AddressTarget): Promise<AddressView> {
+export async function archiveAddress(deps: AddressDeps, input: AddressTarget): Promise<AddressView> {
   const { userId, addressId, request } = input;
 
-  const row = await db.transaction(async (tx) => {
+  const row = await deps.db.transaction(async (tx) => {
     await lockUser(tx, userId);
     const existing = await ownAddress(tx, userId, addressId);
     if (existing.archivedAt) return existing;
@@ -420,12 +456,16 @@ export async function archiveAddress(db: Db, input: AddressTarget): Promise<Addr
 
     let promoted: string | null = null;
     if (existing.isDefault) {
-      const [next] = await tx
-        .select({ id: userAddresses.id })
+      const others = await tx
+        .select({ id: userAddresses.id, cityId: userAddresses.cityId })
         .from(userAddresses)
         .where(and(eq(userAddresses.userId, userId), isNull(userAddresses.archivedAt)))
-        .orderBy(desc(userAddresses.createdAt), desc(userAddresses.id))
-        .limit(1);
+        .orderBy(desc(userAddresses.createdAt), desc(userAddresses.id));
+      // The newest one in a city Komtru still serves; failing that, simply the newest.
+      const served = new Map(
+        (await deps.cities(tx, [...new Set(others.map((row) => row.cityId))])).map((c) => [c.id, c.active]),
+      );
+      const next = others.find((row) => served.get(row.cityId) === true) ?? others[0];
       if (next) {
         await tx
           .update(userAddresses)
@@ -450,14 +490,14 @@ export async function archiveAddress(db: Db, input: AddressTarget): Promise<Addr
     return archived;
   });
 
-  return viewOne(db, row);
+  return viewOne(deps, row);
 }
 
 /** Makes an address the default. Already the default is a no-op. An archived address cannot be. */
-export async function makeDefaultAddress(db: Db, input: AddressTarget): Promise<AddressView> {
+export async function makeDefaultAddress(deps: AddressDeps, input: AddressTarget): Promise<AddressView> {
   const { userId, addressId, request } = input;
 
-  const row = await db.transaction(async (tx) => {
+  const row = await deps.db.transaction(async (tx) => {
     await lockUser(tx, userId);
     const existing = await ownAddress(tx, userId, addressId);
     if (existing.archivedAt) throw addressArchived();
@@ -488,5 +528,34 @@ export async function makeDefaultAddress(db: Db, input: AddressTarget): Promise<
     return updated;
   });
 
-  return viewOne(db, row);
+  return viewOne(deps, row);
+}
+
+/** What the anonymised rows carry: values that satisfy the table's checks and name nobody. */
+const PLACEHOLDER_TEXT = 'Removed';
+export const ANONYMISED_PHONE = '+10000000000';
+
+/**
+ * M1 §15's address step (T-039 must call it): scrubs the recipient name, phone, street, landmark and
+ * label to placeholders and archives every row, so nothing personal survives on an anonymised account.
+ * The rows stay (trades snapshot them, and a row is never deleted); state and city stay too, which is
+ * a coarse location and not an identity. One statement, so it is atomic on its own and joins the
+ * caller's transaction when handed a `Tx`. Idempotent. Returns how many rows the user holds.
+ */
+export async function anonymiseUserAddresses(db: Db | Tx, userId: string): Promise<number> {
+  const rows = await db
+    .update(userAddresses)
+    .set({
+      label: PLACEHOLDER_TEXT,
+      recipientName: PLACEHOLDER_TEXT,
+      recipientPhone: ANONYMISED_PHONE,
+      streetLine: PLACEHOLDER_TEXT,
+      landmark: null,
+      isDefault: false,
+      archivedAt: sql`coalesce(${userAddresses.archivedAt}, now())`,
+      updatedAt: sql`now()`,
+    })
+    .where(eq(userAddresses.userId, userId))
+    .returning({ id: userAddresses.id });
+  return rows.length;
 }

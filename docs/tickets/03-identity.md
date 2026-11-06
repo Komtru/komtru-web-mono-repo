@@ -120,6 +120,7 @@ Spec: `docs/specs/module-01-identity-and-user-management.md`. Decision C2 (desig
   - Close account blocked while any trade is active (CA1, CA2).
   - Account recovery requests with human review above threshold; opens a support ticket via event.
   - Data export and erasure requests hand off to compliance (T-104); anonymisation procedure per M1 §15 including avatar tombstoning through files.
+  - Anonymisation must call `anonymiseUserAddresses(db, userId)` (T-042, exported from the identity barrel), inside its own transaction: it scrubs and archives the user's saved addresses, which are never deleted.
 
 ### T-042 — Saved delivery addresses
 

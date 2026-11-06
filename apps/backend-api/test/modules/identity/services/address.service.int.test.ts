@@ -3,8 +3,9 @@
 // KOMTRU_INFRA_TESTS=1.
 import { MAX_ADDRESSES_PER_USER, type CreateAddressBody } from '@komtru/shared-types';
 import { beforeEach, describe, expect, it } from 'vitest';
-import { seedLocations } from '../../../../src/modules/geo/index.js';
+import { getCitiesByIds, seedLocations } from '../../../../src/modules/geo/index.js';
 import {
+  anonymiseUserAddresses,
   archiveAddress,
   createAddress,
   hasUsableAddress,
@@ -26,6 +27,7 @@ const NAME = 'Adaeze Obiora';
 
 describe.runIf(infraEnabled)('saved delivery addresses (T-042)', () => {
   const t = useTestDatabase();
+  const deps = () => ({ db: t.db(), cities: getCitiesByIds });
   let lagos: { stateId: string; ikeja: string; apapa: string };
   let oyo: { stateId: string; ibadan: string };
 
@@ -61,7 +63,7 @@ describe.runIf(infraEnabled)('saved delivery addresses (T-042)', () => {
     ...over,
   });
   const create = (userId: string, over: Partial<CreateAddressBody> = {}) =>
-    createAddress(t.db(), { userId, body: body(over), request: REQUEST });
+    createAddress(deps(), { userId, body: body(over), request: REQUEST });
 
   const failure = async (promise: Promise<unknown>): Promise<ApiError> => {
     try {
@@ -113,10 +115,10 @@ describe.runIf(infraEnabled)('saved delivery addresses (T-042)', () => {
       const first = await create(userId);
       const second = await create(userId, { label: 'Shop' });
       expect(
-        (await makeDefaultAddress(t.db(), { userId, addressId: second.id, request: REQUEST })).isDefault,
+        (await makeDefaultAddress(deps(), { userId, addressId: second.id, request: REQUEST })).isDefault,
       ).toBe(true);
       expect(await defaults(userId)).toEqual([second.id]);
-      await makeDefaultAddress(t.db(), { userId, addressId: second.id, request: REQUEST });
+      await makeDefaultAddress(deps(), { userId, addressId: second.id, request: REQUEST });
       expect(await defaults(userId)).toEqual([second.id]);
       expect(first.id).not.toBe(second.id);
     });
@@ -127,8 +129,8 @@ describe.runIf(infraEnabled)('saved delivery addresses (T-042)', () => {
       for (let i = 0; i < 6; i += 1) made.push(await create(userId, { label: `A${i}` }));
       const results = await Promise.allSettled(
         made.flatMap((a) => [
-          makeDefaultAddress(t.db(), { userId, addressId: a.id, request: REQUEST }),
-          makeDefaultAddress(t.db(), { userId, addressId: a.id, request: REQUEST }),
+          makeDefaultAddress(deps(), { userId, addressId: a.id, request: REQUEST }),
+          makeDefaultAddress(deps(), { userId, addressId: a.id, request: REQUEST }),
         ]),
       );
       expect(results.filter((r) => r.status === 'rejected')).toEqual([]);
@@ -140,7 +142,7 @@ describe.runIf(infraEnabled)('saved delivery addresses (T-042)', () => {
       const first = await create(userId, { label: 'One' });
       await create(userId, { label: 'Two' });
       const third = await create(userId, { label: 'Three' });
-      const archived = await archiveAddress(t.db(), { userId, addressId: first.id, request: REQUEST });
+      const archived = await archiveAddress(deps(), { userId, addressId: first.id, request: REQUEST });
       expect(archived.archivedAt).not.toBeNull();
       expect(archived.isDefault).toBe(false);
       expect(await defaults(userId)).toEqual([third.id]);
@@ -149,7 +151,7 @@ describe.runIf(infraEnabled)('saved delivery addresses (T-042)', () => {
     it('leaves no default when the last address is archived, and the next one takes it', async () => {
       const { userId } = await seedUser(t.app());
       const only = await create(userId);
-      await archiveAddress(t.db(), { userId, addressId: only.id, request: REQUEST });
+      await archiveAddress(deps(), { userId, addressId: only.id, request: REQUEST });
       expect(await defaults(userId)).toEqual([]);
       const next = await create(userId, { label: 'New' });
       expect(next.isDefault).toBe(true);
@@ -181,14 +183,14 @@ describe.runIf(infraEnabled)('saved delivery addresses (T-042)', () => {
     it('checks the pair again when an edit moves either half, against the stored half', async () => {
       const { userId } = await seedUser(t.app());
       const address = await create(userId);
-      const moveState = updateAddress(t.db(), {
+      const moveState = updateAddress(deps(), {
         userId,
         addressId: address.id,
         body: { stateId: oyo.stateId },
         request: REQUEST,
       });
       expect((await failure(moveState)).status).toBe(422);
-      const moved = await updateAddress(t.db(), {
+      const moved = await updateAddress(deps(), {
         userId,
         addressId: address.id,
         body: { stateId: oyo.stateId, cityId: oyo.ibadan },
@@ -202,7 +204,7 @@ describe.runIf(infraEnabled)('saved delivery addresses (T-042)', () => {
       const { userId } = await seedUser(t.app());
       const address = await create(userId);
       await t.owner().query(`UPDATE geo.cities SET active = false WHERE id = $1`, [lagos.ikeja]);
-      const renamed = await updateAddress(t.db(), {
+      const renamed = await updateAddress(deps(), {
         userId,
         addressId: address.id,
         body: { label: 'Mum’s place' },
@@ -226,7 +228,7 @@ describe.runIf(infraEnabled)('saved delivery addresses (T-042)', () => {
       expect(bad.status).toBe(422);
       expect(bad.fieldErrors?.map((f) => f.path)).toEqual(['recipientPhone']);
       const address = await create(userId);
-      const edit = updateAddress(t.db(), {
+      const edit = updateAddress(deps(), {
         userId,
         addressId: address.id,
         body: { recipientPhone: 'call me' },
@@ -238,14 +240,14 @@ describe.runIf(infraEnabled)('saved delivery addresses (T-042)', () => {
     it('clears a landmark with null and leaves it alone when the edit does not mention it', async () => {
       const { userId } = await seedUser(t.app());
       const address = await create(userId);
-      const kept = await updateAddress(t.db(), {
+      const kept = await updateAddress(deps(), {
         userId,
         addressId: address.id,
         body: { label: 'Home 2' },
         request: REQUEST,
       });
       expect(kept.landmark).toBe('Beside the pharmacy');
-      const cleared = await updateAddress(t.db(), {
+      const cleared = await updateAddress(deps(), {
         userId,
         addressId: address.id,
         body: { landmark: null },
@@ -266,7 +268,7 @@ describe.runIf(infraEnabled)('saved delivery addresses (T-042)', () => {
 
       const last = made.at(-1);
       if (!last) throw new Error('no address');
-      await archiveAddress(t.db(), { userId, addressId: last.id, request: REQUEST });
+      await archiveAddress(deps(), { userId, addressId: last.id, request: REQUEST });
       await create(userId, { label: 'room again' });
     });
 
@@ -304,8 +306,8 @@ describe.runIf(infraEnabled)('saved delivery addresses (T-042)', () => {
       const { userId } = await seedUser(t.app());
       const keep = await create(userId, { label: 'Keep' });
       const drop = await create(userId, { label: 'Drop' });
-      const first = await archiveAddress(t.db(), { userId, addressId: drop.id, request: REQUEST });
-      const again = await archiveAddress(t.db(), { userId, addressId: drop.id, request: REQUEST });
+      const first = await archiveAddress(deps(), { userId, addressId: drop.id, request: REQUEST });
+      const again = await archiveAddress(deps(), { userId, addressId: drop.id, request: REQUEST });
       expect(again.archivedAt).toBe(first.archivedAt);
 
       const { rows } = await t
@@ -314,7 +316,7 @@ describe.runIf(infraEnabled)('saved delivery addresses (T-042)', () => {
           userId,
         ]);
       expect(rows[0]?.n).toBe(2);
-      const page = await listAddresses(t.db(), { userId, limit: 20 });
+      const page = await listAddresses(deps(), { userId, limit: 20 });
       expect(page.items.map((a) => a.id)).toEqual([keep.id]);
 
       const archivedEvents = await t
@@ -327,13 +329,13 @@ describe.runIf(infraEnabled)('saved delivery addresses (T-042)', () => {
       const { userId } = await seedUser(t.app());
       await create(userId, { label: 'Stay' });
       const gone = await create(userId, { label: 'Gone' });
-      await archiveAddress(t.db(), { userId, addressId: gone.id, request: REQUEST });
+      await archiveAddress(deps(), { userId, addressId: gone.id, request: REQUEST });
       const edit = await failure(
-        updateAddress(t.db(), { userId, addressId: gone.id, body: { label: 'Back' }, request: REQUEST }),
+        updateAddress(deps(), { userId, addressId: gone.id, body: { label: 'Back' }, request: REQUEST }),
       );
       expect(edit.status).toBe(409);
       const dflt = await failure(
-        makeDefaultAddress(t.db(), { userId, addressId: gone.id, request: REQUEST }),
+        makeDefaultAddress(deps(), { userId, addressId: gone.id, request: REQUEST }),
       );
       expect(dflt.status).toBe(409);
     });
@@ -345,10 +347,10 @@ describe.runIf(infraEnabled)('saved delivery addresses (T-042)', () => {
       const stranger = await seedUser(t.app());
       const address = await create(owner.userId);
       const as = { userId: stranger.userId, addressId: address.id, request: REQUEST };
-      expect((await failure(updateAddress(t.db(), { ...as, body: { label: 'Mine' } }))).status).toBe(404);
-      expect((await failure(archiveAddress(t.db(), as))).status).toBe(404);
-      expect((await failure(makeDefaultAddress(t.db(), as))).status).toBe(404);
-      expect((await failure(archiveAddress(t.db(), { ...as, addressId: crypto.randomUUID() }))).status).toBe(
+      expect((await failure(updateAddress(deps(), { ...as, body: { label: 'Mine' } }))).status).toBe(404);
+      expect((await failure(archiveAddress(deps(), as))).status).toBe(404);
+      expect((await failure(makeDefaultAddress(deps(), as))).status).toBe(404);
+      expect((await failure(archiveAddress(deps(), { ...as, addressId: crypto.randomUUID() }))).status).toBe(
         404,
       );
     });
@@ -366,7 +368,7 @@ describe.runIf(infraEnabled)('saved delivery addresses (T-042)', () => {
       let cursor: ReturnType<typeof decodeCursor> | undefined;
       let pages = 0;
       for (;;) {
-        const page = await listAddresses(t.db(), { userId, limit: 2, ...(cursor ? { cursor } : {}) });
+        const page = await listAddresses(deps(), { userId, limit: 2, ...(cursor ? { cursor } : {}) });
         seen.push(...page.items.map((a) => a.id));
         pages += 1;
         if (!page.nextCursor) break;
@@ -381,14 +383,14 @@ describe.runIf(infraEnabled)('saved delivery addresses (T-042)', () => {
       const b = await seedUser(t.app());
       await create(a.userId);
       await create(b.userId, { stateId: oyo.stateId, cityId: oyo.ibadan });
-      const page = await listAddresses(t.db(), { userId: a.userId, limit: 20 });
+      const page = await listAddresses(deps(), { userId: a.userId, limit: 20 });
       expect(page.items).toHaveLength(1);
       expect(page.items[0]).toMatchObject({ cityName: 'Ikeja', stateName: 'Lagos', cityActive: true });
     });
 
     it('turns a cursor that is not this list’s into a 422', async () => {
       const { userId } = await seedUser(t.app());
-      const bad = await failure(listAddresses(t.db(), { userId, limit: 20, cursor: { n: 'x', id: 'y' } }));
+      const bad = await failure(listAddresses(deps(), { userId, limit: 20, cursor: { n: 'x', id: 'y' } }));
       expect(bad.status).toBe(422);
     });
   });
@@ -396,32 +398,32 @@ describe.runIf(infraEnabled)('saved delivery addresses (T-042)', () => {
   describe('hasUsableAddress', () => {
     it('is false with no address, true with a live one in an active city', async () => {
       const { userId } = await seedUser(t.app());
-      expect(await hasUsableAddress(t.db(), userId)).toBe(false);
+      expect(await hasUsableAddress(deps(), userId)).toBe(false);
       await create(userId);
-      expect(await hasUsableAddress(t.db(), userId)).toBe(true);
+      expect(await hasUsableAddress(deps(), userId)).toBe(true);
     });
 
     it('is false once the only address is archived', async () => {
       const { userId } = await seedUser(t.app());
       const only = await create(userId);
-      await archiveAddress(t.db(), { userId, addressId: only.id, request: REQUEST });
-      expect(await hasUsableAddress(t.db(), userId)).toBe(false);
+      await archiveAddress(deps(), { userId, addressId: only.id, request: REQUEST });
+      expect(await hasUsableAddress(deps(), userId)).toBe(false);
     });
 
     it('is false when every live address is in a deactivated city, true if one is not', async () => {
       const { userId } = await seedUser(t.app());
       await create(userId);
       await t.owner().query(`UPDATE geo.cities SET active = false WHERE id = $1`, [lagos.ikeja]);
-      expect(await hasUsableAddress(t.db(), userId)).toBe(false);
+      expect(await hasUsableAddress(deps(), userId)).toBe(false);
       await create(userId, { label: 'Ibadan', stateId: oyo.stateId, cityId: oyo.ibadan });
-      expect(await hasUsableAddress(t.db(), userId)).toBe(true);
+      expect(await hasUsableAddress(deps(), userId)).toBe(true);
     });
 
     it('is about this user only', async () => {
       const a = await seedUser(t.app());
       const b = await seedUser(t.app());
       await create(a.userId);
-      expect(await hasUsableAddress(t.db(), b.userId)).toBe(false);
+      expect(await hasUsableAddress(deps(), b.userId)).toBe(false);
     });
   });
 
@@ -429,15 +431,15 @@ describe.runIf(infraEnabled)('saved delivery addresses (T-042)', () => {
     it('carries ids and field names, never the phone, the street, the name or the landmark', async () => {
       const { userId } = await seedUser(t.app());
       const address = await create(userId);
-      await updateAddress(t.db(), {
+      await updateAddress(deps(), {
         userId,
         addressId: address.id,
         body: { streetLine: '99 Secret Close', recipientPhone: '08099999999' },
         request: REQUEST,
       });
       const second = await create(userId, { label: 'Shop' });
-      await makeDefaultAddress(t.db(), { userId, addressId: second.id, request: REQUEST });
-      await archiveAddress(t.db(), { userId, addressId: address.id, request: REQUEST });
+      await makeDefaultAddress(deps(), { userId, addressId: second.id, request: REQUEST });
+      await archiveAddress(deps(), { userId, addressId: address.id, request: REQUEST });
 
       const outbox = await t
         .owner()
@@ -488,6 +490,89 @@ describe.runIf(infraEnabled)('saved delivery addresses (T-042)', () => {
         .owner()
         .query(`SELECT 1 FROM platform.outbox WHERE event_type LIKE 'identity.address.%'`);
       expect(outbox.rowCount).toBe(0);
+    });
+  });
+  describe('review follow-ups', () => {
+    it('promotes the newest live address in an active city, falling back to the newest live one', async () => {
+      const { userId } = await seedUser(t.app());
+      const first = await create(userId, { label: 'One' });
+      const inIbadan = await create(userId, { label: 'Two', stateId: oyo.stateId, cityId: oyo.ibadan });
+      await create(userId, { label: 'Three' });
+      // The newest address now sits in a deactivated city, so the promotion skips it.
+      await t.owner().query(`UPDATE geo.cities SET active = false WHERE id = $1`, [lagos.ikeja]);
+      await archiveAddress(deps(), { userId, addressId: first.id, request: REQUEST });
+      expect(await defaults(userId)).toEqual([inIbadan.id]);
+
+      const other = await seedUser(t.app());
+      const only = await create(other.userId, { label: 'Only', stateId: oyo.stateId, cityId: oyo.ibadan });
+      const second = await create(other.userId, {
+        label: 'Second',
+        stateId: oyo.stateId,
+        cityId: oyo.ibadan,
+      });
+      await t.owner().query(`UPDATE geo.cities SET active = false WHERE id = $1`, [oyo.ibadan]);
+      await archiveAddress(deps(), { userId: other.userId, addressId: only.id, request: REQUEST });
+      expect(await defaults(other.userId)).toEqual([second.id]);
+    });
+
+    it('does not re-check the city when an edit restates the pair it already has', async () => {
+      const { userId } = await seedUser(t.app());
+      const address = await create(userId);
+      await t.owner().query(`UPDATE geo.cities SET active = false WHERE id = $1`, [lagos.ikeja]);
+      const same = await updateAddress(deps(), {
+        userId,
+        addressId: address.id,
+        body: { stateId: lagos.stateId, cityId: lagos.ikeja, label: 'Same place' },
+        request: REQUEST,
+      });
+      expect(same.label).toBe('Same place');
+      const moved = updateAddress(deps(), {
+        userId,
+        addressId: address.id,
+        body: { cityId: lagos.apapa },
+        request: REQUEST,
+      });
+      expect((await moved).cityId).toBe(lagos.apapa);
+    });
+
+    it.each([
+      ['a date that does not exist', '2026-02-30T10:00:00.000000Z'],
+      ['an hour that does not exist', '2026-02-10T25:00:00.000000Z'],
+      ['no timezone', '2026-02-10T10:00:00.000000'],
+      ['a loose format', 'Nov 6 2026'],
+      ['a SQL fragment', "2026-11-06T10:00:00.000000Z'; DROP TABLE x;--"],
+    ])('turns a forged cursor with %s into a 422', async (_name, t0) => {
+      const { userId } = await seedUser(t.app());
+      const bad = await failure(
+        listAddresses(deps(), { userId, limit: 20, cursor: { d: 1, t: t0, id: crypto.randomUUID() } }),
+      );
+      expect(bad.status).toBe(422);
+    });
+
+    it('scrubs every personal field and archives the rows, for any user state', async () => {
+      const { userId } = await seedUser(t.app());
+      const other = await seedUser(t.app());
+      await create(userId);
+      const second = await create(userId, { label: 'Shop' });
+      await archiveAddress(deps(), { userId, addressId: second.id, request: REQUEST });
+      const kept = await create(other.userId);
+
+      expect(await anonymiseUserAddresses(t.db(), userId)).toBe(2);
+      const { rows } = await t
+        .owner()
+        .query<Record<string, unknown>>(`SELECT * FROM identity.user_addresses WHERE user_id = $1`, [userId]);
+      expect(rows).toHaveLength(2);
+      for (const row of rows) {
+        expect(row).toMatchObject({
+          recipient_phone: '+10000000000',
+          is_default: false,
+        });
+        expect(row.archived_at).not.toBeNull();
+        expect(JSON.stringify(row)).not.toMatch(/Adaeze|Allen|pharmacy|Home|Shop|8012345678/);
+      }
+      expect(await hasUsableAddress(deps(), userId)).toBe(false);
+      expect((await listAddresses(deps(), { userId: other.userId, limit: 20 })).items[0]?.id).toBe(kept.id);
+      expect(await anonymiseUserAddresses(t.db(), userId)).toBe(2);
     });
   });
 });

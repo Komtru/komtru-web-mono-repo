@@ -4,7 +4,7 @@ import type { Db } from '../../../../src/db/index.js';
 import { addressRoutes } from '../../../../src/modules/identity/http/routes/address.routes.js';
 import { assertRouteInvariants, type HttpMethod } from '../../../../src/platform/http/route.js';
 
-const routes = addressRoutes({ db: null as unknown as Db });
+const routes = addressRoutes({ db: null as unknown as Db, cities: () => Promise.resolve([]) });
 const find = (method: HttpMethod, path: string) => {
   const route = routes.find((r) => r.method === method && r.path === path);
   if (!route) throw new Error(`no route ${method} ${path}`);

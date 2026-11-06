@@ -137,15 +137,19 @@ export * from './domain/capability.js';
 // T-042. `hasUsableAddress` is the trade gates' question (T-061); the rest is the saved-address API.
 export {
   addressNotFound,
+  anonymiseUserAddresses,
   archiveAddress,
   createAddress,
   hasUsableAddress,
   listAddresses,
   makeDefaultAddress,
   updateAddress,
+  type AddressDeps,
   type AddressRequestContext,
   type AddressView,
+  type CityLookup,
 } from './services/address.service.js';
+import type { CityLookup } from './services/address.service.js';
 export {
   createCapabilityService,
   postgresBuyerFacts,
@@ -197,6 +201,11 @@ export interface IdentityAuthOptions {
   logger: Logger;
   /** T-086's `logistics_company_members` lookup. Absent means nobody has a membership yet. */
   companyMembership?: (db: Db, userId: string) => Promise<CompanyMembership | null>;
+  /**
+   * The geo catalog's `getCitiesByIds`, wired by the registry (identity cannot import geo: geo imports
+   * identity). Absent means address writes fail loudly rather than skip the city check.
+   */
+  cities?: CityLookup;
 }
 
 export interface IdentityAuth {
@@ -220,6 +229,9 @@ export interface IdentityAuth {
  * the pool did not exist that early; a builder that is handed the pool removes the holder and the
  * "used before start" failure mode with it.
  */
+const missingCityLookup: CityLookup = () =>
+  Promise.reject(new Error('identity: no city lookup was wired in (IdentityAuthOptions.cities)'));
+
 export function createIdentityAuth(options: IdentityAuthOptions): IdentityAuth {
   const { db, redis, config, logger } = options;
   const signer = createTokenSigner(config);
@@ -315,7 +327,7 @@ export function createIdentityAuth(options: IdentityAuthOptions): IdentityAuth {
       ...usernameRoutes({ db }),
       ...partyRoutes(party),
       ...deviceRoutes({ db, logger }),
-      ...addressRoutes({ db }),
+      ...addressRoutes({ db, cities: options.cities ?? missingCityLookup }),
       ...mfaRoutes(account),
     ],
     schedules: [
