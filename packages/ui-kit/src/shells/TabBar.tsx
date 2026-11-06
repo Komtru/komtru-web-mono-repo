@@ -15,8 +15,10 @@ export interface TabBarProps {
 }
 
 /**
- * `.scr-tabbar` — the bottom tab bar. `margin-top:auto` is what pins it to the bottom of a short
- * screen, so it only works inside `<MobileShell>`'s flex column.
+ * `.komtru-mobile-nav` (v2) — the bottom tab bar: a translucent blurred surface with a lifted
+ * shadow, one equal column per item, and an indigo-soft pill behind the current one. T-110 drew
+ * v1's `.scr-tabbar`; T-222 re-based it. `margin-top:auto` is what pins it to the bottom of a
+ * short screen, so it only works inside `<MobileShell>`'s flex column.
  */
 export function TabBar({ items, label = 'Sections', className }: TabBarProps): React.JSX.Element {
   const current = soleCurrent(items, 'TabBar');
@@ -25,8 +27,10 @@ export function TabBar({ items, label = 'Sections', className }: TabBarProps): R
     <nav
       aria-label={label}
       className={cx(
-        'sticky bottom-0 mt-auto flex border-t-[1px] border-t-border-hairline bg-surface-primary',
-        'pt-[8px] pr-[4px] pb-[12px] pl-[4px]',
+        'sticky bottom-0 z-20 mt-auto grid shrink-0 grow-0 basis-auto grid-flow-col auto-cols-fr gap-[4px]',
+        'pt-[8px] pr-[8px] pb-[calc(8px+env(safe-area-inset-bottom,0px))] pl-[8px]',
+        'border-t-[1px] border-t-border-hairline bg-[rgba(255,255,255,.97)]',
+        '[box-shadow:0_-6px_18px_rgba(13,20,32,.045)] [backdrop-filter:blur(12px)]',
         className,
       )}
     >
@@ -34,25 +38,25 @@ export function TabBar({ items, label = 'Sections', className }: TabBarProps): R
         const active = index === current;
         const content = (
           <>
-            {/* The reference strokes `.tab svg` and colours `.tab span` with their own rules, not
-                through the tab, so the two states are stated where the reference states them. */}
-            <span
-              aria-hidden
-              className={cx('h-[19px] w-[19px]', active ? 'stroke-trust-indigo' : 'stroke-trust-gray')}
-            >
+            {/* v2 sets `stroke="currentColor"` on each glyph; a caller's icon does not, so the
+                wrapper hands the item's colour down. */}
+            <span aria-hidden className="h-[20px] w-[20px] shrink-0 grow-0 basis-auto stroke-current">
               {item.icon}
             </span>
-            <span
-              className={cx(
-                'text-[9px]',
-                active ? 'font-bold text-trust-indigo' : 'font-medium text-trust-gray',
-              )}
-            >
-              {item.label}
-            </span>
+            <span>{item.label}</span>
           </>
         );
-        const tabClass = cx('flex flex-1 flex-col items-center gap-[3px]', FOCUS_RING);
+        // v2's resting colour is #7A8496, which no token carries (`trust-gray` is the lighter
+        // #9AA5B8 and `slate` the darker #4C5568), so it is written as the reference writes it and
+        // `tabbar-parity.test.tsx` holds it to the reference.
+        const tabClass = cx(
+          'flex min-h-[48px] min-w-0 flex-col items-center justify-center gap-[4px] rounded-[12px] no-underline',
+          'text-[10px] font-semibold tracking-[.01em] transition-[background-color,color] duration-150 ease-[ease]',
+          'motion-reduce:transition-none',
+          // eslint-disable-next-line komtru-design/no-raw-hex -- v2's #7A8496 has no token; see above.
+          active ? 'bg-trust-indigo-soft text-trust-indigo' : 'bg-transparent text-[#7A8496]',
+          FOCUS_RING,
+        );
 
         return item.href === undefined ? (
           <button

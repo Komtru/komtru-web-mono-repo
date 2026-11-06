@@ -174,6 +174,9 @@ export function mediaHolds(prelude: string, width: number): boolean {
   const pixels = (value: string, unit: string): number =>
     unit === 'rem' ? Number(value) * REM : Number(value);
   return body.split(/\s+and\s+/).every((clause) => {
+    // A user preference no viewport width decides. Read as the default — no preference — so a
+    // `prefers-reduced-motion:reduce` override is the rule that does not apply.
+    if (/^\(prefers-reduced-motion:\s*reduce\)$/.test(clause.trim())) return false;
     const range = /^\(width\s*(>=|<=|>|<)\s*([\d.]+)(rem|px)\)$/.exec(clause.trim());
     if (range !== null) {
       const bound = pixels(range[2] ?? '', range[3] ?? 'px');
@@ -323,9 +326,28 @@ function resolveTokens(value: string, extra: Map<string, string>): string {
 
 const SIDES = ['top', 'right', 'bottom', 'left'] as const;
 
+/** Splits on the whitespace outside parentheses, so `calc(8px + env(x, 0px))` stays one value. */
+function splitTopLevel(value: string): string[] {
+  const parts: string[] = [];
+  let depth = 0;
+  let current = '';
+  for (const char of value) {
+    if (char === '(') depth += 1;
+    else if (char === ')') depth -= 1;
+    if (/\s/.test(char) && depth === 0) {
+      if (current !== '') parts.push(current);
+      current = '';
+    } else {
+      current += char;
+    }
+  }
+  if (current !== '') parts.push(current);
+  return parts;
+}
+
 /** `12px 18px` → the four physical sides, the way the box-model shorthand expands. */
 function expandBox(value: string): [string, string, string, string] {
-  const parts = value.split(/\s+/).filter(Boolean);
+  const parts = splitTopLevel(value);
   const top = parts[0] ?? '0';
   const right = parts[1] ?? top;
   const bottom = parts[2] ?? top;
