@@ -6,7 +6,7 @@ A buyer and a seller agree a trade, the buyer funds escrow, goods move by self-a
 delivery, the buyer inspects, money is released or the trade is disputed — and a certified
 merchant can run a storefront with listings and search on top of that.
 
-**55 tickets to MVP**, on top of the 31 already done: 86 of 135. 49 are deferred to after it.
+**71 tickets to MVP** (the original 55, T-190 and the 15 it adds), on top of the 31 already done. 64 are deferred to after it, of 166 in all.
 
 > The full ticket list is [`TICKETS.md`](TICKETS.md); it is not reorganised by this document.
 > This is the cut through it, and the record of why each line sits where it does.
@@ -17,7 +17,7 @@ The ticket graph was written for the whole product, so an MVP is not a prefix of
 things in particular have to be changed deliberately rather than waited out:
 
 - **T-183 ("definition-of-done audit and first push") depends on every other ticket.** Nothing
-  ships until all 135 are done. For the MVP it must depend on the MVP set only.
+  ships until all 166 are done. For the MVP it must depend on the MVP set only.
 - **T-118 (web delivery, pickup PIN and inspection) depends on T-093 (Park and trade
   integration).** The buyer's own delivery screen pulls in the entire Park hub network —
   schema, custody API, the Park agent app and its console, 16 tickets.
@@ -25,7 +25,7 @@ things in particular have to be changed deliberately rather than waited out:
   logistics packages and the Park network console. Its definition of "end to end" spans two
   apps the MVP does not build.
 
-## Included — 55 tickets
+## Included — 71 tickets
 
 ### Identity and platform (13)
 
@@ -78,10 +78,23 @@ T-124 seller payouts · T-126 trust, account and settings
 T-140 scaffold, shell and staff auth · T-141 work queue and universal case · T-143 disputes ·
 T-144 identity review · T-154 merchant certification review
 
-### UI master v2 (1, added 2026-11-06)
+### UI master v2 (16, added 2026-11-06)
 
-T-190 remap the screen index to Living Master v2 and re-scope the UI tickets. Every MVP UI
-ticket now depends on it. The tickets it creates are added to this section as MVP or deferred.
+T-190 remaps the screen index to Living Master v2 and re-scopes the UI tickets; every MVP UI
+ticket depends on it. It adds 30 tickets, 15 of them MVP, listed here:
+
+- **T-191** rework T-110 shells to v2: the desktop sidebar, tablet top nav and Buy/Sell mode
+  switch every MVP desktop and tablet screen sits in.
+- **T-192, T-193** create a trade, the four-stage flows: the core buyer and seller journey.
+- **T-194** workspace supporting screens, funding, terms and payment: the escrow path.
+- **T-195** workspace supporting screens, delivery and evidence: self-arranged delivery.
+- **T-197** proof media: mandatory seller proof and buyer comparison, the heart of inspection.
+- **T-198** lifecycle exceptions and trade extras: expiry, withdrawal and inspection updates.
+- **T-202** seller shop settings and catalogue import: the merchant storefront.
+- **T-204** account basics, money documents and system states: addresses, refunds, session errors.
+- **T-205** account security and lifecycle: MFA, suspension and closure, which T-036 and T-039 serve.
+- **T-207, T-208, T-209** desktop journeys, arrive to complete: the desktop layouts of MVP journeys.
+- **T-212, T-213** tablet journeys, arrive to complete: the tablet layouts of the same journeys.
 
 ### Release (4)
 
@@ -100,9 +113,9 @@ depending ticket does for a user; each narrows what it covers.
 | T-118 delivery and inspection      | T-093 Park integration               | Self-arranged delivery and inspection only — no hub custody, no Park pickup PIN.                                                                |
 | T-123 seller handling and shipping | T-087 logistics packages, T-093 Park | The seller marks a trade shipped and supplies their own tracking; no ship-to-company.                                                           |
 | T-180 end-to-end critical paths    | T-173, T-162, T-148                  | "End to end" means propose → fund → deliver → inspect → release, plus the dispute path. Park and logistics journeys are added with those waves. |
-| T-183 first push                   | everything outside this list         | Gates the push on the MVP set rather than on all 135.                                                                                           |
+| T-183 first push                   | everything outside this list         | Gates the push on the MVP set rather than on all 166.                                                                                           |
 
-## Deferred — 49 tickets
+## Deferred — 64 tickets
 
 - **Park, 16:** T-090–T-095, T-130, T-147, T-148, T-170–T-174. The signature feature, and the
   largest single block. It is the first wave after MVP.
@@ -112,6 +125,15 @@ depending ticket does for a user; each narrows what it covers.
 - **Support and admin, 11:** T-034, T-041, T-100, T-103, T-104, T-105, T-125, T-129, T-150,
   T-151, T-152.
 - **Console and misc, 3:** T-142, T-153, T-155.
+- **UI master v2, 15:** each is deferred because the buyer or seller feature it draws is deferred,
+  or because it belongs to a console or hub surface the MVP does not build.
+  - T-196 workspace resolution screens, T-199, T-200 and T-210 desktop issues: disputes are deferred with T-120.
+  - T-201 Track D return custody and T-206 hub tools and count: Park is deferred.
+  - T-203 seller customers, tax and badges: storefront polish after the first merchants are live.
+  - T-211 desktop help and settings, T-214 tablet issues, messages and help: help and messaging are deferred.
+  - T-215 operations control, T-216 governance, T-217 treasury, T-218 field audits, T-219 people
+    development and T-220 TrustOps tablet: the MVP console is the work queue, disputes, identity
+    review and merchant review only.
 - **T-181 load and resilience** — deliberately after the MVP ships, when there is real traffic
   shape to test against.
 
