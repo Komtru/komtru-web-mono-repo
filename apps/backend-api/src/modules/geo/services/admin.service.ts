@@ -8,7 +8,7 @@ import { isUniqueViolation } from '../../../db/errors.js';
 import { publish, type Tx } from '../../../platform/events/publish.js';
 import { cursorPage, type CursorKey } from '../../../platform/http/paginate.js';
 import { cleanAliases, nameCursorKey, readNameCursor } from '../domain/catalog.js';
-import { aliasClash, cityExists, cityNotFound, stateNotFound } from '../domain/errors.js';
+import { aliasClash, cityExists, cityNotFound, nameIsAlias, stateNotFound } from '../domain/errors.js';
 import { catalogChanged } from '../domain/events.js';
 import { cities } from '../infrastructure/postgres/schema/cities.js';
 import { states } from '../infrastructure/postgres/schema/states.js';
@@ -125,6 +125,27 @@ export async function assertAliasesFree(
   if (clash) throw aliasClash(clash.normalisedName, clash.name);
 }
 
+/** A city's own name must not be another city's alias, or one typeahead prefix means two places. */
+export async function assertNameNotAnAlias(
+  tx: Tx,
+  stateId: string,
+  normalisedName: string,
+  displayName: string,
+  exceptCityId?: string,
+): Promise<void> {
+  const [other] = await tx
+    .select({ name: cities.name })
+    .from(cities)
+    .where(
+      and(
+        eq(cities.stateId, stateId),
+        sql`${normalisedName} = ANY(${cities.aliases})`,
+        exceptCityId ? ne(cities.id, exceptCityId) : undefined,
+      ),
+    );
+  if (other) throw nameIsAlias(displayName, other.name);
+}
+
 /**
  * Inserts a city inside the caller's transaction. Shared by "add a city" and "add a requested city",
  * so both enforce the same uniqueness and write the same audit row and event.
@@ -148,6 +169,7 @@ export async function insertCity(
     .from(cities)
     .where(and(eq(cities.stateId, input.stateId), eq(cities.normalisedName, normalisedName)));
   if (existing) throw cityExists(existing.id, existing.name, existing.active);
+  await assertNameNotAnAlias(tx, input.stateId, normalisedName, input.name);
   const aliases = cleanAliases(input.aliases, normalisedName);
   await assertAliasesFree(tx, input.stateId, aliases);
 
@@ -247,11 +269,11 @@ export async function updateCity(
   input: UpdateCityInput,
 ): Promise<{ city: AdminCityView; changed: boolean }> {
   const [before] = await db
-    .select({ stateId: cities.stateId })
+    .select({ stateId: cities.stateId, name: cities.name })
     .from(cities)
     .where(eq(cities.id, input.cityId));
   if (!before) throw cityNotFound();
-  const nameForRace = input.name ?? '';
+  const nameForRace = input.name ?? before.name;
 
   return translateDuplicate(db, before.stateId, nameForRace, () =>
     db.transaction(async (tx) => {
@@ -271,6 +293,7 @@ export async function updateCity(
             ),
           );
         if (clash) throw cityExists(clash.id, clash.name, clash.active);
+        await assertNameNotAnAlias(tx, current.stateId, normalisedName, name, current.id);
       }
 
       const requested = input.aliases !== undefined ? [...input.aliases] : current.aliases;

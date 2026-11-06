@@ -30,6 +30,25 @@ export const requestAlreadyDecided = () =>
     'Another reviewer got there first',
   );
 
+export const MAX_PENDING_REQUESTS_PER_USER = 20;
+
+export const requestLimitReached = () =>
+  new ApiError(
+    409,
+    'CITY_REQUEST_LIMIT_REACHED',
+    'You have too many city requests waiting',
+    `Wait for a decision on your ${MAX_PENDING_REQUESTS_PER_USER} open requests before asking for another`,
+  );
+
+/** A new or renamed city whose name is already a search alias of a different city in the state. */
+export const nameIsAlias = (name: string, otherName: string) =>
+  new ApiError(
+    409,
+    'CONFLICT',
+    'That name is already a search alias of another city',
+    `${name} is an alias of ${otherName} in this state; remove the alias first, or merge instead`,
+  );
+
 export const aliasClash = (alias: string, otherName: string) =>
   new ApiError(
     422,
@@ -37,9 +56,20 @@ export const aliasClash = (alias: string, otherName: string) =>
     'An alias collides with another city',
     `"${alias}" is the name of ${otherName} in this state`,
     [{ path: 'aliases', message: `"${alias}" is the name of ${otherName}` }],
+    { alias, otherName },
   );
 
 export const mergeTargetInvalid = (message: string) =>
   new ApiError(422, 'VALIDATION_FAILED', 'That city cannot take this request', message, [
     { path: 'cityId', message },
   ]);
+
+/** A merge's automatic alias hit another city; staff can still merge without it. */
+export const mergeAliasClash = (alias: string, otherName: string) =>
+  new ApiError(
+    422,
+    'VALIDATION_FAILED',
+    'The typed name collides with another city',
+    `"${alias}" is the name of ${otherName} in this state. Retry the merge with addAlias:false to merge without keeping it as an alias.`,
+    [{ path: 'addAlias', message: 'Retry with addAlias:false' }],
+  );

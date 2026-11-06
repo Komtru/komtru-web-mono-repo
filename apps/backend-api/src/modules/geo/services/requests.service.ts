@@ -6,17 +6,21 @@
 // normalised name in the same transaction, locked in id order so two reviewers working the same
 // group cannot deadlock, and publishes one `geo.city_request.decided` per requester.
 import { normaliseCityName, type CityRequestStatus, type Paginated } from '@komtru/shared-types';
-import { and, asc, eq, sql } from 'drizzle-orm';
+import { and, asc, eq, inArray, sql } from 'drizzle-orm';
 import type { Db } from '../../../db/index.js';
 import { isUniqueViolation } from '../../../db/errors.js';
 import { publish, type Tx } from '../../../platform/events/publish.js';
+import { ApiError } from '../../../platform/errors.js';
 import { cursorPage, type CursorKey } from '../../../platform/http/paginate.js';
-import { cleanAliases, readTimeCursor } from '../domain/catalog.js';
+import { MAX_ALIASES, cleanAliases, readTimeCursor } from '../domain/catalog.js';
 import {
   cityExists,
   cityNotFound,
   cityRequestNotFound,
+  MAX_PENDING_REQUESTS_PER_USER,
+  mergeAliasClash,
   mergeTargetInvalid,
+  requestLimitReached,
   requestAlreadyDecided,
   stateNotFound,
 } from '../domain/errors.js';
@@ -93,16 +97,29 @@ export async function submitCityRequest(
   if (already) return toView(already);
 
   try {
-    const [row] = await db
-      .insert(cityRequests)
-      .values({
-        requestedByUserId: input.userId,
-        stateId: input.stateId,
-        cityName: input.cityName,
-        normalisedName,
-      })
-      .returning();
-    if (!row) throw new Error('geo: the city request insert returned no row');
+    const row = await db.transaction(async (tx) => {
+      // One user's submissions are counted and inserted one at a time, so two taps cannot both
+      // slip under the cap.
+      await tx.execute(
+        sql`SELECT pg_advisory_xact_lock(hashtextextended(${`geo.city_request:${input.userId}`}, 0))`,
+      );
+      const [held] = await tx
+        .select({ n: sql<number>`count(*)::int` })
+        .from(cityRequests)
+        .where(and(eq(cityRequests.requestedByUserId, input.userId), eq(cityRequests.status, 'PENDING')));
+      if ((held?.n ?? 0) >= MAX_PENDING_REQUESTS_PER_USER) throw requestLimitReached();
+      const [inserted] = await tx
+        .insert(cityRequests)
+        .values({
+          requestedByUserId: input.userId,
+          stateId: input.stateId,
+          cityName: input.cityName,
+          normalisedName,
+        })
+        .returning();
+      if (!inserted) throw new Error('geo: the city request insert returned no row');
+      return inserted;
+    });
     return toView(row);
   } catch (error) {
     // A double tap raced past the check above; the partial unique index made it one request.
@@ -169,7 +186,7 @@ export async function listCityRequests(
   };
 }
 
-interface Group {
+export interface Group {
   target: RequestRow;
   /** Every still-pending request for the target's state and name, target included. */
   members: RequestRow[];
@@ -177,7 +194,7 @@ interface Group {
 }
 
 /** Locks the whole pending group in id order, then proves the target is still in it. */
-async function lockGroup(tx: Tx, requestId: string): Promise<Group> {
+export async function lockGroup(tx: Tx, requestId: string): Promise<Group> {
   const [probe] = await tx
     .select({ stateId: cityRequests.stateId, normalisedName: cityRequests.normalisedName })
     .from(cityRequests)
@@ -202,14 +219,19 @@ async function lockGroup(tx: Tx, requestId: string): Promise<Group> {
   return { target, members, stateName: state.name };
 }
 
-interface Decision {
+export interface Decision {
   actor: GeoActor;
   status: 'ADDED' | 'MERGED' | 'REJECTED';
   city: { id: string; name: string } | null;
   reason: string | null;
 }
 
-async function applyDecision(tx: Tx, group: Group, decision: Decision): Promise<void> {
+export async function applyDecision(
+  tx: Tx,
+  group: Group,
+  decision: Decision,
+  extraAudit: Record<string, unknown> = {},
+): Promise<void> {
   const decidedAt = new Date();
   await tx
     .update(cityRequests)
@@ -220,10 +242,14 @@ async function applyDecision(tx: Tx, group: Group, decision: Decision): Promise<
       decisionReason: decision.reason,
       decidedAt,
     })
+    // Exactly the rows that were locked (and so are notified and audited below). A request inserted
+    // after the lock is not among them and stays PENDING for the next decision.
     .where(
       and(
-        eq(cityRequests.stateId, group.target.stateId),
-        eq(cityRequests.normalisedName, group.target.normalisedName),
+        inArray(
+          cityRequests.id,
+          group.members.map((member) => member.id),
+        ),
         eq(cityRequests.status, 'PENDING'),
       ),
     );
@@ -240,6 +266,7 @@ async function applyDecision(tx: Tx, group: Group, decision: Decision): Promise<
     requestedName: group.target.cityName,
     cityId: decision.city?.id ?? null,
     reason: decision.reason,
+    ...extraAudit,
   });
 
   for (const member of group.members) {
@@ -289,10 +316,20 @@ export async function addRequestedCity(db: Db, input: AddRequestedCityInput): Pr
   try {
     return await db.transaction(async (tx) => {
       const group = await lockGroup(tx, input.requestId);
+      // When staff corrected the spelling, keep what people typed searchable, as a merge does, unless
+      // that would push the city past the alias cap.
+      let aliases = input.aliases;
+      if (normaliseCityName(name) !== group.target.normalisedName) {
+        const withTyped = cleanAliases(
+          [...(input.aliases ?? []), group.target.normalisedName],
+          normaliseCityName(name),
+        );
+        if (withTyped.length <= MAX_ALIASES) aliases = withTyped;
+      }
       const city = await insertCity(tx, input.actor, {
         stateId: group.target.stateId,
         name,
-        aliases: input.aliases,
+        aliases,
         reason: input.reason ?? null,
         via: 'CITY_REQUEST',
       });
@@ -335,10 +372,22 @@ export async function mergeRequest(db: Db, input: MergeRequestInput): Promise<Ci
     }
     if (!target.active) throw mergeTargetInvalid('That city is deactivated; reactivate it or pick another');
 
+    let aliasSkipped: string | undefined;
     if (input.addAlias !== false) {
       const aliases = cleanAliases([...target.aliases, group.target.normalisedName], target.normalisedName);
-      if (aliases.length !== target.aliases.length) {
-        await assertAliasesFree(tx, target.stateId, aliases, target.id);
+      if (aliases.length > MAX_ALIASES) {
+        // A city that already holds the most aliases it may is still a valid merge target; the
+        // request is folded in without the alias, and the audit row says so.
+        aliasSkipped = 'MAX_ALIASES';
+      } else if (aliases.length !== target.aliases.length) {
+        try {
+          await assertAliasesFree(tx, target.stateId, aliases, target.id);
+        } catch (error) {
+          if (error instanceof ApiError && typeof error.extensions?.otherName === 'string') {
+            throw mergeAliasClash(group.target.normalisedName, error.extensions.otherName);
+          }
+          throw error;
+        }
         await tx.update(cities).set({ aliases, updatedAt: new Date() }).where(eq(cities.id, target.id));
         await writeGeoAudit(tx, input.actor, GEO_AUDIT.CITY_UPDATED, {
           cityId: target.id,
@@ -359,12 +408,17 @@ export async function mergeRequest(db: Db, input: MergeRequestInput): Promise<Ci
       }
     }
 
-    await applyDecision(tx, group, {
-      actor: input.actor,
-      status: 'MERGED',
-      city: { id: target.id, name: target.name },
-      reason: input.reason ?? null,
-    });
+    await applyDecision(
+      tx,
+      group,
+      {
+        actor: input.actor,
+        status: 'MERGED',
+        city: { id: target.id, name: target.name },
+        reason: input.reason ?? null,
+      },
+      aliasSkipped ? { aliasSkipped } : {},
+    );
     return reload(tx, input.requestId);
   });
 }

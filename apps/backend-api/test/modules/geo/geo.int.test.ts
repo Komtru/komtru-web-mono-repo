@@ -11,6 +11,7 @@ import { geoAdminRoutes } from '../../../src/modules/geo/http/admin.routes.js';
 import { geoPublicRoutes } from '../../../src/modules/geo/http/public.routes.js';
 import { createGeoCache, type GeoCache } from '../../../src/modules/geo/infrastructure/redis/cache.js';
 import { seedRows } from '../../../src/modules/geo/domain/seed.js';
+import { applyDecision, lockGroup } from '../../../src/modules/geo/services/requests.service.js';
 import { seedLocations } from '../../../src/modules/geo/services/seed.service.js';
 import { createIdentityAuth } from '../../../src/modules/identity/index.js';
 import { errorHandler, notFound } from '../../../src/platform/errors.js';
@@ -697,6 +698,138 @@ describe.runIf(infraEnabled)('location catalog (T-046)', () => {
         cursor = page.nextCursor;
       } while (cursor);
       expect(seen).toEqual(['Alpha Town', 'Beta Town', 'Gamma Town']);
+    });
+  });
+
+  describe('review fixes', () => {
+    const submit = (app: express.Express, state: string, cityName: string) =>
+      request(app).post('/v1/geo/city-requests').send({ stateId: state, cityName });
+
+    it('a decision settles only the requests it locked: one inserted after the lock stays PENDING', async () => {
+      const plateau = await stateId('PL');
+      const first = await consumer();
+      const created = await submit(appFor(first.actor), plateau, 'Jos East').expect(201);
+      const late = await consumer();
+      const admin = await staffActor(['geo.manage']);
+      await clearOutbox();
+
+      await db().transaction(async (tx) => {
+        const group = await lockGroup(tx, body<{ id: string }>(created).id);
+        // A second person asks for the same name after the group was locked.
+        await t.owner().query(
+          `INSERT INTO geo.city_requests (requested_by_user_id, state_id, city_name, normalised_name)
+           VALUES ($1, $2, 'Jos East', 'jos east')`,
+          [late.userId, plateau],
+        );
+        await applyDecision(tx, group, {
+          actor: { userId: admin.principal?.userId ?? '' },
+          status: 'REJECTED',
+          city: null,
+          reason: 'not now',
+        });
+      });
+
+      const { rows } = await t
+        .owner()
+        .query<{ status: string }>(`SELECT status FROM geo.city_requests ORDER BY created_at`);
+      expect(rows.map((r) => r.status)).toEqual(['REJECTED', 'PENDING']);
+      expect(await outboxEventTypes(t.app())).toEqual(['geo.city_request.decided']);
+    });
+
+    it('seeding rows bumps the cache through an event, and a seed that adds nothing publishes nothing', async () => {
+      await t.owner().query(`TRUNCATE geo.city_requests, geo.cities, geo.states CASCADE`);
+      await clearOutbox();
+      await seedLocations(db());
+      expect(await outboxEventTypes(t.app())).toEqual(['geo.catalog.changed']);
+      await clearOutbox();
+      await seedLocations(db());
+      expect(await outboxEventTypes(t.app())).toEqual([]);
+    });
+
+    it('caps a user at 20 distinct pending requests with a clear code, but a repeat still works', async () => {
+      const plateau = await stateId('PL');
+      const user = await consumer();
+      const app = appFor(user.actor);
+      const names = [...'abcdefghijklmnopqrstu'].map((l) => `Testville ${l}`);
+      for (const name of names.slice(0, 20)) await submit(app, plateau, name).expect(201);
+      const over = await submit(app, plateau, names[20] ?? '').expect(409);
+      expect(over.body).toMatchObject({ code: 'CITY_REQUEST_LIMIT_REACHED' });
+      await submit(app, plateau, names[0] ?? '').expect(201);
+      await submit(appFor((await consumer()).actor), plateau, names[20] ?? '').expect(201);
+    });
+
+    it('refuses to add or rename a city onto another city’s alias', async () => {
+      const admin = appFor(await staffActor(['geo.manage']));
+      const rivers = await stateId('RI');
+      const res = await request(admin)
+        .post('/v1/admin/geo/cities')
+        .send({ stateId: rivers, name: 'PH', reason: REASON })
+        .expect(409);
+      expect(res.body).toMatchObject({ code: 'CONFLICT' });
+      const bonny = await cityId('RI', 'Bonny');
+      await request(admin)
+        .patch(`/v1/admin/geo/cities/${bonny}`)
+        .send({ name: 'ph', reason: REASON })
+        .expect(409);
+    });
+
+    it('a merge that clashes on the alias says to retry with addAlias:false, and then succeeds', async () => {
+      const plateau = await stateId('PL');
+      const admin = appFor(await staffActor(['geo.manage']));
+      const bukuru = await cityId('PL', 'Bukuru');
+      await request(admin)
+        .post(`/v1/admin/geo/cities/${bukuru}/deactivate`)
+        .send({ reason: REASON })
+        .expect(200);
+      const created = await submit(appFor((await consumer()).actor), plateau, 'Bukuru').expect(201);
+      const id = body<{ id: string }>(created).id;
+      const jos = await cityId('PL', 'Jos');
+      const clash = await request(admin)
+        .post(`/v1/admin/geo/city-requests/${id}/merge`)
+        .send({ cityId: jos })
+        .expect(422);
+      expect(JSON.stringify(clash.body)).toContain('addAlias');
+      await request(admin)
+        .post(`/v1/admin/geo/city-requests/${id}/merge`)
+        .send({ cityId: jos, addAlias: false })
+        .expect(200);
+    });
+
+    it('add with a corrected name keeps the typed spelling searchable as an alias', async () => {
+      const plateau = await stateId('PL');
+      const created = await submit(appFor((await consumer()).actor), plateau, 'Jos Eest').expect(201);
+      const admin = appFor(await staffActor(['geo.manage']));
+      await request(admin)
+        .post(`/v1/admin/geo/city-requests/${body<{ id: string }>(created).id}/add`)
+        .send({ name: 'Jos East' })
+        .expect(200);
+      const found = body<Page<City>>(
+        await request(appFor(ANONYMOUS_ACTOR)).get('/v1/geo/cities?q=jos%20eest').expect(200),
+      );
+      expect(found.items.map((c) => c.name)).toEqual(['Jos East']);
+    });
+
+    it('a merge into a city already at the alias cap still succeeds, and the audit row says the alias was skipped', async () => {
+      const plateau = await stateId('PL');
+      const admin = appFor(await staffActor(['geo.manage']));
+      const jos = await cityId('PL', 'Jos');
+      const aliases = [...'abcdefghij'].map((l) => `jos ${l}`);
+      await request(admin).patch(`/v1/admin/geo/cities/${jos}`).send({ aliases, reason: REASON }).expect(200);
+      const created = await submit(appFor((await consumer()).actor), plateau, 'Jos Nrth').expect(201);
+      await request(admin)
+        .post(`/v1/admin/geo/city-requests/${body<{ id: string }>(created).id}/merge`)
+        .send({ cityId: jos })
+        .expect(200);
+      const { rows } = await t
+        .owner()
+        .query<{ metadata: unknown }>(
+          `SELECT metadata FROM identity.identity_audit_log WHERE action = 'ADMIN_GEO_CITY_REQUEST_MERGED'`,
+        );
+      expect(rows[0]?.metadata).toMatchObject({ aliasSkipped: 'MAX_ALIASES' });
+      const found = body<Page<City>>(
+        await request(appFor(ANONYMOUS_ACTOR)).get('/v1/geo/cities?q=jos%20nrth').expect(200),
+      );
+      expect(found.items).toEqual([]);
     });
   });
 });

@@ -120,6 +120,7 @@ describe('the codes T-051 answers with', () => {
     expect(PROBLEM_CODES).toContain('IDENTITY_VERIFICATION_REQUIRED');
     expect(PROBLEM_CODES).toContain('BUSINESS_VERIFICATION_REQUIRED');
     expect(PROBLEM_CODES).toContain('CHALLENGE_EXPIRED');
+    expect(PROBLEM_CODES).toContain('CITY_REQUEST_LIMIT_REACHED');
   });
 
   /**

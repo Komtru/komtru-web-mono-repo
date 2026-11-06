@@ -3,7 +3,14 @@
 import { defineEvent } from '@komtru/shared-types';
 import { z } from 'zod';
 
-export const CATALOG_CHANGES = ['CITY_ADDED', 'CITY_UPDATED', 'CITY_DEACTIVATED', 'CITY_ACTIVATED'] as const;
+export const CATALOG_CHANGES = [
+  'CITY_ADDED',
+  'CITY_UPDATED',
+  'CITY_DEACTIVATED',
+  'CITY_ACTIVATED',
+  /** The seed inserted rows; it names no single state or city. */
+  'CATALOG_SEEDED',
+] as const;
 
 /** Anything a dropdown would show differently afterwards. This module's own cache subscribes to it. */
 export const catalogChanged = defineEvent(
@@ -11,8 +18,8 @@ export const catalogChanged = defineEvent(
   1,
   z.object({
     change: z.enum(CATALOG_CHANGES),
-    stateId: z.uuid(),
-    cityId: z.uuid(),
+    stateId: z.uuid().nullable(),
+    cityId: z.uuid().nullable(),
   }),
 );
 
