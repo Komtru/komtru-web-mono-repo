@@ -173,3 +173,10 @@ cost and to find work to resume.
   - T-038 so far: about 5h 5.
 - Next: finish T-038 (resume the worktree), then T-072 funding (Opus, in a fresh window), then
   T-039 and T-046.
+
+## 2026-11-06 21:30 WAT — skipped: budget (5h 89%, week 48%)
+
+- Capacity 0: the 5-hour window (89%, resets 22:20 WAT) leaves no room for a ticket cycle.
+- In-flight, not a cheap tail, so not resumed: `t-038-staff-invitations` (migration and
+  integration tests left) and `t-029-infra-isolation`.
+- Next: finish T-038 from its worktree, then T-072 funding (Opus), then T-039 and T-046.
