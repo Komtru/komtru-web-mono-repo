@@ -68,7 +68,7 @@
 
 ### T-048 — Configuration (M17)
 
-- **Status (2026-11-06): in progress** — implemented and verified; awaiting review
+- **Status:** Done (2026-11-06). Plan: docs/superpowers/plans/2026-11-06-t-048-config.md. Review: 3 must-fix and 6 should-fix items fixed. Owner decisions pending are in the plan; the §6 content proxies wait for M10, M11 and M13.
 - **Touches:** `src/modules/config/**`, migration `config_*`
 - **Depends on:** T-024, T-037
 - **Acceptance criteria:**
