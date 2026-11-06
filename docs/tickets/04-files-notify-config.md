@@ -79,6 +79,8 @@
 
 ### T-049 — Trade Standards by category
 
+- **Status (2026-11-06): in progress** — implemented and verified; awaiting review
+
 - **Touches:** `config` schema `trade_standards`, `trade_categories`; `config/http/standards.controller.ts`
 - **Depends on:** T-048
 - **Acceptance criteria:**

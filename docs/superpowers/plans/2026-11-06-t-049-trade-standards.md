@@ -22,3 +22,6 @@ Scope: `apps/backend-api/src/modules/config/**`, one migration (0034), tests. No
 - The version row is the change record (reason, author, time); `config_change_log` has a CHECK limiting targets to
   SETTING and FLAG, so it is not widened here.
 - Seed values below are placeholders (no spec states them): see the open questions in the run report.
+- Window cap: `trades.inspection_window_max_extension_hours` (seeded 48) limits the extension over the standard
+  window of the version the trade snapshotted, so repeated requests cannot creep past it.
+- Both category lists are paged (route invariant) even though there are two categories.
