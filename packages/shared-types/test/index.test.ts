@@ -24,6 +24,8 @@ describe('@komtru/shared-types public surface', () => {
       'publicUserIdSchema',
       'tradeCodeSchema',
       'hubCodeSchema',
+      'normaliseCityName',
+      'citySchema',
       'sessionScopeSchema',
       'currencySchema',
       'sellerKindSchema',
