@@ -18,32 +18,38 @@ export const itemSpecFieldSchema = z.strictObject({
   required: z.boolean(),
 });
 
-export const standardBodySchema = z
-  .strictObject({
-    inspectionWindowHours: z.int().min(1).max(INSPECTION_WINDOW_MAX_HOURS),
-    itemSpecFields: z.array(itemSpecFieldSchema).min(1).max(30),
-    proofMedia: z.strictObject({
-      minPhotos: z.int().min(0).max(20),
-      requireVideo: z.boolean(),
-    }),
-    imeiVerification: z.boolean(),
-    deliveryDeadlineDays: z.int().min(1).max(90),
-  })
-  .superRefine((value, ctx) => {
-    const keys = value.itemSpecFields.map((f) => f.key);
-    if (new Set(keys).size !== keys.length) {
-      ctx.addIssue({ code: 'custom', path: ['itemSpecFields'], message: 'Field keys must be unique' });
-    }
-    if (value.imeiVerification && !keys.includes(IMEI_FIELD_KEY)) {
-      ctx.addIssue({
-        code: 'custom',
-        path: ['imeiVerification'],
-        message: `IMEI verification needs a ${IMEI_FIELD_KEY} item-spec field`,
-      });
-    }
-  });
+export const standardObject = z.strictObject({
+  inspectionWindowHours: z.int().min(1).max(INSPECTION_WINDOW_MAX_HOURS),
+  itemSpecFields: z.array(itemSpecFieldSchema).min(1).max(30),
+  proofMedia: z.strictObject({
+    minPhotos: z.int().min(0).max(20),
+    requireVideo: z.boolean(),
+  }),
+  imeiVerification: z.boolean(),
+  deliveryDeadlineDays: z.int().min(1).max(90),
+});
 
-export type StandardContent = z.infer<typeof standardBodySchema>;
+/** Cross-field rules, shared by the body schema and the admin route's body (which adds `reason`). */
+export function checkStandardRules(
+  value: Pick<StandardContent, 'itemSpecFields' | 'imeiVerification'>,
+  ctx: z.RefinementCtx,
+): void {
+  const keys = value.itemSpecFields.map((f) => f.key);
+  if (new Set(keys).size !== keys.length) {
+    ctx.addIssue({ code: 'custom', path: ['itemSpecFields'], message: 'Field keys must be unique' });
+  }
+  if (value.imeiVerification && !keys.includes(IMEI_FIELD_KEY)) {
+    ctx.addIssue({
+      code: 'custom',
+      path: ['imeiVerification'],
+      message: `IMEI verification needs a ${IMEI_FIELD_KEY} item-spec field`,
+    });
+  }
+}
+
+export const standardBodySchema = standardObject.superRefine(checkStandardRules);
+
+export type StandardContent = z.infer<typeof standardObject>;
 
 export interface SeedCategory {
   code: string;

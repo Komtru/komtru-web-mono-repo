@@ -41,7 +41,7 @@ export function requireReason(req: Request, reason: string | undefined): string 
   return trimmed;
 }
 
-function configActor(actor: Actor, req: Request): ConfigActor {
+export function configActor(actor: Actor, req: Request): ConfigActor {
   return {
     userId: requireUserId(actor, 'Sign in with a staff session'),
     sessionId: actor.principal?.sessionId,
