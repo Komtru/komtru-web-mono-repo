@@ -114,6 +114,16 @@
   ],
   "checkConstraints": [
     {
+      "table": "config.config_change_log",
+      "name": "config_change_log_target",
+      "definition": "CHECK ((change_target = ANY (ARRAY['SETTING'::text, 'FLAG'::text])))"
+    },
+    {
+      "table": "config.platform_settings",
+      "name": "platform_settings_value_type",
+      "definition": "CHECK ((value_type = ANY (ARRAY['INTEGER'::text, 'BOOLEAN'::text, 'STRING'::text, 'DECIMAL'::text])))"
+    },
+    {
       "table": "files.file_access_grants",
       "name": "file_access_grants_one_grantee_type",
       "definition": "CHECK ((num_nonnulls(grantee_user_id, grantee_role) = 1))"
@@ -325,6 +335,11 @@
     }
   ],
   "triggers": [
+    {
+      "table": "config.config_change_log",
+      "name": "komtru_append_only",
+      "definition": "[O] CREATE TRIGGER komtru_append_only BEFORE DELETE OR UPDATE ON config.config_change_log FOR EACH ROW EXECUTE FUNCTION platform.reject_mutation()"
+    },
     {
       "table": "files.file_access_log",
       "name": "komtru_append_only",

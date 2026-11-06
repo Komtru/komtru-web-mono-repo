@@ -225,6 +225,20 @@
       "when": 1793978504633,
       "tag": "0031_trust_business_and_social_proof",
       "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "7",
+      "when": 1793985691614,
+      "tag": "0032_config_schema",
+      "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "7",
+      "when": 1793985692372,
+      "tag": "0033_config_change_log_append_only",
+      "breakpoints": true
     }
   ]
 }
