@@ -15,6 +15,7 @@ import { argon2Hasher } from './domain/credential/hashing.js';
 import { resolveTermsVersions } from './domain/terms.js';
 import { createActorResolver } from './http/middleware.js';
 import { authRoutes } from './http/routes/auth.routes.js';
+import { addressRoutes } from './http/routes/address.routes.js';
 import { deviceRoutes } from './http/routes/device.routes.js';
 import { mfaRoutes } from './http/routes/mfa.routes.js';
 import { passwordRoutes } from './http/routes/password.routes.js';
@@ -314,6 +315,7 @@ export function createIdentityAuth(options: IdentityAuthOptions): IdentityAuth {
       ...usernameRoutes({ db }),
       ...partyRoutes(party),
       ...deviceRoutes({ db, logger }),
+      ...addressRoutes({ db }),
       ...mfaRoutes(account),
     ],
     schedules: [
