@@ -29,11 +29,18 @@ export const REFRESH_MAX_AGE_SECONDS = 30 * 24 * 60 * 60;
 /** The backend serves one login route and decides the scope from the account (`/v1/auth/login`). */
 export const DEFAULT_LOGIN_PATH = '/auth/login';
 
+/** The second step of a login that answered with a challenge, and the route that sends its code. */
+export const DEFAULT_MFA_VERIFY_PATH = '/auth/mfa/verify';
+export const DEFAULT_MFA_CHALLENGE_PATH = '/auth/mfa/challenge';
+
 export interface AuthRouteOptions {
   config: AppConfig;
   sealer: SessionSealer;
   fetch?: typeof globalThis.fetch;
   loginPath?: string;
+  /** A console passes `/auth/staff/mfa/verify`: the staff routes are separate from the consumer ones. */
+  mfaVerifyPath?: string;
+  mfaChallengePath?: string;
   refreshMaxAgeSeconds?: number;
   /** How long to wait for the backend before answering 502. Matches api-client's own default. */
   timeoutMs?: number;
@@ -41,6 +48,10 @@ export interface AuthRouteOptions {
 
 export interface AuthRouteHandlers {
   login(request: Request): Promise<Response>;
+  /** The second step, for a login that answered with a challenge. Opens the session. */
+  mfa(request: Request): Promise<Response>;
+  /** Asks the backend to send the code for an SMS or email factor. Opens nothing. */
+  mfaChallenge(request: Request): Promise<Response>;
   refresh(request: Request): Promise<Response>;
   logout(request: Request): Promise<Response>;
 }
@@ -58,6 +69,33 @@ const loginRequestSchema = z.object({
   identifier: z.string().min(1).max(254),
   password: z.string().min(1),
   deviceFingerprint: z.unknown().optional(),
+});
+
+/**
+ * §10.1's second 200: the password was right and a factor is still owed. A body that carries a
+ * token beside `mfaRequired` is not a challenge, it is a backend bug, and passing it through would
+ * hand the browser a credential this handler never sealed — so it is refused here, and falls
+ * through to the session check, which refuses it too.
+ */
+const backendChallengeSchema = z
+  .looseObject({
+    mfaRequired: z.literal(true),
+    mfaToken: z.string().min(1).max(512),
+    expiresAt: z.number().int().positive(),
+    factors: z.array(z.looseObject({ id: z.string(), type: z.string() })),
+  })
+  .refine((body) => !('accessToken' in body) && !('refreshToken' in body));
+
+const mfaRequestSchema = z.object({
+  mfaToken: z.string().min(1).max(512),
+  factorId: z.string().min(1),
+  code: z.string().min(1).max(64),
+  deviceFingerprint: z.unknown().optional(),
+});
+
+const mfaChallengeRequestSchema = z.object({
+  mfaToken: z.string().min(1).max(512),
+  factorId: z.string().min(1),
 });
 
 const logoutRequestSchema = z.object({ allDevices: z.boolean().default(false) });
@@ -118,6 +156,8 @@ export function createAuthRouteHandlers({
   sealer,
   fetch: fetchImpl,
   loginPath = DEFAULT_LOGIN_PATH,
+  mfaVerifyPath = DEFAULT_MFA_VERIFY_PATH,
+  mfaChallengePath = DEFAULT_MFA_CHALLENGE_PATH,
   refreshMaxAgeSeconds = REFRESH_MAX_AGE_SECONDS,
   timeoutMs = DEFAULT_TIMEOUT_MS,
 }: AuthRouteOptions): AuthRouteHandlers {
@@ -214,6 +254,29 @@ export function createAuthRouteHandlers({
     // code rewritten here is a code a screen cannot act on.
     if (!upstream.ok) return json(payload ?? {}, upstream.status);
 
+    return finishSignIn(payload);
+  };
+
+  /**
+   * What a login or a second-factor answer turns into. Three outcomes: a challenge (no credential,
+   * so no cookie), a session of this app's scope (cookies and an access token), or a session of
+   * another scope, which is revoked before the refusal.
+   */
+  const finishSignIn = async (payload: Record<string, unknown> | undefined): Promise<Response> => {
+    const challenge = backendChallengeSchema.safeParse(payload);
+    if (challenge.success) {
+      // An allowlist again: the factor hints are named, and nothing else the backend adds rides along.
+      return json(
+        {
+          mfaRequired: true,
+          mfaToken: challenge.data.mfaToken,
+          expiresAt: challenge.data.expiresAt,
+          factors: challenge.data.factors,
+        },
+        200,
+      );
+    }
+
     const parsed = backendSessionSchema.safeParse(payload);
     if (parsed.success && parsed.data.scope !== config.scope) {
       // The account is real and the password was right — the session simply belongs to another app.
@@ -231,6 +294,53 @@ export function createAuthRouteHandlers({
     }
 
     return issue(payload ?? {});
+  };
+
+  /** Shared by the two second-step handlers: validate, call, and pass the backend's problem through. */
+  const secondStep = async (
+    request: Request,
+    path: string,
+    schema: z.ZodType<Record<string, unknown>>,
+  ): Promise<{ response: Response } | { payload: Record<string, unknown> | undefined }> => {
+    const body = schema.safeParse(await readJson(request));
+    if (!body.success) {
+      return {
+        response: problem(
+          422,
+          'VALIDATION_FAILED',
+          'That is not a second-factor answer',
+          'Send the sign-in token, the factor and the code',
+        ),
+      };
+    }
+    let upstream: Response;
+    try {
+      upstream = await callBackend(path, body.data);
+    } catch {
+      return {
+        response: problem(
+          502,
+          'BAD_GATEWAY',
+          'Sign-in is unavailable',
+          'The platform did not answer; try again',
+        ),
+      };
+    }
+    const payload = (await upstream.json().catch(() => undefined)) as Record<string, unknown> | undefined;
+    // Verbatim, so a wrong code keeps its `attemptsRemaining`.
+    if (!upstream.ok) return { response: json(payload ?? {}, upstream.status) };
+    return { payload };
+  };
+
+  const mfa = async (request: Request): Promise<Response> => {
+    const result = await secondStep(request, mfaVerifyPath, mfaRequestSchema);
+    return 'response' in result ? result.response : finishSignIn(result.payload);
+  };
+
+  const mfaChallenge = async (request: Request): Promise<Response> => {
+    const result = await secondStep(request, mfaChallengePath, mfaChallengeRequestSchema);
+    // Nothing here can open a session, so the body is the backend's own: kind, destination, options.
+    return 'response' in result ? result.response : json(result.payload ?? {}, 200);
   };
 
   const rotate = async (refreshToken: string): Promise<Response> => {
@@ -292,7 +402,7 @@ export function createAuthRouteHandlers({
     return json({ ok: true }, 200, clearedCookies(secure));
   };
 
-  return { login, refresh, logout };
+  return { login, mfa, mfaChallenge, refresh, logout };
 }
 
 const expiryOf = (maxAgeSeconds: number): number => Date.now() + maxAgeSeconds * 1000;
@@ -309,9 +419,24 @@ export function komtruAuthRoute(
   return async (request, context) => {
     const { action } = await context.params;
     const name = action.length === 1 ? action[0] : undefined;
-    if (name !== 'login' && name !== 'refresh' && name !== 'logout') {
-      return problem(404, 'NOT_FOUND', 'No such route', 'Only login, refresh and logout exist here');
+    switch (name) {
+      case 'login':
+        return handlers.login(request);
+      case 'mfa':
+        return handlers.mfa(request);
+      case 'mfa-challenge':
+        return handlers.mfaChallenge(request);
+      case 'refresh':
+        return handlers.refresh(request);
+      case 'logout':
+        return handlers.logout(request);
+      default:
+        return problem(
+          404,
+          'NOT_FOUND',
+          'No such route',
+          'Only login, mfa, mfa-challenge, refresh and logout exist here',
+        );
     }
-    return handlers[name](request);
   };
 }

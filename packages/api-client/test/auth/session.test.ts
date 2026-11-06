@@ -128,6 +128,8 @@ describe('the app auth routes', () => {
   it('points at the app’s own route handlers, never at the backend', () => {
     expect(authRoutePaths()).toEqual({
       login: '/api/auth/login',
+      mfa: '/api/auth/mfa',
+      mfaChallenge: '/api/auth/mfa-challenge',
       refresh: '/api/auth/refresh',
       logout: '/api/auth/logout',
     });

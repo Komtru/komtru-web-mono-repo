@@ -19,6 +19,9 @@ export const AUTH_ROUTE_BASE = '/api/auth';
 
 export const authRoutePaths = (base: string = AUTH_ROUTE_BASE) => ({
   login: `${base}/login`,
+  /** The second step of a login that answered with a challenge (staff sign-in always does). */
+  mfa: `${base}/mfa`,
+  mfaChallenge: `${base}/mfa-challenge`,
   refresh: `${base}/refresh`,
   logout: `${base}/logout`,
 });

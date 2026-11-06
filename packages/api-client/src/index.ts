@@ -17,4 +17,5 @@ export * from './queue/retry-queue.js';
 export * from './queue/types.js';
 export * from './realtime/connection.js';
 export * from './retry.js';
+export * from './staff.js';
 export * from './transport.js';

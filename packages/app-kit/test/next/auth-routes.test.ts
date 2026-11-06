@@ -339,3 +339,118 @@ describe('komtruAuthRoute', () => {
     );
   });
 });
+
+const challenge = {
+  mfaRequired: true,
+  mfaToken: 'cid.secret',
+  expiresAt: 4_000_000_000_000,
+  factors: [{ id: '4c8f6a2e-1b0d-4f5a-9e3c-7d2b1a0c9e88', type: 'TOTP', hint: null, isDefault: true }],
+};
+
+const staffSession = { ...session, scope: 'STAFF' as SessionScope };
+
+const factorId = '4c8f6a2e-1b0d-4f5a-9e3c-7d2b1a0c9e88';
+
+describe('a login that owes a second factor', () => {
+  it('passes the challenge through with no cookie, because it carries no credential', async () => {
+    backend.reply(200, challenge);
+    const response = await staffHandlers.login(post({ identifier: 'a@b.c', password: 'x' }));
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual(challenge);
+    expect(cookiesOf(response)).toEqual([]);
+  });
+
+  it('refuses a challenge that carries a token beside it', async () => {
+    backend.reply(200, { ...challenge, accessToken: 'at-1' });
+    const response = await staffHandlers.login(post({ identifier: 'a@b.c', password: 'x' }));
+    expect(response.status).toBe(502);
+  });
+
+  it('hands the browser only the challenge fields it is meant to see', async () => {
+    backend.reply(200, { ...challenge, internal: 'leak' });
+    const body = (await (
+      await staffHandlers.login(post({ identifier: 'a@b.c', password: 'x' }))
+    ).json()) as Record<string, unknown>;
+    expect(Object.keys(body).sort()).toEqual(['expiresAt', 'factors', 'mfaRequired', 'mfaToken']);
+  });
+});
+
+describe('mfa', () => {
+  const verify = (body: unknown = { mfaToken: 'cid.secret', factorId, code: '123456' }) => post(body);
+
+  it('posts to the path it was given and opens the session like a login', async () => {
+    const staff = createAuthRouteHandlers({
+      config: configFor('STAFF'),
+      sealer,
+      fetch: backend.fetch,
+      mfaVerifyPath: '/auth/staff/mfa/verify',
+    });
+    backend.reply(200, staffSession);
+    const response = await staff.mfa(verify());
+    expect(backend.calls[0]).toMatchObject({
+      path: '/auth/staff/mfa/verify',
+      body: { mfaToken: 'cid.secret', factorId, code: '123456' },
+    });
+    expect(response.status).toBe(200);
+    expect(cookiesOf(response).join(';')).toContain('komtru_rt=rt-1');
+    expect(await response.json()).not.toHaveProperty('refreshToken');
+  });
+
+  it('defaults to the consumer route', async () => {
+    await handlers.mfa(verify());
+    expect(backend.calls[0]?.path).toBe('/auth/mfa/verify');
+  });
+
+  it("revokes a session that is not this app's scope", async () => {
+    backend.reply(200, session);
+    const response = await staffHandlers.mfa(verify());
+    expect(response.status).toBe(403);
+    expect(await response.json()).toMatchObject({ code: 'WRONG_SCOPE' });
+    expect(backend.calls.map((call) => call.path)).toEqual(['/auth/mfa/verify', '/auth/logout']);
+  });
+
+  it('passes a wrong code through with the attempts left', async () => {
+    backend.reply(401, { code: 'INVALID_CREDENTIALS', attemptsRemaining: 3 });
+    const response = await staffHandlers.mfa(verify());
+    expect(response.status).toBe(401);
+    expect(await response.json()).toMatchObject({ attemptsRemaining: 3 });
+    expect(cookiesOf(response)).toEqual([]);
+  });
+
+  it('refuses a body that is not a second-factor answer', async () => {
+    const response = await staffHandlers.mfa(verify({ mfaToken: 'cid.secret' }));
+    expect(response.status).toBe(422);
+    expect(backend.calls).toEqual([]);
+  });
+});
+
+describe('mfa-challenge', () => {
+  it('asks the backend to send the code and answers with how to present it', async () => {
+    const body = { kind: 'CODE', challengeId: null, maskedDestination: '+23480•••5567', delivered: true };
+    backend.reply(200, body);
+    const response = await staffHandlers.mfaChallenge(post({ mfaToken: 'cid.secret', factorId }));
+    expect(backend.calls[0]).toMatchObject({ path: '/auth/mfa/challenge' });
+    expect(await response.json()).toEqual(body);
+    expect(cookiesOf(response)).toEqual([]);
+  });
+
+  it('refuses a body without a factor', async () => {
+    expect((await staffHandlers.mfaChallenge(post({ mfaToken: 'cid.secret' }))).status).toBe(422);
+  });
+});
+
+describe('komtruAuthRoute, with the second step', () => {
+  const route = () => komtruAuthRoute({ config: configFor('STAFF'), sealer, fetch: backend.fetch });
+
+  it('serves mfa and mfa-challenge too', async () => {
+    backend.reply(200, staffSession);
+    const verified = await route()(post({ mfaToken: 'cid.secret', factorId, code: '123456' }), {
+      params: Promise.resolve({ action: ['mfa'] }),
+    });
+    expect(verified.status).toBe(200);
+    const challenged = await route()(post({ mfaToken: 'cid.secret', factorId }), {
+      params: Promise.resolve({ action: ['mfa-challenge'] }),
+    });
+    expect(challenged.status).toBe(200);
+  });
+});
