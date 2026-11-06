@@ -410,3 +410,68 @@ export const identityAdminActionApprovalRequestedEvent = defineEvent(
     subjectUserId: z.uuid(),
   }),
 );
+
+// ---------------------------------------------------------------------------
+// T-042: saved delivery addresses.
+//
+// Ids and field NAMES only. The phone, the street, the landmark and the recipient's name are PII
+// (M1 §12) and stay in `identity.user_addresses`: a consumer that needs the address of a trade reads
+// the snapshot the trade took, and one that needs to know an address changed gets the id.
+// ---------------------------------------------------------------------------
+
+export const identityAddressAddedEvent = defineEvent(
+  'identity.address.added',
+  1,
+  z.object({
+    userId: z.uuid(),
+    addressId: z.uuid(),
+    /** True when the new address is the user's default (the first one always is). */
+    isDefault: z.boolean(),
+  }),
+);
+
+export const ADDRESS_FIELDS = [
+  'label',
+  'recipientName',
+  'recipientPhone',
+  'streetLine',
+  'landmark',
+  'stateId',
+  'cityId',
+] as const;
+
+export const identityAddressUpdatedEvent = defineEvent(
+  'identity.address.updated',
+  1,
+  z.object({
+    userId: z.uuid(),
+    addressId: z.uuid(),
+    /** Which fields the edit named, never what they became. */
+    changed: z.array(z.enum(ADDRESS_FIELDS)).min(1),
+  }),
+);
+
+/** Archived, not deleted: the row stays so a trade's snapshot can still be traced to it. */
+export const identityAddressArchivedEvent = defineEvent(
+  'identity.address.archived',
+  1,
+  z.object({
+    userId: z.uuid(),
+    addressId: z.uuid(),
+  }),
+);
+
+/**
+ * The default moved: to `addressId`, from `previousAddressId` (null when there was none). Fires on
+ * make-default, on a create that asks for the default, and when archiving the default promotes the
+ * next address.
+ */
+export const identityAddressDefaultChangedEvent = defineEvent(
+  'identity.address.default_changed',
+  1,
+  z.object({
+    userId: z.uuid(),
+    addressId: z.uuid(),
+    previousAddressId: z.uuid().nullable(),
+  }),
+);

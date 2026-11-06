@@ -133,6 +133,18 @@ export {
 
 // T-035. Appended at the end of the block so a parallel ticket's additions do not collide with it.
 export * from './domain/capability.js';
+// T-042. `hasUsableAddress` is the trade gates' question (T-061); the rest is the saved-address API.
+export {
+  addressNotFound,
+  archiveAddress,
+  createAddress,
+  hasUsableAddress,
+  listAddresses,
+  makeDefaultAddress,
+  updateAddress,
+  type AddressRequestContext,
+  type AddressView,
+} from './services/address.service.js';
 export {
   createCapabilityService,
   postgresBuyerFacts,
