@@ -2,29 +2,40 @@
   "name": "@komtru/operations-app",
   "version": "0.0.0",
   "private": true,
-  "description": "TrustOps console at ops.komtru.com (scaffolded in T-140).",
+  "description": "TrustOps console at ops.komtru.com: staff sign-in, the permission-filtered shell and the section pages later tickets fill (T-140).",
   "type": "module",
-  "main": "./dist/index.js",
-  "types": "./dist/index.d.ts",
-  "exports": {
-    ".": {
-      "types": "./dist/index.d.ts",
-      "default": "./dist/index.js"
-    }
-  },
   "scripts": {
-    "build": "tsc -p tsconfig.build.json",
+    "dev": "next dev --port 3002",
+    "build": "next build",
+    "start": "next start --port 3002",
     "lint": "eslint .",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run"
   },
   "dependencies": {
-    "@komtru/app-kit": "workspace:*"
+    "@komtru/api-client": "workspace:*",
+    "@komtru/app-kit": "workspace:*",
+    "@komtru/shared-types": "workspace:*",
+    "@komtru/ui-kit": "workspace:*",
+    "@sentry/nextjs": "11.4.0",
+    "@tanstack/react-query": "5.104.1",
+    "next": "15.5.27",
+    "react": "19.3.0",
+    "react-dom": "19.3.0",
+    "zod": "4.6.5"
   },
   "devDependencies": {
     "@komtru/config": "workspace:*",
+    "@tailwindcss/postcss": "4.3.3",
+    "@testing-library/dom": "10.4.2",
+    "@testing-library/react": "16.3.3",
     "@types/node": "22.20.5",
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
+    "axe-core": "4.14.0",
     "eslint": "9.39.5",
+    "jsdom": "29.1.1",
+    "tailwindcss": "4.3.3",
     "typescript": "6.0.3",
     "vitest": "5.0.3"
   }

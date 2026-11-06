@@ -2,6 +2,7 @@ import type { SessionScope } from '@komtru/shared-types';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { readAppConfig, type AppConfig } from '../../src/config.js';
 import { createAuthRouteHandlers, komtruAuthRoute } from '../../src/next/auth-routes.js';
+import { createMemoryRefreshStore } from '../../src/next/auth-guards.js';
 import { createSessionSealer } from '../../src/session.js';
 
 const sealer = createSessionSealer('a'.repeat(32));
@@ -26,6 +27,7 @@ const session = {
 interface Call {
   path: string;
   body: unknown;
+  headers: Record<string, string>;
 }
 
 /** A fetch double that records what the route handler asked the backend for. */
@@ -51,6 +53,7 @@ class Backend {
     this.calls.push({
       path: url.pathname.replace(/^\/v1/, ''),
       body: typeof init?.body === 'string' ? (JSON.parse(init.body) as unknown) : undefined,
+      headers: Object.fromEntries(new Headers(init?.headers).entries()),
     });
     if (this.failure) throw this.failure;
     const next = this.queue.shift() ?? { status: 200, body: session, delayMs: 0 };
@@ -84,7 +87,7 @@ beforeEach(() => {
 const post = (body?: unknown, headers: Record<string, string> = {}) =>
   new Request('https://app.komtru.com/api/auth/x', {
     method: 'POST',
-    headers: { 'content-type': 'application/json', ...headers },
+    headers: { 'content-type': 'application/json', origin: 'https://app.komtru.com', ...headers },
     ...(body === undefined ? {} : { body: JSON.stringify(body) }),
   });
 
@@ -133,7 +136,7 @@ describe('login', () => {
     const response = await handlers.login(
       new Request('https://app.komtru.com/api/auth/login', {
         method: 'POST',
-        headers: { 'content-type': 'application/json' },
+        headers: { 'content-type': 'application/json', origin: 'https://app.komtru.com' },
         body: '{"identifier":"a@b.c","passw',
       }),
     );
@@ -254,7 +257,11 @@ describe('logout', () => {
     const response = await handlers.logout(
       new Request('https://app.komtru.com/api/auth/logout', {
         method: 'POST',
-        headers: { 'content-type': 'application/json', cookie: 'komtru_rt=rt-1' },
+        headers: {
+          'content-type': 'application/json',
+          origin: 'https://app.komtru.com',
+          cookie: 'komtru_rt=rt-1',
+        },
         body: '{',
       }),
     );
@@ -302,7 +309,7 @@ describe('the backend calls', () => {
     const response = await https.login(
       new Request('http://localhost:3001/api/auth/login', {
         method: 'POST',
-        headers: { 'content-type': 'application/json' },
+        headers: { 'content-type': 'application/json', origin: 'https://app.komtru.com' },
         body: JSON.stringify({ identifier: 'a@b.c', password: 'x' }),
       }),
     );
@@ -337,5 +344,325 @@ describe('komtruAuthRoute', () => {
     expect((await route()(post(), { params: Promise.resolve({ action: ['login', 'extra'] }) })).status).toBe(
       404,
     );
+  });
+});
+
+const challenge = {
+  mfaRequired: true,
+  mfaToken: 'cid.secret',
+  expiresAt: 4_000_000_000_000,
+  factors: [{ id: '4c8f6a2e-1b0d-4f5a-9e3c-7d2b1a0c9e88', type: 'TOTP', hint: null, isDefault: true }],
+};
+
+const staffSession = { ...session, scope: 'STAFF' as SessionScope };
+
+const factorId = '4c8f6a2e-1b0d-4f5a-9e3c-7d2b1a0c9e88';
+
+describe('a login that owes a second factor', () => {
+  it('passes the challenge through with no cookie, because it carries no credential', async () => {
+    backend.reply(200, challenge);
+    const response = await staffHandlers.login(post({ identifier: 'a@b.c', password: 'x' }));
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual(challenge);
+    expect(cookiesOf(response)).toEqual([]);
+  });
+
+  it('refuses a challenge that carries a token beside it', async () => {
+    backend.reply(200, { ...challenge, accessToken: 'at-1' });
+    const response = await staffHandlers.login(post({ identifier: 'a@b.c', password: 'x' }));
+    expect(response.status).toBe(502);
+  });
+
+  it('hands the browser only the challenge fields it is meant to see', async () => {
+    backend.reply(200, { ...challenge, internal: 'leak' });
+    const body = (await (
+      await staffHandlers.login(post({ identifier: 'a@b.c', password: 'x' }))
+    ).json()) as Record<string, unknown>;
+    expect(Object.keys(body).sort()).toEqual(['expiresAt', 'factors', 'mfaRequired', 'mfaToken']);
+  });
+});
+
+describe('mfa', () => {
+  const verify = (body: unknown = { mfaToken: 'cid.secret', factorId, code: '123456' }) => post(body);
+
+  it('posts to the path it was given and opens the session like a login', async () => {
+    const staff = createAuthRouteHandlers({
+      config: configFor('STAFF'),
+      sealer,
+      fetch: backend.fetch,
+      mfaVerifyPath: '/auth/staff/mfa/verify',
+    });
+    backend.reply(200, staffSession);
+    const response = await staff.mfa(verify());
+    expect(backend.calls[0]).toMatchObject({
+      path: '/auth/staff/mfa/verify',
+      body: { mfaToken: 'cid.secret', factorId, code: '123456' },
+    });
+    expect(response.status).toBe(200);
+    expect(cookiesOf(response).join(';')).toContain('komtru_rt=rt-1');
+    expect(await response.json()).not.toHaveProperty('refreshToken');
+  });
+
+  it('defaults to the consumer route', async () => {
+    await handlers.mfa(verify());
+    expect(backend.calls[0]?.path).toBe('/auth/mfa/verify');
+  });
+
+  it("revokes a session that is not this app's scope", async () => {
+    backend.reply(200, session);
+    const response = await staffHandlers.mfa(verify());
+    expect(response.status).toBe(403);
+    expect(await response.json()).toMatchObject({ code: 'WRONG_SCOPE' });
+    expect(backend.calls.map((call) => call.path)).toEqual(['/auth/mfa/verify', '/auth/logout']);
+  });
+
+  it('passes a wrong code through with the attempts left', async () => {
+    backend.reply(401, { code: 'INVALID_CREDENTIALS', attemptsRemaining: 3 });
+    const response = await staffHandlers.mfa(verify());
+    expect(response.status).toBe(401);
+    expect(await response.json()).toMatchObject({ attemptsRemaining: 3 });
+    expect(cookiesOf(response)).toEqual([]);
+  });
+
+  it('refuses a body that is not a second-factor answer', async () => {
+    const response = await staffHandlers.mfa(verify({ mfaToken: 'cid.secret' }));
+    expect(response.status).toBe(422);
+    expect(backend.calls).toEqual([]);
+  });
+});
+
+describe('mfa-challenge', () => {
+  it('asks the backend to send the code and answers with how to present it', async () => {
+    const body = { kind: 'CODE', challengeId: null, maskedDestination: '+23480•••5567', delivered: true };
+    backend.reply(200, body);
+    const response = await staffHandlers.mfaChallenge(post({ mfaToken: 'cid.secret', factorId }));
+    expect(backend.calls[0]).toMatchObject({ path: '/auth/mfa/challenge' });
+    expect(await response.json()).toEqual(body);
+    expect(cookiesOf(response)).toEqual([]);
+  });
+
+  it('refuses a body without a factor', async () => {
+    expect((await staffHandlers.mfaChallenge(post({ mfaToken: 'cid.secret' }))).status).toBe(422);
+  });
+});
+
+describe('komtruAuthRoute, with the second step', () => {
+  const route = () => komtruAuthRoute({ config: configFor('STAFF'), sealer, fetch: backend.fetch });
+
+  it('serves mfa and mfa-challenge too', async () => {
+    backend.reply(200, staffSession);
+    const verified = await route()(post({ mfaToken: 'cid.secret', factorId, code: '123456' }), {
+      params: Promise.resolve({ action: ['mfa'] }),
+    });
+    expect(verified.status).toBe(200);
+    const challenged = await route()(post({ mfaToken: 'cid.secret', factorId }), {
+      params: Promise.resolve({ action: ['mfa-challenge'] }),
+    });
+    expect(challenged.status).toBe(200);
+  });
+});
+
+describe('the browser-only guard', () => {
+  const bare = (headers: Record<string, string>, body: unknown = { identifier: 'a@b.c', password: 'x' }) =>
+    new Request('https://app.komtru.com/api/auth/x', { method: 'POST', headers, body: JSON.stringify(body) });
+
+  it.each([
+    ['login', { identifier: 'a@b.c', password: 'x' }],
+    ['mfa', { mfaToken: 'cid.secret', factorId, code: '123456' }],
+    ['mfaChallenge', { mfaToken: 'cid.secret', factorId }],
+    ['logout', { allDevices: false }],
+    ['release', {}],
+  ] as const)('refuses %s from another origin, from a form post and with no origin', async (name, body) => {
+    const h = createAuthRouteHandlers({
+      config: configFor('CONSUMER'),
+      sealer,
+      fetch: backend.fetch,
+      tokenMode: { store: createMemoryRefreshStore({ ttlMs: 1000 }) },
+    });
+    const json = { 'content-type': 'application/json' };
+    expect((await h[name](bare({ ...json, origin: 'https://evil.com' }, body))).status).toBe(403);
+    expect(
+      (await h[name](bare({ 'content-type': 'text/plain', origin: 'https://app.komtru.com' }, body))).status,
+    ).toBe(403);
+    expect((await h[name](bare(json, body))).status).toBe(403);
+    expect(backend.calls).toEqual([]);
+  });
+
+  it('accepts a same-origin referer when the browser sent no origin', async () => {
+    const response = await handlers.login(
+      bare({ 'content-type': 'application/json', referer: 'https://app.komtru.com/sign-in' }),
+    );
+    expect(response.status).toBe(200);
+  });
+
+  it('does not clear cookies for a refused logout', async () => {
+    const response = await handlers.logout(
+      bare({ 'content-type': 'text/plain', cookie: 'komtru_rt=rt-1' }, {}),
+    );
+    expect(response.status).toBe(403);
+    expect(cookiesOf(response)).toEqual([]);
+  });
+});
+
+describe('the client the backend sees', () => {
+  it('forwards the chain and user agent on login, mfa, challenge and logout', async () => {
+    const via = { 'x-forwarded-for': '203.0.113.7', 'user-agent': 'Mozilla/5.0' };
+    await handlers.login(post({ identifier: 'a@b.c', password: 'x' }, via));
+    await handlers.mfa(post({ mfaToken: 'cid.secret', factorId, code: '123456' }, via));
+    await handlers.mfaChallenge(post({ mfaToken: 'cid.secret', factorId }, via));
+    await handlers.logout(post({ allDevices: false }, { ...via, cookie: 'komtru_rt=rt-1' }));
+    expect(backend.calls).toHaveLength(4);
+    for (const call of backend.calls) {
+      expect(call.headers['x-forwarded-for']).toBe('203.0.113.7');
+      expect(call.headers['user-agent']).toBe('Mozilla/5.0');
+    }
+  });
+
+  it('forwards it on the revoke it makes for a wrong-scope session too', async () => {
+    await staffHandlers.login(
+      post({ identifier: 'a@b.c', password: 'x' }, { 'x-forwarded-for': '203.0.113.7' }),
+    );
+    expect(backend.calls[1]?.path).toBe('/auth/logout');
+    expect(backend.calls[1]?.headers['x-forwarded-for']).toBe('203.0.113.7');
+  });
+});
+
+describe('the limiter', () => {
+  const via = (ip: string) => ({ 'x-forwarded-for': ip });
+
+  it('answers 429 with a wait once an identifier has spent its points, whatever the address', async () => {
+    for (let n = 0; n < 5; n += 1) {
+      await handlers.login(post({ identifier: 'a@b.c', password: 'x' }, via(`10.0.0.${String(n)}`)));
+    }
+    const response = await handlers.login(post({ identifier: ' A@B.C ', password: 'x' }, via('10.0.0.99')));
+    expect(response.status).toBe(429);
+    expect(Number(response.headers.get('retry-after'))).toBeGreaterThan(0);
+    expect(backend.calls).toHaveLength(5);
+  });
+
+  it('answers 429 once an address has spent its points, whatever the identifier', async () => {
+    for (let n = 0; n < 20; n += 1) {
+      await handlers.login(post({ identifier: `user${String(n)}@b.c`, password: 'x' }, via('10.0.0.1')));
+    }
+    const response = await handlers.login(post({ identifier: 'fresh@b.c', password: 'x' }, via('10.0.0.1')));
+    expect(response.status).toBe(429);
+    expect(
+      (await handlers.login(post({ identifier: 'fresh@b.c', password: 'x' }, via('10.0.0.2')))).status,
+    ).toBe(200);
+  });
+
+  it('limits the second step per challenge, not per code guess', async () => {
+    const body = { mfaToken: 'cid.secret', factorId, code: '111111' };
+    for (let n = 0; n < 8; n += 1) await handlers.mfa(post(body, via('10.0.0.1')));
+    expect((await handlers.mfa(post({ ...body, mfaToken: 'cid2.secret' }, via('10.0.0.1')))).status).toBe(
+      200,
+    );
+    expect((await handlers.mfa(post({ ...body, code: '222222' }, via('10.0.0.3')))).status).toBe(429);
+  });
+
+  it('limits mfa-challenge too, so a code cannot be sent in a loop', async () => {
+    const body = { mfaToken: 'cid.secret', factorId };
+    for (let n = 0; n < 5; n += 1) await handlers.mfaChallenge(post(body, via('10.0.0.1')));
+    expect((await handlers.mfaChallenge(post(body, via('10.0.0.1')))).status).toBe(429);
+  });
+
+  it('can be turned off, and starts a fresh window after a minute', async () => {
+    let now = 0;
+    const timed = createAuthRouteHandlers({
+      config: configFor('CONSUMER'),
+      sealer,
+      fetch: backend.fetch,
+      now: () => now,
+    });
+    for (let n = 0; n < 5; n += 1) await timed.login(post({ identifier: 'a@b.c', password: 'x' }));
+    expect((await timed.login(post({ identifier: 'a@b.c', password: 'x' }))).status).toBe(429);
+    now = 61_000;
+    expect((await timed.login(post({ identifier: 'a@b.c', password: 'x' }))).status).toBe(200);
+
+    const open = createAuthRouteHandlers({
+      config: configFor('CONSUMER'),
+      sealer,
+      fetch: backend.fetch,
+      limits: false,
+    });
+    for (let n = 0; n < 30; n += 1) await open.login(post({ identifier: 'a@b.c', password: 'x' }));
+    expect((await open.login(post({ identifier: 'a@b.c', password: 'x' }))).status).toBe(200);
+  });
+});
+
+describe('token mode', () => {
+  const store = () => createMemoryRefreshStore({ ttlMs: 60_000 });
+  const consumer = (s = store(), extra: Partial<Parameters<typeof createAuthRouteHandlers>[0]> = {}) =>
+    createAuthRouteHandlers({
+      config: configFor('CONSUMER'),
+      sealer,
+      fetch: backend.fetch,
+      tokenMode: { store: s },
+      ...extra,
+    });
+
+  it('returns the access token, sets no cookie and keeps the refresh token to itself', async () => {
+    const s = store();
+    backend.reply(200, { ...session, nextStep: 'NONE', user: { id: 'u1' } });
+    const response = await consumer(s).login(post({ identifier: 'a@b.c', password: 'x' }));
+    expect(response.status).toBe(200);
+    expect(cookiesOf(response)).toEqual([]);
+    const body = (await response.json()) as Record<string, unknown>;
+    expect(Object.keys(body).sort()).toEqual(['accessToken', 'expiresAt', 'expiresIn', 'scope']);
+    expect(JSON.stringify(body)).not.toContain('rt-1');
+    expect(s.take('at-1')).toBe('rt-1');
+  });
+
+  it('passes a second-factor challenge through, and opens the token after it', async () => {
+    const s = store();
+    backend.reply(200, challenge);
+    const first = await consumer(s).login(post({ identifier: 'a@b.c', password: 'x' }));
+    expect(await first.json()).toEqual(challenge);
+    expect(s.sweep()).toEqual([]);
+
+    backend.reply(200, session);
+    const second = await consumer(s).mfa(post({ mfaToken: 'cid.secret', factorId, code: '123456' }));
+    expect(cookiesOf(second)).toEqual([]);
+    expect(await second.json()).toMatchObject({ accessToken: 'at-1' });
+    expect(s.take('at-1')).toBe('rt-1');
+  });
+
+  it('revokes the session on release, once, and answers the same for an unknown token', async () => {
+    const s = store();
+    s.put('at-1', 'rt-1');
+    const h = consumer(s);
+    const release = (token: string) =>
+      h.release(post({}, { authorization: `Bearer ${token}`, 'x-forwarded-for': '203.0.113.7' }));
+    expect((await release('at-1')).status).toBe(200);
+    expect(backend.calls).toHaveLength(1);
+    expect(backend.calls[0]).toMatchObject({
+      path: '/auth/logout',
+      body: { refreshToken: 'rt-1', allDevices: false },
+    });
+    expect(backend.calls[0]?.headers['x-forwarded-for']).toBe('203.0.113.7');
+
+    expect(await (await release('at-1')).json()).toEqual({ ok: true });
+    expect(await (await release('nope')).json()).toEqual({ ok: true });
+    expect(backend.calls).toHaveLength(1);
+  });
+
+  it('revokes what an abandoned page left behind, on the next sign-in', async () => {
+    let now = 0;
+    const s = createMemoryRefreshStore({ ttlMs: 1000, now: () => now });
+    s.put('at-old', 'rt-old');
+    now = 5000;
+    await consumer(s, { now: () => now }).login(post({ identifier: 'a@b.c', password: 'x' }));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(backend.calls.map((call) => call.body)).toContainEqual({
+      refreshToken: 'rt-old',
+      allDevices: false,
+    });
+  });
+
+  it('refuses a session that is not the scope it was built for', async () => {
+    const response = await consumer(store(), { config: configFor('STAFF') }).login(
+      post({ identifier: 'a@b.c', password: 'x' }),
+    );
+    expect(response.status).toBe(403);
   });
 });

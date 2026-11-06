@@ -214,19 +214,70 @@ importers:
 
   apps/operations-app:
     dependencies:
+      '@komtru/api-client':
+        specifier: workspace:*
+        version: link:../../packages/api-client
       '@komtru/app-kit':
         specifier: workspace:*
         version: link:../../packages/app-kit
+      '@komtru/shared-types':
+        specifier: workspace:*
+        version: link:../../packages/shared-types
+      '@komtru/ui-kit':
+        specifier: workspace:*
+        version: link:../../packages/ui-kit
+      '@sentry/nextjs':
+        specifier: 11.4.0
+        version: 11.4.0(@babel/core@7.29.7)(next@15.5.27(@babel/core@7.29.7)(@opentelemetry/api@1.9.1)(@playwright/test@1.63.0)(@types/node@22.20.5)(react-dom@19.3.0(react@19.3.0))(react@19.3.0))(react@19.3.0)
+      '@tanstack/react-query':
+        specifier: 5.104.1
+        version: 5.104.1(react@19.3.0)
+      next:
+        specifier: 15.5.27
+        version: 15.5.27(@babel/core@7.29.7)(@opentelemetry/api@1.9.1)(@playwright/test@1.63.0)(@types/node@22.20.5)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
+      react:
+        specifier: 19.3.0
+        version: 19.3.0
+      react-dom:
+        specifier: 19.3.0
+        version: 19.3.0(react@19.3.0)
+      zod:
+        specifier: 4.6.5
+        version: 4.6.5
     devDependencies:
       '@komtru/config':
         specifier: workspace:*
         version: link:../../packages/config
+      '@tailwindcss/postcss':
+        specifier: 4.3.3
+        version: 4.3.3
+      '@testing-library/dom':
+        specifier: 10.4.2
+        version: 10.4.2
+      '@testing-library/react':
+        specifier: 16.3.3
+        version: 16.3.3(@testing-library/dom@10.4.2)(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
       '@types/node':
         specifier: 22.20.5
         version: 22.20.5
+      '@types/react':
+        specifier: 19.3.0
+        version: 19.3.0
+      '@types/react-dom':
+        specifier: 19.3.0
+        version: 19.3.0(@types/react@19.3.0)
+      axe-core:
+        specifier: 4.14.0
+        version: 4.14.0
       eslint:
         specifier: 9.39.5
         version: 9.39.5(jiti@2.7.0)
+      jsdom:
+        specifier: 29.1.1
+        version: 29.1.1(@noble/hashes@1.8.0)
+      tailwindcss:
+        specifier: 4.3.3
+        version: 4.3.3
       typescript:
         specifier: 6.0.3
         version: 6.0.3

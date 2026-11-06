@@ -9,6 +9,7 @@ Same definition of done as Epic 13, applied to desktop and tablet reference fram
 - **Screens (v2):** OP-28, OP-33; staff login, MFA and staff invitation acceptance have no reference screen
 - **Depends on:** T-017, T-037, T-038, T-190
 - **Acceptance criteria:** sidebar per OP-01 navigation (Work Queue, Trades, Disputes, Identity/KYB, Fraud & Risk, Park Hubs, Parcels/Custody, Payments/Settlement, Trust Graph, Audit/Trust Trail, Policies, Reports); items hidden by permission; `STAFF` scope enforced by middleware.
+- **Status (2026-11-06): in progress** — implementation and tests complete; next: review.
 
 ### T-141 — Work queue and universal case
 

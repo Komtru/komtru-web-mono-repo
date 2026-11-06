@@ -19,7 +19,7 @@ Copy `templates/**` into the app, keeping the paths, and add one module of your 
 middleware.ts                      → scope enforcement on every navigation
 instrumentation.ts                 → Sentry, server and edge
 instrumentation-client.ts          → Sentry, browser
-app/api/auth/[...action]/route.ts     → login, refresh, logout
+app/api/auth/[...action]/route.ts     → login, mfa, mfa-challenge, refresh, logout
 app/error.tsx                      → inside the layout
 app/global-error.tsx               → replaces the document, so it carries <html>, <body>, <main>
 app/not-found.tsx
@@ -32,6 +32,12 @@ it the app refuses to start, which is the point: middleware cannot tell a real s
 made-up one without it.
 
 ## How a session works
+
+A login that owes a second factor (every staff login does) answers `{ mfaRequired, mfaToken, factors }`
+and sets no cookie: the browser then posts the code to `/api/auth/mfa` (after `/api/auth/mfa-challenge`
+for an SMS or email factor), and that answer opens the session exactly as login does. Pass
+`loginPath`, `mfaVerifyPath` and `mfaChallengePath` to `komtruAuthRoute` for an app whose scope has
+its own backend routes (the console uses `/auth/staff/*`).
 
 ```
 browser ──POST /api/auth/login──▶ route handler ──POST {api}/auth/login──▶ backend

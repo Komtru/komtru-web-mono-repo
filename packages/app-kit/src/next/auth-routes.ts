@@ -12,6 +12,14 @@ import { sessionScopeSchema } from '@komtru/shared-types';
 import { z } from 'zod';
 import type { AppConfig } from '../config.js';
 import {
+  checkSameOriginJson,
+  clientIpOf,
+  createRateLimiter,
+  forwardHeaders,
+  type RateLimiter,
+  type RefreshStore,
+} from './auth-guards.js';
+import {
   clearedCookies,
   REFRESH_COOKIE,
   secureCookieFor,
@@ -29,18 +37,61 @@ export const REFRESH_MAX_AGE_SECONDS = 30 * 24 * 60 * 60;
 /** The backend serves one login route and decides the scope from the account (`/v1/auth/login`). */
 export const DEFAULT_LOGIN_PATH = '/auth/login';
 
+/** The second step of a login that answered with a challenge, and the route that sends its code. */
+export const DEFAULT_MFA_VERIFY_PATH = '/auth/mfa/verify';
+export const DEFAULT_MFA_CHALLENGE_PATH = '/auth/mfa/challenge';
+
 export interface AuthRouteOptions {
   config: AppConfig;
   sealer: SessionSealer;
   fetch?: typeof globalThis.fetch;
   loginPath?: string;
+  /** A console passes `/auth/staff/mfa/verify`: the staff routes are separate from the consumer ones. */
+  mfaVerifyPath?: string;
+  mfaChallengePath?: string;
+  /**
+   * Hands the browser the access token and keeps the refresh token **here**, in this store, with no
+   * cookie at all. For a page that needs a bearer token for a few minutes and must not become a
+   * session: a staff invitation is accepted by a consumer account (T-038) on the console's host.
+   * The refresh token is revoked through `release`, or by the sweep when the page is abandoned.
+   * `config.scope` must be the scope the backend login route issues.
+   */
+  tokenMode?: { store: RefreshStore };
+  /** Per-minute budgets in front of login, mfa and mfa-challenge. `false` turns them off (tests). */
+  limits?: false | Partial<AuthLimits>;
+  now?: () => number;
   refreshMaxAgeSeconds?: number;
   /** How long to wait for the backend before answering 502. Matches api-client's own default. */
   timeoutMs?: number;
 }
 
+/** Fixed one-minute windows. The backend's own limiter is the fine one; this is the coarse door. */
+export interface AuthLimits {
+  loginPerIp: number;
+  loginPerIdentifier: number;
+  mfaPerIp: number;
+  mfaPerToken: number;
+  challengePerIp: number;
+  challengePerToken: number;
+}
+
+export const DEFAULT_AUTH_LIMITS: AuthLimits = {
+  loginPerIp: 20,
+  loginPerIdentifier: 5,
+  mfaPerIp: 30,
+  mfaPerToken: 8,
+  challengePerIp: 20,
+  challengePerToken: 5,
+};
+
 export interface AuthRouteHandlers {
+  /** Token mode only: revokes the consumer session filed under the bearer token, then forgets it. */
+  release(request: Request): Promise<Response>;
   login(request: Request): Promise<Response>;
+  /** The second step, for a login that answered with a challenge. Opens the session. */
+  mfa(request: Request): Promise<Response>;
+  /** Asks the backend to send the code for an SMS or email factor. Opens nothing. */
+  mfaChallenge(request: Request): Promise<Response>;
   refresh(request: Request): Promise<Response>;
   logout(request: Request): Promise<Response>;
 }
@@ -58,6 +109,33 @@ const loginRequestSchema = z.object({
   identifier: z.string().min(1).max(254),
   password: z.string().min(1),
   deviceFingerprint: z.unknown().optional(),
+});
+
+/**
+ * §10.1's second 200: the password was right and a factor is still owed. A body that carries a
+ * token beside `mfaRequired` is not a challenge, it is a backend bug, and passing it through would
+ * hand the browser a credential this handler never sealed — so it is refused here, and falls
+ * through to the session check, which refuses it too.
+ */
+const backendChallengeSchema = z
+  .looseObject({
+    mfaRequired: z.literal(true),
+    mfaToken: z.string().min(1).max(512),
+    expiresAt: z.number().int().positive(),
+    factors: z.array(z.looseObject({ id: z.string(), type: z.string() })),
+  })
+  .refine((body) => !('accessToken' in body) && !('refreshToken' in body));
+
+const mfaRequestSchema = z.object({
+  mfaToken: z.string().min(1).max(512),
+  factorId: z.string().min(1),
+  code: z.string().min(1).max(64),
+  deviceFingerprint: z.unknown().optional(),
+});
+
+const mfaChallengeRequestSchema = z.object({
+  mfaToken: z.string().min(1).max(512),
+  factorId: z.string().min(1),
 });
 
 const logoutRequestSchema = z.object({ allDevices: z.boolean().default(false) });
@@ -118,6 +196,11 @@ export function createAuthRouteHandlers({
   sealer,
   fetch: fetchImpl,
   loginPath = DEFAULT_LOGIN_PATH,
+  mfaVerifyPath = DEFAULT_MFA_VERIFY_PATH,
+  mfaChallengePath = DEFAULT_MFA_CHALLENGE_PATH,
+  tokenMode,
+  limits,
+  now = Date.now,
   refreshMaxAgeSeconds = REFRESH_MAX_AGE_SECONDS,
   timeoutMs = DEFAULT_TIMEOUT_MS,
 }: AuthRouteOptions): AuthRouteHandlers {
@@ -136,10 +219,17 @@ export function createAuthRouteHandlers({
    * request open forever *and* pin the rotation below, so every later tab with that token would
    * block on the same dead promise.
    */
-  const callBackend = async (path: string, body: unknown): Promise<Response> =>
+  const callBackend = async (
+    path: string,
+    body: unknown,
+    forwarded: Record<string, string> = {},
+  ): Promise<Response> =>
     doFetch(`${config.apiUrl}${path}`, {
       method: 'POST',
-      headers: { 'content-type': 'application/json', accept: 'application/json' },
+      // `forwarded` is the real client's chain and user agent. Without it the backend sees this
+      // server for every sign-in: its per-IP limits and lockout would count the whole console as one
+      // person, and the sessions table would record this server's address.
+      headers: { 'content-type': 'application/json', accept: 'application/json', ...forwarded },
       body: JSON.stringify(body),
       signal: AbortSignal.timeout(timeoutMs),
     });
@@ -156,6 +246,54 @@ export function createAuthRouteHandlers({
       return text === '' ? undefined : (JSON.parse(text) as unknown);
     } catch {
       return undefined;
+    }
+  };
+
+  const appOrigin = new URL(config.appUrl).origin;
+  const budgets = limits === false ? undefined : { ...DEFAULT_AUTH_LIMITS, ...limits };
+  const limiter = (points: number | undefined): RateLimiter | undefined =>
+    points === undefined ? undefined : createRateLimiter({ points, windowMs: 60_000, now });
+  const buckets = {
+    loginIp: limiter(budgets?.loginPerIp),
+    loginId: limiter(budgets?.loginPerIdentifier),
+    mfaIp: limiter(budgets?.mfaPerIp),
+    mfaToken: limiter(budgets?.mfaPerToken),
+    challengeIp: limiter(budgets?.challengePerIp),
+    challengeToken: limiter(budgets?.challengePerToken),
+  };
+
+  /** 403 for a request a cross-site page could have made; null to proceed. */
+  const refuse = (request: Request): Response | null => {
+    const reason = checkSameOriginJson(request, appOrigin);
+    return reason === null ? null : problem(403, 'FORBIDDEN', 'That request was refused', reason);
+  };
+
+  const tooMany = (wait: number): Response => {
+    const response = problem(429, 'RATE_LIMITED', 'Too many attempts', 'Wait a minute and try again');
+    response.headers.set('retry-after', String(wait));
+    return response;
+  };
+
+  /** The first bucket that is empty answers; every bucket is spent, so a refusal costs the caller too. */
+  const spend = (attempts: [RateLimiter | undefined, string][]): Response | null => {
+    let wait: number | null = null;
+    for (const [bucket, key] of attempts) {
+      const result = bucket?.take(key) ?? null;
+      if (result !== null && (wait === null || result > wait)) wait = result;
+    }
+    return wait === null ? null : tooMany(wait);
+  };
+
+  /** A challenge's id is the part of `mfaToken` before the dot; the secret half is never a key. */
+  const tokenKey = (body: unknown): string => {
+    const token = (body as { mfaToken?: unknown } | undefined)?.mfaToken;
+    return typeof token === 'string' ? token.split('.')[0]! : 'none';
+  };
+
+  const sweepAbandoned = (): void => {
+    if (tokenMode === undefined) return;
+    for (const refreshToken of tokenMode.store.sweep()) {
+      void callBackend('/auth/logout', { refreshToken, allDevices: false }).catch(() => undefined);
     }
   };
 
@@ -183,6 +321,13 @@ export function createAuthRouteHandlers({
     if (backendBody.nextStep !== undefined) forBrowser.nextStep = backendBody.nextStep;
     if (backendBody.user !== undefined) forBrowser.user = backendBody.user;
     const refreshToken = parsed.data.refreshToken;
+    if (tokenMode !== undefined) {
+      // No cookie, no `user`, no `nextStep`: the page asked for a bearer token and gets exactly that.
+      delete forBrowser.nextStep;
+      delete forBrowser.user;
+      tokenMode.store.put(parsed.data.accessToken, refreshToken);
+      return json(forBrowser, 200);
+    }
     const sealed = await sealer.seal({ scope: parsed.data.scope, expiresAt: expiryOf(refreshMaxAgeSeconds) });
     return json(
       forBrowser,
@@ -197,14 +342,23 @@ export function createAuthRouteHandlers({
   };
 
   const login = async (request: Request): Promise<Response> => {
+    const refused = refuse(request);
+    if (refused !== null) return refused;
     const body = loginRequestSchema.safeParse(await readJson(request));
     if (!body.success) {
       return problem(422, 'VALIDATION_FAILED', 'That is not a sign-in', 'Send an identifier and a password');
     }
+    const forwarded = forwardHeaders(request);
+    const limited = spend([
+      [buckets.loginIp, clientIpOf(request)],
+      [buckets.loginId, body.data.identifier.trim().toLowerCase()],
+    ]);
+    if (limited !== null) return limited;
+    sweepAbandoned();
 
     let upstream: Response;
     try {
-      upstream = await callBackend(loginPath, body.data);
+      upstream = await callBackend(loginPath, body.data, forwarded);
     } catch {
       return problem(502, 'BAD_GATEWAY', 'Sign-in is unavailable', 'The platform did not answer; try again');
     }
@@ -214,14 +368,42 @@ export function createAuthRouteHandlers({
     // code rewritten here is a code a screen cannot act on.
     if (!upstream.ok) return json(payload ?? {}, upstream.status);
 
+    return finishSignIn(payload, forwarded);
+  };
+
+  /**
+   * What a login or a second-factor answer turns into. Three outcomes: a challenge (no credential,
+   * so no cookie), a session of this app's scope (cookies and an access token), or a session of
+   * another scope, which is revoked before the refusal.
+   */
+  const finishSignIn = async (
+    payload: Record<string, unknown> | undefined,
+    forwarded: Record<string, string>,
+  ): Promise<Response> => {
+    const challenge = backendChallengeSchema.safeParse(payload);
+    if (challenge.success) {
+      // An allowlist again: the factor hints are named, and nothing else the backend adds rides along.
+      return json(
+        {
+          mfaRequired: true,
+          mfaToken: challenge.data.mfaToken,
+          expiresAt: challenge.data.expiresAt,
+          factors: challenge.data.factors,
+        },
+        200,
+      );
+    }
+
     const parsed = backendSessionSchema.safeParse(payload);
     if (parsed.success && parsed.data.scope !== config.scope) {
       // The account is real and the password was right — the session simply belongs to another app.
       // Revoke it before answering: a session nobody can use is still a session, and leaving one
       // behind on every mistyped host is how a session list fills with ghosts.
-      await callBackend('/auth/logout', { refreshToken: parsed.data.refreshToken, allDevices: false }).catch(
-        () => undefined,
-      );
+      await callBackend(
+        '/auth/logout',
+        { refreshToken: parsed.data.refreshToken, allDevices: false },
+        forwarded,
+      ).catch(() => undefined);
       return problem(
         403,
         'WRONG_SCOPE',
@@ -233,10 +415,83 @@ export function createAuthRouteHandlers({
     return issue(payload ?? {});
   };
 
-  const rotate = async (refreshToken: string): Promise<Response> => {
+  /** Shared by the two second-step handlers: validate, call, and pass the backend's problem through. */
+  const secondStep = async (
+    request: Request,
+    path: string,
+    schema: z.ZodType<Record<string, unknown>>,
+    perIp: RateLimiter | undefined,
+    perToken: RateLimiter | undefined,
+  ): Promise<
+    | { response: Response }
+    | { payload: Record<string, unknown> | undefined; forwarded: Record<string, string> }
+  > => {
+    const refused = refuse(request);
+    if (refused !== null) return { response: refused };
+    const raw = await readJson(request);
+    const body = schema.safeParse(raw);
+    if (!body.success) {
+      return {
+        response: problem(
+          422,
+          'VALIDATION_FAILED',
+          'That is not a second-factor answer',
+          'Send the sign-in token, the factor and the code',
+        ),
+      };
+    }
+    const forwarded = forwardHeaders(request);
+    const limited = spend([
+      [perIp, clientIpOf(request)],
+      [perToken, tokenKey(raw)],
+    ]);
+    if (limited !== null) return { response: limited };
     let upstream: Response;
     try {
-      upstream = await callBackend('/auth/refresh', { refreshToken });
+      upstream = await callBackend(path, body.data, forwarded);
+    } catch {
+      return {
+        response: problem(
+          502,
+          'BAD_GATEWAY',
+          'Sign-in is unavailable',
+          'The platform did not answer; try again',
+        ),
+      };
+    }
+    const payload = (await upstream.json().catch(() => undefined)) as Record<string, unknown> | undefined;
+    // Verbatim, so a wrong code keeps its `attemptsRemaining`.
+    if (!upstream.ok) return { response: json(payload ?? {}, upstream.status) };
+    return { payload, forwarded };
+  };
+
+  const mfa = async (request: Request): Promise<Response> => {
+    const result = await secondStep(
+      request,
+      mfaVerifyPath,
+      mfaRequestSchema,
+      buckets.mfaIp,
+      buckets.mfaToken,
+    );
+    return 'response' in result ? result.response : finishSignIn(result.payload, result.forwarded);
+  };
+
+  const mfaChallenge = async (request: Request): Promise<Response> => {
+    const result = await secondStep(
+      request,
+      mfaChallengePath,
+      mfaChallengeRequestSchema,
+      buckets.challengeIp,
+      buckets.challengeToken,
+    );
+    // Nothing here can open a session, so the body is the backend's own: kind, destination, options.
+    return 'response' in result ? result.response : json(result.payload ?? {}, 200);
+  };
+
+  const rotate = async (refreshToken: string, forwarded: Record<string, string>): Promise<Response> => {
+    let upstream: Response;
+    try {
+      upstream = await callBackend('/auth/refresh', { refreshToken }, forwarded);
     } catch {
       // Offline, DNS, a dead backend. Not a sign-out: the credential is still good.
       return problem(
@@ -271,28 +526,50 @@ export function createAuthRouteHandlers({
     const inFlight = rotations.get(key);
     if (inFlight) return (await inFlight).clone();
 
-    const started = rotate(refreshToken).finally(() => rotations.delete(key));
+    const started = rotate(refreshToken, forwardHeaders(request)).finally(() => rotations.delete(key));
     rotations.set(key, started);
     return (await started).clone();
   };
 
   const logout = async (request: Request): Promise<Response> => {
+    const refused = refuse(request);
+    if (refused !== null) return refused;
     const body = logoutRequestSchema.safeParse((await readJson(request)) ?? {});
     const refreshToken = readCookie(request, REFRESH_COOKIE);
 
     if (refreshToken !== undefined) {
       // Best effort. Signing out locally must work even when the platform cannot be reached —
       // refusing to clear the cookie would leave the person signed in on a shared phone.
-      await callBackend('/auth/logout', {
-        refreshToken,
-        allDevices: body.success ? body.data.allDevices : false,
-      }).catch(() => undefined);
+      await callBackend(
+        '/auth/logout',
+        {
+          refreshToken,
+          allDevices: body.success ? body.data.allDevices : false,
+        },
+        forwardHeaders(request),
+      ).catch(() => undefined);
     }
 
     return json({ ok: true }, 200, clearedCookies(secure));
   };
 
-  return { login, refresh, logout };
+  const release = async (request: Request): Promise<Response> => {
+    const refused = refuse(request);
+    if (refused !== null) return refused;
+    const bearer = /^Bearer\s+(\S+)$/i.exec(request.headers.get('authorization') ?? '')?.[1];
+    if (tokenMode !== undefined && bearer !== undefined) {
+      const refreshToken = tokenMode.store.take(bearer);
+      // Best effort and the same answer either way: this route must not say whether a token was known.
+      if (refreshToken !== undefined) {
+        await callBackend('/auth/logout', { refreshToken, allDevices: false }, forwardHeaders(request)).catch(
+          () => undefined,
+        );
+      }
+    }
+    return json({ ok: true }, 200);
+  };
+
+  return { login, mfa, mfaChallenge, refresh, logout, release };
 }
 
 const expiryOf = (maxAgeSeconds: number): number => Date.now() + maxAgeSeconds * 1000;
@@ -309,9 +586,26 @@ export function komtruAuthRoute(
   return async (request, context) => {
     const { action } = await context.params;
     const name = action.length === 1 ? action[0] : undefined;
-    if (name !== 'login' && name !== 'refresh' && name !== 'logout') {
-      return problem(404, 'NOT_FOUND', 'No such route', 'Only login, refresh and logout exist here');
+    switch (name) {
+      case 'login':
+        return handlers.login(request);
+      case 'mfa':
+        return handlers.mfa(request);
+      case 'mfa-challenge':
+        return handlers.mfaChallenge(request);
+      case 'release':
+        return handlers.release(request);
+      case 'refresh':
+        return handlers.refresh(request);
+      case 'logout':
+        return handlers.logout(request);
+      default:
+        return problem(
+          404,
+          'NOT_FOUND',
+          'No such route',
+          'Only login, mfa, mfa-challenge, refresh and logout exist here',
+        );
     }
-    return handlers[name](request);
   };
 }

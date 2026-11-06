@@ -1,9 +1,10 @@
 {
-  "extends": "@komtru/config/tsconfig/library.json",
+  "extends": "@komtru/config/tsconfig/next.json",
   "compilerOptions": {
-    "noEmit": true,
     "rootDir": ".",
-    "types": ["node"]
+    "types": ["node"],
+    "paths": { "@/*": ["./src/*"] }
   },
-  "include": ["src", "test", "*.config.ts", "*.config.mjs"]
+  "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts"],
+  "exclude": ["node_modules"]
 }
