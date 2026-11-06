@@ -269,7 +269,7 @@ What changed, from [`screens-v2.tsv`](../design-reference/screens-v2.tsv) (437 s
 
 ### T-222 — Re-base TabBar to v2 mobile styling
 
-- **Status (2026-11-06): in progress** — implemented and verified; awaiting review
+- **Status:** Done (2026-11-06). Re-based on v2's final cascade (9.5px labels); deviations in docs/ui-review/T-222/README.md. Reviewed by the manager.
 
 - **Depends on:** T-191
 - **Model:** sonnet
