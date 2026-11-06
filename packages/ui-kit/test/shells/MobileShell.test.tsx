@@ -38,16 +38,19 @@ describe('TabBar', () => {
     expect(screen.getByRole('navigation', { name: 'Customer sections' })).toBeDefined();
   });
 
-  it('gives the current tab indigo and the rest trust-gray, icon and label alike', () => {
-    // The reference states both in their own rules (`.tab.active svg`, `.tab.active span`) rather
-    // than through the tab, so a tab that only coloured its label would still read as inactive.
+  it('gives the current tab an indigo-soft pill and indigo text, and the rest a quiet grey', () => {
+    // v2 states the colour on the item (`.kmn-item.is-active{color;background}`) and the glyph takes
+    // it through `currentColor`, so the icon wrapper strokes with the item's colour rather than
+    // carrying a colour of its own.
     render(<TabBar items={TABS} />);
     const current = screen.getByRole('button', { name: /Trades/ });
-    expect(current.firstElementChild?.className).toContain('stroke-trust-indigo');
-    expect(current.lastElementChild?.className).toContain('text-trust-indigo');
+    expect(current.className).toContain('text-trust-indigo');
+    expect(current.className).toContain('bg-trust-indigo-soft');
+    expect(current.firstElementChild?.className).toContain('stroke-current');
     const other = screen.getByRole('button', { name: /Alerts/ });
-    expect(other.firstElementChild?.className).toContain('stroke-trust-gray');
-    expect(other.lastElementChild?.className).toContain('text-trust-gray');
+    // eslint-disable-next-line komtru-design/no-raw-hex -- v2's resting grey has no token.
+    expect(other.className).toContain('text-[#7A8496]');
+    expect(other.className).not.toContain('bg-trust-indigo-soft');
   });
 
   it('takes a class list, so a one-shell app can hide it where the top nav takes over', () => {

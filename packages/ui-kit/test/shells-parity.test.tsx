@@ -175,24 +175,8 @@ const ROWS: ParityRow[] = [
   { id: 'tb-dot', selector: '.tb-dot', element: MOBILE, node: 7 },
   { id: 'scr-body', selector: '.scr-body', element: MOBILE, node: 8 },
 
-  { id: 'scr-tabbar', selector: '.scr-tabbar', element: MOBILE, node: 9 },
-  { id: 'scr-tab', selector: '.scr-tabbar .tab', element: MOBILE, node: 13 },
-  { id: 'scr-tab-icon', selector: '.scr-tabbar .tab svg', element: MOBILE, node: 14 },
-  { id: 'scr-tab-label', selector: '.scr-tabbar .tab span', element: MOBILE, node: 15 },
-  {
-    id: 'scr-tab-active-icon',
-    selector: '.scr-tabbar .tab.active svg',
-    extends: ['.scr-tabbar .tab svg'],
-    element: MOBILE,
-    node: 11,
-  },
-  {
-    id: 'scr-tab-active-label',
-    selector: '.scr-tabbar .tab.active span',
-    extends: ['.scr-tabbar .tab span'],
-    element: MOBILE,
-    node: 12,
-  },
+  // The tab bar is no longer checked here: T-222 re-based it on v2's `.komtru-mobile-nav`, so its
+  // rows live in `tabbar-parity.test.tsx` against the v2 reference.
 
   { id: 'scr-logo-row', selector: '.scr-logo-row', element: LOGO_BAR, node: 0 },
 

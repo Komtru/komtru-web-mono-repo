@@ -99,3 +99,8 @@ Screens to shoot: AC1 and E3 (mobile), D9 and T1 (consumer), NAV and TO-PA9 (con
   both `sticky bottom-0`: measured in Chromium at 340×660 on a scrolling body, the footer pins to
   y=614–660 and the tab bar's top lands at y=618. The reference never draws both, and which one a
   screen wants is the screen's decision, not a default.
+
+## TabBar (T-222)
+
+`TabBar` follows v2's `.komtru-mobile-nav`, not v1's `.scr-tabbar`; its deviations are in
+`docs/ui-review/T-222/README.md`.
