@@ -90,15 +90,36 @@ async function applyOutcome(
   if (decision.markVerified) {
     const owner = await deps.store.findBusinessOwner(rcNumber);
     /**
-     * `owner.userId === request.userId` is NOT a duplicate.
+     * `owner.userId === request.userId` is NOT a duplicate, and is not a second row either.
      *
-     * It is the submitter's own verified business, re-submitted — a double tap, or a re-check. The
-     * submission service already refuses that with a 409, so reaching here means the first
-     * verification landed between the submission and this job. Treating it as a duplicate would
-     * raise a fraud signal to Risk about an innocent person and park the request in MANUAL_REVIEW,
-     * which the expiry sweep deliberately skips and which nothing can clear until T-052 ships.
+     * It is the submitter's own verified business, re-submitted — a double tap. The submission
+     * service refuses that with a 409, so reaching here means the first verification landed in
+     * between, and `business_verifications_user_active_unique` would refuse a second verified row
+     * anyway: one verified business per account, so a second CAC cannot quietly replace the one a
+     * level-3 grant was made on. So the first row stays the record and this request is simply
+     * settled, exactly as `settleAlreadyVerified` does on the identity path.
+     *
+     * Treating it as a DUPLICATE instead would raise a fraud signal to Risk about an innocent
+     * person and park the request in MANUAL_REVIEW, which the expiry sweep deliberately skips and
+     * which nothing can clear until T-052 ships.
      */
-    if (owner && owner.userId !== request.userId) {
+    if (owner && owner.userId === request.userId) {
+      if (
+        !(await deps.store.settleAlreadyVerified({
+          request,
+          provider: deps.adapter.provider,
+          providerReference: result.providerReference,
+        }))
+      ) {
+        return;
+      }
+      // Re-evaluated rather than assumed: the bank match may have landed since the first CAC did.
+      await evaluateBusinessLevel(deps, request);
+      pushOutcome(deps, request, 'APPROVED', result.verdict);
+      return;
+    }
+
+    if (owner) {
       const applied = await deps.store.applyDuplicateBusiness({
         ...shared,
         requestStatus: 'MANUAL_REVIEW',

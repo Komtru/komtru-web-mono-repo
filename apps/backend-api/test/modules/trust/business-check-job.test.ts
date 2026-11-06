@@ -166,14 +166,22 @@ describe('runBusinessCheck', () => {
     expect(hex).not.toContain(RC);
   });
 
-  it('treats the submitter’s OWN verified registration as theirs, not as a duplicate', async () => {
+  /**
+   * A double tap, not fraud — and not a second row either: one verified business per account is a
+   * unique index, so inserting one would fail the job rather than approve the request.
+   */
+  it('settles the submitter’s OWN verified registration without writing a second row', async () => {
     const request = requestRow({ verificationType: 'CAC', targetLevel: 3 });
     const { store } = await runBusiness({
       request,
       businessOwner: { userId: request.userId, registeredBusinessName: BUSINESS_NAME },
+      businessFacts: { currentLevel: 2, cacVerified: true, businessBankMatched: true },
     });
     expect(store.duplicateBusinesses).toHaveLength(0);
-    expect(store.businessOutcomes[0]?.markVerified).toBe(true);
+    expect(store.businessOutcomes).toHaveLength(0);
+    expect(store.settledAlreadyVerified).toEqual([{ requestId: request.id }]);
+    // Re-evaluated, because the bank match may have landed since the first CAC did.
+    expect(store.grants[0]).toMatchObject({ toLevel: 3 });
   });
 
   it('does not check for a duplicate at all when the registration did not pass', async () => {
