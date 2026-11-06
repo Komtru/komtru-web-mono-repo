@@ -99,7 +99,7 @@ Spec: `docs/specs/module-01-identity-and-user-management.md`. Decision C2 (desig
   - Capability service with `canActAsBuyer(userId)`, false while an `ACTIVE` `MERCHANT` capability exists, exported from the identity barrel and unit-tested, including the rule that trades already in flight finish normally.
   - Self-dealing block at the permission layer (M1 C5), time-boxed role grants, dual approval for `FINANCE_ADMIN`, `SUPER_ADMIN`, `COMPLIANCE_OFFICER`, two-step actions through `admin_action_approvals` (MFA reset, forced username change, verification override, large refunds).
   - Admin endpoints per M1 §10.6, all paginated, each requiring a reason (400 without one) and writing an audit row.
-- **Status (2026-11-06): in progress** — implemented and verified; awaiting review
+- **Status:** Done (2026-11-06). Plan: docs/superpowers/plans/2026-11-06-t-037-rbac-staff-admin.md. Review (Opus security): 5 must-fix and 9 should-fix items fixed. Owner decisions pending are listed in the plan, with deny-by-default applied.
 
 ### T-038 — Staff invitations
 
