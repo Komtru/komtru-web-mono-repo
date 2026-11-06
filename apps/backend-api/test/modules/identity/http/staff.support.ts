@@ -56,6 +56,7 @@ export const buildApp = (t: TestDatabase, redis: Redis): Express => {
       idempotency: createIdempotencyGate({ db: t.db(), redis, logger: testLogger }),
       rateLimit: createRateLimitGate({ redis, logger: testLogger, keyPrefix: `rl-${randomUUID()}` }),
       resolveActor: auth.resolveActor,
+      onDenied: auth.onAccessDenied,
     }),
   });
 };

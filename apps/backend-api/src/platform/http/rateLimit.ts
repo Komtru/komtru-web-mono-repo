@@ -80,8 +80,15 @@ export function createRateLimitGate({
   // counts into the same Redis keys.
   const limiters = new Map<string, RateLimiterRedis>();
   const limiterFor = (route: RouteDefinition, window: RateLimitWindow, kind: string): RateLimiterRedis => {
-    const id = `${keyPrefix}:${route.method}:${route.path}:${kind}`;
-    let limiter = limiters.get(id);
+    // A route may share its per-identifier counter with others (`identifierBucket`), so one account
+    // cannot be guessed at five times a minute through each of two doors. The Redis counter is
+    // shared; the budget each door checks it against stays its own, hence the wider map key.
+    const shared = kind === 'identifier' ? route.rateLimit?.identifierBucket : undefined;
+    const id = shared
+      ? `${keyPrefix}:shared:${shared}:identifier`
+      : `${keyPrefix}:${route.method}:${route.path}:${kind}`;
+    const mapKey = `${id}|${window.points}|${window.durationSeconds}`;
+    let limiter = limiters.get(mapKey);
     if (!limiter) {
       limiter = new RateLimiterRedis({
         storeClient: redis,
@@ -89,7 +96,7 @@ export function createRateLimitGate({
         points: window.points,
         duration: window.durationSeconds,
       });
-      limiters.set(id, limiter);
+      limiters.set(mapKey, limiter);
     }
     return limiter;
   };

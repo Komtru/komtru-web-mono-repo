@@ -5,6 +5,7 @@ import {
   DUAL_APPROVAL_ROLES,
   approvalSatisfies,
   MAX_ROLE_GRANT_DAYS,
+  MAX_SUPER_ADMINS,
   TWO_STEP_ACTIONS,
   authorizeAdminAction,
   needsApproval,
@@ -64,6 +65,34 @@ describe('authorizeAdminAction: self-action', () => {
       }),
     ).toEqual({ allowed: false, reason: 'SELF_ACTION' });
   });
+
+  it.each(['user.reinstate', 'capability.grant', 'mfa.reset', 'user.view_pii', 'role.grant'])(
+    'blocks %s on the actor’s own account, destructive or not',
+    (permission) => {
+      expect(
+        authorizeAdminAction({
+          actorUserId: 'staff',
+          roles: ['SUPER_ADMIN', 'OPERATIONS_ADMIN'],
+          permission,
+          subjectUserId: 'staff',
+        }),
+      ).toEqual({ allowed: false, reason: 'SELF_ACTION' });
+    },
+  );
+
+  it.each(['user.view', 'user.search', 'session.view', 'audit.view', 'role.view'])(
+    'allows the read %s on the actor’s own account',
+    (permission) => {
+      expect(
+        authorizeAdminAction({
+          actorUserId: 'staff',
+          roles: ['SUPER_ADMIN'],
+          permission,
+          subjectUserId: 'staff',
+        }),
+      ).toEqual({ allowed: true });
+    },
+  );
 
   it('does not block a read on the actor’s own account', () => {
     expect(
@@ -236,11 +265,52 @@ describe('authorizeAdminAction: the section 12.3 footnote conditions', () => {
   });
 });
 
+describe('staff targets', () => {
+  const base = { actorUserId: 'ops', subjectUserId: 'admin', subjectIsStaff: true };
+
+  it.each(['user.suspend', 'user.reinstate', 'session.revoke', 'mfa.reset', 'username.force_change'])(
+    'refuses %s on a staff subject unless the actor is SUPER_ADMIN',
+    (permission) => {
+      expect(authorizeAdminAction({ ...base, roles: ['OPERATIONS_ADMIN'], permission })).toEqual({
+        allowed: false,
+        reason: 'STAFF_TARGET',
+      });
+      expect(
+        authorizeAdminAction({
+          ...base,
+          roles: ['OPERATIONS_ADMIN', 'SUPER_ADMIN'],
+          permission,
+          approval: approval(),
+        }),
+      ).toEqual({ allowed: true });
+    },
+  );
+
+  it('still lets COMPLIANCE_OFFICER revoke a staff role (the offboarding path)', () => {
+    expect(
+      authorizeAdminAction({ ...base, roles: ['COMPLIANCE_OFFICER'], permission: 'role.revoke' }),
+    ).toEqual({ allowed: true });
+  });
+
+  it('does not apply to a subject who is not staff', () => {
+    expect(
+      authorizeAdminAction({
+        ...base,
+        subjectIsStaff: false,
+        roles: ['OPERATIONS_ADMIN'],
+        permission: 'user.suspend',
+      }),
+    ).toEqual({ allowed: true });
+  });
+});
+
 describe('the two-step registry', () => {
-  it('names the four actions the ticket lists, each with a catalogued permission', () => {
+  it('names the actions the ticket lists plus the finance ones, each with a catalogued permission', () => {
     expect(Object.keys(TWO_STEP_ACTIONS).sort()).toEqual([
       'LARGE_REFUND',
       'MFA_RESET',
+      'PAYOUT_RETRY',
+      'RECONCILIATION_RESOLVE',
       'USERNAME_FORCE_CHANGE',
       'VERIFICATION_OVERRIDE',
     ]);
@@ -290,12 +360,22 @@ describe('role grants', () => {
     now,
   };
 
-  it('accepts a permanent grant of an ordinary role and a time-boxed one', () => {
-    expect(validateRoleGrant(grant)).toEqual({ ok: true, needsSecondApprover: false });
-    expect(validateRoleGrant({ ...grant, expiresAt: new Date(now.getTime() + 30 * day) })).toEqual({
+  it('never leaves a grant permanent: no expiry becomes the longest allowed (C6)', () => {
+    expect(validateRoleGrant(grant)).toEqual({
       ok: true,
       needsSecondApprover: false,
+      expiresAt: new Date(now.getTime() + MAX_ROLE_GRANT_DAYS * day),
     });
+    const thirty = new Date(now.getTime() + 30 * day);
+    expect(validateRoleGrant({ ...grant, expiresAt: thirty })).toEqual({
+      ok: true,
+      needsSecondApprover: false,
+      expiresAt: thirty,
+    });
+  });
+
+  it('caps SUPER_ADMIN at two holders', () => {
+    expect(MAX_SUPER_ADMINS).toBe(2);
   });
 
   it('rejects an expiry in the past, at now, or beyond the horizon', () => {
@@ -321,8 +401,11 @@ describe('role grants', () => {
   it.each(['FINANCE_ADMIN', 'SUPER_ADMIN', 'COMPLIANCE_OFFICER'])(
     'flags %s as needing a second approver, who must be a third person',
     (roleCode) => {
-      expect(validateRoleGrant({ ...grant, roleCode })).toEqual({ ok: true, needsSecondApprover: true });
-      expect(validateRoleGrant({ ...grant, roleCode, approvedBy: 'approver' })).toEqual({
+      expect(validateRoleGrant({ ...grant, roleCode })).toMatchObject({
+        ok: true,
+        needsSecondApprover: true,
+      });
+      expect(validateRoleGrant({ ...grant, roleCode, approvedBy: 'approver' })).toMatchObject({
         ok: true,
         needsSecondApprover: false,
       });

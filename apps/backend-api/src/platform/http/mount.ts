@@ -36,6 +36,14 @@ export interface ParsedRequest {
   body: unknown;
 }
 
+/** What a denial hook is told. Only a caller who HAS a principal reaches it (an anonymous one is a 401). */
+export interface AccessDenial {
+  route: RouteDefinition;
+  actor: Actor;
+  req: Request;
+  reason: 'SCOPE' | 'PERMISSION';
+}
+
 export interface MountDeps {
   logger: Logger;
   idempotency?: IdempotencyGate;
@@ -46,6 +54,12 @@ export interface MountDeps {
    * It never throws for an auth failure — it reports one, and the enforcement below decides.
    */
   resolveActor?: (req: Request) => Promise<Actor>;
+  /**
+   * Told about every 403 the scope and permission check produces, so the module that owns the audit
+   * log can record a refusal the handler never saw. Best-effort: a failure here is logged and the
+   * caller still gets their 403.
+   */
+  onDenied?: (denial: AccessDenial) => Promise<void>;
 }
 
 export { ANONYMOUS_ACTOR } from './principal.js';
@@ -80,7 +94,11 @@ const UNAUTHENTICATED_DETAIL: Record<AuthFailure, string> = {
  * perfectly valid, it simply belongs to another app, and answering 401 would send the api-client
  * into a refresh it does not need and a sign-out it should not do (design §7.3).
  */
-function enforceAccess(route: RouteDefinition, actor: Actor, res: Response): void {
+function enforceAccess(
+  route: RouteDefinition,
+  actor: Actor,
+  res: Response,
+): { denied: 'SCOPE' | 'PERMISSION' } | undefined {
   if (route.scope === 'PUBLIC') return;
 
   const { principal } = actor;
@@ -91,18 +109,20 @@ function enforceAccess(route: RouteDefinition, actor: Actor, res: Response): voi
     res.setHeader('WWW-Authenticate', `Bearer error="invalid_token", error_description="${failure}"`);
     throw new ApiError(401, UNAUTHENTICATED_CODE[failure], 'Not signed in', UNAUTHENTICATED_DETAIL[failure]);
   }
-  if (principal.scope !== route.scope) {
-    throw new ApiError(
-      403,
-      'FORBIDDEN',
-      'This session cannot call this endpoint',
-      `Sign in with a ${route.scope.toLowerCase()} session`,
-    );
-  }
-  if (route.permission && !principal.permissions.has(route.permission)) {
-    throw new ApiError(403, 'FORBIDDEN', 'You do not have permission to do that');
-  }
+  if (principal.scope !== route.scope) return { denied: 'SCOPE' };
+  if (route.permission && !principal.permissions.has(route.permission)) return { denied: 'PERMISSION' };
+  return undefined;
 }
+
+const deniedError = (route: RouteDefinition, denied: 'SCOPE' | 'PERMISSION'): ApiError =>
+  denied === 'SCOPE'
+    ? new ApiError(
+        403,
+        'FORBIDDEN',
+        'This session cannot call this endpoint',
+        `Sign in with a ${route.scope.toLowerCase()} session`,
+      )
+    : new ApiError(403, 'FORBIDDEN', 'You do not have permission to do that');
 
 const EMPTY = z.object({});
 
@@ -146,7 +166,13 @@ export function mountRoutes(routes: RouteDefinition[], deps: MountDeps): (router
         const actor = await resolveActor(req);
         // Before the rate limiter: a caller who may not be here at all should not be able to spend
         // another caller's budget, and refusing costs nothing to meter.
-        enforceAccess(route, actor, res);
+        const refusal = enforceAccess(route, actor, res);
+        if (refusal) {
+          await deps
+            .onDenied?.({ route, actor, req, reason: refusal.denied })
+            .catch((error: unknown) => logger.error({ err: error }, 'access denial hook failed'));
+          throw deniedError(route, refusal.denied);
+        }
 
         // Charged before validation: otherwise one malformed field buys an attacker unlimited
         // unmetered requests to exactly the routes that asked to be metered.

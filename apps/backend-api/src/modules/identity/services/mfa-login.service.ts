@@ -260,7 +260,7 @@ export async function completeMfaLogin(
         subjectUserId: userId,
         ip: input.ip,
         userAgent: input.userAgent,
-        metadata: { factorId: factor.id, factorType: factor.factorType, attempts },
+        metadata: { scope, factorId: factor.id, factorType: factor.factorType, attempts },
       });
       return { outcome: 'WRONG_CODE', attemptsRemaining: challenge.maxAttempts - attempts };
     }

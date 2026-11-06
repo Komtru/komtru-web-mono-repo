@@ -21,6 +21,7 @@ import { isAllowed, type PermissionCode } from '../domain/rbac/catalog.js';
 import {
   TWO_STEP_ACTIONS,
   approvalSatisfies,
+  staffTargetDenied,
   type ApprovalProof,
   type TwoStepAction,
 } from '../domain/rbac/sod.js';
@@ -31,6 +32,7 @@ import { AUDIT_ACTIONS } from './audit.service.js';
 import {
   auditStaff,
   forbidden,
+  holdsStaffRole,
   insertAssignment,
   isDualApprovalRole,
   liveRoleCodes,
@@ -129,6 +131,17 @@ export async function requestApproval(
     : input.subjectUserId === input.actor.userId
       ? 'SELF_ACTION'
       : undefined;
+  const staffTarget =
+    !denied &&
+    staffTargetDenied(permission, await holdsStaffRole(db, input.subjectUserId), input.actor.roles);
+  if (staffTarget) {
+    return refuse(db, input.actor, {
+      permission,
+      subjectUserId: input.subjectUserId,
+      reason: input.reason,
+      denied: 'STAFF_TARGET',
+    });
+  }
   if (denied) {
     return refuse(db, input.actor, {
       permission,
@@ -167,8 +180,12 @@ export interface DecideInput {
   approvalId: string;
   decision: 'APPROVE' | 'REJECT';
   reason: string;
-  /** The identity challenge with the subject was completed (MFA reset only; ignored elsewhere). */
-  identityChallengeConfirmed?: boolean | undefined;
+  /**
+   * Evidence that the identity challenge with the subject was completed: a ticket or call id (MFA
+   * reset only; ignored elsewhere). A bare "yes" is not evidence, so a reference is required and is
+   * recorded in the audit row.
+   */
+  identityChallengeRef?: string | undefined;
 }
 
 export interface DecideResult {
@@ -187,93 +204,121 @@ export async function decideApproval(deps: ApprovalDeps, input: DecideInput): Pr
   const { db } = deps;
   const { actor } = input;
 
-  const outcome = await db.transaction(async (tx): Promise<DecideResult & { invalidate: string[] }> => {
-    const row = (
-      await tx
-        .select()
-        .from(adminActionApprovals)
-        .where(eq(adminActionApprovals.id, input.approvalId))
-        .for('update')
-    )[0];
-    if (!row || !isApprovalAction(row.action)) throw notFound();
+  const outcome = await db
+    .transaction(async (tx): Promise<DecideResult & { invalidate: string[] }> => {
+      const row = (
+        await tx
+          .select()
+          .from(adminActionApprovals)
+          .where(eq(adminActionApprovals.id, input.approvalId))
+          .for('update')
+      )[0];
+      if (!row || !isApprovalAction(row.action)) throw notFound();
 
-    const state = approvalState(row);
-    if (state === 'EXPIRED') throw conflict('This approval has expired; ask for it again');
-    if (state !== 'PENDING') throw conflict(`This approval is already ${state.toLowerCase()}`);
+      const state = approvalState(row);
+      if (state === 'EXPIRED') throw conflict('This approval has expired; ask for it again');
+      if (state !== 'PENDING') throw conflict(`This approval is already ${state.toLowerCase()}`);
 
-    const action = row.action;
-    const permission = permissionFor(action);
-    if (!isAllowed(actor.roles, permission)) throw forbidden();
+      const action = row.action;
+      const permission = permissionFor(action);
+      if (!isAllowed(actor.roles, permission)) throw forbidden();
+      // The subject may neither wave their own request through nor wave it away.
+      if (row.subjectUserId === actor.userId) throw forbidden('You cannot decide an approval aimed at you');
+      if (staffTargetDenied(permission, await holdsStaffRole(tx, row.subjectUserId), actor.roles)) {
+        throw forbidden('Only a SUPER_ADMIN may decide an action aimed at a staff member');
+      }
 
-    if (input.decision === 'REJECT') {
+      if (input.decision === 'REJECT') {
+        await tx
+          .update(adminActionApprovals)
+          .set({ rejectedAt: sql`now()`, rejectionReason: input.reason })
+          .where(eq(adminActionApprovals.id, row.id));
+        await auditStaff(tx, actor, {
+          action: AUDIT_ACTIONS.APPROVAL_REJECTED,
+          subjectUserId: row.subjectUserId,
+          reason: input.reason,
+          metadata: { approvalId: row.id, approvalAction: action },
+        });
+        return { approvalId: row.id, state: 'REJECTED', action, invalidate: [] };
+      }
+
+      const challengeRef = input.identityChallengeRef?.trim() ?? '';
+      const proof: ApprovalProof = {
+        approvedByUserId: actor.userId,
+        approvedByRoles: actor.roles,
+        identityChallengeConfirmed: challengeRef.length > 0,
+      };
+      const requesterRoles = await liveRoleCodes(tx, row.requestedBy);
+      const requesterStillHolds = isAllowed(requesterRoles, permission);
+      if (
+        !requesterStillHolds ||
+        !approvalSatisfies({
+          permission,
+          requesterUserId: row.requestedBy,
+          subjectUserId: row.subjectUserId,
+          proof,
+        })
+      ) {
+        throw forbidden(
+          !requesterStillHolds
+            ? 'The requester no longer holds the permission for this action'
+            : 'You cannot approve this: you must be a different person from the requester and the subject, hold the permission, and have completed the identity challenge where one is required',
+        );
+      }
+
+      const invalidate: string[] = [];
+      let executed = false;
+      if (identityOwned(action)) {
+        invalidate.push(...(await execute(tx, row, action, input.reason, actor.userId)));
+        executed = true;
+      }
+
       await tx
         .update(adminActionApprovals)
-        .set({ rejectedAt: sql`now()`, rejectionReason: input.reason })
+        .set({
+          approvedBy: actor.userId,
+          approvedAt: sql`now()`,
+          ...(executed ? { executedAt: sql`now()` } : {}),
+        })
         .where(eq(adminActionApprovals.id, row.id));
+
+      // ONE row for approve-and-execute: the action is a single staff decision, and its effect is
+      // named in the metadata rather than written as a second row.
       await auditStaff(tx, actor, {
-        action: AUDIT_ACTIONS.APPROVAL_REJECTED,
+        action: AUDIT_ACTIONS.APPROVAL_APPROVED,
         subjectUserId: row.subjectUserId,
         reason: input.reason,
-        metadata: { approvalId: row.id, approvalAction: action },
+        metadata: {
+          approvalId: row.id,
+          approvalAction: action,
+          requestedBy: row.requestedBy,
+          executed,
+          identityChallengeRef: challengeRef.length > 0 ? challengeRef : null,
+        },
       });
-      return { approvalId: row.id, state: 'REJECTED', action, invalidate: [] };
-    }
-
-    const proof: ApprovalProof = {
-      approvedByUserId: actor.userId,
-      approvedByRoles: actor.roles,
-      identityChallengeConfirmed: input.identityChallengeConfirmed === true,
-    };
-    const requesterRoles = await liveRoleCodes(tx, row.requestedBy);
-    const requesterStillHolds = isAllowed(requesterRoles, permission);
-    if (
-      !requesterStillHolds ||
-      !approvalSatisfies({
-        permission,
-        requesterUserId: row.requestedBy,
-        subjectUserId: row.subjectUserId,
-        proof,
-      })
-    ) {
-      throw forbidden(
-        !requesterStillHolds
-          ? 'The requester no longer holds the permission for this action'
-          : 'You cannot approve this: you must be a different person from the requester and the subject, hold the permission, and have completed the identity challenge where one is required',
-      );
-    }
-
-    const invalidate: string[] = [];
-    let executed = false;
-    if (identityOwned(action)) {
-      invalidate.push(...(await execute(tx, row, action, input.reason, actor.userId)));
-      executed = true;
-    }
-
-    await tx
-      .update(adminActionApprovals)
-      .set({
-        approvedBy: actor.userId,
-        approvedAt: sql`now()`,
-        ...(executed ? { executedAt: sql`now()` } : {}),
-      })
-      .where(eq(adminActionApprovals.id, row.id));
-
-    // ONE row for approve-and-execute: the action is a single staff decision, and its effect is
-    // named in the metadata rather than written as a second row.
-    await auditStaff(tx, actor, {
-      action: AUDIT_ACTIONS.APPROVAL_APPROVED,
-      subjectUserId: row.subjectUserId,
-      reason: input.reason,
-      metadata: {
-        approvalId: row.id,
-        approvalAction: action,
-        requestedBy: row.requestedBy,
-        executed,
-        identityChallengeConfirmed: proof.identityChallengeConfirmed,
-      },
+      return { approvalId: row.id, state: executed ? 'EXECUTED' : 'APPROVED', action, invalidate };
+    })
+    .catch(async (error: unknown) => {
+      // Every 403 raised inside the decision rolled its transaction back, and the refusal with it.
+      // Record it on its own so a refused approval is not invisible in the audit trail.
+      if (error instanceof ApiError && error.status === 403) {
+        await db
+          .transaction((tx) =>
+            auditStaff(tx, actor, {
+              action: AUDIT_ACTIONS.ADMIN_ACTION_DENIED,
+              reason: input.reason,
+              outcome: 'DENIED',
+              metadata: {
+                approvalId: input.approvalId,
+                decision: input.decision,
+                denied: error.detail ?? error.title,
+              },
+            }),
+          )
+          .catch(() => undefined);
+      }
+      throw error;
     });
-    return { approvalId: row.id, state: executed ? 'EXECUTED' : 'APPROVED', action, invalidate };
-  });
 
   // After the commit and best-effort, as `applyKillSwitch` does: a missed invalidation costs one
   // cache hit, because `resolvePrincipal` compares the token's epoch with the row it just read.
@@ -369,14 +414,30 @@ export interface ConsumeApprovalInput {
   approvalId: string;
   action: TwoStepAction;
   subjectUserId: string;
-  /** Who is spending it. Must not be the approver: the approver signs, someone else acts. */
+  /**
+   * What the owning module is about to do, in the same shape it requested. It must equal the payload
+   * the approver signed, key for key: an approval for a refund of 5,000 cannot be spent on 500,000.
+   */
+  expectedPayload: Record<string, unknown>;
+  /** Who is spending it. Must be the person who REQUESTED the action. */
   consumedBy: string;
 }
 
+/** Key order must not matter, nothing else may. */
+const canonical = (value: unknown): string => {
+  if (Array.isArray(value)) return `[${value.map(canonical).join(',')}]`;
+  if (value !== null && typeof value === 'object') {
+    const entries = Object.entries(value as Record<string, unknown>).sort(([a], [b]) => a.localeCompare(b));
+    return `{${entries.map(([key, inner]) => `${JSON.stringify(key)}:${canonical(inner)}`).join(',')}}`;
+  }
+  return JSON.stringify(value) ?? 'null';
+};
+
 /**
- * How a module that owns a foreign two-step action (verification override, refund) spends an
- * approval: once, in its own transaction, for the action and subject it was approved for. Anything
- * else — wrong action, wrong subject, not approved, expired, already spent — refuses.
+ * How a module that owns a foreign two-step action (verification override, refund, payout retry,
+ * reconciliation resolution) spends an approval: once, in its own transaction, for the action,
+ * subject and exact payload it was approved for, by the person who asked for it, while that person
+ * still holds the permission. Anything else refuses.
  */
 export async function consumeApproval(tx: Tx, input: ConsumeApprovalInput): Promise<void> {
   const row = (
@@ -394,7 +455,17 @@ export async function consumeApproval(tx: Tx, input: ConsumeApprovalInput): Prom
   }
   if (row.executedAt !== null) throw conflict('This approval has already been used');
   if (row.expiresAt.getTime() <= Date.now()) throw conflict('This approval has expired');
-  if (row.approvedBy === input.consumedBy) throw forbidden('The approver cannot also be the one who acts');
+  if (canonical(row.payload ?? {}) !== canonical(input.expectedPayload)) {
+    throw forbidden('This is not what was approved');
+  }
+  if (input.consumedBy !== row.requestedBy) {
+    throw forbidden('Only the person who requested this action may carry it out');
+  }
+  // The approval is a signature on a request by someone who could make it. If they have since lost
+  // the permission, the request is no longer anyone's to carry out.
+  if (!isAllowed(await liveRoleCodes(tx, row.requestedBy), permissionFor(input.action))) {
+    throw forbidden('The requester no longer holds the permission for this action');
+  }
 
   await tx
     .update(adminActionApprovals)

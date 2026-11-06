@@ -9,9 +9,11 @@ import type { Db } from '../../../db/index.js';
 import { ApiError } from '../../../platform/errors.js';
 import { publish, type Tx } from '../../../platform/events/publish.js';
 import { identityAdminRoleGrantedEvent, identityAdminRoleRevokedEvent } from '../domain/events.js';
+import { isSecondFactor } from '../domain/mfa/policy.js';
 import { isKnownRole } from '../domain/rbac/catalog.js';
 import {
   DUAL_APPROVAL_ROLES,
+  MAX_SUPER_ADMINS,
   authorizeAdminAction,
   validateRoleGrant,
   type AdminActionInput,
@@ -21,6 +23,7 @@ import { adminRoleAssignments, roles } from '../infrastructure/postgres/schema/r
 import { sessions } from '../infrastructure/postgres/schema/sessions.js';
 import { users } from '../infrastructure/postgres/schema/users.js';
 import { AUDIT_ACTIONS, writeAudit } from './audit.service.js';
+import { activeFactors } from './mfa.service.js';
 
 /** The caller of an admin endpoint, as `resolvePrincipal` re-read it from the database this request. */
 export interface StaffActor {
@@ -60,7 +63,13 @@ export async function auditStaff(
   });
 }
 
-const DENIAL_DETAIL: Record<DenyReason, string> = {
+/** What a refusal can name: the authoriser's reasons, plus the two a role grant adds. */
+export type RefusalReason = DenyReason | 'SELF_GRANT' | 'APPROVER_NOT_DISTINCT';
+
+const DENIAL_DETAIL: Record<RefusalReason, string> = {
+  STAFF_TARGET: 'Only a SUPER_ADMIN may do this to another staff member',
+  SELF_GRANT: 'You cannot grant a role to yourself',
+  APPROVER_NOT_DISTINCT: 'The approver must be a different person from the granter and the grantee',
   PERMISSION_DENIED: 'You do not have permission to do that',
   CONDITION_NOT_MET: 'This needs a condition you have not met (an open ticket, a documented request)',
   APPROVAL_REQUIRED: 'This needs a second approver',
@@ -95,7 +104,7 @@ export async function requireAuthorised(
 export async function refuse(
   db: Db,
   actor: StaffActor,
-  input: { permission: string; subjectUserId?: string | undefined; reason: string; denied: DenyReason },
+  input: { permission: string; subjectUserId?: string | undefined; reason: string; denied: RefusalReason },
 ): Promise<never> {
   await db.transaction((tx) =>
     auditStaff(tx, actor, {
@@ -108,6 +117,10 @@ export async function refuse(
   );
   throw forbidden(DENIAL_DETAIL[input.denied]);
 }
+
+/** True when the user holds a live staff role: the subject of a staff-protected action. */
+export const holdsStaffRole = async (tx: Pick<Db, 'select'>, userId: string): Promise<boolean> =>
+  (await liveRoleCodes(tx, userId)).length > 0;
 
 /** Live role codes: not revoked, not past `expires_at`, and approved where the role demands it. */
 export async function liveRoleCodes(tx: Pick<Db, 'select'>, userId: string): Promise<string[]> {
@@ -125,6 +138,9 @@ export async function liveRoleCodes(tx: Pick<Db, 'select'>, userId: string): Pro
     );
   return [...new Set(rows.map((row) => row.code))];
 }
+
+/** Arbitrary but fixed; no other lock uses it. */
+export const SUPER_ADMIN_LOCK_KEY = 1_037_000_001;
 
 const userExists = async (tx: Tx, userId: string): Promise<boolean> =>
   (await tx.select({ id: users.id }).from(users).where(eq(users.id, userId)).limit(1)).length > 0;
@@ -172,6 +188,36 @@ export async function insertAssignment(tx: Tx, input: InsertAssignmentInput): Pr
   });
   if (!verdict.ok) throw grantRefusal(verdict.reason);
   if (verdict.needsSecondApprover) throw new Error('insertAssignment: a dual-approval role needs approvedBy');
+  // Always time-boxed (C6): an absent expiry became the longest allowed one in the verdict.
+  const expiresAt = verdict.expiresAt;
+
+  // Owner decision pending: a staff member with no second factor must not exist, so the grant itself
+  // is refused rather than leaving a role that cannot sign in. The same function writes every grant,
+  // so the approval path and the break-glass script are held to it too.
+  if (!(await activeFactors(tx, input.userId)).some((factor) => isSecondFactor(factor.factorType))) {
+    throw conflict('Enrol a second factor before a staff role can be granted');
+  }
+
+  if (input.roleCode === 'SUPER_ADMIN') {
+    // Two writers can both read "one holder" and both insert. The lock serialises them for the life
+    // of this transaction (and is transaction-scoped, never session-scoped, for PgBouncer's sake).
+    await tx.execute(sql`SELECT pg_advisory_xact_lock(${SUPER_ADMIN_LOCK_KEY})`);
+    const holders = (
+      await tx
+        .select({ n: sql<number>`count(*)::int` })
+        .from(adminRoleAssignments)
+        .where(
+          and(
+            eq(adminRoleAssignments.roleCode, 'SUPER_ADMIN'),
+            isNull(adminRoleAssignments.revokedAt),
+            sql`(${adminRoleAssignments.expiresAt} IS NULL OR ${adminRoleAssignments.expiresAt} > now())`,
+          ),
+        )
+    )[0]?.n;
+    if ((holders ?? 0) >= MAX_SUPER_ADMINS) {
+      throw conflict(`There can be at most ${MAX_SUPER_ADMINS} SUPER_ADMIN holders`);
+    }
+  }
 
   const active = await tx
     .select({ id: adminRoleAssignments.id, expiresAt: adminRoleAssignments.expiresAt })
@@ -206,7 +252,7 @@ export async function insertAssignment(tx: Tx, input: InsertAssignmentInput): Pr
         grantedBy: input.grantedBy,
         approvedBy: input.approvedBy ?? null,
         reason: input.reason,
-        expiresAt: input.expiresAt ?? null,
+        expiresAt,
       })
       .returning({ id: adminRoleAssignments.id })
   )[0];
@@ -218,7 +264,7 @@ export async function insertAssignment(tx: Tx, input: InsertAssignmentInput): Pr
       roleCode: input.roleCode,
       grantedBy: input.grantedBy,
       approvedBy: input.approvedBy ?? null,
-      expiresAt: input.expiresAt ? input.expiresAt.toISOString() : null,
+      expiresAt: expiresAt.toISOString(),
     },
     aggregateType: 'identity.user',
     aggregateId: input.userId,
@@ -227,7 +273,10 @@ export async function insertAssignment(tx: Tx, input: InsertAssignmentInput): Pr
   return row.id;
 }
 
-export type GrantRoleResult = { outcome: 'GRANTED'; assignmentId: string } | { outcome: 'NEEDS_APPROVAL' };
+export type GrantRoleResult =
+  | { outcome: 'GRANTED'; assignmentId: string }
+  /** `expiresAt` is the effective one, which the approval carries so the grant keeps its box. */
+  | { outcome: 'NEEDS_APPROVAL'; expiresAt: Date };
 
 /**
  * `POST /admin/users/{id}/roles`, first half. A role that does not need a second approver is
@@ -256,18 +305,28 @@ export async function grantRole(
     ...(input.expiresAt ? { expiresAt: input.expiresAt } : {}),
     now: new Date(),
   });
-  if (!verdict.ok) throw grantRefusal(verdict.reason);
+  if (!verdict.ok) {
+    if (verdict.reason === 'SELF_GRANT' || verdict.reason === 'APPROVER_NOT_DISTINCT') {
+      return refuse(db, actor, {
+        permission: 'role.grant',
+        subjectUserId: input.userId,
+        reason: input.reason,
+        denied: verdict.reason,
+      });
+    }
+    throw grantRefusal(verdict.reason);
+  }
 
   return db.transaction(async (tx): Promise<GrantRoleResult> => {
     if (!(await userExists(tx, input.userId))) throw notFound();
-    if (verdict.needsSecondApprover) return { outcome: 'NEEDS_APPROVAL' };
+    if (verdict.needsSecondApprover) return { outcome: 'NEEDS_APPROVAL', expiresAt: verdict.expiresAt };
 
     const assignmentId = await insertAssignment(tx, {
       userId: input.userId,
       roleCode: input.roleCode,
       grantedBy: actor.userId,
       reason: input.reason,
-      expiresAt: input.expiresAt,
+      expiresAt: verdict.expiresAt,
     });
     await auditStaff(tx, actor, {
       action: AUDIT_ACTIONS.ROLE_GRANTED,
@@ -276,7 +335,7 @@ export async function grantRole(
       metadata: {
         roleCode: input.roleCode,
         assignmentId,
-        expiresAt: input.expiresAt?.toISOString() ?? null,
+        expiresAt: verdict.expiresAt.toISOString(),
       },
     });
     return { outcome: 'GRANTED', assignmentId };
@@ -355,3 +414,31 @@ export async function revokeRole(
 
 export const isDualApprovalRole = (roleCode: string): boolean =>
   (DUAL_APPROVAL_ROLES as readonly string[]).includes(roleCode);
+
+/**
+ * The mount layer's 403 (scope or route permission) never reaches a handler, so nothing else would
+ * record it. Best-effort by contract: the caller's 403 does not depend on this succeeding.
+ */
+export async function recordRouteDenial(
+  db: Db,
+  input: {
+    actor: StaffActor;
+    route: string;
+    permission: string | undefined;
+    reason: 'SCOPE' | 'PERMISSION';
+    stated: string | undefined;
+  },
+): Promise<void> {
+  await db.transaction((tx) =>
+    auditStaff(tx, input.actor, {
+      action: AUDIT_ACTIONS.ADMIN_ACTION_DENIED,
+      reason: input.stated?.trim() || 'not stated: refused before the request was read',
+      outcome: 'DENIED',
+      metadata: {
+        route: input.route,
+        permission: input.permission ?? null,
+        denied: input.reason === 'SCOPE' ? 'ROUTE_SCOPE' : 'ROUTE_PERMISSION',
+      },
+    }),
+  );
+}

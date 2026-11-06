@@ -66,6 +66,8 @@ export interface KomtruModule {
    * every caller anonymous, which is what a process serving only PUBLIC routes wants.
    */
   resolveActor?: (req: Request) => Promise<Actor>;
+  /** Told about each scope or permission 403, so identity can audit a refusal no handler saw. */
+  onAccessDenied?: MountDeps['onDenied'];
   /** Runs at process start, in registry order (e.g. subscribing to events). */
   start?: (ctx: ModuleContext) => Promise<void>;
   /** Runs at shutdown, in reverse registry order. */
@@ -91,11 +93,13 @@ export function mountModules(modules: KomtruModule[], deps: MountDeps): (router:
     throw new Error(`more than one module resolves the actor: ${resolvers.map((m) => m.name).join(', ')}`);
   }
   const resolveActor = deps.resolveActor ?? resolvers[0]?.resolveActor;
+  const onDenied = deps.onDenied ?? resolvers[0]?.onAccessDenied;
   return mountRoutes(
     modules.flatMap((module) => module.routes ?? []),
     {
       ...deps,
       ...(resolveActor ? { resolveActor } : {}),
+      ...(onDenied ? { onDenied } : {}),
     },
   );
 }

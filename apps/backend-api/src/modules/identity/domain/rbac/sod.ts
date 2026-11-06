@@ -5,7 +5,6 @@
 // backs three of these rules with constraints (no self grant, a distinct approver, the dual-approval
 // trigger) and this is the layer that refuses first, with a reason the caller can act on.
 import {
-  PERMISSIONS,
   ROLES,
   ROLE_CODES,
   conditionFor,
@@ -23,10 +22,52 @@ export const DUAL_APPROVAL_ROLES: readonly RoleCode[] = ROLES.filter((role) => r
 );
 
 /**
- * The longest a time-boxed role grant may run. A grant with no `expiresAt` is permanent; one with an
- * `expiresAt` must end within this horizon, so "temporary" cannot quietly mean "until 2099".
+ * The longest a time-boxed role grant may run. A grant with no `expiresAt` gets this horizon (C6: never
+ * permanent), and an explicit one must end within it, so "temporary" cannot mean "until 2099".
  */
 export const MAX_ROLE_GRANT_DAYS = 365;
+
+/**
+ * M1 section 12.1: "Break-glass. Two people maximum." Enforced where a SUPER_ADMIN row is written,
+ * under a lock, because a count taken outside the write is a race two granters can both win.
+ */
+export const MAX_SUPER_ADMINS = 2;
+
+/**
+ * The permissions that are reads of the actor's own account and stay allowed on oneself. Everything
+ * else refuses `subject === actor`: an admin restricted by someone else must not be able to lift it,
+ * and must not be able to grant themselves a capability or approve their own request.
+ */
+const SELF_READ_ALLOWED: ReadonlySet<string> = new Set([
+  'user.view',
+  'user.search',
+  'session.view',
+  'audit.view',
+  'role.view',
+]);
+
+/**
+ * Actions on a user that are the kind a lesser admin could use to neutralise a more privileged one
+ * (lock them out, reset their factor, rename them). When the subject holds a live staff role, only a
+ * SUPER_ADMIN may do these. `role.*` is deliberately absent: COMPLIANCE_OFFICER revoking a role is
+ * the offboarding path (section 12.3 note 5).
+ */
+const STAFF_PROTECTED: ReadonlySet<string> = new Set([
+  'user.restrict',
+  'user.suspend',
+  'user.reinstate',
+  'user.close',
+  'session.revoke',
+  'mfa.reset',
+  'username.force_change',
+  'credential.force_reset',
+]);
+
+export const staffTargetDenied = (
+  permission: string,
+  subjectIsStaff: boolean | undefined,
+  roles: readonly string[],
+): boolean => subjectIsStaff === true && STAFF_PROTECTED.has(permission) && !roles.includes('SUPER_ADMIN');
 
 /**
  * The actions that run as two steps through `admin_action_approvals` (T-037, M1 section 10.6): one
@@ -48,6 +89,13 @@ export const TWO_STEP_ACTIONS = {
   },
   // M8 section 10 sets no threshold for "large", so every refund is two-step until it does.
   LARGE_REFUND: { permission: 'payment.refund', identityOwned: false, identityChallenge: false },
+  // Owner decision pending: money-moving finance actions are two-step rather than one person's call.
+  PAYOUT_RETRY: { permission: 'payout.retry', identityOwned: false, identityChallenge: false },
+  RECONCILIATION_RESOLVE: {
+    permission: 'reconciliation.resolve',
+    identityOwned: false,
+    identityChallenge: false,
+  },
 } as const satisfies Record<
   string,
   { permission: PermissionCode; identityOwned: boolean; identityChallenge: boolean }
@@ -92,7 +140,12 @@ export interface TicketContext {
 }
 
 export type DenyReason =
-  'PERMISSION_DENIED' | 'CONDITION_NOT_MET' | 'APPROVAL_REQUIRED' | 'SELF_ACTION' | 'SELF_DEALING';
+  | 'PERMISSION_DENIED'
+  | 'CONDITION_NOT_MET'
+  | 'APPROVAL_REQUIRED'
+  | 'SELF_ACTION'
+  | 'STAFF_TARGET'
+  | 'SELF_DEALING';
 
 export type AdminAuthorization = { allowed: true } | { allowed: false; reason: DenyReason };
 
@@ -106,6 +159,8 @@ export interface AdminActionInput {
   /** Footnote 2: the session is read-only and inside its 15 minutes. The caller enforces both. */
   readOnlyTimeBoxed?: boolean;
   trade?: TradeSelfDealingContext;
+  /** The subject holds a live staff role. Callers that act on a user look this up. */
+  subjectIsStaff?: boolean;
 }
 
 const holds = (roles: readonly string[], permission: PermissionCode): boolean =>
@@ -160,9 +215,6 @@ const conditionHolds = (condition: GrantCondition, input: AdminActionInput): boo
   }
 };
 
-const isDestructive = (permission: PermissionCode): boolean =>
-  PERMISSIONS.find((definition) => definition.code === permission)?.isDestructive ?? false;
-
 /**
  * Whether this actor may do this now. Deny by default: an unknown permission, an unknown role and a
  * missing fact all answer no.
@@ -181,8 +233,11 @@ export function authorizeAdminAction(input: AdminActionInput): AdminAuthorizatio
     .filter(({ grant }) => grant !== 'DENY');
   if (grants.length === 0) return { allowed: false, reason: 'PERMISSION_DENIED' };
 
-  if (input.subjectUserId === input.actorUserId && isDestructive(permission)) {
+  if (input.subjectUserId === input.actorUserId && !SELF_READ_ALLOWED.has(permission)) {
     return { allowed: false, reason: 'SELF_ACTION' };
+  }
+  if (staffTargetDenied(permission, input.subjectIsStaff, roles)) {
+    return { allowed: false, reason: 'STAFF_TARGET' };
   }
 
   // One grant that is satisfied is enough, so a role holding the permission outright is not held
@@ -211,7 +266,7 @@ export function authorizeAdminAction(input: AdminActionInput): AdminAuthorizatio
 }
 
 export type RoleGrantVerdict =
-  | { ok: true; needsSecondApprover: boolean }
+  | { ok: true; needsSecondApprover: boolean; expiresAt: Date }
   | {
       ok: false;
       reason: 'UNKNOWN_ROLE' | 'SELF_GRANT' | 'INVALID_EXPIRY' | 'APPROVER_NOT_DISTINCT';
@@ -235,17 +290,18 @@ export function validateRoleGrant(input: RoleGrantInput): RoleGrantVerdict {
   if (!isKnownRole(input.roleCode)) return { ok: false, reason: 'UNKNOWN_ROLE' };
   if (input.grantedBy === input.userId) return { ok: false, reason: 'SELF_GRANT' };
 
-  if (input.expiresAt !== undefined) {
-    const horizon = input.now.getTime() + MAX_ROLE_GRANT_DAYS * 24 * 60 * 60 * 1000;
-    if (input.expiresAt.getTime() <= input.now.getTime() || input.expiresAt.getTime() > horizon) {
-      return { ok: false, reason: 'INVALID_EXPIRY' };
-    }
+  // C6: every grant is time-boxed. No `expiresAt` means the longest allowed, never "forever".
+  const horizon = input.now.getTime() + MAX_ROLE_GRANT_DAYS * 24 * 60 * 60 * 1000;
+  const expiresAt = input.expiresAt ?? new Date(horizon);
+  if (expiresAt.getTime() <= input.now.getTime() || expiresAt.getTime() > horizon) {
+    return { ok: false, reason: 'INVALID_EXPIRY' };
   }
 
-  if (!DUAL_APPROVAL_ROLES.includes(input.roleCode)) return { ok: true, needsSecondApprover: false };
-  if (input.approvedBy === undefined) return { ok: true, needsSecondApprover: true };
+  if (!DUAL_APPROVAL_ROLES.includes(input.roleCode))
+    return { ok: true, needsSecondApprover: false, expiresAt };
+  if (input.approvedBy === undefined) return { ok: true, needsSecondApprover: true, expiresAt };
   if (input.approvedBy === input.grantedBy || input.approvedBy === input.userId) {
     return { ok: false, reason: 'APPROVER_NOT_DISTINCT' };
   }
-  return { ok: true, needsSecondApprover: false };
+  return { ok: true, needsSecondApprover: false, expiresAt };
 }

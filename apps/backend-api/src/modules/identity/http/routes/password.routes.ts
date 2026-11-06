@@ -91,6 +91,7 @@ export function passwordRoutes(deps: PasswordControllerDeps): RouteDefinition[] 
         durationSeconds: 60,
         by: ['identifier', 'ip', 'device'],
         perKey: { ip: { points: 20, durationSeconds: 60 } },
+        identifierBucket: 'password-login',
         identifierFrom: loginIdentifier,
         deviceFrom: fingerprint,
       },

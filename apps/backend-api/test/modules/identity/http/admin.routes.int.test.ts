@@ -89,6 +89,9 @@ describe.runIf(infraEnabled)('the admin surface (T-037, M1 section 10.6)', () =>
     return { ...member, consumerToken: bodyOf<SessionBody>(login).accessToken };
   };
 
+  /** A plain account with an enrolled second factor: the only kind a staff role may be granted to. */
+  const mfaSubject = async () => seedMember(t, app, { mfa: true });
+
   const auditRows = async (where: string, params: unknown[] = []): Promise<AuditRow[]> =>
     (
       await t.owner().query<AuditRow>(
@@ -107,7 +110,7 @@ describe.runIf(infraEnabled)('the admin surface (T-037, M1 section 10.6)', () =>
       expect((await request(app).get('/v1/admin/users?reason=x')).status).toBe(401);
     });
 
-    it('refuses a staff role that lacks the permission, and writes nothing', async () => {
+    it('refuses a staff role that lacks the permission, and records the denial', async () => {
       const analyst = await staff('ANALYST');
       const target = await subject();
       expect(
@@ -119,6 +122,16 @@ describe.runIf(infraEnabled)('the admin surface (T-037, M1 section 10.6)', () =>
         ).status,
       ).toBe(403);
       expect(await auditRows(`action = 'ROLE_GRANTED'`)).toHaveLength(0);
+      const denied = await auditRows(`action = 'ADMIN_ACTION_DENIED' AND actor_user_id = $1`, [
+        analyst.userId,
+      ]);
+      expect(denied).toHaveLength(1);
+      expect(denied[0]).toMatchObject({ outcome: 'DENIED', actor_type: 'STAFF' });
+      expect(denied[0]?.metadata).toMatchObject({
+        denied: 'ROUTE_PERMISSION',
+        permission: 'role.grant',
+        reason: REASON,
+      });
     });
 
     it('answers 400 without a reason, on every admin endpoint, and records nothing', async () => {
@@ -400,7 +413,7 @@ describe.runIf(infraEnabled)('the admin surface (T-037, M1 section 10.6)', () =>
   describe('roles', () => {
     it('grants an ordinary role, time-boxed, with one audit row and an event', async () => {
       const root = await staff('SUPER_ADMIN');
-      const target = await subject();
+      const target = await mfaSubject();
       const expiresAt = new Date(Date.now() + 7 * 86_400_000).toISOString();
       const response = await as(root.token).post(`/admin/users/${target.userId}/roles`, {
         roleCode: 'KYC_ANALYST',
@@ -429,7 +442,7 @@ describe.runIf(infraEnabled)('the admin surface (T-037, M1 section 10.6)', () =>
 
     it('refuses a past or over-long expiry, an unknown role, a duplicate and a self grant', async () => {
       const root = await staff('SUPER_ADMIN');
-      const target = await subject();
+      const target = await mfaSubject();
       const grant = (body: object) =>
         as(root.token).post(`/admin/users/${target.userId}/roles`, { reason: REASON, ...body });
       expect(
@@ -474,7 +487,7 @@ describe.runIf(infraEnabled)('the admin surface (T-037, M1 section 10.6)', () =>
     it('opens an approval for a dual-approval role, and a second SUPER_ADMIN completes it', async () => {
       const first = await staff('SUPER_ADMIN');
       const second = await staff('SUPER_ADMIN');
-      const target = await subject();
+      const target = await mfaSubject();
 
       const requested = await as(first.token).post(`/admin/users/${target.userId}/roles`, {
         roleCode: 'FINANCE_ADMIN',
@@ -620,7 +633,7 @@ describe.runIf(infraEnabled)('the admin surface (T-037, M1 section 10.6)', () =>
         (
           await as(ops.token).post(`/admin/approvals/${approvalId}/approve`, {
             reason: REASON,
-            identityChallengeConfirmed: true,
+            identityChallengeRef: 'call-2231',
           })
         ).status,
       ).toBe(403);
@@ -639,7 +652,7 @@ describe.runIf(infraEnabled)('the admin surface (T-037, M1 section 10.6)', () =>
 
       const done = await as(root.token).post(`/admin/approvals/${approvalId}/approve`, {
         reason: REASON,
-        identityChallengeConfirmed: true,
+        identityChallengeRef: 'call-2231',
       });
       expect(done.status).toBe(200);
       expect(bodyOf<Decided>(done)).toMatchObject({ state: 'EXECUTED', action: 'MFA_RESET' });
@@ -671,7 +684,7 @@ describe.runIf(infraEnabled)('the admin surface (T-037, M1 section 10.6)', () =>
         (
           await as(root.token).post(`/admin/approvals/${approvalId}/approve`, {
             reason: REASON,
-            identityChallengeConfirmed: true,
+            identityChallengeRef: 'call-2231',
           })
         ).status,
       ).toBe(409);
@@ -746,7 +759,7 @@ describe.runIf(infraEnabled)('the admin surface (T-037, M1 section 10.6)', () =>
         (
           await as(lead.token).post(`/admin/approvals/${approvalId}/approve`, {
             reason: REASON,
-            identityChallengeConfirmed: true,
+            identityChallengeRef: 'call-2231',
           })
         ).status,
       ).toBe(409);

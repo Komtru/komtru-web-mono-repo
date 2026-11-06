@@ -34,7 +34,7 @@ describe.runIf(infraEnabled)('identity catalogue seed', () => {
     expect(await counts(t.app())).toEqual({
       roles: 14,
       permissions: 70,
-      grants: 214,
+      grants: 212,
       reserved: reservedSkeletonRows().length,
     });
   });
@@ -92,7 +92,7 @@ describe.runIf(infraEnabled)('identity catalogue seed', () => {
         "DELETE FROM identity.role_permissions WHERE role_code = 'SUPER_ADMIN' AND permission_code = 'role.grant'",
       );
     await seedIdentityCatalogue(t.db());
-    expect((await counts(t.app()))?.grants).toBe(214);
+    expect((await counts(t.app()))?.grants).toBe(212);
   });
 
   it('seeds every fold of every reserved word, so a reserved @flutterwave also blocks @fiutterwave', async () => {

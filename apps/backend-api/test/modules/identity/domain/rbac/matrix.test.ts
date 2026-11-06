@@ -57,7 +57,7 @@ const PLATFORM_TABLE = `
 | \`trade.view\` | ✅ | ✅ | ❌ | ❌ | ❌ | ❌ | ✅ | ✅ | ✅ | ✅ | ❌ | ❌ | ❌ | ❌ |
 | \`trade.view_all\` | ✅ | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
 | \`trade.cancel_override\` | ⚠️ | ⚠️ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
-| \`trade.dispute_escalate\` | ❌ | ✅ | ❌ | ❌ | ❌ | ❌ | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| \`trade.dispute_escalate\` | ❌ | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
 | \`payment.view\` | ❌ | ❌ | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
 | \`payment.refund\` | ❌ | ❌ | ⚠️ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
 | \`payout.view\` | ❌ | ❌ | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
@@ -101,7 +101,7 @@ const PLATFORM_TABLE = `
 | \`growth.view\` | ✅ | ✅ | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ✅ | ❌ |
 | \`growth.manage\` | ✅ | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
 | \`moderation.view\` | ✅ | ✅ | ❌ | ❌ | ✅ | ❌ | ❌ | ❌ | ✅ | ✅ | ❌ | ❌ | ❌ | ❌ |
-| \`moderation.act\` | ✅ | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ✅ | ❌ | ❌ | ❌ | ❌ |
+| \`moderation.act\` | ✅ | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
 `;
 
 const ABBREVIATIONS: Record<string, RoleCode> = {
@@ -188,7 +188,7 @@ describe('platform permission matrix', () => {
       roles: 14,
       permissions: 70,
       cells: 980,
-      grants: 214,
+      grants: 212,
       grantsByRole: {
         SUPER_ADMIN: 48,
         OPERATIONS_ADMIN: 40,
@@ -196,10 +196,10 @@ describe('platform permission matrix', () => {
         COMPLIANCE_OFFICER: 19,
         FRAUD_ANALYST: 16,
         KYC_ANALYST: 14,
-        DISPUTE_REVIEWER: 8,
+        DISPUTE_REVIEWER: 7,
         DISPUTE_LEAD: 6,
         SUPPORT_AGENT: 11,
-        SUPPORT_LEAD: 19,
+        SUPPORT_LEAD: 18,
         LOGISTICS_OPERATOR: 3,
         PARK_OPERATIONS: 6,
         ANALYST: 4,
@@ -224,7 +224,7 @@ describe('platform permission matrix', () => {
   });
 
   it('denies by default: the blanks outnumber the grants', () => {
-    expect(CATALOGUE_COUNTS.cells - CATALOGUE_COUNTS.grants).toBe(766);
+    expect(CATALOGUE_COUNTS.cells - CATALOGUE_COUNTS.grants).toBe(768);
   });
 
   it('counts the merchant application and geo grants the ticket names', () => {

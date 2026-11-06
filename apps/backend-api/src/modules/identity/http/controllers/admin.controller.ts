@@ -40,6 +40,7 @@ export interface AdminControllerDeps extends ApprovalDeps {
   db: Db;
 }
 
+const MAX_REASON_LENGTH = 1000;
 const SIGN_IN = 'Sign in with a staff session';
 
 /** The caller as the services want it, read off the principal `resolvePrincipal` built this request. */
@@ -56,8 +57,15 @@ export function staffActor(actor: Actor, req: Request): StaffActor {
 }
 
 /** M1 section 10.6: "A missing reason is a 400." Whitespace is missing. */
-export function requireReason(reason: string | undefined): string {
-  const trimmed = reason?.trim() ?? '';
+export function requireReason(req: Request, reason: string | undefined): string {
+  // `X-Admin-Reason` for a client that would rather not put prose in a URL; the body or query member
+  // wins when both are sent.
+  const trimmed = (reason ?? req.get('x-admin-reason') ?? '').trim();
+  if (trimmed.length > MAX_REASON_LENGTH) {
+    throw new ApiError(400, 'VALIDATION_FAILED', 'The reason is too long', undefined, [
+      { path: 'reason', message: `At most ${MAX_REASON_LENGTH} characters` },
+    ]);
+  }
   if (trimmed.length === 0) {
     throw new ApiError(400, 'VALIDATION_FAILED', 'A reason is required', 'Say why you are doing this', [
       { path: 'reason', message: 'Required' },
@@ -78,7 +86,7 @@ export async function searchUsersHandler(
 ) {
   return searchUsers(deps.db, {
     actor: staffActor(actor, req),
-    reason: requireReason(query.reason),
+    reason: requireReason(req, query.reason),
     q: query.q,
     status: query.status,
     verificationLevel: query.verificationLevel,
@@ -93,7 +101,11 @@ export async function userDetailHandler(
   userId: string,
   reason: string | undefined,
 ) {
-  return getUserDetail(deps.db, { actor: staffActor(actor, req), userId, reason: requireReason(reason) });
+  return getUserDetail(deps.db, {
+    actor: staffActor(actor, req),
+    userId,
+    reason: requireReason(req, reason),
+  });
 }
 
 export async function piiHandler(
@@ -102,7 +114,7 @@ export async function piiHandler(
   userId: string,
   reason: string | undefined,
 ) {
-  return revealPii(deps.db, { actor: staffActor(actor, req), userId, reason: requireReason(reason) });
+  return revealPii(deps.db, { actor: staffActor(actor, req), userId, reason: requireReason(req, reason) });
 }
 
 export async function statusHandler(
@@ -115,7 +127,7 @@ export async function statusHandler(
     actor: staffActor(actor, req),
     userId,
     to: body.status,
-    reason: requireReason(body.reason),
+    reason: requireReason(req, body.reason),
     evidenceRef: body.evidenceRef,
   });
 }
@@ -126,7 +138,11 @@ export async function revokeAllHandler(
   userId: string,
   reason: string | undefined,
 ) {
-  return revokeUserSessions(deps, { actor: staffActor(actor, req), userId, reason: requireReason(reason) });
+  return revokeUserSessions(deps, {
+    actor: staffActor(actor, req),
+    userId,
+    reason: requireReason(req, reason),
+  });
 }
 
 export async function auditLogHandler(
@@ -138,7 +154,7 @@ export async function auditLogHandler(
   return listUserAuditLog(deps.db, {
     actor: staffActor(actor, req),
     userId,
-    reason: requireReason(query.reason),
+    reason: requireReason(req, query.reason),
     page: query.page,
     limit: query.limit,
   });
@@ -153,7 +169,7 @@ export async function linkedAccountsHandler(
   return listLinkedAccounts(deps.db, {
     actor: staffActor(actor, req),
     userId,
-    reason: requireReason(query.reason),
+    reason: requireReason(req, query.reason),
     page: query.page,
     limit: query.limit,
   });
@@ -167,7 +183,7 @@ export async function grantRoleHandler(
   body: z.output<typeof grantRoleBody>,
 ) {
   const staff = staffActor(actor, req);
-  const reason = requireReason(body.reason);
+  const reason = requireReason(req, body.reason);
   const expiresAt = body.expiresAt ? new Date(body.expiresAt) : undefined;
 
   const result = await grantRole(deps.db, {
@@ -184,7 +200,7 @@ export async function grantRoleHandler(
     action: 'ROLE_GRANT',
     subjectUserId: userId,
     reason,
-    payload: { roleCode: body.roleCode, expiresAt: expiresAt?.toISOString() ?? null },
+    payload: { roleCode: body.roleCode, expiresAt: result.expiresAt.toISOString() },
   });
   return { status: 'PENDING_APPROVAL' as const, ...opened };
 }
@@ -200,7 +216,7 @@ export async function revokeRoleHandler(
     actor: staffActor(actor, req),
     userId,
     roleCode,
-    reason: requireReason(reason),
+    reason: requireReason(req, reason),
   });
 }
 
@@ -214,7 +230,7 @@ export async function reserveHandler(
     username: body.username,
     category: body.category,
     note: body.note,
-    reason: requireReason(body.reason),
+    reason: requireReason(req, body.reason),
   });
 }
 
@@ -228,7 +244,7 @@ export async function requestMfaResetHandler(
     actor: staffActor(actor, req),
     action: 'MFA_RESET',
     subjectUserId: userId,
-    reason: requireReason(reason),
+    reason: requireReason(req, reason),
   });
 }
 
@@ -242,7 +258,7 @@ export async function requestForceChangeHandler(
     actor: staffActor(actor, req),
     action: 'USERNAME_FORCE_CHANGE',
     subjectUserId: userId,
-    reason: requireReason(body.reason),
+    reason: requireReason(req, body.reason),
     payload: { newUsername: body.newUsername, evidenceRef: body.evidenceRef ?? null },
   });
 }
@@ -258,8 +274,8 @@ export async function decideHandler(
     actor: staffActor(actor, req),
     approvalId,
     decision,
-    reason: requireReason(body.reason),
-    identityChallengeConfirmed: body.identityChallengeConfirmed,
+    reason: requireReason(req, body.reason),
+    identityChallengeRef: body.identityChallengeRef,
   });
 }
 
@@ -269,7 +285,7 @@ export async function approvalsHandler(
   query: z.output<typeof approvalsQuery>,
 ) {
   const staff = staffActor(actor, req);
-  const reason = requireReason(query.reason);
+  const reason = requireReason(req, query.reason);
   const result = await listApprovals(deps.db, {
     state: query.status,
     page: query.page,

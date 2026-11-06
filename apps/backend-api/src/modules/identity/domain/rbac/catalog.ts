@@ -514,7 +514,7 @@ export const PERMISSION_MATRIX: Readonly<Record<PermissionCode, MatrixRow>> = {
   ),
   'trade.view_all': allow('SUPER_ADMIN', 'OPERATIONS_ADMIN'),
   'trade.cancel_override': approved('SUPER_ADMIN', 'OPERATIONS_ADMIN'),
-  'trade.dispute_escalate': allow('OPERATIONS_ADMIN', 'DISPUTE_REVIEWER'),
+  'trade.dispute_escalate': allow('OPERATIONS_ADMIN'),
   // M8 §10. A refund is a financial action routed through admin_action_approvals; the spec sets no
   // "large" threshold, so every refund is two-step.
   'payment.view': allow('FINANCE_ADMIN'),
@@ -592,7 +592,7 @@ export const PERMISSION_MATRIX: Readonly<Record<PermissionCode, MatrixRow>> = {
     'SUPPORT_AGENT',
     'SUPPORT_LEAD',
   ),
-  'moderation.act': allow('SUPER_ADMIN', 'OPERATIONS_ADMIN', 'SUPPORT_LEAD'),
+  'moderation.act': allow('SUPER_ADMIN', 'OPERATIONS_ADMIN'),
 };
 
 export const isKnownPermission = (code: string): code is PermissionCode =>
@@ -638,7 +638,7 @@ export const CATALOGUE_COUNTS = {
   roles: 14,
   permissions: 70,
   cells: 980,
-  grants: 214,
+  grants: 212,
   grantsByRole: {
     SUPER_ADMIN: 48,
     OPERATIONS_ADMIN: 40,
@@ -646,10 +646,10 @@ export const CATALOGUE_COUNTS = {
     COMPLIANCE_OFFICER: 19,
     FRAUD_ANALYST: 16,
     KYC_ANALYST: 14,
-    DISPUTE_REVIEWER: 8,
+    DISPUTE_REVIEWER: 7,
     DISPUTE_LEAD: 6,
     SUPPORT_AGENT: 11,
-    SUPPORT_LEAD: 19,
+    SUPPORT_LEAD: 18,
     LOGISTICS_OPERATOR: 3,
     PARK_OPERATIONS: 6,
     ANALYST: 4,

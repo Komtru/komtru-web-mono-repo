@@ -42,6 +42,11 @@ export interface RateLimitSpec {
    * may carry its own.
    */
   perKey?: Partial<Record<RateLimitKey, RateLimitWindow>>;
+  /**
+   * Routes naming the same bucket count their `identifier` key into one Redis counter. Used by the
+   * consumer and staff login routes, which are two doors onto one password.
+   */
+  identifierBucket?: string;
   /** For `identifier`: pulls the email, phone or PIN subject out of the request. */
   identifierFrom?: (input: { body: unknown; query: unknown; params: unknown }) => string | undefined;
   /**

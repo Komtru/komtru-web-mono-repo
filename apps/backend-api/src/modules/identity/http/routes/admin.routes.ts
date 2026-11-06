@@ -129,7 +129,9 @@ export function adminRoutes(deps: AdminControllerDeps): RouteDefinition[] {
       method: 'get',
       path: '/admin/users/:id/linked-accounts',
       scope: 'STAFF',
-      permission: 'session.view',
+      // Owner decision pending: linkage is a fraud signal, so it is gated like the fraud queue
+      // (SUPER_ADMIN, OPERATIONS_ADMIN, COMPLIANCE_OFFICER, FRAUD_ANALYST), not by `session.view`.
+      permission: 'risk.view',
       summary: 'Other accounts sharing a device or an IP with this one',
       paginated: 'page',
       rateLimit: STAFF_BUDGET,

@@ -28,6 +28,7 @@ export function staffAuthRoutes(deps: PasswordControllerDeps): RouteDefinition[]
         durationSeconds: 60,
         by: ['identifier', 'ip', 'device'],
         perKey: { ip: { points: 10, durationSeconds: 60 } },
+        identifierBucket: 'password-login',
         identifierFrom: loginIdentifier,
         deviceFrom: mfaFingerprint,
       },

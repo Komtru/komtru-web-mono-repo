@@ -19,7 +19,7 @@ import type { Db } from '../../../db/index.js';
 import { ApiError } from '../../../platform/errors.js';
 import { publish, type Tx } from '../../../platform/events/publish.js';
 import { identityUserStatusChangedEvent, identityVerificationLevelChangedEvent } from '../domain/events.js';
-import type { PermissionCode } from '../domain/rbac/catalog.js';
+import { isAllowed, type PermissionCode } from '../domain/rbac/catalog.js';
 import { skeletonVariants } from '../domain/username/skeleton.js';
 import type { ReservedCategory } from '../domain/username/reserved.js';
 import { identityAuditLog } from '../infrastructure/postgres/schema/audit.js';
@@ -34,7 +34,7 @@ import {
   type VerificationLevelName,
 } from '../infrastructure/postgres/schema/enums.js';
 import { AUDIT_ACTIONS } from './audit.service.js';
-import { auditStaff, requireAuthorised, type StaffActor } from './rbac.service.js';
+import { auditStaff, holdsStaffRole, requireAuthorised, type StaffActor } from './rbac.service.js';
 import { bumpSessionsEpoch, revokeAllSessions } from './session.service.js';
 
 export interface ApplyVerificationLevelInput {
@@ -157,19 +157,19 @@ export async function searchUsers(
   const where = filters.length > 0 ? and(...filters) : undefined;
 
   return db.transaction(async (tx) => {
-    const [items, count] = await Promise.all([
-      tx
-        .select(summaryColumns)
-        .from(users)
-        .where(where)
-        .orderBy(desc(users.createdAt), desc(users.id))
-        .limit(input.limit)
-        .offset((input.page - 1) * input.limit),
-      tx
-        .select({ n: sql<number>`count(*)::int` })
-        .from(users)
-        .where(where),
-    ]);
+    // Sequential: one transaction is one connection, and a pg client queues what it is
+    // handed concurrently (deprecated, and an error from pg 9).
+    const items = await tx
+      .select(summaryColumns)
+      .from(users)
+      .where(where)
+      .orderBy(desc(users.createdAt), desc(users.id))
+      .limit(input.limit)
+      .offset((input.page - 1) * input.limit);
+    const count = await tx
+      .select({ n: sql<number>`count(*)::int` })
+      .from(users)
+      .where(where);
     await auditStaff(tx, input.actor, {
       action: AUDIT_ACTIONS.ADMIN_USER_SEARCHED,
       reason: input.reason,
@@ -196,6 +196,11 @@ export async function getUserDetail(
   db: Db,
   input: { actor: StaffActor; userId: string; reason: string },
 ): Promise<AdminUserDetail> {
+  // A status reason can say why someone was restricted, which is closer to personal data than to an
+  // account fact. Roles that cannot see PII or act on status (ANALYST, READ_ONLY) do not get it.
+  const mayReadStatusReason = (
+    ['user.view_pii', 'user.restrict', 'user.suspend', 'user.reinstate'] as const
+  ).some((permission) => isAllowed(input.actor.roles, permission));
   return db.transaction(async (tx) => {
     const row = (
       await tx
@@ -208,23 +213,28 @@ export async function getUserDetail(
         .where(eq(users.id, input.userId))
     )[0];
     if (!row) throw notFound();
-    const [capabilities, factors] = await Promise.all([
-      tx
-        .select({ capability: userCapabilities.capability, status: userCapabilities.status })
-        .from(userCapabilities)
-        .where(eq(userCapabilities.userId, input.userId)),
-      tx
-        .select({ id: mfaFactors.id })
-        .from(mfaFactors)
-        .where(and(eq(mfaFactors.userId, input.userId), eq(mfaFactors.status, 'ACTIVE')))
-        .limit(1),
-    ]);
+    // Sequential: one transaction is one connection, and a pg client queues what it is
+    // handed concurrently (deprecated, and an error from pg 9).
+    const capabilities = await tx
+      .select({ capability: userCapabilities.capability, status: userCapabilities.status })
+      .from(userCapabilities)
+      .where(eq(userCapabilities.userId, input.userId));
+    const factors = await tx
+      .select({ id: mfaFactors.id })
+      .from(mfaFactors)
+      .where(and(eq(mfaFactors.userId, input.userId), eq(mfaFactors.status, 'ACTIVE')))
+      .limit(1);
     await auditStaff(tx, input.actor, {
       action: AUDIT_ACTIONS.ADMIN_USER_VIEWED,
       subjectUserId: input.userId,
       reason: input.reason,
     });
-    return { ...row, mfaEnrolled: factors.length > 0, capabilities };
+    return {
+      ...row,
+      statusReason: mayReadStatusReason ? row.statusReason : null,
+      mfaEnrolled: factors.length > 0,
+      capabilities,
+    };
   });
 }
 
@@ -260,24 +270,24 @@ export async function revealPii(
     if ((await tx.select({ id: users.id }).from(users).where(eq(users.id, input.userId))).length === 0) {
       throw notFound();
     }
-    const [email, phone, profile] = await Promise.all([
-      tx
-        .select({ value: userEmails.email })
-        .from(userEmails)
-        .where(and(eq(userEmails.userId, input.userId), eq(userEmails.isPrimary, true))),
-      tx
-        .select({ value: userPhones.phoneE164 })
-        .from(userPhones)
-        .where(and(eq(userPhones.userId, input.userId), eq(userPhones.isPrimary, true))),
-      tx
-        .select({
-          firstName: userProfiles.firstName,
-          lastName: userProfiles.lastName,
-          dateOfBirth: userProfiles.dateOfBirth,
-        })
-        .from(userProfiles)
-        .where(eq(userProfiles.userId, input.userId)),
-    ]);
+    // Sequential: one transaction is one connection, and a pg client queues what it is
+    // handed concurrently (deprecated, and an error from pg 9).
+    const email = await tx
+      .select({ value: userEmails.email })
+      .from(userEmails)
+      .where(and(eq(userEmails.userId, input.userId), eq(userEmails.isPrimary, true)));
+    const phone = await tx
+      .select({ value: userPhones.phoneE164 })
+      .from(userPhones)
+      .where(and(eq(userPhones.userId, input.userId), eq(userPhones.isPrimary, true)));
+    const profile = await tx
+      .select({
+        firstName: userProfiles.firstName,
+        lastName: userProfiles.lastName,
+        dateOfBirth: userProfiles.dateOfBirth,
+      })
+      .from(userProfiles)
+      .where(eq(userProfiles.userId, input.userId));
 
     const revealed: Partial<Record<PiiField, string>> = {};
     const put = (field: PiiField, value: string | null | undefined) => {
@@ -348,7 +358,12 @@ export async function changeUserStatus(
       `Staff may set ${STAFF_SETTABLE_STATUSES.join(', ')}; closing and anonymising are the lifecycle service's.`,
     );
   }
-  await requireAuthorised(deps.db, input.actor, { permission, subjectUserId: input.userId }, input.reason);
+  await requireAuthorised(
+    deps.db,
+    input.actor,
+    { permission, subjectUserId: input.userId, subjectIsStaff: await holdsStaffRole(deps.db, input.userId) },
+    input.reason,
+  );
 
   const result = await deps.db.transaction(async (tx) => {
     const row = (
@@ -412,7 +427,11 @@ export async function revokeUserSessions(
   await requireAuthorised(
     deps.db,
     input.actor,
-    { permission: 'session.revoke', subjectUserId: input.userId },
+    {
+      permission: 'session.revoke',
+      subjectUserId: input.userId,
+      subjectIsStaff: await holdsStaffRole(deps.db, input.userId),
+    },
     input.reason,
   );
   const revoked = await deps.db.transaction(async (tx) => {
@@ -453,27 +472,27 @@ export async function listUserAuditLog(
       throw notFound();
     }
     const where = eq(identityAuditLog.subjectUserId, input.userId);
-    const [items, count] = await Promise.all([
-      tx
-        .select({
-          id: identityAuditLog.id,
-          occurredAt: identityAuditLog.occurredAt,
-          action: identityAuditLog.action,
-          outcome: identityAuditLog.outcome,
-          actorType: identityAuditLog.actorType,
-          actorUserId: identityAuditLog.actorUserId,
-          metadata: identityAuditLog.metadata,
-        })
-        .from(identityAuditLog)
-        .where(where)
-        .orderBy(desc(identityAuditLog.occurredAt), desc(identityAuditLog.id))
-        .limit(input.limit)
-        .offset((input.page - 1) * input.limit),
-      tx
-        .select({ n: sql<number>`count(*)::int` })
-        .from(identityAuditLog)
-        .where(where),
-    ]);
+    // Sequential: one transaction is one connection, and a pg client queues what it is
+    // handed concurrently (deprecated, and an error from pg 9).
+    const items = await tx
+      .select({
+        id: identityAuditLog.id,
+        occurredAt: identityAuditLog.occurredAt,
+        action: identityAuditLog.action,
+        outcome: identityAuditLog.outcome,
+        actorType: identityAuditLog.actorType,
+        actorUserId: identityAuditLog.actorUserId,
+        metadata: identityAuditLog.metadata,
+      })
+      .from(identityAuditLog)
+      .where(where)
+      .orderBy(desc(identityAuditLog.occurredAt), desc(identityAuditLog.id))
+      .limit(input.limit)
+      .offset((input.page - 1) * input.limit);
+    const count = await tx
+      .select({ n: sql<number>`count(*)::int` })
+      .from(identityAuditLog)
+      .where(where);
     await auditStaff(tx, input.actor, {
       action: AUDIT_ACTIONS.ADMIN_AUDIT_LOG_VIEWED,
       subjectUserId: input.userId,
@@ -483,6 +502,12 @@ export async function listUserAuditLog(
     return { items, page: input.page, limit: input.limit, total: count[0]?.n ?? 0 };
   });
 }
+
+/**
+ * How far back a shared IP counts as a link. Without a bound the self-join grows with every session
+ * either account ever opened, and a carrier-grade NAT address links half a city.
+ */
+export const IP_LINK_WINDOW_DAYS = 90;
 
 export interface LinkedAccountView {
   userId: string;
@@ -516,7 +541,9 @@ export async function listLinkedAccounts(
       SELECT other.user_id, 'IP'::text, count(DISTINCT mine.ip)::int
         FROM identity.sessions mine
         JOIN identity.sessions other ON other.ip = mine.ip AND other.user_id <> mine.user_id
+                                    AND other.issued_at > now() - interval '${sql.raw(String(IP_LINK_WINDOW_DAYS))} days'
        WHERE mine.user_id = ${input.userId}::uuid AND mine.ip IS NOT NULL
+         AND mine.issued_at > now() - interval '${sql.raw(String(IP_LINK_WINDOW_DAYS))} days'
        GROUP BY other.user_id`;
     const total = (await tx.execute<{ n: number }>(sql`SELECT count(*)::int AS n FROM (${links}) l`)).rows[0]
       ?.n;

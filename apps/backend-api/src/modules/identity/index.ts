@@ -20,6 +20,9 @@ import { mfaRoutes } from './http/routes/mfa.routes.js';
 import { passwordRoutes } from './http/routes/password.routes.js';
 import { staffAuthRoutes } from './http/routes/staff-auth.routes.js';
 import { adminRoutes } from './http/routes/admin.routes.js';
+import { callerAgent, callerIp } from './http/controllers/request.js';
+import { recordRouteDenial } from './services/rbac.service.js';
+import { routeLabel } from '../../platform/http/route.js';
 import { registrationRoutes } from './http/routes/registration.routes.js';
 import type { MfaDeps } from './services/mfa.service.js';
 import { createRelyingParty } from './infrastructure/webauthn/relying-party.js';
@@ -37,6 +40,7 @@ export * from './infrastructure/postgres/schema/index.js';
 export * from './domain/events.js';
 export * from './domain/rbac/catalog.js';
 export * from './domain/rbac/sod.js';
+export { bootstrapSuperAdmins, BootstrapRefused } from './services/bootstrap.service.js';
 export * from './domain/username/policy.js';
 export * from './domain/username/reserved.js';
 export * from './domain/username/skeleton.js';
@@ -129,9 +133,10 @@ export {
 export * from './domain/capability.js';
 export {
   createCapabilityService,
-  postgresMerchantStatus,
+  postgresBuyerFacts,
+  type BuyerFacts,
+  type BuyerFactsLookup,
   type CapabilityService,
-  type MerchantStatusLookup,
 } from './services/capability.service.js';
 export * from './domain/party/card.js';
 export * from './domain/party/lookup.js';
@@ -180,6 +185,8 @@ export interface IdentityAuthOptions {
 export interface IdentityAuth {
   /** What `mountRoutes` takes as `resolveActor`: the platform's only way to learn who is calling. */
   resolveActor: (req: Request) => Promise<Actor>;
+  /** Records a STAFF route's scope or permission 403, which no handler ever sees. */
+  onAccessDenied: NonNullable<KomtruModule['onAccessDenied']>;
   signer: TokenSigner;
   epochs: EpochCache;
   routes: KomtruModule['routes'];
@@ -257,6 +264,30 @@ export function createIdentityAuth(options: IdentityAuthOptions): IdentityAuth {
     signer,
     epochs,
     resolveActor: createActorResolver(principalDeps),
+    onAccessDenied: async ({ route, actor, req, reason }) => {
+      const principal = actor.principal;
+      if (route.scope !== 'STAFF' || !principal) return;
+      const body = (req.body ?? {}) as { reason?: unknown };
+      const query = req.query.reason;
+      await recordRouteDenial(db, {
+        actor: {
+          userId: principal.userId,
+          roles: principal.roles,
+          sessionId: principal.sessionId,
+          ip: callerIp(req),
+          userAgent: callerAgent(req),
+        },
+        route: routeLabel(route),
+        permission: route.permission,
+        reason,
+        stated:
+          typeof query === 'string'
+            ? query
+            : typeof body.reason === 'string'
+              ? body.reason
+              : req.get('x-admin-reason'),
+      });
+    },
     routes: [
       ...authRoutes({ db, signer, epochs, logger }),
       ...registrationRoutes(account),
@@ -302,4 +333,5 @@ export const identityModule = (auth: IdentityAuth): KomtruModule =>
     routes: auth.routes,
     schedules: auth.schedules,
     resolveActor: auth.resolveActor,
+    onAccessDenied: auth.onAccessDenied,
   });

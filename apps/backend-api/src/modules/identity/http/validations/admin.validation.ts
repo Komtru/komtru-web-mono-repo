@@ -51,7 +51,8 @@ export const forceChangeBody = z.strictObject({
 
 export const approveBody = z.strictObject({
   reason,
-  identityChallengeConfirmed: z.boolean().optional(),
+  /** A ticket or call id proving the identity challenge happened. Required to approve an MFA reset. */
+  identityChallengeRef: z.string().trim().min(3).max(120).optional(),
 });
 
 export const approvalsQuery = readQuery.extend({
