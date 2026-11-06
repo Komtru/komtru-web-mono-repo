@@ -169,6 +169,11 @@
       "tag": "0033_config_change_log_append_only",
       "when": 1793985692372,
       "sha256": "d565d0691bf885f477067ea1764c8ea48fdb80412bd9510cc341deb307d56853"
+    },
+    {
+      "tag": "0034_trade_standards",
+      "when": 1793987828366,
+      "sha256": "d531c2bcff49d3a27d1b6ae11faf118d986cbc9cd1da93bdc2f2b7ba2c67a36f"
     }
   ]
 }
