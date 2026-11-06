@@ -1,13 +1,9 @@
 // The app's navigation, as data.
 //
-// One account, one set of destinations (design C22, §6.3): no buyer view, no seller view, no role
-// switcher, no second tab bar. Two things vary, and both are facts about the person rather than a
-// mode they chose:
-//
-//   * a certified merchant is sell-only, so **Shop takes Explore's place** — it is the same slot,
-//     not a sixth tab, because a merchant has nothing to browse for;
-//   * Account carries **Payouts** once someone has sold, and a **Park Agent** item whose
-//     destination is the hub application, the application's status, or `park.komtru.com`.
+// One account (design C22, §6.3). v2 draws two views of it behind a Buy/Sell switch, five
+// destinations each (DX-03 and DX-04); a certified merchant is sell-only, so they are always in Sell.
+// Account carries **Payouts** once someone has sold, and a **Park Agent** item whose destination is
+// the hub application, the application's status, or `park.komtru.com`.
 //
 // No React here: what the destinations are is a rule, and a rule is worth testing without a DOM.
 // `icons.tsx` draws them.
@@ -30,7 +26,12 @@ export interface Viewer {
  */
 export const ANONYMOUS_VIEWER: Viewer = { certifiedMerchant: false, hasSold: false, parkAgent: 'none' };
 
-export type TabId = 'trades' | 'explore' | 'shop' | 'alerts' | 'messages' | 'account';
+/** v2's Buy/Sell switch (Y2, DX-03, DX-04). Two views of one account, not two accounts. */
+export type Mode = 'buy' | 'sell';
+
+export const MODE_COOKIE = 'komtru_mode';
+
+export type TabId = 'home' | 'trades' | 'messages' | 'discover' | 'account' | 'shop' | 'orders' | 'listings';
 
 export interface Tab {
   id: TabId;
@@ -39,32 +40,66 @@ export interface Tab {
 }
 
 const TAB: Record<TabId, Tab> = {
+  home: { id: 'home', label: 'Home', href: '/home' },
   trades: { id: 'trades', label: 'Trades', href: '/trades' },
-  explore: { id: 'explore', label: 'Explore', href: '/explore' },
-  shop: { id: 'shop', label: 'Shop', href: '/shop' },
-  alerts: { id: 'alerts', label: 'Alerts', href: '/alerts' },
   messages: { id: 'messages', label: 'Messages', href: '/messages' },
+  // The v2 mobile nav links Discover to `/browse`.
+  discover: { id: 'discover', label: 'Discover', href: '/browse' },
   account: { id: 'account', label: 'Account', href: '/account' },
+  shop: { id: 'shop', label: 'Shop', href: '/shop' },
+  orders: { id: 'orders', label: 'Orders', href: '/orders' },
+  listings: { id: 'listings', label: 'Listings', href: '/listings' },
 };
 
-/** The five destinations, in the reference's own order, with the second slot decided by the person. */
-export function tabsFor(viewer: Viewer): readonly Tab[] {
-  const second = viewer.certifiedMerchant ? TAB.shop : TAB.explore;
-  return [TAB.trades, second, TAB.alerts, TAB.messages, TAB.account];
+/** Alerts left the nav in v2: it is the bell in the top bar. */
+export const BELL_HREF = '/alerts';
+
+/**
+ * The five destinations of a mode, in the order v2 draws them: DX-03's sidebar for Buy and DX-04's for
+ * Sell. The viewer is part of the signature because the mode it is in is decided with it (`modeFor`).
+ */
+export function tabsFor(_viewer: Viewer, mode: Mode = 'buy'): readonly Tab[] {
+  return mode === 'sell'
+    ? [TAB.shop, TAB.orders, TAB.listings, TAB.messages, TAB.account]
+    : [TAB.home, TAB.trades, TAB.messages, TAB.discover, TAB.account];
+}
+
+/**
+ * The mode someone is in: the one they chose (a cookie the switch writes), Buy when they have not
+ * chosen or the value is not a mode. A certified merchant is sell-only (design 6.3), so for them the
+ * answer is Sell whatever the cookie says and the switch is locked.
+ */
+export function modeFor(viewer: Viewer, chosen: string | undefined): Mode {
+  if (viewer.certifiedMerchant) return 'sell';
+  return chosen === 'sell' ? 'sell' : 'buy';
+}
+
+/** Where switching into a mode lands: the first item of its nav. */
+export const landingFor = (mode: Mode): string => tabsFor(ANONYMOUS_VIEWER, mode)[0]?.href ?? '/home';
+
+const TRADE_CODE = /^KMT-\d+$/i;
+
+/**
+ * Where the global search and Trade Code bar sends a query: a Trade Code opens its trade, anything
+ * else is Discover's results, and an empty query goes nowhere.
+ */
+export function searchDestination(query: string): string | undefined {
+  const text = query.trim();
+  if (text === '') return undefined;
+  if (TRADE_CODE.test(text)) return `/trades/${text.toUpperCase()}`;
+  return `/browse?q=${encodeURIComponent(text)}`;
 }
 
 const isSegmentPrefix = (pathname: string, prefix: string): boolean =>
   pathname === prefix || pathname.startsWith(`${prefix}/`);
 
 /**
- * Which tab a path sits under, or `undefined` when it sits under none — a Park Hub application, a
- * sign-in, or Shop read by someone who is not a certified merchant. Whole segments only:
- * `/tradesmanship` is not the Trades tab, and `aria-current="page"` on the wrong tab is worse than
- * on none. A screen declares a tab only when the viewer actually has it, which is the rule
- * `app/(app)/shop/page.tsx` follows.
+ * Which tab a path sits under, or `undefined` when it sits under none — a Park Hub application, the
+ * alerts feed, or a destination of the other mode. Whole segments only: `/tradesmanship` is not the
+ * Trades tab, and `aria-current="page"` on the wrong tab is worse than on none.
  */
-export function currentTab(pathname: string, viewer: Viewer): TabId | undefined {
-  return tabsFor(viewer).find((tab) => isSegmentPrefix(pathname, tab.href))?.id;
+export function currentTab(pathname: string, viewer: Viewer, mode: Mode = 'buy'): TabId | undefined {
+  return tabsFor(viewer, mode).find((tab) => isSegmentPrefix(pathname, tab.href))?.id;
 }
 
 export type AccountItemId =
