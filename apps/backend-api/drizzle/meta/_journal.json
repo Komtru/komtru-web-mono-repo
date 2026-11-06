@@ -267,6 +267,13 @@
       "when": 1794001874943,
       "tag": "0037_geo_no_delete",
       "breakpoints": true
+    },
+    {
+      "idx": 38,
+      "version": "7",
+      "when": 1794004994519,
+      "tag": "0038_identity_addresses",
+      "breakpoints": true
     }
   ]
 }

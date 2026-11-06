@@ -189,6 +189,11 @@
       "tag": "0037_geo_no_delete",
       "when": 1794001874943,
       "sha256": "a3dec87cbb53a423b5da2af9bdef8966601ef0297afa0e2b56d05b7d0e34d9d2"
+    },
+    {
+      "tag": "0038_identity_addresses",
+      "when": 1794004994519,
+      "sha256": "a2cb4a3cd98a1254edf8d8098eba84b6e9aa369ada66f8b79493815d3992336b"
     }
   ]
 }

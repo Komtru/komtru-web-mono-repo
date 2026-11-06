@@ -88,6 +88,11 @@ export const AUDIT_ACTIONS = {
   STAFF_INVITATION_ACCEPTED: 'STAFF_INVITATION_ACCEPTED',
   STAFF_INVITATION_BOUND: 'STAFF_INVITATION_BOUND',
   ADMIN_STAFF_INVITATIONS_LISTED: 'ADMIN_STAFF_INVITATIONS_LISTED',
+  // T-042. `metadata` names the address id and the fields touched, never their values (§S12).
+  ADDRESS_ADDED: 'ADDRESS_ADDED',
+  ADDRESS_UPDATED: 'ADDRESS_UPDATED',
+  ADDRESS_ARCHIVED: 'ADDRESS_ARCHIVED',
+  ADDRESS_DEFAULT_SET: 'ADDRESS_DEFAULT_SET',
 } as const;
 
 export async function writeAudit(tx: Tx, input: AuditInput): Promise<void> {

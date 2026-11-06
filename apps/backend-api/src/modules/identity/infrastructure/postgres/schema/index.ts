@@ -10,4 +10,5 @@ export * from './sessions.js';
 export * from './usernames.js';
 export * from './invitations.js';
 export * from './staff-invitations.js';
+export * from './addresses.js';
 export * from './audit.js';
