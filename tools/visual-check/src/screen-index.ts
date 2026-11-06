@@ -1,3 +1,4 @@
+// T-190: the harness still drives the v1 reference (REFERENCE_FILE), so it reads the v1 index until a v2 mode exists.
 // `SCREEN_INDEX.md` is the only map from a screen id to its place in the reference HTML, and
 // `scripts/test/screen-index.test.ts` keeps it true against the HTML itself. This module reads it
 // the same way, so the harness and that test cannot disagree about what a row means.
@@ -10,7 +11,7 @@ export const REFERENCE_DIR = new URL('../../../docs/design-reference/', import.m
 
 export const REFERENCE_HTML_PATH = new URL(REFERENCE_FILE, REFERENCE_DIR);
 
-export const SCREEN_INDEX_PATH = new URL('SCREEN_INDEX.md', REFERENCE_DIR);
+export const SCREEN_INDEX_PATH = new URL('SCREEN_INDEX-v1.md', REFERENCE_DIR);
 
 /** One row of the index: a screen, where it lives in the HTML, and who builds it. */
 export interface ScreenRow {

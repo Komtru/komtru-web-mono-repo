@@ -8,7 +8,7 @@ import { describe, expect, it } from 'vitest';
 const root = join(import.meta.dirname, '..', '..');
 const referenceDir = join(root, 'docs', 'design-reference');
 const html = readFileSync(join(referenceDir, 'Komtru — UI Screens Living Master File.html'), 'utf8');
-const indexMd = readFileSync(join(referenceDir, 'SCREEN_INDEX.md'), 'utf8');
+const indexMd = readFileSync(join(referenceDir, 'SCREEN_INDEX-v1.md'), 'utf8');
 
 /** The five frontends; `backend-api` has no screens. */
 const APPS = ['web-app-ui', 'operations-app', 'logistics-ops', 'park-agent-app'] as const;
