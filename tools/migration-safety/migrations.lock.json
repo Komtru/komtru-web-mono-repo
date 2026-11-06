@@ -174,6 +174,11 @@
       "tag": "0034_trade_standards",
       "when": 1793987828366,
       "sha256": "d531c2bcff49d3a27d1b6ae11faf118d986cbc9cd1da93bdc2f2b7ba2c67a36f"
+    },
+    {
+      "tag": "0035_staff_invitations",
+      "when": 1794000839613,
+      "sha256": "3a1db5ac55ed4422543449a8890be2316eb5bba67c3332961b41936d66f8ceef"
     }
   ]
 }
