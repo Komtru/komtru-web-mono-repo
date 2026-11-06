@@ -33,7 +33,7 @@ import {
  * budget rather than three — a limiter that counts spellings does not limit anything. Then
  * digested, because the subject becomes a Redis key and a log field and §S12 is absolute.
  */
-const loginIdentifier = ({ body }: { body: unknown }): string | undefined => {
+export const loginIdentifier = ({ body }: { body: unknown }): string | undefined => {
   const { identifier } = body as { identifier?: unknown };
   if (typeof identifier !== 'string') return undefined;
   const trimmed = identifier.trim();
@@ -91,6 +91,7 @@ export function passwordRoutes(deps: PasswordControllerDeps): RouteDefinition[] 
         durationSeconds: 60,
         by: ['identifier', 'ip', 'device'],
         perKey: { ip: { points: 20, durationSeconds: 60 } },
+        identifierBucket: 'password-login',
         identifierFrom: loginIdentifier,
         deviceFrom: fingerprint,
       },

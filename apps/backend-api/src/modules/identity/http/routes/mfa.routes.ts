@@ -47,13 +47,13 @@ import {
 } from '../validations/mfa.validation.js';
 
 /** The challenge id half of an mfa token: a budget key that is not itself the secret. */
-const mfaTokenSubject = ({ body }: { body: unknown }): string | undefined => {
+export const mfaTokenSubject = ({ body }: { body: unknown }): string | undefined => {
   const { mfaToken } = body as { mfaToken?: unknown };
   if (typeof mfaToken !== 'string') return undefined;
   return splitProofToken(mfaToken)?.challengeId;
 };
 
-const fingerprint = ({ body }: { body: unknown }): string | undefined => {
+export const mfaFingerprint = ({ body }: { body: unknown }): string | undefined => {
   const { deviceFingerprint } = body as { deviceFingerprint?: unknown };
   return typeof deviceFingerprint === 'string' ? deviceFingerprint : undefined;
 };
@@ -79,7 +79,7 @@ export function mfaRoutes(deps: MfaControllerDeps & PasswordControllerDeps): Rou
         durationSeconds: 60,
         by: ['ip', 'identifier', 'device'],
         identifierFrom: mfaTokenSubject,
-        deviceFrom: fingerprint,
+        deviceFrom: mfaFingerprint,
       },
       schema: { body: mfaChallengeRequestSchema, response: mfaChallengeResponseSchema },
       handler: (ctx) => challengeMfa(deps, ctx.req, ctx.body),
@@ -104,7 +104,7 @@ export function mfaRoutes(deps: MfaControllerDeps & PasswordControllerDeps): Rou
         durationSeconds: 60,
         by: ['ip', 'identifier', 'device'],
         identifierFrom: mfaTokenSubject,
-        deviceFrom: fingerprint,
+        deviceFrom: mfaFingerprint,
       },
       schema: { body: mfaVerifyRequestSchema, response: sessionBodySchema },
       handler: (ctx) => verifyMfa(deps, ctx.req, ctx.body),

@@ -40,7 +40,7 @@ export interface PasswordControllerDeps extends MfaDeps {
  * The status, the code and the title are identical either way, so §S3's promise is untouched: what
  * differs is a field nobody without the credentials can ever see.
  */
-const rejected = (extensions?: Record<string, unknown>): ApiError =>
+export const rejected = (extensions?: Record<string, unknown>): ApiError =>
   new ApiError(
     401,
     'INVALID_CREDENTIALS',

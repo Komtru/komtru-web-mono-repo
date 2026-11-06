@@ -332,3 +332,42 @@ export const identityMfaRemovedEvent = defineEvent(
     lastFactor: z.boolean().default(false),
   }),
 );
+
+// ---------------------------------------------------------------------------
+// T-037: staff roles and two-step administrative actions (M1 section 11).
+// ---------------------------------------------------------------------------
+
+/** A staff role went live. `approvedBy` is set for the dual-approval roles and null otherwise. */
+export const identityAdminRoleGrantedEvent = defineEvent(
+  'identity.admin_role.granted',
+  1,
+  z.object({
+    userId: z.uuid(),
+    roleCode: z.string().min(1),
+    grantedBy: z.uuid(),
+    approvedBy: z.uuid().nullable(),
+    expiresAt: z.iso.datetime().nullable(),
+  }),
+);
+
+export const identityAdminRoleRevokedEvent = defineEvent(
+  'identity.admin_role.revoked',
+  1,
+  z.object({
+    userId: z.uuid(),
+    roleCode: z.string().min(1),
+    revokedBy: z.uuid(),
+    reason: z.string().min(1),
+  }),
+);
+
+/** A two-step action is waiting for a second holder. Notifications tells the approvers. */
+export const identityAdminActionApprovalRequestedEvent = defineEvent(
+  'identity.admin_action.approval_requested',
+  1,
+  z.object({
+    approvalId: z.uuid(),
+    action: z.string().min(1),
+    subjectUserId: z.uuid(),
+  }),
+);
