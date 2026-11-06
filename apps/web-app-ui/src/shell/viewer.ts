@@ -1,4 +1,5 @@
-import { ANONYMOUS_VIEWER, type Viewer } from './nav';
+import { cookies } from 'next/headers';
+import { ANONYMOUS_VIEWER, MODE_COOKIE, modeFor, type Mode, type Viewer } from './nav';
 
 /**
  * Who the shell is being drawn for.
@@ -12,3 +13,11 @@ import { ANONYMOUS_VIEWER, type Viewer } from './nav';
  * Already a promise so the ticket that fills it in changes one function body and no callers.
  */
 export const resolveViewer = (): Promise<Viewer> => Promise.resolve(ANONYMOUS_VIEWER);
+
+/**
+ * The mode the switch last chose, or the one the viewer is held to: a certified merchant is always in
+ * Sell. Reads the request's cookies, so a page that calls it is rendered per request.
+ */
+export async function resolveMode(viewer: Viewer): Promise<Mode> {
+  return modeFor(viewer, (await cookies()).get(MODE_COOKIE)?.value);
+}

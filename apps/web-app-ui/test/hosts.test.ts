@@ -121,7 +121,7 @@ describe('/hub/* (design C12)', () => {
 
 describe('everything else', () => {
   it('is this app, served as asked', () => {
-    for (const pathname of ['/', '/trades', '/account', '/explore/electronics']) {
+    for (const pathname of ['/', '/trades', '/account', '/browse/electronics']) {
       expect(routeRequest(at('app.komtru.com', pathname), DEPLOYED), pathname).toEqual({ kind: 'app' });
     }
   });

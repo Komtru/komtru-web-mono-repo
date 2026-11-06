@@ -116,7 +116,7 @@ describe('the session gate', () => {
 
   it('serves the screens the scaffold has to draw before sign-in exists', async () => {
     // T-111 deletes PRE_AUTH_PUBLIC_PATHS; until it does, these are reachable with no session.
-    for (const path of ['/trades', '/explore', '/alerts', '/messages', '/account', '/hub/register']) {
+    for (const path of ['/trades', '/browse', '/alerts', '/messages', '/account', '/hub/register']) {
       const response = await middleware(request(`https://app.komtru.com${path}`));
       expect(response.status, path).toBe(200);
     }

@@ -8,7 +8,7 @@ export type ShellMode = 'buy' | 'sell';
 export interface ModeSwitchProps {
   mode: ShellMode;
   onChange?: (mode: ShellMode) => void;
-  /** Names the switch for assistive technology; the visible text is only the current mode. */
+  /** Names what the switch is, lower-case ("selling mode"): the accessible name is the visible mode, then this. */
   label: string;
   /**
    * A certified merchant is sell-only: the switch stays readable on Sell and refuses to change,
@@ -39,7 +39,6 @@ export function ModeSwitch({
       type="button"
       role="switch"
       aria-checked={sell}
-      aria-label={label}
       aria-readonly={locked ? true : undefined}
       onClick={locked ? undefined : () => onChange?.(sell ? 'buy' : 'sell')}
       className={cx(
@@ -52,7 +51,9 @@ export function ModeSwitch({
         className,
       )}
     >
+      {/* Named from its content, so the visible mode leads the name (WCAG 2.5.3): "Buy, selling mode". */}
       <span>{sell ? 'Sell' : 'Buy'}</span>
+      <span className="sr-only">, {label}</span>
       <i
         aria-hidden
         className={cx('block h-[14px] w-[14px] rounded-[50%]', sell ? 'bg-trust-emerald' : 'bg-trust-indigo')}

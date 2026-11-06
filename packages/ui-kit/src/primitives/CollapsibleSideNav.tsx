@@ -24,7 +24,6 @@ export function CollapsibleSideNav(props: CollapsibleSideNavProps): React.JSX.El
         <button
           type="button"
           aria-expanded={!collapsed}
-          aria-label={name}
           title={name}
           onClick={() => setCollapsed(!collapsed)}
           className={cx(
@@ -44,7 +43,11 @@ export function CollapsibleSideNav(props: CollapsibleSideNavProps): React.JSX.El
           >
             <path d={collapsed ? 'M9 6l6 6-6 6' : 'M15 6l-6 6 6 6'} />
           </svg>
-          {collapsed ? null : 'Collapse'}
+          {/* Named from its content: the visible word leads the name (WCAG 2.5.3), the rest is for readers. */}
+          <span className={collapsed ? 'sr-only' : undefined}>
+            {collapsed ? 'Expand ' : 'Collapse '}
+            <span className="sr-only">navigation</span>
+          </span>
         </button>
       }
     />

@@ -14,21 +14,41 @@ const ICON = { viewBox: '0 0 24 24', fill: 'none', strokeLinecap: 'round' } as c
 const TAB = { ...ICON, strokeWidth: '2' } as const;
 const RAIL = { ...ICON, strokeWidth: '2' } as const;
 
+/** v2's `komtru-mobile-nav` glyphs (7481), drawn at the weight its tab bar uses. */
 export const TAB_ICONS: Record<TabId, React.ReactNode> = {
-  /** OF1's `.tab` — the parcel. */
+  home: (
+    <svg {...TAB} strokeLinejoin="round">
+      <path d="M4 11l8-7 8 7" />
+      <path d="M6 10v9h12v-9" />
+    </svg>
+  ),
   trades: (
-    <svg {...TAB}>
-      <rect x="4" y="7" width="16" height="12" rx="2.5" />
+    <svg {...TAB} strokeLinejoin="round">
+      <path d="M4 7h15l-3-3" />
+      <path d="m19 7-3 3" />
+      <path d="M20 17H5l3 3" />
+      <path d="m5 17 3-3" />
     </svg>
   ),
-  /** P2-D1's "Find" glass: Explore is search and categories. */
-  explore: (
-    <svg {...TAB}>
+  messages: (
+    <svg {...TAB} strokeLinejoin="round">
+      <path d="M20 11.5a7.5 7.5 0 0 1-7.5 7.5 8 8 0 0 1-3.5-.8L4 20l1.3-4A7.5 7.5 0 1 1 20 11.5Z" />
+    </svg>
+  ),
+  discover: (
+    <svg {...TAB} strokeLinejoin="round">
       <circle cx="11" cy="11" r="7" />
-      <path d="M21 21l-4.3-4.3" />
+      <path d="m16 16 4 4" />
+      <path d="M11 7v4l2.5 1.5" />
     </svg>
   ),
-  /** S1's `.tab` — the storefront grid a certified merchant gets in Explore's place. */
+  account: (
+    <svg {...TAB}>
+      <circle cx="12" cy="8" r="3.2" />
+      <path d="M5 20c0-3.5 3-6 7-6s7 2.5 7 6" />
+    </svg>
+  ),
+  /** S1's `.tab` — the storefront grid. Sell mode's first destination. */
   shop: (
     <svg {...TAB}>
       <rect x="3" y="3" width="8" height="8" rx="1.5" />
@@ -37,30 +57,30 @@ export const TAB_ICONS: Record<TabId, React.ReactNode> = {
       <rect x="3" y="13" width="8" height="8" rx="1.5" />
     </svg>
   ),
-  /** AC6's bell. */
-  alerts: (
-    <svg {...TAB}>
-      <path d="M6 10a6 6 0 1 1 12 0c0 4 1.5 5.5 1.5 5.5H4.5S6 14 6 10z" />
+  /** The parcel: an order to pack and send. */
+  orders: (
+    <svg {...TAB} strokeLinejoin="round">
+      <path d="M4 8l8-4 8 4v8l-8 4-8-4V8z" />
+      <path d="M4 8l8 4 8-4M12 12v8" />
     </svg>
   ),
-  /**
-   * New. The reference's consumer tab bar has four tabs and no Messages among them — AC7 is reached
-   * from a trade — so there is no glyph to lift. Drawn in the same idiom: one 24 viewBox, weight 2,
-   * round caps, a single path.
-   */
-  messages: (
+  /** A list of things for sale. */
+  listings: (
     <svg {...TAB}>
-      <path d="M4 7a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2H9l-5 4V7z" />
-    </svg>
-  ),
-  /** OF1's `.tab` — the person. */
-  account: (
-    <svg {...TAB}>
-      <circle cx="12" cy="8" r="3.2" />
-      <path d="M5 20c0-3.5 3-6 7-6s7 2.5 7 6" />
+      <path d="M9 6h11M9 12h11M9 18h11" />
+      <circle cx="4.5" cy="6" r="1" />
+      <circle cx="4.5" cy="12" r="1" />
+      <circle cx="4.5" cy="18" r="1" />
     </svg>
   ),
 };
+
+/** The top bar's bell (`.tb-icon`): where Alerts went when it left the nav. */
+export const BELL_ICON: React.ReactNode = (
+  <svg {...ICON} strokeWidth="2">
+    <path d="M6 10a6 6 0 1 1 12 0c0 4 1.5 5.5 1.5 5.5H4.5S6 14 6 10z" />
+  </svg>
+);
 
 export const ACCOUNT_ICONS: Record<AccountItemId, React.ReactNode> = {
   'personal-info': (

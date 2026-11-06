@@ -19,25 +19,25 @@ const NAV = [
 
 describe('ModeSwitch (v2 `.role-toggle`)', () => {
   it('is a switch that reads Buy when off and Sell when on', () => {
-    const { rerender } = render(<ModeSwitch mode="buy" onChange={() => {}} label="Selling mode" />);
-    const toggle = screen.getByRole('switch', { name: 'Selling mode' });
+    const { rerender } = render(<ModeSwitch mode="buy" onChange={() => {}} label="selling mode" />);
+    const toggle = screen.getByRole('switch', { name: 'Buy, selling mode' });
     expect(toggle.getAttribute('aria-checked')).toBe('false');
-    expect(toggle.textContent).toBe('Buy');
-    rerender(<ModeSwitch mode="sell" onChange={() => {}} label="Selling mode" />);
+    expect(toggle.textContent).toBe('Buy, selling mode');
+    rerender(<ModeSwitch mode="sell" onChange={() => {}} label="selling mode" />);
     expect(screen.getByRole('switch').getAttribute('aria-checked')).toBe('true');
-    expect(screen.getByRole('switch').textContent).toBe('Sell');
+    expect(screen.getByRole('switch').textContent).toBe('Sell, selling mode');
   });
 
   it('asks for the other mode when pressed', () => {
     const onChange = vi.fn();
-    render(<ModeSwitch mode="buy" onChange={onChange} label="Selling mode" />);
+    render(<ModeSwitch mode="buy" onChange={onChange} label="selling mode" />);
     fireEvent.click(screen.getByRole('switch'));
     expect(onChange).toHaveBeenCalledWith('sell');
   });
 
   it('stays readable and refuses to change when locked', () => {
     const onChange = vi.fn();
-    render(<ModeSwitch mode="sell" onChange={onChange} locked label="Selling mode" />);
+    render(<ModeSwitch mode="sell" onChange={onChange} locked label="selling mode" />);
     fireEvent.click(screen.getByRole('switch'));
     expect(onChange).not.toHaveBeenCalled();
     expect(screen.getByRole('switch').getAttribute('aria-readonly')).toBe('true');
