@@ -30,8 +30,6 @@ export interface BusinessDeps {
 export interface SubmitBusinessInput {
   userId: string;
   rcNumber: string;
-  firstName: string;
-  lastName: string;
 }
 
 /**
@@ -87,6 +85,21 @@ export async function submitBusinessCheck(
     );
   }
 
+  /**
+   * The officer match runs against the name the provider matched on the user's own NIN or BVN.
+   *
+   * Never a name from the request: anyone able to type a real director's name would pass.
+   */
+  const identityName = await deps.store.findVerifiedIdentityName(input.userId);
+  if (!identityName) {
+    throw new ApiError(
+      409,
+      'IDENTITY_VERIFICATION_REQUIRED',
+      'Verify your own identity first',
+      'We match the business officers against the name on your verified NIN or BVN, and there is none on file yet.',
+    );
+  }
+
   const attemptCount = (await deps.store.countAttempts(input.userId, 'CAC')) + 1;
 
   let request;
@@ -110,10 +123,9 @@ export async function submitBusinessCheck(
     status: request.status,
     job: {
       requestId: request.id,
-      // The RC number is public and the names are not persisted anywhere — which is exactly why the
-      // whole claim is sealed: unsealed, Redis would hold the only copy of the names in the system.
+      // The names are personal data, so the whole claim is sealed: unsealed, Redis would hold them.
       sealed: deps.encryption.encrypt(
-        JSON.stringify({ rcNumber, firstName: input.firstName, lastName: input.lastName }),
+        JSON.stringify({ rcNumber, firstName: identityName.firstName, lastName: identityName.lastName }),
       ),
     },
   };

@@ -180,6 +180,15 @@ export async function requestSocialProofCheck(
       'There is nothing more to do for this one.',
     );
   }
+  // One verified claim per platform: confirming a second would only fail at the unique index.
+  if (await deps.store.hasVerifiedSocialClaim({ userId: input.userId, platform: claim.platform })) {
+    throw new ApiError(
+      409,
+      'CONFLICT',
+      `Your ${claim.platform === 'X' ? 'X' : 'Instagram'} handle is already verified`,
+      'There is nothing more to do for this one.',
+    );
+  }
   if (Date.now() - claim.createdAt.getTime() > SOCIAL_CHALLENGE_TTL_MS) {
     throw new ApiError(
       409,

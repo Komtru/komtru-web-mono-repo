@@ -62,16 +62,17 @@ export async function runIdentityCheck(deps: TrustJobDeps, data: IdentityCheckJo
     timed,
   );
 
-  await applyOutcome(deps, request, type, claim.identifier, result);
+  await applyOutcome(deps, request, type, claim, result);
 }
 
 async function applyOutcome(
   deps: TrustJobDeps,
   request: VerificationRequest,
   type: IdentifierType,
-  identifier: string,
+  claim: z.infer<typeof claimSchema>,
   result: IdentityCheckResult,
 ): Promise<void> {
+  const identifier = claim.identifier;
   const decision = decideIdentityOutcome(result.verdict);
   /**
    * The CODE, never the provider's sentence.
@@ -101,6 +102,9 @@ async function applyOutcome(
       ...shared,
       ...(result.dobMatch === undefined ? {} : { dobMatch: result.dobMatch }),
       ...(result.phoneMatch === undefined ? {} : { phoneMatch: result.phoneMatch }),
+      // The name that PASSED the provider's match, kept for the CAC officer match (T-051).
+      verifiedFirstName: claim.firstName,
+      verifiedLastName: claim.lastName,
       requestStatus: decision.requestStatus,
       markVerified: decision.markVerified,
       ...(rejectionReason === undefined ? {} : { rejectionReason }),

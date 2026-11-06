@@ -7,6 +7,7 @@
 // `merchant_staff` model, and that re-registration happens — so "is this already another, unrelated
 // merchant's verified business" is a question, not a constraint violation.
 import { z } from 'zod';
+import { isUniqueViolation } from '../../../db/errors.js';
 import { classifyBusinessFailure, decideBusinessOutcome } from '../domain/decision.js';
 import { normaliseRcNumber, rcNumberHash } from '../domain/identifiers.js';
 import type { BusinessCheckJob } from '../domain/queues.js';
@@ -54,6 +55,25 @@ export async function runBusinessCheck(deps: TrustJobDeps, data: BusinessCheckJo
   );
 
   await applyOutcome(deps, request, rcNumber, result);
+}
+
+async function settleOwnVerified(
+  deps: TrustJobDeps,
+  request: VerificationRequest,
+  result: BusinessCheckResult,
+): Promise<void> {
+  if (
+    !(await deps.store.settleAlreadyVerified({
+      request,
+      provider: deps.adapter.provider,
+      providerReference: result.providerReference,
+    }))
+  ) {
+    return;
+  }
+  // Re-evaluated rather than assumed: the bank match may have landed since the first CAC did.
+  await evaluateBusinessLevel(deps, request);
+  pushOutcome(deps, request, 'APPROVED', result.verdict);
 }
 
 async function applyOutcome(
@@ -104,18 +124,7 @@ async function applyOutcome(
      * which nothing can clear until T-052 ships.
      */
     if (owner && owner.userId === request.userId) {
-      if (
-        !(await deps.store.settleAlreadyVerified({
-          request,
-          provider: deps.adapter.provider,
-          providerReference: result.providerReference,
-        }))
-      ) {
-        return;
-      }
-      // Re-evaluated rather than assumed: the bank match may have landed since the first CAC did.
-      await evaluateBusinessLevel(deps, request);
-      pushOutcome(deps, request, 'APPROVED', result.verdict);
+      await settleOwnVerified(deps, request, result);
       return;
     }
 
@@ -137,7 +146,19 @@ async function applyOutcome(
     }
   }
 
-  const applied = await deps.store.applyBusinessOutcome(shared);
+  let applied: boolean;
+  try {
+    applied = await deps.store.applyBusinessOutcome(shared);
+  } catch (error) {
+    /**
+     * The backstop for the same double tap: the owner read above can miss a verification that lands
+     * between it and this write. Rethrowing would make BullMQ retry and re-call (and re-bill) the
+     * provider for an answer already on file, so the request is settled as already verified instead.
+     */
+    if (!isUniqueViolation(error, 'business_verifications_user_active_unique')) throw error;
+    await settleOwnVerified(deps, request, result);
+    return;
+  }
   /**
    * The request left the open set while the provider was answering.
    *

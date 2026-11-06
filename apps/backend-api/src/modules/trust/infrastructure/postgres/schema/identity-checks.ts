@@ -11,7 +11,7 @@ import { kycProvider } from './enums.js';
 import { verificationRequests } from './requests.js';
 
 /** `bytea`, as a Buffer. drizzle's own `bytea` landed after 0.45; this is the one-liner it needs. */
-const bytea = customType<{ data: Buffer; driverData: Buffer }>({ dataType: () => 'bytea' });
+export const bytea = customType<{ data: Buffer; driverData: Buffer }>({ dataType: () => 'bytea' });
 
 export const ninVerifications = trust.table(
   'nin_verifications',
@@ -26,6 +26,12 @@ export const ninVerifications = trust.table(
     /** HMAC-SHA256 under the platform pepper, domain-separated from the BVN one (D1). */
     ninHash: bytea('nin_hash').notNull(),
     nameMatchScore: numeric('name_match_score', { precision: 5, scale: 2 }),
+    /**
+     * The name the provider matched against this NIN, set only when the check passed. Business
+     * verification reads it for the CAC officer match so that name is never one a client typed.
+     */
+    verifiedFirstName: text('verified_first_name'),
+    verifiedLastName: text('verified_last_name'),
     dobMatch: boolean('dob_match'),
     provider: kycProvider('provider').notNull(),
     providerReference: text('provider_reference').notNull(),
@@ -59,6 +65,9 @@ export const bvnVerifications = trust.table(
     bvnMasked: text('bvn_masked').notNull(),
     bvnHash: bytea('bvn_hash').notNull(),
     nameMatchScore: numeric('name_match_score', { precision: 5, scale: 2 }),
+    /** As on `nin_verifications`: the name that matched, set only when the check passed. */
+    verifiedFirstName: text('verified_first_name'),
+    verifiedLastName: text('verified_last_name'),
     /** The BVN-registered phone against M1's verified one. */
     phoneMatch: boolean('phone_match'),
     provider: kycProvider('provider').notNull(),

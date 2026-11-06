@@ -61,6 +61,8 @@ async function insertIdentityOutcome(
     nameMatchScore?: number;
     dobMatch?: boolean;
     phoneMatch?: boolean;
+    verifiedFirstName?: string;
+    verifiedLastName?: string;
     verified: boolean;
   },
 ): Promise<void> {
@@ -71,6 +73,9 @@ async function insertIdentityOutcome(
     provider: input.provider,
     providerReference: input.providerReference,
     verifiedAt: input.verified ? sql`now()` : null,
+    // Kept only for a passed check: a rejected attempt's typed name is exactly what must not be trusted.
+    verifiedFirstName: input.verified ? (input.verifiedFirstName ?? null) : null,
+    verifiedLastName: input.verified ? (input.verifiedLastName ?? null) : null,
   };
   if (input.type === 'NIN') {
     await tx.insert(ninVerifications).values({
@@ -283,6 +288,8 @@ export function bindStore(db: Db): TrustStore {
             ...(input.nameMatchScore === undefined ? {} : { nameMatchScore: input.nameMatchScore }),
             ...(input.dobMatch === undefined ? {} : { dobMatch: input.dobMatch }),
             ...(input.phoneMatch === undefined ? {} : { phoneMatch: input.phoneMatch }),
+            ...(input.verifiedFirstName === undefined ? {} : { verifiedFirstName: input.verifiedFirstName }),
+            ...(input.verifiedLastName === undefined ? {} : { verifiedLastName: input.verifiedLastName }),
             verified: input.markVerified,
           });
 
@@ -448,6 +455,47 @@ export function bindStore(db: Db): TrustStore {
         .where(and(eq(column, hash), isNotNull(table.verifiedAt)))
         .limit(1);
       return row?.userId;
+    },
+
+    findVerifiedIdentityName: async (userId) => {
+      const [nin] = await db
+        .select({
+          firstName: ninVerifications.verifiedFirstName,
+          lastName: ninVerifications.verifiedLastName,
+          verifiedAt: ninVerifications.verifiedAt,
+        })
+        .from(ninVerifications)
+        .where(
+          and(
+            eq(ninVerifications.userId, userId),
+            isNotNull(ninVerifications.verifiedAt),
+            isNotNull(ninVerifications.verifiedFirstName),
+            isNotNull(ninVerifications.verifiedLastName),
+          ),
+        )
+        .orderBy(desc(ninVerifications.verifiedAt))
+        .limit(1);
+      const [bvn] = await db
+        .select({
+          firstName: bvnVerifications.verifiedFirstName,
+          lastName: bvnVerifications.verifiedLastName,
+          verifiedAt: bvnVerifications.verifiedAt,
+        })
+        .from(bvnVerifications)
+        .where(
+          and(
+            eq(bvnVerifications.userId, userId),
+            isNotNull(bvnVerifications.verifiedAt),
+            isNotNull(bvnVerifications.verifiedFirstName),
+            isNotNull(bvnVerifications.verifiedLastName),
+          ),
+        )
+        .orderBy(desc(bvnVerifications.verifiedAt))
+        .limit(1);
+      const latest = nin && bvn ? (nin.verifiedAt! >= bvn.verifiedAt! ? nin : bvn) : (nin ?? bvn);
+      return latest?.firstName && latest.lastName
+        ? { firstName: latest.firstName, lastName: latest.lastName }
+        : undefined;
     },
 
     identityFacts: async (userId): Promise<IdentityFactsRow> => {
@@ -700,6 +748,7 @@ export function bindStore(db: Db): TrustStore {
             requestId: input.request.id,
             userId: input.request.userId,
             accountNumberMasked: input.accountNumberMasked,
+            accountNumberHash: input.accountNumberHash,
             bankCode: input.bankCode,
             resolvedAccountName: input.resolvedAccountName ?? null,
             expectedName: input.expectedName,
@@ -822,7 +871,7 @@ export function bindStore(db: Db): TrustStore {
           and(
             eq(bankAccountNameMatches.userId, input.userId),
             eq(bankAccountNameMatches.bankCode, input.bankCode),
-            eq(bankAccountNameMatches.accountNumberMasked, input.accountNumberMasked),
+            eq(bankAccountNameMatches.accountNumberHash, input.accountNumberHash),
           ),
         )
         // The most recent check on that account: T-073 asks what we know NOW, and a seller who
@@ -912,6 +961,21 @@ export function bindStore(db: Db): TrustStore {
         )
         .limit(1);
       return row?.userId;
+    },
+
+    hasVerifiedSocialClaim: async ({ userId, platform }) => {
+      const [row] = await db
+        .select({ id: socialProofClaims.id })
+        .from(socialProofClaims)
+        .where(
+          and(
+            eq(socialProofClaims.userId, userId),
+            eq(socialProofClaims.platform, platform),
+            eq(socialProofClaims.verified, true),
+          ),
+        )
+        .limit(1);
+      return row !== undefined;
     },
 
     findSocialProofClaim: async (claimId) => {

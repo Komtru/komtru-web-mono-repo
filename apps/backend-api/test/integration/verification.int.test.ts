@@ -494,8 +494,6 @@ describe.runIf(infraEnabled)('trust against a real database', () => {
     const submitted = await submitBusinessCheck(serviceDeps(), {
       userId,
       rcNumber,
-      firstName: FIRST_NAME,
-      lastName: LAST_NAME,
     });
     await runBusinessCheck(jobDeps(), { requestId: submitted.requestId, sealed: submitted.job.sealed });
     return submitted.requestId;
@@ -600,8 +598,6 @@ describe.runIf(infraEnabled)('trust against a real database', () => {
       submitBusinessCheck(serviceDeps(), {
         userId,
         rcNumber: RC_NUMBER,
-        firstName: FIRST_NAME,
-        lastName: LAST_NAME,
       }),
     ).rejects.toMatchObject({ status: 409, code: 'IDENTITY_VERIFICATION_REQUIRED' });
   });
@@ -682,7 +678,7 @@ describe.runIf(infraEnabled)('trust against a real database', () => {
     await runBankMatch(userId);
 
     const store = bindStore(database.db());
-    const match = await readBankNameMatch(store, {
+    const match = await readBankNameMatch(store, hasher, {
       userId,
       bankCode: BANK_CODE,
       accountNumber: RAW_ACCOUNT,
@@ -695,7 +691,11 @@ describe.runIf(infraEnabled)('trust against a real database', () => {
 
     // A different account on the same user is not this account's verdict.
     expect(
-      await readBankNameMatch(store, { userId, bankCode: BANK_CODE, accountNumber: '0123456780' }),
+      await readBankNameMatch(store, hasher, { userId, bankCode: BANK_CODE, accountNumber: '0123456780' }),
+    ).toBeUndefined();
+    // Nor is another account at the same bank that merely shares its last four digits.
+    expect(
+      await readBankNameMatch(store, hasher, { userId, bankCode: BANK_CODE, accountNumber: '9999996787' }),
     ).toBeUndefined();
   });
 
@@ -728,8 +728,6 @@ describe.runIf(infraEnabled)('trust against a real database', () => {
       submitBusinessCheck(serviceDeps(), {
         userId,
         rcNumber: '1487337',
-        firstName: FIRST_NAME,
-        lastName: LAST_NAME,
       }),
     ).rejects.toMatchObject({ status: 409 });
 

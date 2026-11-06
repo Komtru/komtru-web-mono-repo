@@ -4,6 +4,7 @@
 // (§6.5), because M8's `payout_accounts` is the account of record and a second copy here is a second
 // thing to leak. Nothing below writes it, logs it or puts it in an event.
 import { z } from 'zod';
+import { bankAccountHash } from '../domain/identifiers.js';
 import { classifyBankMatchFailure, decideBankMatchOutcome } from '../domain/decision.js';
 import type { BankMatchJob } from '../domain/queues.js';
 import { maskAccountNumber, normaliseAccountNumber } from '../services/bankMatch.service.js';
@@ -50,10 +51,25 @@ export async function runBankMatchCheck(deps: TrustJobDeps, data: BankMatchJob):
   );
 
   const decision = decideBankMatchOutcome(result);
+
+  /**
+   * A PENDING verdict is not an answer, so no `bank_account_name_matches` row is written.
+   *
+   * The request stays PROVIDER_PENDING for the expiry sweep. A row written now would read back
+   * through `findBankNameMatch` as a name-match on record, and `businessFacts` would count it.
+   */
+  if (decision.requestStatus === 'PROVIDER_PENDING') {
+    deps.logger.info(
+      { requestId: request.id },
+      'trust: the bank name-match is still pending at the provider',
+    );
+    return;
+  }
   const applied = await deps.store.applyBankMatchOutcome({
     request,
     // Four digits, and this is the only place the full number stops travelling.
     accountNumberMasked: maskAccountNumber(accountNumber),
+    accountNumberHash: bankAccountHash(deps.hasher, accountNumber),
     bankCode: claim.bankCode,
     ...(result.resolvedAccountName === undefined ? {} : { resolvedAccountName: result.resolvedAccountName }),
     expectedName: claim.expectedName,

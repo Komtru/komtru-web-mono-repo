@@ -52,6 +52,8 @@ export const REJECTION_CODES = [
   'ADDRESS_PROOF_UNREADABLE',
   'SOCIAL_HANDLE_NOT_FOUND',
   'SOCIAL_CHALLENGE_NOT_FOUND',
+  /** Two accounts published the same handle's code and the other one was settled first. */
+  'SOCIAL_HANDLE_TAKEN',
   // --- shared --------------------------------------------------------------------------------
   /** The provider never answered and the sweep closed the request (§6.2). Not the user's fault. */
   'PROVIDER_UNAVAILABLE',
@@ -212,6 +214,15 @@ const REASONS: Record<RejectionCode, Omit<RejectionReason, 'code'>> = {
     whyHeading: 'Why',
     why: 'We could not find your code on that profile yet. Put it in your bio or post it, then check again — it can take a minute to appear.',
     remedy: 'RESUBMIT',
+    identityLevelAffected: false,
+  },
+
+  SOCIAL_HANDLE_TAKEN: {
+    surface: 'SOCIAL_PROOF',
+    outcome: 'REJECTED',
+    whyHeading: 'Why',
+    why: 'That handle was verified on another account moments before yours. If it is yours, contact support and we will sort it out.',
+    remedy: 'CONTACT_SUPPORT',
     identityLevelAffected: false,
   },
 

@@ -14,6 +14,8 @@ import { ApiError } from '../../../platform/errors.js';
 import type { Encryption } from '../../../platform/crypto/encryption.js';
 import type { Logger } from '../../../platform/logger.js';
 import { isUniqueViolation } from '../../../db/errors.js';
+import type { HmacHasher } from '../../../platform/crypto/hmac.js';
+import { bankAccountHash } from '../domain/identifiers.js';
 import { BUSINESS_VERIFIED_LEVEL } from '../domain/levels.js';
 import type { BankMatchJob } from '../domain/queues.js';
 import type { BankNameMatchRecord, TrustStore } from '../infrastructure/postgres/store.js';
@@ -129,10 +131,12 @@ export async function submitBankMatchCheck(
  */
 export const readBankNameMatch = (
   store: Pick<TrustStore, 'findBankNameMatch'>,
+  hasher: HmacHasher,
   input: { userId: string; bankCode: string; accountNumber: string },
 ): Promise<BankNameMatchRecord | undefined> =>
   store.findBankNameMatch({
     userId: input.userId,
     bankCode: input.bankCode,
-    accountNumberMasked: maskAccountNumber(normaliseAccountNumber(input.accountNumber)),
+    // Keyed on the full number's hash: four digits are shared by unrelated accounts at one bank.
+    accountNumberHash: bankAccountHash(hasher, normaliseAccountNumber(input.accountNumber)),
   });

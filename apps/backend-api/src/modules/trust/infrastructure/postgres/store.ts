@@ -68,6 +68,9 @@ export interface IdentityOutcomeInput {
   nameMatchScore?: number;
   dobMatch?: boolean;
   phoneMatch?: boolean;
+  /** The name the provider matched. Persisted only when `markVerified` (see `findVerifiedIdentityName`). */
+  verifiedFirstName?: string;
+  verifiedLastName?: string;
   requestStatus: VerificationRequestStatus;
   markVerified: boolean;
   rejectionReason?: string;
@@ -137,6 +140,8 @@ export interface BusinessOutcomeInput {
 export interface BankMatchOutcomeInput {
   request: VerificationRequest;
   accountNumberMasked: string;
+  /** `bankAccountHash(...)` of the full number: what a read keys on, since four digits are not unique. */
+  accountNumberHash: Buffer;
   bankCode: string;
   resolvedAccountName?: string;
   expectedName: string;
@@ -292,6 +297,11 @@ export interface TrustStore {
   /** Who verified this identifier first, for the duplicate event. Undefined if the row is gone. */
   findIdentifierOwner(type: IdentifierType, hash: Buffer): Promise<string | undefined>;
   identityFacts(userId: string): Promise<IdentityFactsRow>;
+  /**
+   * The name the provider matched on the user's most recently verified NIN or BVN. This, and not
+   * anything the client types, is the name a CAC officer match runs against.
+   */
+  findVerifiedIdentityName(userId: string): Promise<{ firstName: string; lastName: string } | undefined>;
   /** Writes the append-only change row and moves identity's column, in one transaction. */
   grantLevel(input: GrantInput): Promise<LevelOutcome>;
   revokeLevel(input: RevokeInput): Promise<LevelOutcome>;
@@ -331,7 +341,7 @@ export interface TrustStore {
   findBankNameMatch(input: {
     userId: string;
     bankCode: string;
-    accountNumberMasked: string;
+    accountNumberHash: Buffer;
   }): Promise<BankNameMatchRecord | undefined>;
 
   /**
@@ -356,6 +366,8 @@ export interface TrustStore {
     platform: SocialProofPlatform;
     handle: string;
   }): Promise<string | undefined>;
+  /** Whether the user already holds a VERIFIED claim on the platform (one per platform is the rule). */
+  hasVerifiedSocialClaim(input: { userId: string; platform: SocialProofPlatform }): Promise<boolean>;
   findSocialProofClaim(claimId: string): Promise<SocialProofClaim | undefined>;
   /**
    * Paginated, and the signature says so rather than returning the lot.

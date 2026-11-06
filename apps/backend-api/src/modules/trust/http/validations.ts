@@ -99,8 +99,6 @@ export const statusResponse = z.object({
  */
 export const businessBody = z.strictObject({
   rcNumber: z.string().trim().min(2).max(30),
-  firstName: givenName,
-  lastName: givenName,
 });
 
 /** A NUBAN. Ten digits once the separators are out, which the service checks after normalising. */

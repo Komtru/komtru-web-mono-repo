@@ -153,7 +153,7 @@ export const status = (deps: TrustHttpDeps, userId: string): Promise<Verificatio
 
 export async function submitBusiness(
   deps: TrustHttpDeps,
-  input: { userId: string; body: { rcNumber: string; firstName: string; lastName: string } },
+  input: { userId: string; body: { rcNumber: string } },
 ): Promise<SubmissionResponse> {
   const submitted = await submitBusinessCheck(
     {

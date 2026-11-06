@@ -175,7 +175,7 @@ describe('readVerificationStatus', () => {
 describe('the T-051 request bodies', () => {
   it('takes a CAC number with or without its prefix and separators', () => {
     for (const rcNumber of ['RC 1487322', 'rc-1487322', '1487322']) {
-      expect(businessBody.safeParse({ rcNumber, firstName: 'Ada', lastName: 'Obi' }).success).toBe(true);
+      expect(businessBody.safeParse({ rcNumber }).success).toBe(true);
     }
   });
 

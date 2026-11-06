@@ -113,3 +113,16 @@ export function rcNumberHash(hasher: HmacHasher, normalised: string): Buffer {
   }
   return hasher.hmac('trust:cac', normalised);
 }
+
+/**
+ * A keyed HMAC of a full, normalised NUBAN, domain-separated like the identifier hashes.
+ *
+ * It exists so a bank name-match is read back for EXACTLY the account that was checked: the last four
+ * digits are not an identity, and two accounts at one bank can share them.
+ */
+export function bankAccountHash(hasher: HmacHasher, normalisedAccountNumber: string): Buffer {
+  if (!/^\d+$/.test(normalisedAccountNumber)) {
+    throw new TypeError('bankAccountHash(): the account number must be digits only');
+  }
+  return hasher.hmac('trust:bank-account', normalisedAccountNumber);
+}

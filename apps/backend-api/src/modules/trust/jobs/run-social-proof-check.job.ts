@@ -52,8 +52,8 @@ export async function runSocialProofCheck(
     return;
   }
   if (Date.now() - claim.createdAt.getTime() > SOCIAL_CHALLENGE_TTL_MS) {
-    deps.logger.info(
-      { claimId: claim.id },
+    deps.logger.warn(
+      { claimId: claim.id, platform: claim.platform },
       'trust: the social proof challenge expired before it was checked',
     );
     return;
@@ -80,34 +80,37 @@ export async function runSocialProofCheck(
   // Narrowed off `result.outcome` rather than off the boolean: the compiler cannot see that
   // `verified === false` implies the outcome is one of the two REASON knows, and a cast to make it
   // believe so is a cast that stops catching a fifth outcome being added later.
-  const reason = result.outcome === 'CODE_PRESENT' ? undefined : REASON[result.outcome];
-  const verified = reason === undefined;
+  let reason: RejectionCode | undefined =
+    result.outcome === 'CODE_PRESENT' ? undefined : REASON[result.outcome];
+  let verified = reason === undefined;
   // `last_checked_at` moves on EVERY settled lookup, pass or fail — it is what rate-limits the
   // re-check, and a failure that left it untouched is a free retry loop against a third party.
   /**
-   * The index is the enforcement point, so the violation is caught rather than prevented.
+   * The two partial unique indexes are the enforcement point, so their violations are caught.
    *
-   * `claimSocialHandle` already refuses a handle somebody else has proved, which handles every
-   * ordinary case. What is left is the race: two users publishing the same handle's code and both
-   * jobs running before either committed. `social_proof_claims_platform_handle` lets exactly one
-   * through, and the loser must not fail the job forever — so it is settled as not verified, which
-   * moves `last_checked_at` and applies the cooldown like any other unsuccessful lookup.
-   *
-   * No reason is attached: the taxonomy in `domain/rejection.ts` comes from BVR1 and VF1 and has no
-   * member for this, and inventing one to cover a race would be inventing the part of the taxonomy
-   * the ticket says not to invent. The claim simply reads as unverified on the list endpoint.
+   * `claimSocialHandle` and `requestSocialProofCheck` refuse the ordinary cases up front. What is
+   * left is the race: `social_proof_claims_platform_handle` (another account proved this handle
+   * first) and `social_proof_claims_user_platform` (this user proved another claim on the platform
+   * meanwhile). Either loser must not fail the job forever, so it is settled as unverified with
+   * `SOCIAL_HANDLE_TAKEN`, which also applies the re-check cooldown, and the user is told.
    */
   let settled: boolean;
   try {
     settled = await deps.store.settleSocialProofClaim({ claimId: claim.id, verified });
   } catch (error) {
-    if (!isUniqueViolation(error, 'social_proof_claims_platform_handle')) throw error;
+    if (
+      !isUniqueViolation(error, 'social_proof_claims_platform_handle') &&
+      !isUniqueViolation(error, 'social_proof_claims_user_platform')
+    ) {
+      throw error;
+    }
     deps.logger.warn(
       { claimId: claim.id, platform: claim.platform },
-      'trust: the handle was proved on another account first; this claim stays unverified',
+      'trust: lost a social proof race on a unique index; this claim stays unverified',
     );
+    verified = false;
+    reason = 'SOCIAL_HANDLE_TAKEN';
     settled = await deps.store.settleSocialProofClaim({ claimId: claim.id, verified: false });
-    return;
   }
   if (!settled) {
     deps.logger.info({ claimId: claim.id }, 'trust: the social proof claim was settled elsewhere');

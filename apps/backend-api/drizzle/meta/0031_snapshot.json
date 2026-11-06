@@ -1,5 +1,5 @@
 {
-  "id": "ed742e87-04fc-4070-9e6a-467f1e998f4c",
+  "id": "cadeff59-f6e7-4e88-9cde-98d0ca5c0144",
   "prevId": "b9834c86-c1b2-449e-9e59-9c1f34a36ad5",
   "version": "7",
   "dialect": "postgresql",
@@ -6426,6 +6426,12 @@
           "primaryKey": false,
           "notNull": true
         },
+        "account_number_hash": {
+          "name": "account_number_hash",
+          "type": "bytea",
+          "primaryKey": false,
+          "notNull": true
+        },
         "bank_code": {
           "name": "bank_code",
           "type": "text",
@@ -6510,7 +6516,7 @@
               "nulls": "last"
             },
             {
-              "expression": "account_number_masked",
+              "expression": "account_number_hash",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
@@ -6949,6 +6955,18 @@
           "primaryKey": false,
           "notNull": false
         },
+        "verified_first_name": {
+          "name": "verified_first_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "verified_last_name": {
+          "name": "verified_last_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
         "phone_match": {
           "name": "phone_match",
           "type": "boolean",
@@ -7071,6 +7089,18 @@
         "name_match_score": {
           "name": "name_match_score",
           "type": "numeric(5, 2)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "verified_first_name": {
+          "name": "verified_first_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "verified_last_name": {
+          "name": "verified_last_name",
+          "type": "text",
           "primaryKey": false,
           "notNull": false
         },

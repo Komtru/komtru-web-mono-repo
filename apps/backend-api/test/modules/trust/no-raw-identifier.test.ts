@@ -79,20 +79,31 @@ const run = async (
     lines,
     emitted,
     sealed: submitted.job.sealed,
-    writes: JSON.stringify([
-      submitStore.requests,
-      jobStore.identityOutcomes,
-      jobStore.duplicates,
-      jobStore.livenessOutcomes,
-      jobStore.providerCalls,
-      jobStore.grants,
-    ]),
+    // The matched name is kept on purpose, in exactly two fields (`verified_first_name` and
+    // `verified_last_name`), because the CAC officer match reads it; every OTHER write must be clean.
+    writes: JSON.stringify(
+      [
+        submitStore.requests,
+        jobStore.identityOutcomes,
+        jobStore.duplicates,
+        jobStore.livenessOutcomes,
+        jobStore.providerCalls,
+        jobStore.grants,
+      ],
+      (key, value: unknown) => (key === 'verifiedFirstName' || key === 'verifiedLastName' ? '[kept]' : value),
+    ),
+    outcomes: jobStore.identityOutcomes,
   };
 };
 
 const SECRETS = [RAW_NIN, RAW_PASSING_NIN, FIRST_NAME, LAST_NAME, DOB];
 
 describe('a verification run leaves no raw identifier behind', () => {
+  it('keeps the matched name only in the two verified-name fields', async () => {
+    const { outcomes } = await run(RAW_PASSING_NIN, createFakeKycClient());
+    expect(outcomes[0]).toMatchObject({ verifiedFirstName: FIRST_NAME, verifiedLastName: LAST_NAME });
+  });
+
   it('writes none of the claim to any table', async () => {
     const { writes } = await run(RAW_PASSING_NIN, createFakeKycClient());
     for (const secret of SECRETS) expect(writes).not.toContain(secret);

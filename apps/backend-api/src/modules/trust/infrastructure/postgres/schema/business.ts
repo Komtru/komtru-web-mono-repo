@@ -9,6 +9,7 @@ import { sql } from 'drizzle-orm';
 import { boolean, index, numeric, text, timestamp, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
 import { trust } from './columns.js';
 import { bankMatchResult, kycProvider } from './enums.js';
+import { bytea } from './identity-checks.js';
 import { verificationRequests } from './requests.js';
 
 export const businessVerifications = trust.table(
@@ -71,6 +72,11 @@ export const bankAccountNameMatches = trust.table(
     userId: uuid('user_id').notNull(),
     /** Last four digits. The full number is M8's record, encrypted there (§4, T-073). */
     accountNumberMasked: text('account_number_masked').notNull(),
+    /**
+     * Keyed HMAC of the FULL account number (`trust:bank-account`). The last four digits are not an
+     * identity: two accounts at one bank can share them, so reads key on this, not on the mask.
+     */
+    accountNumberHash: bytea('account_number_hash').notNull(),
     bankCode: text('bank_code').notNull(),
     /** What the bank returned. Null when the account could not be resolved at all. */
     resolvedAccountName: text('resolved_account_name'),
@@ -96,11 +102,7 @@ export const bankAccountNameMatches = trust.table(
      * Keyed on the masked number and the bank code rather than on the request, because the payout
      * account is the thing T-073 holds — it has no verification request id and should not need one.
      */
-    index('bank_account_name_matches_account_idx').on(
-      table.userId,
-      table.bankCode,
-      table.accountNumberMasked,
-    ),
+    index('bank_account_name_matches_account_idx').on(table.userId, table.bankCode, table.accountNumberHash),
   ],
 );
 

@@ -7,6 +7,7 @@ CREATE TABLE "trust"."bank_account_name_matches" (
 	"request_id" uuid NOT NULL,
 	"user_id" uuid NOT NULL,
 	"account_number_masked" text NOT NULL,
+	"account_number_hash" "bytea" NOT NULL,
 	"bank_code" text NOT NULL,
 	"resolved_account_name" text,
 	"expected_name" text NOT NULL,
@@ -70,12 +71,16 @@ CREATE TABLE "trust"."social_proof_claims" (
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
+ALTER TABLE "trust"."bvn_verifications" ADD COLUMN "verified_first_name" text;--> statement-breakpoint
+ALTER TABLE "trust"."bvn_verifications" ADD COLUMN "verified_last_name" text;--> statement-breakpoint
+ALTER TABLE "trust"."nin_verifications" ADD COLUMN "verified_first_name" text;--> statement-breakpoint
+ALTER TABLE "trust"."nin_verifications" ADD COLUMN "verified_last_name" text;--> statement-breakpoint
 ALTER TABLE "trust"."bank_account_name_matches" ADD CONSTRAINT "bank_account_name_matches_request_id_verification_requests_id_fk" FOREIGN KEY ("request_id") REFERENCES "trust"."verification_requests"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "trust"."business_verifications" ADD CONSTRAINT "business_verifications_request_id_verification_requests_id_fk" FOREIGN KEY ("request_id") REFERENCES "trust"."verification_requests"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "trust"."address_checks" ADD CONSTRAINT "address_checks_request_id_verification_requests_id_fk" FOREIGN KEY ("request_id") REFERENCES "trust"."verification_requests"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "trust"."verification_documents" ADD CONSTRAINT "verification_documents_request_id_verification_requests_id_fk" FOREIGN KEY ("request_id") REFERENCES "trust"."verification_requests"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 CREATE INDEX "bank_account_name_matches_user_idx" ON "trust"."bank_account_name_matches" USING btree ("user_id");--> statement-breakpoint
-CREATE INDEX "bank_account_name_matches_account_idx" ON "trust"."bank_account_name_matches" USING btree ("user_id","bank_code","account_number_masked");--> statement-breakpoint
+CREATE INDEX "bank_account_name_matches_account_idx" ON "trust"."bank_account_name_matches" USING btree ("user_id","bank_code","account_number_hash");--> statement-breakpoint
 CREATE INDEX "business_verifications_user_idx" ON "trust"."business_verifications" USING btree ("user_id");--> statement-breakpoint
 CREATE INDEX "business_verifications_rc_idx" ON "trust"."business_verifications" USING btree ("cac_rc_number");--> statement-breakpoint
 CREATE UNIQUE INDEX "business_verifications_user_active_unique" ON "trust"."business_verifications" USING btree ("user_id") WHERE "trust"."business_verifications"."verified_at" IS NOT NULL;--> statement-breakpoint

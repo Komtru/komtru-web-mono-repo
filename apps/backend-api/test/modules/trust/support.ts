@@ -128,6 +128,12 @@ export interface StubStoreOptions {
   socialClaim?: SocialProofClaim | undefined;
   /** Who has already PROVED the handle being claimed, if anybody. */
   verifiedHandleOwner?: string | undefined;
+  /** The name the user's verified NIN/BVN matched. Absent by default would refuse every CAC submit. */
+  identityName?: { firstName: string; lastName: string } | undefined;
+  /** The user already holds a verified claim on the platform. */
+  hasVerifiedSocialClaim?: boolean;
+  /** Throws on the first settle only, then succeeds: drives the unique-index race branches. */
+  settleSocialThrows?: Error;
   socialClaims?: SocialProofClaim[];
   rejections?: RejectedRequestRow[];
   createAddressCheckThrows?: Error;
@@ -155,6 +161,7 @@ export function stubStore(options: StubStoreOptions = {}): RecordedStore {
   const socialDecisions: SocialProofDecisionInput[] = [];
   let thrownOnce = false;
   let businessThrownOnce = false;
+  let socialThrownOnce = false;
 
   return {
     requests,
@@ -227,6 +234,11 @@ export function stubStore(options: StubStoreOptions = {}): RecordedStore {
       return Promise.resolve(true);
     },
     findIdentifierOwner: () => Promise.resolve(options.identifierOwner),
+
+    findVerifiedIdentityName: () =>
+      Promise.resolve(
+        'identityName' in options ? options.identityName : { firstName: 'Ada', lastName: 'Obi' },
+      ),
 
     identityFacts: () =>
       Promise.resolve({
@@ -315,6 +327,7 @@ export function stubStore(options: StubStoreOptions = {}): RecordedStore {
     },
 
     findVerifiedHandleOwner: () => Promise.resolve(options.verifiedHandleOwner),
+    hasVerifiedSocialClaim: () => Promise.resolve(options.hasVerifiedSocialClaim ?? false),
     findSocialProofClaim: () => Promise.resolve(options.socialClaim),
 
     listSocialProofClaims: ({ page, limit }) => {
@@ -326,6 +339,10 @@ export function stubStore(options: StubStoreOptions = {}): RecordedStore {
     },
 
     settleSocialProofClaim: (input) => {
+      if (options.settleSocialThrows && !socialThrownOnce) {
+        socialThrownOnce = true;
+        return Promise.reject(options.settleSocialThrows);
+      }
       socialDecisions.push(input);
       return Promise.resolve(options.socialSettled ?? true);
     },
