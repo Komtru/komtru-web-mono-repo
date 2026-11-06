@@ -5,11 +5,11 @@ after every run. The run-by-run history is [`manager/RUN_LOG.md`](manager/RUN_LO
 behind it is [`BUILD_PLAN.md`](BUILD_PLAN.md).
 
 ```
-MVP   ███████████·······················  37/110  (34%)
-Total ████████··························  37/167  (22%)
+MVP   ████████████······················  38/110  (35%)
+Total ████████··························  38/167  (23%)
 ```
 
-73 MVP tickets left, 57 deferred past it.
+72 MVP tickets left, 57 deferred past it.
 
 ## By epic
 
@@ -20,7 +20,7 @@ Total ████████·························
 | 02-backend-platform    | 9    | 10    |
 | 03-identity            | 6    | 11    |
 | 04-files-notify-config | 3    | 7     |
-| 05-trust               | 1    | 3     |
+| 05-trust               | 2    | 3     |
 | 06-merchant-search     | 0    | 3     |
 | 07-trades              | 1    | 9     |
 | 08-ledger              | 2    | 8     |
@@ -47,7 +47,6 @@ Total ████████·························
 | ------ | ------------------------------------------------------------- | --- |
 | T-029  | Isolate the integration suite's shared Redis and queues       | yes |
 | T-037  | RBAC catalog, staff login and admin endpoints                 | yes |
-| T-051  | Business verification, bank name-match, address, social proof | yes |
 | T-072  | Funding a trade                                               | yes |
 | T-191  | Rework T-110 shells to the v2 desktop, tablet and mode switch | yes |
 | T-034  | Social login                                                  |     |
@@ -75,7 +74,6 @@ Total ████████·························
 | T-046  | Location catalog: states, cities and city requests                        | yes |
 | T-048  | Configuration (M17)                                                       | yes |
 | T-049  | Trade Standards by category                                               | yes |
-| T-051  | Business verification, bank name-match, address, social proof             | yes |
 | T-052  | Duplicate identity detection and KYC review queue                         | yes |
 | T-055  | Merchant applications and certification                                   | yes |
 | T-056  | Listings lifecycle, images and stock                                      | yes |

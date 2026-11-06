@@ -6,6 +6,10 @@ cost and to find work to resume.
 
 ## Waiting on the owner
 
+- **Mobile Buy/Sell switch (T-191).** v2's Y2 is a mobile Role Switcher list (Buyer, Merchant
+  Shop, Park Agent), and the mobile frames draw no Buy/Sell control. The default applied by the
+  fix pass is to put the same Buy/Sell switch from desktop and tablet in the mobile header.
+  Overrule it here if you want Y2's role list instead.
 - Q1 (hosting and the GitHub remote) still blocks T-005 and the T-183 push.
 - Q3 (wallet) still blocks T-131.
 - ~~Disputes in the MVP?~~ Answered 2026-11-06: yes. T-120, T-196, T-199, T-200 and the new T-221 are in the MVP.
@@ -43,3 +47,28 @@ cost and to find work to resume.
   - visual-check still points at v1 and needs a v2 mode before v2 UI tickets attach visual checks.
   - The v2 mobile tab bar is unchecked; T-191 covers it.
 - Next: T-051 (resume the worktree), T-029, T-037, T-072.
+
+## 2026-11-06 16:30 WAT — T-051 and T-191 in parallel (interactive, outside the schedule)
+
+- Usage at start: 5h 73%, week 34%. At end: 5h 91%, week 36%.
+- Capacity: 2, both Sonnet. They passed the parallel rules: different modules, and only T-051
+  has a migration.
+- **T-051: merged.**
+  - Resumed the existing worktree and merged main into it.
+  - The review found 3 must-fixes, all fixed: the officer match trusted a typed name, social-proof
+    index races, and a missing socket event. The fix pass also covered 5 should-fixes: the bank
+    match is now keyed on an account-number HMAC, and the submission guards have tests.
+  - Verified on the branch: 267/267 trust and verification tests with infrastructure, migration
+    safety clean (32 migrations), typecheck and lint clean.
+  - Verified names are now stored on NIN/BVN verification rows. That is within M6 D1, which
+    forbids storing raw NIN/BVN numbers, not names.
+  - Change for T-073: `readBankNameMatch(store, hasher, …)` now takes the hasher.
+- **T-191: saved after review.**
+  - Implemented: 100 web-app-ui tests and 845 ui-kit tests pass.
+  - The review found 3 must-fixes and 9 should-fixes, written to `docs/ui-review/T-191/REVIEW.md`
+    on branch `t-191-v2-shell-rework`.
+  - The fix pass was not started, because the 5-hour window passed 88%.
+- Ticket costs, for the two together including both reviews and the T-051 fix: 5h-cost=18
+  week-cost=2. Per ticket that is about 9 and 1.
+- Next: the T-191 fix pass. Resume the worktree; a fresh Sonnet fixer works from REVIEW.md.
+  Then T-037, which should reuse the `wip/main-uncommitted-2026-10-15` RBAC work, and T-072.
