@@ -103,6 +103,8 @@ Spec: `docs/specs/module-01-identity-and-user-management.md`. Decision C2 (desig
 
 ### T-038 — Staff invitations
 
+- **Status (2026-11-06): in progress** — implementation and tests complete; next: review.
+
 - **Touches:** `identity/services/staffInvitation.service.ts`, `identity/http/staffInvitation.controller.ts`
 - **Depends on:** T-037
 - **Acceptance criteria:**

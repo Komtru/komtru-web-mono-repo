@@ -246,6 +246,13 @@
       "when": 1793987828366,
       "tag": "0034_trade_standards",
       "breakpoints": true
+    },
+    {
+      "idx": 35,
+      "version": "7",
+      "when": 1794001602903,
+      "tag": "0035_staff_invitations",
+      "breakpoints": true
     }
   ]
 }

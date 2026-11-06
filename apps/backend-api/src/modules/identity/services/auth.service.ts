@@ -48,6 +48,7 @@ import {
   type VerifyOutcome,
 } from './otp.service.js';
 import { claimInvitationsForDestination, resolveInvitationToken } from './invitation.service.js';
+import { bindStaffInvitationsForDestination } from './staff-invitation.service.js';
 import { createSession, type IssuedSession, type SessionDeps } from './session.service.js';
 import type { PasswordRejection } from '../domain/credential/policy.js';
 
@@ -464,6 +465,13 @@ export async function verifyChallenge(
       { hasher: deps.otpHasher },
       { userId, channel: challenge.channel === 'EMAIL' ? 'EMAIL' : 'PHONE', canonical },
     );
+
+    // T-038. Only an EMAIL can be a staff invitation's destination. This binds the invitation to the
+    // account that proved the address and grants nothing: the role needs a second factor, which a
+    // new account has not enrolled, and is granted by an OTP-confirmed acceptance.
+    if (challenge.channel === 'EMAIL') {
+      await bindStaffInvitationsForDestination(tx, { hasher: deps.otpHasher }, { userId, canonical });
+    }
 
     const device = await upsertDevice(tx, {
       userId,

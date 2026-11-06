@@ -42,6 +42,11 @@
       "definition": "CREATE UNIQUE INDEX social_identities_provider_subject ON identity.social_identities USING btree (provider, provider_user_id) WHERE (unlinked_at IS NULL)"
     },
     {
+      "table": "identity.staff_invitations",
+      "name": "staff_invitations_pending_unique",
+      "definition": "CREATE UNIQUE INDEX staff_invitations_pending_unique ON identity.staff_invitations USING btree (destination_hash, role_code) WHERE (status = 'PENDING'::identity.invitation_status)"
+    },
+    {
       "table": "identity.user_emails",
       "name": "user_emails_one_primary",
       "definition": "CREATE UNIQUE INDEX user_emails_one_primary ON identity.user_emails USING btree (user_id) WHERE is_primary"

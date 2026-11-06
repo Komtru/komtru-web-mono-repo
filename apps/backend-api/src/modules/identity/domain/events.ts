@@ -277,6 +277,45 @@ export const identityPartyInvitationExpiredEvent = defineEvent(
 );
 
 // ---------------------------------------------------------------------------
+// T-038: staff invitations. None carries the token or the address, only the masked one.
+// ---------------------------------------------------------------------------
+
+export const identityStaffInvitationCreatedEvent = defineEvent(
+  'identity.staff_invitation.created',
+  1,
+  z.strictObject({
+    invitationId: z.uuid(),
+    invitedBy: z.uuid(),
+    roleCode: z.string().min(1),
+    maskedDestination: z.string().min(1),
+    expiresAt: z.iso.datetime(),
+  }),
+);
+
+/** `approvalId` is set when the role is a dual-approval one and the grant waits for a second holder. */
+export const identityStaffInvitationAcceptedEvent = defineEvent(
+  'identity.staff_invitation.accepted',
+  1,
+  z.strictObject({
+    invitationId: z.uuid(),
+    invitedBy: z.uuid(),
+    acceptedByUserId: z.uuid(),
+    roleCode: z.string().min(1),
+    approvalId: z.uuid().nullable(),
+  }),
+);
+
+export const identityStaffInvitationCancelledEvent = defineEvent(
+  'identity.staff_invitation.cancelled',
+  1,
+  z.strictObject({
+    invitationId: z.uuid(),
+    cancelledBy: z.uuid(),
+    roleCode: z.string().min(1),
+  }),
+);
+
+// ---------------------------------------------------------------------------
 // T-036: devices, MFA factors and passkeys.
 // ---------------------------------------------------------------------------
 
