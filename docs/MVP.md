@@ -25,7 +25,7 @@ things in particular have to be changed deliberately rather than waited out:
   logistics packages and the Park network console. Its definition of "end to end" spans two
   apps the MVP does not build.
 
-## Included — 71 tickets
+## Included — 76 tickets
 
 ### Identity and platform (13)
 
@@ -96,6 +96,18 @@ ticket depends on it. It adds 30 tickets, 15 of them MVP, listed here:
 - **T-207, T-208, T-209** desktop journeys, arrive to complete: the desktop layouts of MVP journeys.
 - **T-212, T-213** tablet journeys, arrive to complete: the tablet layouts of the same journeys.
 
+### Disputes for buyers and sellers (6, added 2026-11-06 by the owner)
+
+The owner ruled that buyers and sellers must be able to open and follow a dispute in the MVP,
+not only TrustOps. Return custody at a hub (T-201) stays deferred with Park, so returns are
+self-arranged.
+
+- **T-120** disputes (buyer and seller), the mobile web dispute screens.
+- **T-196** trade workspace resolution and issue-reporting screens.
+- **T-199** resolution execution, the return track (Track A).
+- **T-200** resolution execution, replacement and mutual settlement (Tracks B and C).
+- **T-221** desktop and tablet issues and resolution, split out of T-210 and T-214.
+
 ### Release (4)
 
 T-005 hosting and deploy jobs · T-180 end-to-end critical paths · T-182 security review ·
@@ -115,7 +127,7 @@ depending ticket does for a user; each narrows what it covers.
 | T-180 end-to-end critical paths    | T-173, T-162, T-148                  | "End to end" means propose → fund → deliver → inspect → release, plus the dispute path. Park and logistics journeys are added with those waves. |
 | T-183 first push                   | everything outside this list         | Gates the push on the MVP set rather than on all 166.                                                                                           |
 
-## Deferred — 64 tickets
+## Deferred — 60 tickets
 
 - **Park, 16:** T-090–T-095, T-130, T-147, T-148, T-170–T-174. The signature feature, and the
   largest single block. It is the first wave after MVP.
@@ -125,12 +137,12 @@ depending ticket does for a user; each narrows what it covers.
 - **Support and admin, 11:** T-034, T-041, T-100, T-103, T-104, T-105, T-125, T-129, T-150,
   T-151, T-152.
 - **Console and misc, 3:** T-142, T-153, T-155.
-- **UI master v2, 15:** each is deferred because the buyer or seller feature it draws is deferred,
+- **UI master v2, 11:** each is deferred because the buyer or seller feature it draws is deferred,
   or because it belongs to a console or hub surface the MVP does not build.
-  - T-196 workspace resolution screens, T-199, T-200 and T-210 desktop issues: disputes are deferred with T-120.
+  - T-210 desktop messages, trust and account: messaging is deferred. Its dispute screens moved to T-221 (MVP).
   - T-201 Track D return custody and T-206 hub tools and count: Park is deferred.
   - T-203 seller customers, tax and badges: storefront polish after the first merchants are live.
-  - T-211 desktop help and settings, T-214 tablet issues, messages and help: help and messaging are deferred.
+  - T-211 desktop help and settings, T-214 tablet messages, account and help: help and messaging are deferred.
   - T-215 operations control, T-216 governance, T-217 treasury, T-218 field audits, T-219 people
     development and T-220 TrustOps tablet: the MVP console is the work queue, disputes, identity
     review and merchant review only.

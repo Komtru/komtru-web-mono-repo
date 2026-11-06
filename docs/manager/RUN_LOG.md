@@ -8,10 +8,7 @@ cost and to find work to resume.
 
 - Q1 (hosting and the GitHub remote) still blocks T-005 and the T-183 push.
 - Q3 (wallet) still blocks T-131.
-- **Disputes in the MVP?** T-190 kept dispute and return screens deferred, alongside T-120:
-  T-196 workspace resolution, T-199 and T-200 resolution execution, and T-210's issues screens.
-  The MVP still includes the backend dispute core (T-080, T-081) and the TrustOps dispute console
-  (T-143). Should buyers and sellers get the mobile dispute screens in the MVP too?
+- ~~Disputes in the MVP?~~ Answered 2026-11-06: yes. T-120, T-196, T-199, T-200 and the new T-221 are in the MVP.
 
 ## 2026-11-06 13:45 WAT — setup (interactive session, not a manager run)
 

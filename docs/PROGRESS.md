@@ -5,11 +5,11 @@ after every run. The run-by-run history is [`manager/RUN_LOG.md`](manager/RUN_LO
 behind it is [`BUILD_PLAN.md`](BUILD_PLAN.md).
 
 ```
-MVP   ████████████······················  37/102  (36%)
-Total ████████··························  37/166  (22%)
+MVP   ███████████·······················  37/110  (34%)
+Total ████████··························  37/167  (22%)
 ```
 
-65 MVP tickets left, 64 deferred past it.
+73 MVP tickets left, 57 deferred past it.
 
 ## By epic
 
@@ -33,7 +33,7 @@ Total ████████·························
 | 15-logistics-ops       | 0    | 3     |
 | 16-park-agent-app      | 0    | 5     |
 | 17-release             | 0    | 4     |
-| 18-ui-master-v2        | 1    | 31    |
+| 18-ui-master-v2        | 1    | 32    |
 
 ## In progress
 
@@ -103,6 +103,7 @@ Total ████████·························
 | T-117  | Escrow funding                                                            | yes |
 | T-118  | Delivery, pickup PIN and inspection                                       | yes |
 | T-119  | Cancellation and refunds                                                  | yes |
+| T-120  | Disputes (buyer and seller)                                               | yes |
 | T-121  | Apply for merchant certification                                          | yes |
 | T-122  | Shop and listings                                                         | yes |
 | T-123  | Seller trade handling and shipping                                        | yes |
@@ -121,13 +122,20 @@ Total ████████·························
 | T-193  | Create a trade: seller starts, buyer completes                            | yes |
 | T-194  | Trade workspace supporting screens: funding, terms, agreement and payment | yes |
 | T-195  | Trade workspace supporting screens: delivery and evidence                 | yes |
+| T-196  | Trade workspace supporting screens: resolution and issue reporting        | yes |
 | T-197  | Proof media: capture, check and compare                                   | yes |
 | T-198  | Lifecycle exceptions and trade extras                                     | yes |
+| T-199  | Resolution execution: return track                                        | yes |
+| T-200  | Resolution execution: replacement and mutual settlement                   | yes |
+| T-201  | Resolution execution: return custody at the hub                           | yes |
 | T-202  | Seller shop settings and catalogue import                                 | yes |
 | T-204  | Account basics, money documents and system states                         | yes |
 | T-205  | Account security and lifecycle                                            | yes |
 | T-207  | Desktop: arrive, home and discover                                        | yes |
 | T-208  | Desktop: propose, agree and fund                                          | yes |
 | T-209  | Desktop: fulfil, deliver, inspect and complete                            | yes |
+| T-210  | Desktop: issues and resolution, messages, trust and account               | yes |
 | T-212  | Tablet: arrive, home, discover, propose and fund                          | yes |
 | T-213  | Tablet: fulfil, deliver, inspect and payouts                              | yes |
+| T-214  | Tablet: issues, messages, account and help                                | yes |
+| T-221  | Desktop and tablet: issues and resolution                                 | yes |

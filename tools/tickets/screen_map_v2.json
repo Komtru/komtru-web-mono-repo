@@ -72,7 +72,8 @@
     "T-171": "park-agent-app",
     "T-172": "park-agent-app",
     "T-173": "park-agent-app",
-    "T-174": "park-agent-app"
+    "T-174": "park-agent-app",
+    "T-221": "web-app-ui"
   },
   "sections": {
     "Entry — Mobile Web": "T-111",
@@ -146,7 +147,7 @@
     "Desktop · 06 · Fulfil & dispatch": "T-209",
     "Desktop · 07 · Deliver & inspect": "T-209",
     "Desktop · 09 · Complete & grow": "T-209",
-    "Desktop · 08 · Issues & resolution": "T-210",
+    "Desktop · 08 · Issues & resolution": "T-221",
     "Desktop · 10 · Messages, trust & account": "T-210",
     "Desktop · 11 · Help, documents & settings": "T-211",
     "Tablet · 01 · Arrive": "T-212",
@@ -157,7 +158,7 @@
     "Tablet · 06 · Fulfil & dispatch": "T-213",
     "Tablet · 07 · Deliver & inspect": "T-213",
     "Tablet · 09 · Complete & grow": "T-213",
-    "Tablet · 08 · Issues & resolution": "T-214",
+    "Tablet · 08 · Issues & resolution": "T-221",
     "Tablet · 10 · Messages & account": "T-214",
     "Tablet · 11 · Help & settings": "T-214",
     "TrustOps · 02 · People & network": "T-144",
@@ -265,10 +266,6 @@
     "SP-M05": "T-205",
     "SP-M10": "T-131",
     "DX-33": "T-125",
-    "TX-15": "T-214",
-    "TX-16": "T-214",
-    "TX-17": "T-214",
-    "TX-18": "T-214",
     "OP-07": "T-147",
     "OP-08": "T-147",
     "OP-09": "T-147",

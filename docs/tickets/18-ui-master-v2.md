@@ -184,10 +184,10 @@ What changed, from [`screens-v2.tsv`](../design-reference/screens-v2.tsv) (437 s
 
 ### T-210 — Desktop: issues and resolution, messages, trust and account
 
-- **Depends on:** T-191, T-120, T-128, T-126, T-114, T-196, T-199, T-190
+- **Depends on:** T-191, T-128, T-126, T-114, T-190
 - **Model:** sonnet
-- **Scope:** Report an issue, case status, decision, return status, check the return, settlement negotiation and appeal, messages with trade context, notifications centre, Trust Passport, and account and security. Definition of done as epic 13 (frontend-design per screen, ui-kit only, all states, e2e and axe).
-- **Acceptance criteria:** the 11 v2 screens DX-24, DX-25, DX-26, DX-27, DX-28, DX-29, DX-30, DX-34, DX-35, DX-36, DX-37 are built to the reference rows in `SCREEN_INDEX.md`, with copy taken from the reference and every data-backed screen showing loading, empty, error and offline states.
+- **Scope:** Messages with trade context, notifications centre, Trust Passport, and account and security. Definition of done as epic 13 (frontend-design per screen, ui-kit only, all states, e2e and axe).
+- **Acceptance criteria:** the 4 v2 screens DX-34, DX-35, DX-36, DX-37 are built to the reference rows in `SCREEN_INDEX.md`, with copy taken from the reference and every data-backed screen showing loading, empty, error and offline states.
 
 ### T-211 — Desktop: help, documents and settings
 
@@ -212,10 +212,10 @@ What changed, from [`screens-v2.tsv`](../design-reference/screens-v2.tsv) (437 s
 
 ### T-214 — Tablet: issues, messages, account and help
 
-- **Depends on:** T-191, T-196, T-128, T-126, T-129, T-190
+- **Depends on:** T-191, T-128, T-126, T-129, T-190
 - **Model:** sonnet
-- **Scope:** Tablet report an issue, return status, check the return, settlement offer, messages, account, help and contact, statements and shop settings. Definition of done as epic 13 (frontend-design per screen, ui-kit only, all states, e2e and axe).
-- **Acceptance criteria:** the 9 v2 screens TX-15, TX-16, TX-17, TX-18, TX-20, TX-21, SP-T01, SP-T02, SP-T03 are built to the reference rows in `SCREEN_INDEX.md`, with copy taken from the reference and every data-backed screen showing loading, empty, error and offline states.
+- **Scope:** Tablet messages, account, help and contact, statements and shop settings. Definition of done as epic 13 (frontend-design per screen, ui-kit only, all states, e2e and axe).
+- **Acceptance criteria:** the 5 v2 screens TX-20, TX-21, SP-T01, SP-T02, SP-T03 are built to the reference rows in `SCREEN_INDEX.md`, with copy taken from the reference and every data-backed screen showing loading, empty, error and offline states.
 
 ### T-215 — TrustOps: operations control, knowledge and quality
 
@@ -258,3 +258,10 @@ What changed, from [`screens-v2.tsv`](../design-reference/screens-v2.tsv) (437 s
 - **Model:** sonnet
 - **Scope:** The touch layouts for reviewers and approvers: Today, My work, proposal review, dispute decision, hub application and approvals. Definition of done as epic 13 (frontend-design per screen, ui-kit only, all states, e2e and axe).
 - **Acceptance criteria:** the 6 v2 screens OP-T1, OP-T2, OP-T3, OP-T4, OP-T5, OP-T6 are built to the reference rows in `SCREEN_INDEX.md`, with copy taken from the reference and every data-backed screen showing loading, empty, error and offline states.
+
+### T-221 — Desktop and tablet: issues and resolution
+
+- **Depends on:** T-191, T-120, T-196, T-199, T-200, T-190
+- **Model:** sonnet
+- **Scope:** The desktop and tablet layouts of the dispute journey: report an issue, case status and evidence, decision, return status, check the return, settlement negotiation and appeal. Split out of T-210 and T-214 on 2026-11-06, when the owner put buyer and seller disputes in the MVP. Definition of done as epic 13 (frontend-design per screen, ui-kit only, all states, e2e and axe).
+- **Acceptance criteria:** the 11 v2 screens DX-24, DX-25, DX-26, DX-27, DX-28, DX-29, DX-30, TX-15, TX-16, TX-17, TX-18 are built to the reference rows in `SCREEN_INDEX.md`, with copy taken from the reference and every data-backed screen showing loading, empty, error and offline states.
