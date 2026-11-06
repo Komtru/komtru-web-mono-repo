@@ -78,6 +78,11 @@ T-124 seller payouts · T-126 trust, account and settings
 T-140 scaffold, shell and staff auth · T-141 work queue and universal case · T-143 disputes ·
 T-144 identity review · T-154 merchant certification review
 
+### UI master v2 (1, added 2026-11-06)
+
+T-190 remap the screen index to Living Master v2 and re-scope the UI tickets. Every MVP UI
+ticket now depends on it. The tickets it creates are added to this section as MVP or deferred.
+
 ### Release (4)
 
 T-005 hosting and deploy jobs · T-180 end-to-end critical paths · T-182 security review ·
