@@ -40,7 +40,7 @@
 
 ### T-046 — Location catalog: states, cities and city requests
 
-- **Status (2026-11-06): in progress** — implementation and tests complete; next: review.
+- **Status:** Done (2026-11-06). Plan: `docs/superpowers/plans/2026-11-06-t-046-location-catalog.md`. Review: 1 must-fix and 6 should-fix items fixed. Seed (37 states, 129 cities) is in `apps/backend-api/src/modules/geo/seed/nigeria-locations.seed.ts`; owner review of the city list (Q16) is still open.
 - **Touches:** `src/modules/geo/**`, migration `geo_*`, `packages/shared-types/src/geo.ts`, `packages/api-client` geo hooks
 - **Depends on:** T-021, T-025, T-037
 - **Acceptance criteria:**
