@@ -52,6 +52,11 @@
       "definition": "CREATE UNIQUE INDEX staff_invitations_pending_unique ON identity.staff_invitations USING btree (destination_hash, role_code) WHERE (status = 'PENDING'::identity.invitation_status)"
     },
     {
+      "table": "identity.user_addresses",
+      "name": "user_addresses_one_default",
+      "definition": "CREATE UNIQUE INDEX user_addresses_one_default ON identity.user_addresses USING btree (user_id) WHERE is_default"
+    },
+    {
       "table": "identity.user_emails",
       "name": "user_emails_one_primary",
       "definition": "CREATE UNIQUE INDEX user_emails_one_primary ON identity.user_emails USING btree (user_id) WHERE is_primary"
@@ -207,6 +212,21 @@
       "table": "identity.admin_role_assignments",
       "name": "admin_role_self_approval",
       "definition": "CHECK (((approved_by IS NULL) OR (approved_by <> user_id)))"
+    },
+    {
+      "table": "identity.user_addresses",
+      "name": "user_addresses_default_is_live",
+      "definition": "CHECK ((NOT (is_default AND (archived_at IS NOT NULL))))"
+    },
+    {
+      "table": "identity.user_addresses",
+      "name": "user_addresses_phone_e164",
+      "definition": "CHECK ((recipient_phone ~ '^\\+[1-9][0-9]{7,14}$'::text))"
+    },
+    {
+      "table": "identity.user_addresses",
+      "name": "user_addresses_text_not_blank",
+      "definition": "CHECK (((length(btrim(label)) > 0) AND (length(btrim(recipient_name)) > 0) AND (length(btrim(street_line)) > 0)))"
     },
     {
       "table": "identity.user_phones",
@@ -409,6 +429,11 @@
       "table": "identity.roles",
       "name": "roles_dual_approval_backfill",
       "definition": "[O] CREATE TRIGGER roles_dual_approval_backfill BEFORE UPDATE ON identity.roles FOR EACH ROW EXECUTE FUNCTION identity.enforce_dual_approval_backfill()"
+    },
+    {
+      "table": "identity.user_addresses",
+      "name": "komtru_no_delete",
+      "definition": "[O] CREATE TRIGGER komtru_no_delete BEFORE DELETE ON identity.user_addresses FOR EACH ROW EXECUTE FUNCTION identity.reject_address_delete()"
     },
     {
       "table": "ledger.ledger_accounts",

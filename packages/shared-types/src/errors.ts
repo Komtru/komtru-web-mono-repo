@@ -77,6 +77,9 @@ export const PROBLEM_CODES = [
   // T-046. A user already has the most distinct city requests waiting that one person may hold;
   // the client says "wait for a decision" rather than the generic conflict copy.
   'CITY_REQUEST_LIMIT_REACHED',
+  // T-042. A user already holds the most live delivery addresses one account may keep; the client
+  // says "archive one first" rather than the generic conflict copy.
+  'ADDRESS_LIMIT_REACHED',
   // Deliberately NOT added: `TOO_MANY_REQUESTS`. `RATE_LIMITED` above is already this platform's
   // 429, used by the route limiter, by identity's party-lookup budget and by the OTP resend
   // throttle, and it already carries `retryAfter` as an extension member. The social-proof
