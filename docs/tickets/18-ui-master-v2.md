@@ -51,7 +51,7 @@ What changed, from [`screens-v2.tsv`](../design-reference/screens-v2.tsv) (437 s
 
 ### T-191 — Rework T-110 shells to the v2 desktop, tablet and mode switch
 
-- **Status (2026-11-06): in progress** — implemented; review done; next: fix pass from `docs/ui-review/T-191/REVIEW.md`. Owner ruling 2026-11-06: mobile gets the same Buy/Sell switch in its header (not Y2's role list).
+- **Status (2026-11-06): in progress** — review fixed; awaiting manager verification
 - **Depends on:** T-110, T-190
 - **Model:** sonnet
 - **Scope:** The one rework ticket. T-110 is the only UI on `main`; it built the app scaffold and the shells against v1's D9 (sidebar shell, Account, Personal Info) and tablet top nav. v2 redraws the shell: a five-item nav (Home, Trades, Messages, Discover, Account) in a sidebar with Collapse and `/` to search on desktop, the same five items as top navigation on tablet, and a Buy/Sell mode switch beside the profile (Y2). T-110's OF1 offline screen is unchanged (the v2 text and markup match v1), so it needs no rework. Update the sidebar and top-nav items, add the mode switch and the global search and Trade Code bar, and re-run the T-110 visual checks against v2 (DX-03, DX-37, TX-02 frames). Mobile tab bar: confirm against the v2 mobile frames and change only if they differ. Definition of done as epic 13 (frontend-design per screen, ui-kit only, all states, e2e and axe).
@@ -266,3 +266,10 @@ What changed, from [`screens-v2.tsv`](../design-reference/screens-v2.tsv) (437 s
 - **Model:** sonnet
 - **Scope:** The desktop and tablet layouts of the dispute journey: report an issue, case status and evidence, decision, return status, check the return, settlement negotiation and appeal. Split out of T-210 and T-214 on 2026-11-06, when the owner put buyer and seller disputes in the MVP. Definition of done as epic 13 (frontend-design per screen, ui-kit only, all states, e2e and axe).
 - **Acceptance criteria:** the 11 v2 screens DX-24, DX-25, DX-26, DX-27, DX-28, DX-29, DX-30, TX-15, TX-16, TX-17, TX-18 are built to the reference rows in `SCREEN_INDEX.md`, with copy taken from the reference and every data-backed screen showing loading, empty, error and offline states.
+
+### T-222 — Re-base TabBar to v2 mobile styling
+
+- **Depends on:** T-191
+- **Model:** sonnet
+- **Scope:** `TabBar` still draws T-110's v1 mobile styling and is parity-tested against the v1 stylesheet, so T-191 changed only its five items. Re-base it and its parity tests on v2's `.komtru-mobile-nav`. Found in the T-191 review (`docs/ui-review/T-191/README.md`).
+- **Acceptance criteria:** the mobile tab bar matches the v2 mobile tab-bar styling at `Komtru — UI Living Master v2.html` line ~7481: an indigo-soft pill behind the active item, 20px icons and 10px labels, with v2's blur and shadow; the `TabBar` parity tests assert v2's values rather than v1's; axe stays clean at four widths.

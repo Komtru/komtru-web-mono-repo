@@ -23,7 +23,7 @@ One app for every consumer with no buyer or seller views (design C22, §6.3), pl
 
 - **Screens:** OF1 (unchanged in v2). D9 (sidebar shell) and Y2 (role switcher) are redrawn in v2; the shell rework is T-191.
 - **Depends on:** T-017
-- **Acceptance criteria:** tablet shell behaviour (sidebar collapses to top nav) shared by every later tablet screen; app on port 3001 with mobile tab bar (Trades, Explore, Alerts, Messages, Account) and desktop sidebar; no role switcher and no separate seller tab bar; certified merchants see Shop in place of Explore; Account holds Payouts for anyone who has sold and a Park Agent item that opens the hub application or, once active, `park.komtru.com`; offline state via service worker; `passport.komtru.com` host rewrite to public profile routes; `/hub/*` operating URLs redirect to `park.komtru.com` (design C12).
+- **Acceptance criteria:** tablet shell behaviour (sidebar collapses to top nav) shared by every later tablet screen; app on port 3001 with the v2 shells (superseded by T-191: five destinations per Buy/Sell mode, Discover rather than Explore, Alerts as the bell); no separate seller tab bar; certified merchants are held in Sell mode; Account holds Payouts for anyone who has sold and a Park Agent item that opens the hub application or, once active, `park.komtru.com`; offline state via service worker; `passport.komtru.com` host rewrite to public profile routes; `/hub/*` operating URLs redirect to `park.komtru.com` (design C12).
 
 ### T-111 — Entry and authentication
 

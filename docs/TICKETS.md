@@ -228,5 +228,6 @@ T-001 → T-002 → T-003 → T-020 → T-021 → T-030 → T-031 → T-032 → 
 | [T-219](tickets/18-ui-master-v2.md)        | TrustOps: people development                                              | 18 — Adopt UI Living Master v2                                                                  | T-140, T-037, T-190                                    | 12   | Waiting      |
 | [T-220](tickets/18-ui-master-v2.md)        | TrustOps: tablet                                                          | 18 — Adopt UI Living Master v2                                                                  | T-141, T-142, T-143, T-147, T-150, T-190               | 18   | Waiting      |
 | [T-221](tickets/18-ui-master-v2.md)        | Desktop and tablet: issues and resolution                                 | 18 — Adopt UI Living Master v2                                                                  | T-191, T-120, T-196, T-199, T-200, T-190               | 20   | Waiting      |
+| [T-222](tickets/18-ui-master-v2.md)        | Re-base TabBar to v2 mobile styling                                       | 18 — Adopt UI Living Master v2                                                                  | T-191                                                  | 8    | Waiting      |
 
-**Totals:** 167 tickets — Blocked 3, Done 37, Ready 8, Waiting 119.
+**Totals:** 168 tickets — Blocked 3, Done 37, Ready 8, Waiting 120.
