@@ -53,8 +53,11 @@ export const tradeTermsVersions = trade.table(
     deliveryGraceHours: integer('delivery_grace_hours').notNull(),
 
     /** Snapshots, not pointers: an address edited later must not restate an agreed trade. */
-    deliveryAddress: jsonb('delivery_address').notNull(),
-    shipsFromAddress: jsonb('ships_from_address').notNull(),
+    /** NULL until the buyer has chosen one: a seller's proposal cannot snapshot an address the buyer
+     * has not picked yet. The acceptor's version fills it, and the service refuses acceptance
+     * without both (T-061). */
+    deliveryAddress: jsonb('delivery_address'),
+    shipsFromAddress: jsonb('ships_from_address'),
 
     supersededAt: timestamp('superseded_at', { withTimezone: true }),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
