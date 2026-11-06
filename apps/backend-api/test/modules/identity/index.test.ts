@@ -167,6 +167,12 @@ describe('identity module wiring (T-035)', () => {
     );
   });
 
+  it('schedules the staff invitation expiry sweep', () => {
+    expect(identity.identityModule(auth()).schedules?.map((job) => job.name)).toContain(
+      identity.STAFF_INVITATIONS_EXPIRE_SCHEDULE,
+    );
+  });
+
   it('refuses to build without ENCRYPTION_KEY, naming the variable', () => {
     // An invitation destination has to be stored recoverably to be sent. A process that cannot
     // encrypt one should say so while it is starting, not on the first invitation.
