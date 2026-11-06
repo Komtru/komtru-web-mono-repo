@@ -269,6 +269,8 @@ What changed, from [`screens-v2.tsv`](../design-reference/screens-v2.tsv) (437 s
 
 ### T-222 — Re-base TabBar to v2 mobile styling
 
+- **Status (2026-11-06): in progress** — implemented and verified; awaiting review
+
 - **Depends on:** T-191
 - **Model:** sonnet
 - **Scope:** `TabBar` still draws T-110's v1 mobile styling and is parity-tested against the v1 stylesheet, so T-191 changed only its five items. Re-base it and its parity tests on v2's `.komtru-mobile-nav`. Found in the T-191 review (`docs/ui-review/T-191/README.md`).
