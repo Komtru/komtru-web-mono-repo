@@ -115,6 +115,7 @@ Spec: `docs/specs/module-01-identity-and-user-management.md`. Decision C2 (desig
 
 - **Touches:** `identity/services/{lifecycle,recovery,ndpa}.service.ts`
 - **Depends on:** T-037
+- **Status:** Done (2026-11-07). Plan: `docs/superpowers/plans/2026-11-07-t-039-account-lifecycle.md`. Review: 4 must-fix and 9 should-fix items fixed. Suspension notice (AS1/AS2) is served in the login 403 problem, since suspended users have no session for `/me`. Hand-offs to T-100 and T-104 are events only; T-104 must call `anonymiseUser` and re-drive file tombstones.
 - **Acceptance criteria:**
   - Status machine per M1 §9.1 (restrict, suspend, reinstate, lock, close, anonymise) with `identity.user.status_changed`; suspension screens data (AS1, AS2) available via `/me`.
   - Close account blocked while any trade is active (CA1, CA2).

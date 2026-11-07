@@ -5,11 +5,11 @@ after every run. The run-by-run history is [`manager/RUN_LOG.md`](manager/RUN_LO
 behind it is [`BUILD_PLAN.md`](BUILD_PLAN.md).
 
 ```
-MVP   ███████████████···················  50/111  (45%)
-Total ██████████························  50/168  (30%)
+MVP   ████████████████··················  51/111  (46%)
+Total ██████████························  51/168  (30%)
 ```
 
-61 MVP tickets left, 57 deferred past it.
+60 MVP tickets left, 57 deferred past it.
 
 ## By epic
 
@@ -18,7 +18,7 @@ Total ██████████······················
 | 00-foundations         | 5    | 6     |
 | 01-shared-packages     | 8    | 8     |
 | 02-backend-platform    | 9    | 10    |
-| 03-identity            | 9    | 11    |
+| 03-identity            | 10   | 11    |
 | 04-files-notify-config | 6    | 7     |
 | 05-trust               | 2    | 3     |
 | 06-merchant-search     | 0    | 3     |
@@ -47,7 +47,6 @@ Total ██████████······················
 | Ticket | Title                                                             | MVP |
 | ------ | ----------------------------------------------------------------- | --- |
 | T-029  | Isolate the integration suite's shared Redis and queues           | yes |
-| T-039  | Account lifecycle, recovery and NDPA hooks                        | yes |
 | T-052  | Duplicate identity detection and KYC review queue                 | yes |
 | T-072  | Funding a trade                                                   | yes |
 | T-034  | Social login                                                      |     |
@@ -75,7 +74,6 @@ Total ██████████······················
 | ------ | ------------------------------------------------------------------------- | --- |
 | T-005  | Hosting confirmation and real deploy jobs                                 | yes |
 | T-029  | Isolate the integration suite's shared Redis and queues                   | yes |
-| T-039  | Account lifecycle, recovery and NDPA hooks                                | yes |
 | T-052  | Duplicate identity detection and KYC review queue                         | yes |
 | T-055  | Merchant applications and certification                                   | yes |
 | T-056  | Listings lifecycle, images and stock                                      | yes |
