@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-return, @typescript-eslint/no-unsafe-argument -- raw `pg` rows and supertest bodies are untyped in assertions */
 // T-039 over HTTP: GET /me, close, the NDPA requests and account recovery, through the real login.
 // Skipped unless KOMTRU_INFRA_TESTS=1.
 import type { Express } from 'express';

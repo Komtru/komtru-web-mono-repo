@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-argument -- raw `pg` rows and supertest bodies are untyped in assertions */
 // T-039 / M1 section 15: the anonymisation procedure, and the export and erasure hand-offs.
 // Skipped unless KOMTRU_INFRA_TESTS=1.
 import { describe, expect, it, vi } from 'vitest';

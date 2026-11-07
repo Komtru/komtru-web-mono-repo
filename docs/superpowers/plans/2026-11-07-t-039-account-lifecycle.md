@@ -21,7 +21,7 @@ Ports (injected through `IdentityAuthOptions`, wired in `modules/index.ts`, beca
 - `tombstoneUserFiles(userId, reason)` — wired to files' `tombstoneByUploader`. Absent: logged, and the post-commit `identity.account.anonymised` event is the retry hook.
 
 Routes: `GET /me`, `POST /me/close`, `POST /me/data-export`, `POST /me/erasure-request`, `POST /auth/recovery-requests` (public),
-`GET /admin/recovery-requests`, `POST /admin/recovery-requests/:id/decide`. `POST /admin/users/:id/status` additionally accepts `CLOSED`.
+`GET /admin/recovery-requests`, `POST /admin/recovery-requests/:id/decision`. `POST /admin/users/:id/status` additionally accepts `CLOSED`.
 
 T-104 (compliance) and T-100 (support) are not built: every hand-off is an outbox event and nothing more.
 
@@ -74,5 +74,7 @@ Defaults applied; none touches money.
 8. **What an approved recovery does.** Unlocks a LOCKED account, revokes all sessions and bumps the epoch. It does NOT reset credentials or MFA: those stay with the password reset flow and the two-person MFA reset (T-037). Default: minimal.
 9. **Retention anonymisation is not scheduled.** `anonymiseUser` exists and refuses before 30 days after closure unless compliance has fulfilled a deletion request; no cron runs it, because a legal-hold check belongs to T-104. Only the 30-day close of abandoned registrations is scheduled. Default: manual/compliance-triggered.
 10. **Erasure closes the account immediately.** `POST /me/erasure-request` closes (needs no active trade, password), then `scheduledFor` = now + 30 days is the SLA hint in the event. Default: close first.
-11. **Duplicate export/erasure requests** within 24 hours return the existing request's receipt instead of emitting a second event (deduplicated through the audit log; compliance's table arrives with T-104).
-12. **`gateway.disconnectUser`** (T-027's note) is not called: identity cannot import the socket module. The socket re-validation sweep drops a suspended user's connection.
+11. **Duplicate export requests** within 24 hours return the first request's receipt instead of emitting a second event (deduplicated through the audit log; compliance's table arrives with T-104). Erasure needs no dedupe: it closes the account, and a closed account cannot sign in to ask again. A user who closed first and later wants erasure goes through support/compliance (T-104), not a route.
+12. **Anonymising a staff member** is refused (a human decision, not a job's): revoke the role first. `destination_enc` is NOT NULL, so anonymised invitations hold an empty value rather than NULL.
+13. **An unknown identifier on the recovery intake** is stored (volume is a signal) but opens no ticket; the response is identical (S3).
+14. **`gateway.disconnectUser`** (T-027's note) is not called: identity cannot import the socket module. The socket re-validation sweep drops a suspended user's connection.

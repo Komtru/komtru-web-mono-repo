@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-return -- raw `pg` rows and supertest bodies are untyped in assertions */
 // T-039: account recovery against real Postgres. Skipped unless KOMTRU_INFRA_TESTS=1.
 import { describe, expect, it } from 'vitest';
 import { createHmacHasher } from '../../../../src/platform/crypto/hmac.js';
