@@ -44,6 +44,8 @@ export * from './domain/events.js';
 export * from './domain/rbac/catalog.js';
 export * from './domain/rbac/sod.js';
 export { bootstrapSuperAdmins, BootstrapRefused } from './services/bootstrap.service.js';
+// T-107: the cases index checks a reassignment target holds a live role, without re-deriving "live".
+export { liveRoleCodes } from './services/rbac.service.js';
 export * from './domain/username/policy.js';
 export * from './domain/username/reserved.js';
 export * from './domain/username/skeleton.js';

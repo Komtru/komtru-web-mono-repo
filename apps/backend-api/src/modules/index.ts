@@ -9,6 +9,7 @@ import type { AppConfig } from '../config/env.js';
 import type { Db } from '../db/index.js';
 import type { Logger } from '../platform/logger.js';
 import type { KomtruModule, SeedableModule } from '../platform/module.js';
+import { casesModule } from './cases/index.js';
 import { configModule } from './config/index.js';
 import { filesModule, filesSeed } from './files/index.js';
 import { geoModule, getCitiesByIds } from './geo/index.js';
@@ -61,6 +62,8 @@ export const createModules: ModuleBuilder = (deps) => {
     // After identity (party lookup, invitations, addresses), config (standards, fees) and files
     // (proof media), which it reads through their barrels.
     createTradesModule(deps),
+    // After identity, whose audit log and role grants every staff change to a case reads and writes.
+    casesModule,
     notifyModule,
     socket,
   ];
