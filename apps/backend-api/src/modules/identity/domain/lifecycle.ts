@@ -35,6 +35,9 @@ const EDGES: Readonly<
   RESTRICTED: {
     ACTIVE: ['STAFF'],
     SUSPENDED: ['STAFF', 'SYSTEM'], // escalate
+    // A restricted account can still sign in, so its holder can always leave and ask for erasure
+    // (NDPA); restriction stops new activity, it does not hold a person in the product.
+    CLOSED: ['SELF', 'STAFF'],
   },
   SUSPENDED: {
     ACTIVE: ['STAFF'],

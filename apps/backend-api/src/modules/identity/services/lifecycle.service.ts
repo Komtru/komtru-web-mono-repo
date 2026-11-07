@@ -53,11 +53,30 @@ export interface TransitionActor {
   userAgent?: string | null | undefined;
 }
 
+/**
+ * What the `identity.user.status_changed` event says about WHY. A code, never the free text: an outbox
+ * row is kept, consumers are many, and a staff member's note ("fraud ring 7") or a user's own words
+ * are not theirs to read. The full staff text stays in `users.status_reason` and the audit log, which
+ * only staff see.
+ */
+export type StatusReasonCode =
+  | 'STAFF_RESTRICT'
+  | 'STAFF_SUSPEND'
+  | 'STAFF_REINSTATE'
+  | 'STAFF_CLOSE'
+  | 'SELF_CLOSE'
+  | 'RISK_LOCK'
+  | 'RECOVERY_APPROVED'
+  | 'REGISTRATION_ABANDONED'
+  | 'RETENTION_ELAPSED'
+  | 'ERASURE_FULFILLED';
+
 export interface TransitionInput {
   userId: string;
   to: LifecycleStatus;
   by: Initiator;
   reason: string;
+  reasonCode: StatusReasonCode;
   actor: TransitionActor;
   auditAction: string;
   /** Ids, counts and enum values only (§S12). `reason`, `from`, `to` are added. */
@@ -100,6 +119,30 @@ export async function assertNoActiveTrades(
 ): Promise<void> {
   const active = ports.hasActiveTrades ? await ports.hasActiveTrades(db, userId) : true;
   if (active) throw activeTradesRefusal();
+}
+
+/**
+ * Trade creation's half of the close-vs-trade race. `trades.*_user_id` has no foreign key, so
+ * inserting a trade takes no lock on the user row, and a closure could read "no active trades",
+ * commit, and strand a trade created a moment earlier. Trades calls this inside the transaction that
+ * writes a party onto a trade: `FOR SHARE` makes a concurrent closure (which holds `FOR UPDATE` on
+ * the same row while it counts trades) wait for the trade to commit, or makes this wait for the
+ * closure and then see a non-ACTIVE status and refuse.
+ */
+export async function lockUserForTrade(tx: Tx, userId: string): Promise<void> {
+  const row = (
+    await tx.select({ status: users.status }).from(users).where(eq(users.id, userId)).for('share')
+  )[0];
+  if (row?.status !== 'ACTIVE') {
+    throw new ApiError(
+      409,
+      'CONFLICT',
+      'This account cannot take part in a trade right now',
+      'The account is not active',
+      undefined,
+      { reason: 'ACCOUNT_NOT_ACTIVE' },
+    );
+  }
 }
 
 export async function applyStatusTransition(
@@ -150,7 +193,7 @@ export async function applyStatusTransition(
   }
 
   await publish(tx, identityUserStatusChangedEvent, {
-    payload: { userId: input.userId, from, to: input.to, reason: input.reason },
+    payload: { userId: input.userId, from, to: input.to, reason: input.reasonCode },
     aggregateType: 'identity.user',
     aggregateId: input.userId,
     actor: eventActor(input.actor),
@@ -203,6 +246,7 @@ export async function lockAccount(
       to: 'LOCKED',
       by: 'SYSTEM',
       reason: input.reason,
+      reasonCode: 'RISK_LOCK',
       actor: { type: 'SYSTEM' },
       auditAction: AUDIT_ACTIONS.ACCOUNT_LOCKED,
       auditMetadata: input.ruleId ? { ruleId: input.ruleId } : {},
@@ -224,10 +268,13 @@ export interface CloseDeps extends LifecycleDeps {
   requireStepUp?: (tx: Tx, userId: string, token: string | undefined) => Promise<void>;
 }
 
+export const CLOSE_REASON_CODES = ['NOT_USING', 'PRIVACY', 'SECURITY', 'OTHER'] as const;
+export type CloseReasonCode = (typeof CLOSE_REASON_CODES)[number];
+
 export interface CloseInput {
   userId: string;
   sessionId?: string | undefined;
-  reason: string;
+  reasonCode: CloseReasonCode;
   password?: string | undefined;
   stepUpToken?: string | undefined;
   ip?: string | null;
@@ -274,7 +321,9 @@ export async function closeOwnAccount(
       userId: input.userId,
       to: 'CLOSED',
       by: 'SELF',
-      reason: input.reason,
+      // The user's own words are NOT stored (they may name anyone); only which box they ticked.
+      reason: `SELF_CLOSE:${input.reasonCode}`,
+      reasonCode: 'SELF_CLOSE',
       actor: {
         type: 'USER',
         userId: input.userId,
@@ -338,6 +387,7 @@ export async function sweepAbandonedRegistrations(
           to: 'CLOSED',
           by: 'SYSTEM',
           reason: `no channel verified within ${ABANDONED_REGISTRATION_DAYS} days`,
+          reasonCode: 'REGISTRATION_ABANDONED',
           actor: { type: 'SYSTEM' },
           auditAction: AUDIT_ACTIONS.ACCOUNT_CLOSED,
           onlyFrom: ['PENDING_VERIFICATION'],

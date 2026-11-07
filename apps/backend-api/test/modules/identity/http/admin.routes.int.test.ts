@@ -42,12 +42,15 @@ describe.runIf(infraEnabled)('the admin surface (T-037, M1 section 10.6)', () =>
   const t = useTestDatabase();
   let redis: Redis;
   let app: Express;
+  /** What the trade port answers: open by default, so a closure is refused unless a test says otherwise. */
+  let tradeOpen = true;
 
   beforeEach(async () => {
     redis ??= createTestRedis();
     await redisReady(redis);
     await seedCatalogue(t);
-    app = buildApp(t, redis);
+    tradeOpen = true;
+    app = buildApp(t, redis, { hasActiveTrades: () => Promise.resolve(tradeOpen) });
   });
   afterAll(() => {
     redis?.disconnect();
@@ -311,6 +314,19 @@ describe.runIf(infraEnabled)('the admin surface (T-037, M1 section 10.6)', () =>
   });
 
   describe('status and sessions', () => {
+    it('closes an account through the status route once the trade port says nothing is open', async () => {
+      const ops = await staff('OPERATIONS_ADMIN');
+      const target = await subject();
+      tradeOpen = false;
+      const closed = await as(ops.token).post(`/admin/users/${target.userId}/status`, {
+        status: 'CLOSED',
+        reason: REASON,
+      });
+      expect(closed.status).toBe(200);
+      expect(closed.body).toEqual({ from: 'ACTIVE', to: 'CLOSED' });
+      expect((await as(target.consumerToken).get('/me/mfa/factors')).status).toBe(401);
+    });
+
     it('suspends: the status, the kill switch, the event and exactly one audit row', async () => {
       const ops = await staff('OPERATIONS_ADMIN');
       const target = await subject();
@@ -388,13 +404,17 @@ describe.runIf(infraEnabled)('the admin surface (T-037, M1 section 10.6)', () =>
       });
       expect(same.status).toBe(409);
       expect(bodyOf<Problem>(same).code).toBe('INVALID_TRANSITION');
-      // T-039 owns closing and it is now reachable, but this app is built with no trade port, which
-      // fails closed: an unwired process refuses to close rather than closing blind.
+      // T-039 owns closing and it is now reachable, but the trade port says a trade is open.
       const closed = await as(ops.token).post(`/admin/users/${target.userId}/status`, {
         status: 'CLOSED',
         reason: REASON,
       });
       expect(closed.status).toBe(409);
+      expect(bodyOf<Problem & { reason?: string }>(closed).reason).toBe('ACTIVE_TRADES');
+      const stillActive = await t
+        .owner()
+        .query(`SELECT status::text FROM identity.users WHERE id = $1`, [target.userId]);
+      expect(stillActive.rows[0]).toMatchObject({ status: 'ACTIVE' });
       // Locking and anonymising stay out of staff's hands.
       for (const status of ['LOCKED', 'ANONYMISED']) {
         const refused = await as(ops.token).post(`/admin/users/${target.userId}/status`, {

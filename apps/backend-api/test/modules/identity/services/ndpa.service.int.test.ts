@@ -1,4 +1,4 @@
-/* eslint-disable @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-argument -- raw `pg` rows and supertest bodies are untyped in assertions */
+/* eslint-disable @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-argument, @typescript-eslint/no-unsafe-return -- raw `pg` rows and supertest bodies are untyped in assertions */
 // T-039 / M1 section 15: the anonymisation procedure, and the export and erasure hand-offs.
 // Skipped unless KOMTRU_INFRA_TESTS=1.
 import { describe, expect, it, vi } from 'vitest';
@@ -185,6 +185,63 @@ describe.runIf(infraEnabled)('NDPA hooks and anonymisation (T-039)', () => {
       expect(events).toContain('identity.user.status_changed');
     });
 
+    it('leaves no staff prose or requester network data behind', async () => {
+      const { userId } = await richUser();
+      await t
+        .owner()
+        .query(`UPDATE identity.users SET status_reason = 'fraud ring 7 (Ada Obi)' WHERE id = $1`, [userId]);
+      await t.owner().query(
+        `INSERT INTO identity.account_recovery_requests (user_id, claimed_identifier_hash, method, status, requested_ip,
+                                                          decision_reason, expires_at)
+         VALUES ($1, sha256('secret'::bytea), 'LOST_ALL', 'REJECTED', '203.0.113.9', 'caller was Ada', now())`,
+        [userId],
+      );
+
+      await anonymiseUser(deps(), { userId, trigger: 'COMPLIANCE' });
+
+      expect(
+        (await t.owner().query(`SELECT status_reason FROM identity.users WHERE id = $1`, [userId])).rows[0],
+      ).toMatchObject({ status_reason: null });
+      const recovery = (
+        await t.owner().query(
+          `SELECT requested_ip, requested_device_id, octet_length(claimed_identifier_hash) n, decision_reason
+             FROM identity.account_recovery_requests WHERE user_id = $1`,
+          [userId],
+        )
+      ).rows[0];
+      expect(recovery).toMatchObject({
+        requested_ip: null,
+        requested_device_id: null,
+        n: 0,
+        decision_reason: null,
+      });
+      // The event the rest of the platform keeps carries a code, not words.
+      const reasons = (
+        await t
+          .owner()
+          .query(
+            `SELECT payload->>'reason' r FROM platform.outbox WHERE event_type = 'identity.user.status_changed'`,
+          )
+      ).rows.map((r) => r.r);
+      expect(reasons).toEqual(['ERASURE_FULFILLED']);
+    });
+
+    it('takes anonymisedAt from the database clock, so column and event agree', async () => {
+      const { userId } = await richUser();
+      await anonymiseUser(deps(), { userId, trigger: 'COMPLIANCE' });
+      const column = (
+        await t.owner().query(`SELECT anonymised_at FROM identity.users WHERE id = $1`, [userId])
+      ).rows[0].anonymised_at as Date;
+      const event = (
+        await t
+          .owner()
+          .query(
+            `SELECT payload->>'anonymisedAt' a FROM platform.outbox WHERE event_type = 'identity.account.anonymised'`,
+          )
+      ).rows[0].a as string;
+      expect(new Date(event).getTime()).toBe(column.getTime());
+    });
+
     it('scrubs and archives saved addresses, never deleting them', async () => {
       await seedLocations(t.db());
       const { userId } = await richUser('ACTIVE');
@@ -350,7 +407,7 @@ describe.runIf(infraEnabled)('NDPA hooks and anonymisation (T-039)', () => {
           `$argon2id$v=19$m=19456,t=2,p=1$test$${PASSWORD}`,
         ]);
 
-      const receipt = await requestErasure(deps(), { userId, reason: 'erase me', password: PASSWORD });
+      const receipt = await requestErasure(deps(), { userId, reasonCode: 'OTHER', password: PASSWORD });
 
       expect(new Date(receipt.scheduledFor).getTime()).toBeGreaterThan(Date.now() + 29 * 86_400_000);
       expect(
@@ -376,11 +433,13 @@ describe.runIf(infraEnabled)('NDPA hooks and anonymisation (T-039)', () => {
       await expect(
         requestErasure(deps({ ports: { hasActiveTrades: () => Promise.resolve(true) } }), {
           userId,
-          reason: 'x',
+          reasonCode: 'OTHER',
           password: PASSWORD,
         }),
       ).rejects.toMatchObject({ status: 409 });
-      await expect(requestErasure(deps(), { userId, reason: 'x', password: 'wrong' })).rejects.toMatchObject({
+      await expect(
+        requestErasure(deps(), { userId, reasonCode: 'OTHER', password: 'wrong' }),
+      ).rejects.toMatchObject({
         status: 401,
       });
       expect(

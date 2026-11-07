@@ -5,6 +5,7 @@ import {
   closeOwnAccount,
   getAccountNotice,
   lockAccount,
+  lockUserForTrade,
   sweepAbandonedRegistrations,
   type LifecyclePorts,
 } from '../../../../src/modules/identity/services/lifecycle.service.js';
@@ -96,6 +97,14 @@ describe.runIf(infraEnabled)('account lifecycle (T-039)', () => {
         );
       expect(rows).toHaveLength(1);
       expect(await outboxEventTypes(t.owner())).toContain('identity.user.status_changed');
+      // The event carries a code, never the staff member's note; the note stays in the row and audit.
+      const event = await t
+        .owner()
+        .query<{ payload: { reason: string } }>(
+          `SELECT payload FROM platform.outbox WHERE event_type = 'identity.user.status_changed'`,
+        );
+      expect(event.rows[0]?.payload.reason).toBe('STAFF_SUSPEND');
+      expect((await statusOf(userId))?.status_reason).toBe('chargeback ring');
     });
 
     it('refuses an edge the machine does not have, and leaves the row alone', async () => {
@@ -167,7 +176,7 @@ describe.runIf(infraEnabled)('account lifecycle (T-039)', () => {
       const { userId } = await seedUser(t.app());
       await withPassword(userId);
       await expect(
-        closeOwnAccount(closeDeps(openTrade), { userId, reason: 'leaving', password: 'wrong' }),
+        closeOwnAccount(closeDeps(openTrade), { userId, reasonCode: 'OTHER', password: 'wrong' }),
       ).rejects.toMatchObject({ status: 409, extensions: { reason: 'ACTIVE_TRADES' } });
       const { rows } = await t
         .owner()
@@ -179,7 +188,7 @@ describe.runIf(infraEnabled)('account lifecycle (T-039)', () => {
       const { userId } = await seedUser(t.app());
       await withPassword(userId);
       await expect(
-        closeOwnAccount(closeDeps(noTrades), { userId, reason: 'leaving', password: 'nope' }),
+        closeOwnAccount(closeDeps(noTrades), { userId, reasonCode: 'OTHER', password: 'nope' }),
       ).rejects.toMatchObject({ status: 401, code: 'INVALID_CREDENTIALS' });
       expect((await statusOf(userId))?.status).toBe('ACTIVE');
       const { rows } = await t
@@ -194,7 +203,7 @@ describe.runIf(infraEnabled)('account lifecycle (T-039)', () => {
       await seedSession(userId);
       const result = await closeOwnAccount(closeDeps(noTrades), {
         userId,
-        reason: 'leaving',
+        reasonCode: 'OTHER',
         password: PASSWORD,
       });
       expect(result).toMatchObject({ from: 'ACTIVE', to: 'CLOSED', sessionsRevoked: 1 });
@@ -207,12 +216,12 @@ describe.runIf(infraEnabled)('account lifecycle (T-039)', () => {
       const a = await seedUser(t.app());
       await withPassword(a.userId);
       await expect(
-        closeOwnAccount(closeDeps(noTrades), { userId: a.userId, reason: 'x' }),
+        closeOwnAccount(closeDeps(noTrades), { userId: a.userId, reasonCode: 'OTHER' }),
       ).rejects.toMatchObject({ status: 422 });
 
       const b = await seedUser(t.app());
       await expect(
-        closeOwnAccount(closeDeps(noTrades), { userId: b.userId, reason: 'x' }),
+        closeOwnAccount(closeDeps(noTrades), { userId: b.userId, reasonCode: 'OTHER' }),
       ).rejects.toMatchObject({ status: 403, code: 'STEP_UP_REQUIRED' });
       let asked: string | undefined;
       await closeOwnAccount(
@@ -223,19 +232,100 @@ describe.runIf(infraEnabled)('account lifecycle (T-039)', () => {
             return Promise.resolve();
           },
         },
-        { userId: b.userId, reason: 'x', stepUpToken: 'tok' },
+        { userId: b.userId, reasonCode: 'OTHER', stepUpToken: 'tok' },
       );
       expect(asked).toBe('tok');
       expect((await statusOf(b.userId))?.status).toBe('CLOSED');
     });
 
-    it('is refused from a restricted account (deny by default)', async () => {
+    it('is allowed from a restricted account (they can sign in, so they can leave)', async () => {
       const { userId } = await seedUser(t.app(), { status: 'RESTRICTED' });
       await withPassword(userId);
-      await expect(
-        closeOwnAccount(closeDeps(noTrades), { userId, reason: 'x', password: PASSWORD }),
-      ).rejects.toBeInstanceOf(ApiError);
-      expect((await statusOf(userId))?.status).toBe('RESTRICTED');
+      await closeOwnAccount(closeDeps(noTrades), { userId, reasonCode: 'OTHER', password: PASSWORD });
+      expect((await statusOf(userId))?.status).toBe('CLOSED');
+    });
+
+    it('is refused from a suspended or locked account, which cannot hold a session (deny by default)', async () => {
+      for (const status of ['SUSPENDED', 'LOCKED']) {
+        const { userId } = await seedUser(t.app(), { status });
+        await withPassword(userId);
+        await expect(
+          closeOwnAccount(closeDeps(noTrades), { userId, reasonCode: 'OTHER', password: PASSWORD }),
+          status,
+        ).rejects.toBeInstanceOf(ApiError);
+        expect((await statusOf(userId))?.status).toBe(status);
+      }
+    });
+
+    it('stores a fixed code and never the user words, in the status, the audit row and the event', async () => {
+      const { userId } = await seedUser(t.app());
+      await withPassword(userId);
+      await closeOwnAccount(closeDeps(noTrades), { userId, reasonCode: 'PRIVACY', password: PASSWORD });
+
+      expect((await statusOf(userId))?.status_reason).toBe('SELF_CLOSE:PRIVACY');
+      const { rows } = await t
+        .owner()
+        .query<{ metadata: { reason: string } }>(
+          `SELECT metadata FROM identity.identity_audit_log WHERE subject_user_id = $1 AND action = 'ACCOUNT_CLOSED'`,
+          [userId],
+        );
+      expect(rows[0]?.metadata.reason).toBe('SELF_CLOSE:PRIVACY');
+      const events = await t
+        .owner()
+        .query<{ payload: { reason: string } }>(
+          `SELECT payload FROM platform.outbox WHERE event_type = 'identity.user.status_changed'`,
+        );
+      expect(events.rows[0]?.payload.reason).toBe('SELF_CLOSE');
+    });
+
+    it('does not let a close race a trade being created (the share lock)', async () => {
+      const { userId } = await seedUser(t.app());
+      await withPassword(userId);
+      // The "trade" is a flag set when the creating transaction commits, standing in for a trades
+      // row: what is under test is that the closure WAITS for the creator rather than counting first.
+      let tradeCommitted = false;
+      const ports: LifecyclePorts = { hasActiveTrades: () => Promise.resolve(tradeCommitted) };
+      let release!: () => void;
+      const gate = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      const creating = t.db().transaction(async (tx) => {
+        await lockUserForTrade(tx, userId);
+        await gate;
+        tradeCommitted = true;
+      });
+      await new Promise((resolve) => setTimeout(resolve, 150));
+
+      const closing = closeOwnAccount(closeDeps(ports), { userId, reasonCode: 'OTHER', password: PASSWORD });
+      const settled = closing.then(
+        () => 'closed',
+        (error: unknown) => (error as ApiError).extensions?.reason,
+      );
+      await new Promise((resolve) => setTimeout(resolve, 150));
+      release();
+      await creating;
+
+      expect(await settled).toBe('ACTIVE_TRADES');
+      expect((await statusOf(userId))?.status).toBe('ACTIVE');
+    });
+
+    it('refuses a trade party whose account closed first', async () => {
+      const { userId } = await seedUser(t.app());
+      await withPassword(userId);
+      await closeOwnAccount(closeDeps(noTrades), { userId, reasonCode: 'OTHER', password: PASSWORD });
+      await expect(t.db().transaction((tx) => lockUserForTrade(tx, userId))).rejects.toMatchObject({
+        status: 409,
+        extensions: { reason: 'ACCOUNT_NOT_ACTIVE' },
+      });
+      for (const status of ['RESTRICTED', 'PENDING_VERIFICATION']) {
+        const other = await seedUser(t.app(), { status });
+        await expect(
+          t.db().transaction((tx) => lockUserForTrade(tx, other.userId)),
+          status,
+        ).rejects.toMatchObject({
+          status: 409,
+        });
+      }
     });
   });
 
@@ -280,7 +370,7 @@ describe.runIf(infraEnabled)('account lifecycle (T-039)', () => {
         noticeKey: 'ACCOUNT_RESTRICTED',
         supportReference: publicId,
         openTrades: false,
-        canClose: false,
+        canClose: true,
         abilities: { login: true, buy: false, sell: false },
       });
       expect(JSON.stringify(notice)).not.toContain('fraud ring');

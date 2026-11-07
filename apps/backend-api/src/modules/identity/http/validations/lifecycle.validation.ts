@@ -1,6 +1,7 @@
 // T-039's request and response shapes: GET /me, the close and NDPA routes, and account recovery.
 import { pageRequestSchema, pagedSchema } from '@komtru/shared-types';
 import { z } from 'zod';
+import { CLOSE_REASON_CODES } from '../../services/lifecycle.service.js';
 import { LIFECYCLE_STATUSES } from '../../domain/lifecycle.js';
 import { RECOVERY_METHODS } from '../../domain/events.js';
 
@@ -12,7 +13,8 @@ const passwordField = z.string().min(1).max(256);
  * service's call, so neither is required here.
  */
 export const closeAccountBody = z.strictObject({
-  reason: z.string().trim().min(1).max(500),
+  /** Which box the user ticked. Their own words are not collected: they would be kept, and read, for years. */
+  reason: z.enum(CLOSE_REASON_CODES).default('OTHER'),
   password: passwordField.optional(),
   stepUpToken: z.string().min(1).max(2048).optional(),
 });
@@ -65,12 +67,12 @@ export const recoveryIntakeBody = z.strictObject({
   /** An email, a phone number or a handle: whatever the person remembers. */
   identifier: z.string().trim().min(3).max(320),
   method: z.enum(RECOVERY_METHODS),
-  evidenceRefs: z.array(z.uuid()).max(5).optional(),
 });
 
 /** One shape whatever happened (§S3). */
 export const recoveryReceiptResponse = z.object({
-  requestId: z.string(),
+  /** Opaque and fresh on every call; it names nothing (see `RecoveryReceipt`). */
+  receiptId: z.uuid(),
   status: z.literal('RECEIVED'),
 });
 

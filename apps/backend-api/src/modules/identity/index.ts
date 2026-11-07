@@ -213,6 +213,7 @@ export {
   closeOwnAccount,
   getAccountNotice,
   lockAccount,
+  lockUserForTrade,
   sweepAbandonedRegistrations,
   type AccountNotice,
   type LifecyclePorts,

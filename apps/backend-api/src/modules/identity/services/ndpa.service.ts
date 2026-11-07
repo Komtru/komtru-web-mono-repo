@@ -29,6 +29,7 @@ import { socialIdentities, userCredentials } from '../infrastructure/postgres/sc
 import { partyInvitations } from '../infrastructure/postgres/schema/invitations.js';
 import {
   devices,
+  accountRecoveryRequests,
   mfaFactors,
   otpChallenges,
   passkeyCredentials,
@@ -269,6 +270,7 @@ async function runProcedure(
     to: 'ANONYMISED',
     by: 'SYSTEM',
     reason: input.trigger === 'COMPLIANCE' ? 'erasure fulfilled by compliance' : 'retention period elapsed',
+    reasonCode: input.trigger === 'COMPLIANCE' ? 'ERASURE_FULFILLED' : 'RETENTION_ELAPSED',
     actor: { type: 'SYSTEM' },
     auditAction: AUDIT_ACTIONS.ACCOUNT_ANONYMISED,
     auditMetadata: { trigger: input.trigger },
@@ -278,12 +280,14 @@ async function runProcedure(
   // Step 2: replace the identifiers. The tombstone handle goes through skeleton(), never string
   // concatenation, so its skeleton cannot collide with a real user's folded one.
   const username = tombstoneHandle();
-  await tx
+  const [stamped] = await tx
     .update(users)
     .set({
       username,
       usernameSkeleton: skeleton(username),
       anonymisedAt: sql`now()`,
+      // Staff prose ("fraud ring 7", a name) does not survive erasure; the audit log keeps the record.
+      statusReason: null,
       primaryEmailId: null,
       primaryPhoneId: null,
       registrationIp: null,
@@ -291,7 +295,22 @@ async function runProcedure(
       lastLoginAt: null,
       updatedAt: sql`now()`,
     })
-    .where(eq(users.id, input.userId));
+    .where(eq(users.id, input.userId))
+    .returning({ anonymisedAt: users.anonymisedAt });
+
+  // Recovery requests carry the requester's IP, device and a digest of the identifier they typed.
+  // They are the account's history, so the rows stay; what identifies a person goes.
+  // (Sessions keep `ip` and `user_agent`: they are revoked here and age out under the 90-day
+  // session retention of M1 §15, which is the documented retention for that data.)
+  await tx
+    .update(accountRecoveryRequests)
+    .set({
+      requestedIp: null,
+      requestedDeviceId: null,
+      claimedIdentifierHash: Buffer.alloc(0),
+      decisionReason: null,
+    })
+    .where(eq(accountRecoveryRequests.userId, input.userId));
 
   // Step 3: destroy credentials, channels and authenticators.
   await tx.delete(userEmails).where(eq(userEmails.userId, input.userId));
@@ -337,7 +356,8 @@ async function runProcedure(
   // T-042: saved addresses are scrubbed and archived, never deleted (a trade snapshots them).
   await anonymiseUserAddresses(tx, input.userId);
 
-  const anonymisedAt = new Date();
+  // The database clock, so the event, the column and the audit row agree to the millisecond.
+  const anonymisedAt = stamped?.anonymisedAt ?? new Date();
   await publish(tx, identityAccountAnonymisedEvent, {
     payload: { userId: input.userId, anonymisedAt: anonymisedAt.toISOString() },
     aggregateType: 'identity.user',

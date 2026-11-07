@@ -11,6 +11,7 @@
 //      and T-037's two-person MFA reset (plan, owner decision 8).
 //
 // M10 (tickets, T-100) is not built: "opens a support ticket" is the `recovery_requested` event.
+import { randomUUID } from 'node:crypto';
 import { and, desc, eq, inArray, lt, sql } from 'drizzle-orm';
 import type { Db } from '../../../db/index.js';
 import { ApiError } from '../../../platform/errors.js';
@@ -47,6 +48,8 @@ export interface RecoveryDeps {
   epochs?: EpochInvalidator;
   /** Defaults to the shipped threshold. A test, or M13 later, may pass another. */
   reviewThreshold?: number;
+  /** Tests pass 0. Defaults to `RECOVERY_RESPONSE_FLOOR_MS`. */
+  responseFloorMs?: number;
 }
 
 export interface RecoveryIntake {
@@ -58,11 +61,21 @@ export interface RecoveryIntake {
   deviceId?: string | null;
 }
 
-/** The same body for every outcome. */
+/**
+ * The same body for every outcome, and an OPAQUE receipt: a fresh random id on every call that is
+ * not the request's id. Returning the real id would let a caller tell a known account with an open
+ * request (same id back) from an unknown one (a new id each time). Staff find the case in the queue.
+ */
 export interface RecoveryReceipt {
-  requestId: string;
+  receiptId: string;
   status: 'RECEIVED';
 }
+
+/**
+ * A known identifier does several more statements than an unknown one. The public call is held to
+ * this floor so the difference is not a stopwatch away; it comfortably exceeds the slow path.
+ */
+export const RECOVERY_RESPONSE_FLOOR_MS = 400;
 
 const IDENTIFIER_DOMAIN = 'recovery-identifier';
 
@@ -70,35 +83,26 @@ const IDENTIFIER_DOMAIN = 'recovery-identifier';
  * `POST /auth/recovery-requests`. Public; the route rate-limits by identifier and IP.
  */
 export async function requestRecovery(deps: RecoveryDeps, input: RecoveryIntake): Promise<RecoveryReceipt> {
+  const started = Date.now();
+  await intake(deps, input);
+  const wait = (deps.responseFloorMs ?? RECOVERY_RESPONSE_FLOOR_MS) - (Date.now() - started);
+  if (wait > 0) await new Promise((resolve) => setTimeout(resolve, wait));
+  return { receiptId: randomUUID(), status: 'RECEIVED' };
+}
+
+async function intake(deps: RecoveryDeps, input: RecoveryIntake): Promise<void> {
   const claimedIdentifierHash = deps.identifierHasher.hmac(
     IDENTIFIER_DOMAIN,
     input.identifier.trim().toLowerCase(),
   );
   const evidence = [...(input.evidenceRefs ?? [])];
 
-  return deps.db.transaction(async (tx): Promise<RecoveryReceipt> => {
+  await deps.db.transaction(async (tx) => {
     const candidate = await resolveLoginCandidate(tx, input.identifier);
 
-    // Unknown identifier: remember that it was asked (volume is a signal), open nothing, and answer
-    // exactly as for a known one.
-    if (!candidate) {
-      const [row] = await tx
-        .insert(accountRecoveryRequests)
-        .values({
-          userId: null,
-          claimedIdentifierHash,
-          method: input.method,
-          status: 'REJECTED',
-          decisionReason: 'NO_SUCH_ACCOUNT',
-          requiresHuman: false,
-          evidenceRefs: evidence,
-          requestedIp: input.ip ?? null,
-          requestedDeviceId: input.deviceId ?? null,
-          expiresAt: sql`now()`,
-        })
-        .returning({ id: accountRecoveryRequests.id });
-      return { requestId: row?.id ?? '', status: 'RECEIVED' };
-    }
+    // Unknown identifier: nothing is stored. A row per call would be an unbounded write an anonymous
+    // caller controls; the rate limiter is where the volume of guesses is visible.
+    if (!candidate) return;
 
     // One open request per account. A second would be a second ticket for the same incident, and a
     // way to flood the review queue by retrying.
@@ -116,7 +120,7 @@ export async function requestRecovery(deps: RecoveryDeps, input: RecoveryIntake)
         )
         .limit(1)
     )[0];
-    if (open) return { requestId: open.id, status: 'RECEIVED' };
+    if (open) return;
 
     const riskScore = recoveryRiskScore({
       method: input.method,
@@ -169,7 +173,6 @@ export async function requestRecovery(deps: RecoveryDeps, input: RecoveryIntake)
       deviceId: input.deviceId ?? null,
       metadata: { recoveryRequestId: requestId, method: input.method, riskScore, requiresHuman },
     });
-    return { requestId, status: 'RECEIVED' };
   });
 }
 
@@ -331,6 +334,7 @@ export async function decideRecovery(
           to: 'ACTIVE',
           by: 'STAFF',
           reason: `account recovery approved: ${input.reason}`,
+          reasonCode: 'RECOVERY_APPROVED',
           actor: {
             type: 'STAFF',
             userId: input.actor.userId,
@@ -390,14 +394,28 @@ export async function decideRecovery(
 }
 
 /** Marks requests nobody decided in time. Daily; bounded so a backlog is not one statement. */
-export async function expireRecoveryRequests(db: Db, now: Date = new Date()): Promise<number> {
+export async function expireRecoveryRequests(db: Db, now: Date = new Date(), limit = 500): Promise<number> {
+  const due = await db
+    .select({ id: accountRecoveryRequests.id })
+    .from(accountRecoveryRequests)
+    .where(
+      and(
+        inArray(accountRecoveryRequests.status, [...OPEN_STATUSES]),
+        lt(accountRecoveryRequests.expiresAt, now),
+      ),
+    )
+    .limit(limit);
+  if (due.length === 0) return 0;
   const rows = await db
     .update(accountRecoveryRequests)
     .set({ status: 'EXPIRED' })
     .where(
       and(
+        inArray(
+          accountRecoveryRequests.id,
+          due.map((row) => row.id),
+        ),
         inArray(accountRecoveryRequests.status, [...OPEN_STATUSES]),
-        lt(accountRecoveryRequests.expiresAt, now),
       ),
     )
     .returning({ id: accountRecoveryRequests.id });

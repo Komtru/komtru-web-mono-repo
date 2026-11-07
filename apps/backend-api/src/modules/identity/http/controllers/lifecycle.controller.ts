@@ -31,7 +31,7 @@ const SIGN_IN = 'Sign in to manage your account';
 const closeInput = (req: Request, actor: Actor, body: z.output<typeof closeAccountBody>): CloseInput => ({
   userId: requireUserId(actor, SIGN_IN),
   sessionId: actor.principal?.sessionId,
-  reason: body.reason,
+  reasonCode: body.reason,
   password: body.password,
   stepUpToken: body.stepUpToken,
   ip: callerIp(req),
@@ -97,7 +97,6 @@ export function postRecoveryRequest(
   return requestRecovery(deps, {
     identifier: body.identifier,
     method: body.method,
-    ...(body.evidenceRefs ? { evidenceRefs: body.evidenceRefs } : {}),
     ip: callerIp(req),
   });
 }

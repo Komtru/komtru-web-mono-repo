@@ -12,7 +12,7 @@ import type { Logger } from '../platform/logger.js';
 import type { KomtruModule, SeedableModule } from '../platform/module.js';
 import { casesModule } from './cases/index.js';
 import { configModule } from './config/index.js';
-import { filesModule, filesSeed, tombstoneByUploader } from './files/index.js';
+import { filesModule, filesSeed, requestTombstone, tombstoneByUploader } from './files/index.js';
 import { geoModule, getCitiesByIds } from './geo/index.js';
 import { createIdentityAuth, identityModule, identitySeed, resolvePrincipal } from './identity/index.js';
 import { ledgerModule } from './ledger/index.js';
@@ -64,9 +64,23 @@ export const createModules: ModuleBuilder = (deps) => {
     ...deps,
     cities: getCitiesByIds,
     hasActiveTrades,
-    // M1 §15 step 6: the avatar (and every other upload) is tombstoned through files, after commit.
-    tombstoneUserFiles: ({ userId, reason }) =>
-      tombstoneByUploader(deps.db, { uploaderUserId: userId, reason }),
+    // M1 §15 step 6: the avatar first (named, so it is tombstoned even if the record names another
+    // uploader), then every other upload, through files, after the commit.
+    // TODO(T-104): a failure here is only logged by identity. The committed
+    // `identity.account.anonymised` event is the retry hook; compliance's DSR fulfilment should
+    // re-drive this for any user whose files are still ACTIVE.
+    tombstoneUserFiles: async ({ userId, avatarFileId, reason }) => {
+      const done: string[] = [];
+      if (avatarFileId) {
+        // A soft reference: the record may be gone already, which is not a failure of erasure.
+        const tombstoned = await requestTombstone(deps.db, { fileId: avatarFileId, reason }).then(
+          () => true,
+          () => false,
+        );
+        if (tombstoned) done.push(avatarFileId);
+      }
+      return [...done, ...(await tombstoneByUploader(deps.db, { uploaderUserId: userId, reason }))];
+    },
   });
   // Built before the array so trust can be handed its gateway, and placed LAST in the array so the
   // start order is unchanged: it produces nothing of its own, it only pushes what the others

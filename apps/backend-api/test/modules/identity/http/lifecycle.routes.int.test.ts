@@ -97,7 +97,7 @@ describe.runIf(infraEnabled)('the account lifecycle routes (T-039)', () => {
         status: 'RESTRICTED',
         noticeKey: 'ACCOUNT_RESTRICTED',
         abilities: { buy: false },
-        canClose: false,
+        canClose: true,
       });
       expect(JSON.stringify(response.body)).not.toContain('fraud ring');
     });
@@ -115,7 +115,7 @@ describe.runIf(infraEnabled)('the account lifecycle routes (T-039)', () => {
   describe('POST /me/close', () => {
     it('closes the account behind the password and ends the session', async () => {
       const me = await signedIn();
-      const response = await as(me.token).post('/me/close', { reason: 'leaving', password: PASSWORD });
+      const response = await as(me.token).post('/me/close', { reason: 'PRIVACY', password: PASSWORD });
       expect(response.status).toBe(200);
       expect(response.body).toMatchObject({ status: 'CLOSED' });
       expect(await statusOf(me.userId)).toBe('CLOSED');
@@ -123,13 +123,13 @@ describe.runIf(infraEnabled)('the account lifecycle routes (T-039)', () => {
       // And the same credentials no longer sign in.
       expect(
         (await request(app).post('/v1/auth/login').send({ identifier: me.email, password: PASSWORD })).status,
-      ).toBe(401);
+      ).toBe(403);
     });
 
     it('is refused while a trade is active, with the reason a client can branch on (CA2)', async () => {
       const me = await signedIn();
       tradeOpen = true;
-      const response = await as(me.token).post('/me/close', { reason: 'leaving', password: PASSWORD });
+      const response = await as(me.token).post('/me/close', { reason: 'PRIVACY', password: PASSWORD });
       expect(response.status).toBe(409);
       expect(bodyOf<Problem & { reason?: string }>(response).reason).toBe('ACTIVE_TRADES');
       expect(await statusOf(me.userId)).toBe('ACTIVE');
@@ -137,8 +137,11 @@ describe.runIf(infraEnabled)('the account lifecycle routes (T-039)', () => {
 
     it('rejects a wrong password and a missing reason', async () => {
       const me = await signedIn();
-      expect((await as(me.token).post('/me/close', { reason: 'x', password: 'nope' })).status).toBe(401);
-      expect((await as(me.token).post('/me/close', { password: PASSWORD })).status).toBe(422);
+      expect((await as(me.token).post('/me/close', { reason: 'OTHER', password: 'nope' })).status).toBe(401);
+      // Free text is not accepted: only a reason code.
+      expect(
+        (await as(me.token).post('/me/close', { reason: 'my own words', password: PASSWORD })).status,
+      ).toBe(422);
       expect(await statusOf(me.userId)).toBe('ACTIVE');
     });
   });
@@ -162,7 +165,7 @@ describe.runIf(infraEnabled)('the account lifecycle routes (T-039)', () => {
     it('closes the account and hands the erasure to compliance', async () => {
       const me = await signedIn();
       const response = await as(me.token).post('/me/erasure-request', {
-        reason: 'erase',
+        reason: 'PRIVACY',
         password: PASSWORD,
       });
       expect(response.status).toBe(202);
@@ -200,16 +203,26 @@ describe.runIf(infraEnabled)('the account lifecycle routes (T-039)', () => {
         .post('/v1/auth/recovery-requests')
         .send({ identifier: locked.email, method: 'MFA_LOCKOUT' });
 
+      const realRequestId = (
+        await t
+          .owner()
+          .query<{ id: string }>(`SELECT id FROM identity.account_recovery_requests WHERE user_id = $1`, [
+            locked.userId,
+          ])
+      ).rows[0]?.id;
+      // The receipt the caller got is opaque: it is not the request's id.
+      expect(receipt.body.receiptId).not.toBe(realRequestId);
+
       const member = await seedMember(t, app, { roles: ['OPERATIONS_ADMIN'], mfa: true });
       const token = await staffSession(app, member);
 
       const queue = await as(token).get('/admin/recovery-requests?status=PENDING&reason=review');
       expect(queue.status).toBe(200);
       expect(bodyOf<Page<{ id: string; userId: string }>>(queue).items.map((i) => i.id)).toContain(
-        receipt.body.requestId,
+        realRequestId,
       );
 
-      const decision = await as(token).post(`/admin/recovery-requests/${receipt.body.requestId}/decision`, {
+      const decision = await as(token).post(`/admin/recovery-requests/${realRequestId}/decision`, {
         decision: 'APPROVE',
         reason: 'verified on a call',
       });

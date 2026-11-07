@@ -35,7 +35,12 @@ import {
 } from '../infrastructure/postgres/schema/enums.js';
 import { staffPermissionFor } from '../domain/lifecycle.js';
 import { AUDIT_ACTIONS } from './audit.service.js';
-import { applyStatusTransition, dropEpochCache, type LifecyclePorts } from './lifecycle.service.js';
+import {
+  applyStatusTransition,
+  dropEpochCache,
+  type LifecyclePorts,
+  type StatusReasonCode,
+} from './lifecycle.service.js';
 import { auditStaff, holdsStaffRole, requireAuthorised, type StaffActor } from './rbac.service.js';
 import { bumpSessionsEpoch, revokeAllSessions } from './session.service.js';
 
@@ -317,6 +322,13 @@ export async function revealPii(
 
 export const STAFF_SETTABLE_STATUSES: readonly string[] = ['RESTRICTED', 'SUSPENDED', 'ACTIVE', 'CLOSED'];
 
+const STAFF_REASON_CODE: Partial<Record<UserStatusName, StatusReasonCode>> = {
+  RESTRICTED: 'STAFF_RESTRICT',
+  SUSPENDED: 'STAFF_SUSPEND',
+  ACTIVE: 'STAFF_REINSTATE',
+  CLOSED: 'STAFF_CLOSE',
+};
+
 export interface StatusChangeDeps {
   db: Db;
   epochs?: { invalidate(userId: string): Promise<void> };
@@ -363,6 +375,7 @@ export async function changeUserStatus(
       to: input.to,
       by: 'STAFF',
       reason: input.reason,
+      reasonCode: STAFF_REASON_CODE[input.to] ?? 'STAFF_REINSTATE',
       actor: {
         type: 'STAFF',
         userId: input.actor.userId,

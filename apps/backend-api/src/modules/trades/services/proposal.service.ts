@@ -21,6 +21,7 @@ import {
   lookupKeyForEmail,
   lookupKeyForPhone,
   lookupKeyForUsername,
+  lockUserForTrade,
   lookupParty,
   partyInvitations,
   users,
@@ -269,6 +270,8 @@ export async function createProposal(deps: TradeDeps, input: CreateProposalInput
   const graceHours = await deps.graceHours();
 
   return deps.db.transaction(async (tx) => {
+    // First: see lockUserForTrade. A closing account must not gain a trade behind the closure's back.
+    await lockUserForTrade(tx, input.userId);
     const address = await snapshotAddress(deps, tx, input.userId, input.addressId, input.role);
 
     const trade = await withTradeCode(tx, async (tradeCode) => {
@@ -520,6 +523,7 @@ async function sendInTransaction(
       await assertSellerProof(deps, tx, trade.id, standard);
     }
 
+    if (resolved.kind === 'USER') await lockUserForTrade(tx, resolved.userId);
     const counterpartySet =
       resolved.kind === 'USER'
         ? {
@@ -897,6 +901,7 @@ export async function claimTradeInvitation(
     }
     // Both the usable-address rule and the 422 live in snapshotAddress; claiming only needs *a* usable one.
     await requireAnyUsableAddress(deps, tx, input.userId, counterpartyRole);
+    await lockUserForTrade(tx, input.userId);
 
     await applyTransition(tx, {
       tradeId: trade.id,
