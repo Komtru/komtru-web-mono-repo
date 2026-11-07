@@ -1,6 +1,9 @@
 -- T-061: a terms version carries the proposer's own address; the other side is filled by whoever
--- accepts. The shape checks therefore allow NULL. NOT VALID because the shape of every existing row
--- is unchanged (a NULL could not exist before) so there is nothing to re-scan under the lock.
+-- accepts. The shape checks therefore allow NULL, and a new check keeps at least one side present.
+-- Each check goes in NOT VALID and is validated straight away: validation takes only SHARE UPDATE
+-- EXCLUSIVE (reads and writes carry on), and the add-then-validate order keeps the ACCESS EXCLUSIVE
+-- window to the catalog change. Every existing row already satisfies all three (both columns were
+-- NOT NULL and shape-checked before), so validation passes.
 CREATE TABLE "trade"."trade_proof_media" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"trade_id" uuid NOT NULL,
@@ -25,4 +28,8 @@ ALTER TABLE "trade"."trade_terms_versions" ADD CONSTRAINT "trade_terms_ships_fro
       AND length(coalesce("trade"."trade_terms_versions"."ships_from_address" ->> 'street', '')) > 0
       AND length(coalesce("trade"."trade_terms_versions"."ships_from_address" ->> 'recipient', '')) > 0
       AND length(coalesce("trade"."trade_terms_versions"."ships_from_address" ->> 'state_id', '')) > 0
-      AND length(coalesce("trade"."trade_terms_versions"."ships_from_address" ->> 'city_id', '')) > 0)) NOT VALID;
+      AND length(coalesce("trade"."trade_terms_versions"."ships_from_address" ->> 'city_id', '')) > 0)) NOT VALID;--> statement-breakpoint
+ALTER TABLE "trade"."trade_terms_versions" ADD CONSTRAINT "trade_terms_has_an_address" CHECK ("trade"."trade_terms_versions"."delivery_address" IS NOT NULL OR "trade"."trade_terms_versions"."ships_from_address" IS NOT NULL) NOT VALID;--> statement-breakpoint
+ALTER TABLE "trade"."trade_terms_versions" VALIDATE CONSTRAINT "trade_terms_delivery_address_shape";--> statement-breakpoint
+ALTER TABLE "trade"."trade_terms_versions" VALIDATE CONSTRAINT "trade_terms_ships_from_address_shape";--> statement-breakpoint
+ALTER TABLE "trade"."trade_terms_versions" VALIDATE CONSTRAINT "trade_terms_has_an_address";

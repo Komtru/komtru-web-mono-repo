@@ -71,6 +71,11 @@ export const tradeTermsVersions = trade.table(
     ),
     check('trade_terms_delivery_address_shape', addressShape(table.deliveryAddress)),
     check('trade_terms_ships_from_address_shape', addressShape(table.shipsFromAddress)),
+    // A proposal carries the proposer's own side; the other is filled later, but never both missing.
+    check(
+      'trade_terms_has_an_address',
+      sql`${table.deliveryAddress} IS NOT NULL OR ${table.shipsFromAddress} IS NOT NULL`,
+    ),
     // The turn-flipping guard: two counter-proposals racing cannot both become version N, so the
     // loser retries against the version it has actually seen rather than silently overwriting.
     uniqueIndex('trade_terms_versions_trade_version').on(table.tradeId, table.versionNumber),
