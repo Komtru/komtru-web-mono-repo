@@ -240,7 +240,12 @@ export interface CloseInput {
  * The trade check runs before the password is spent on, so "you have open trades" is answered
  * without burning a lockout attempt.
  */
-export async function closeOwnAccount(deps: CloseDeps, input: CloseInput): Promise<TransitionResult> {
+export async function closeOwnAccount(
+  deps: CloseDeps,
+  input: CloseInput,
+  /** Runs in the closing transaction, so a hand-off event commits with the closure or not at all. */
+  onClosed?: (tx: Tx, closed: TransitionResult) => Promise<void>,
+): Promise<TransitionResult> {
   const ports = deps.ports ?? {};
   const result = await deps.db.transaction(async (tx) => {
     // The trade refusal first: it is the more useful answer, and it costs the caller no attempt.
@@ -265,23 +270,22 @@ export async function closeOwnAccount(deps: CloseDeps, input: CloseInput): Promi
       await deps.requireStepUp(tx, input.userId, input.stepUpToken);
     }
 
-    return {
-      refused: false as const,
-      transition: await applyStatusTransition(tx, ports, {
+    const transition = await applyStatusTransition(tx, ports, {
+      userId: input.userId,
+      to: 'CLOSED',
+      by: 'SELF',
+      reason: input.reason,
+      actor: {
+        type: 'USER',
         userId: input.userId,
-        to: 'CLOSED',
-        by: 'SELF',
-        reason: input.reason,
-        actor: {
-          type: 'USER',
-          userId: input.userId,
-          sessionId: input.sessionId,
-          ip: input.ip,
-          userAgent: input.userAgent,
-        },
-        auditAction: AUDIT_ACTIONS.ACCOUNT_CLOSED,
-      }),
-    };
+        sessionId: input.sessionId,
+        ip: input.ip,
+        userAgent: input.userAgent,
+      },
+      auditAction: AUDIT_ACTIONS.ACCOUNT_CLOSED,
+    });
+    await onClosed?.(tx, transition);
+    return { refused: false as const, transition };
   });
   if (result.refused) throw new ApiError(401, 'INVALID_CREDENTIALS', 'That password is not correct');
   await dropEpochCache(deps.epochs, input.userId);
