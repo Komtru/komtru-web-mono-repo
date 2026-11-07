@@ -242,3 +242,10 @@ cost and to find work to resume.
 - Next: T-061 review, then fix and merge, in a fresh window. The reviewer should check that
   `trades.payment_deadline_hours` (T-048) is not yet applied at acceptance. Then T-072 funding
   (opus), T-107 and T-039.
+
+## 2026-11-07 03:13 WAT — skipped: budget (5h 87%, week 59%)
+
+- Capacity 0: `est` 14, and 87+14 > 90. The 5-hour window resets at 03:20 WAT.
+- In-flight, not a cheap tail, so not resumed: `t-061-proposal-flow` (review, fix and merge
+  left) and `t-029-infra-isolation`.
+- Next: T-061 review, fix and merge, then T-072 funding (opus), T-107 and T-039.
