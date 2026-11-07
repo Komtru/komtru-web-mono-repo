@@ -17,7 +17,7 @@ describe.runIf(infraEnabled)('account recovery (T-039)', () => {
   const t = useTestDatabase();
   const deps = (): RecoveryDeps => ({
     db: t.db(),
-    hasher: createHmacHasher('pepper-for-tests-0123456789abcdef'),
+    identifierHasher: createHmacHasher('pepper-for-tests-0123456789abcdef'),
   });
 
   const staff = async (roles = ['OPERATIONS_ADMIN']): Promise<StaffActor> => ({

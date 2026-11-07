@@ -42,7 +42,7 @@ const OPEN_STATUSES = ['PENDING', 'CHALLENGED'] as const;
 export interface RecoveryDeps {
   db: Db;
   /** The module's pepper-bound hasher: the claimed identifier is stored as a digest, never as text. */
-  hasher: HmacHasher;
+  identifierHasher: HmacHasher;
   ports?: LifecyclePorts;
   epochs?: EpochInvalidator;
   /** Defaults to the shipped threshold. A test, or M13 later, may pass another. */
@@ -70,7 +70,10 @@ const IDENTIFIER_DOMAIN = 'recovery-identifier';
  * `POST /auth/recovery-requests`. Public; the route rate-limits by identifier and IP.
  */
 export async function requestRecovery(deps: RecoveryDeps, input: RecoveryIntake): Promise<RecoveryReceipt> {
-  const claimedIdentifierHash = deps.hasher.hmac(IDENTIFIER_DOMAIN, input.identifier.trim().toLowerCase());
+  const claimedIdentifierHash = deps.identifierHasher.hmac(
+    IDENTIFIER_DOMAIN,
+    input.identifier.trim().toLowerCase(),
+  );
   const evidence = [...(input.evidenceRefs ?? [])];
 
   return deps.db.transaction(async (tx): Promise<RecoveryReceipt> => {

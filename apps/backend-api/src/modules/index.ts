@@ -4,6 +4,7 @@
 // It is a function rather than a constant array because a module may need the process's own
 // connections and configuration before it exists at all: identity has to build a token signer and an
 // epoch cache before it can answer "who is calling".
+import { and, eq, notInArray, or } from 'drizzle-orm';
 import type { Redis } from 'ioredis';
 import type { AppConfig } from '../config/env.js';
 import type { Db } from '../db/index.js';
@@ -11,13 +12,13 @@ import type { Logger } from '../platform/logger.js';
 import type { KomtruModule, SeedableModule } from '../platform/module.js';
 import { casesModule } from './cases/index.js';
 import { configModule } from './config/index.js';
-import { filesModule, filesSeed } from './files/index.js';
+import { filesModule, filesSeed, tombstoneByUploader } from './files/index.js';
 import { geoModule, getCitiesByIds } from './geo/index.js';
 import { createIdentityAuth, identityModule, identitySeed, resolvePrincipal } from './identity/index.js';
 import { ledgerModule } from './ledger/index.js';
 import { notifyModule } from './notify/index.js';
 import { createSocketModule } from './socket/index.js';
-import { createTradesModule } from './trades/index.js';
+import { TERMINAL_STATUSES, createTradesModule, trades } from './trades/index.js';
 import { createTrustModule } from './trust/index.js';
 
 export interface ProcessDeps {
@@ -35,8 +36,38 @@ export type ModuleBuilder = (deps: ProcessDeps) => KomtruModule[];
 // identity, because every one of its routes is scope-checked against the actor identity resolves.
 // trust after files, because a liveness selfie is a file record it resolves through M20's barrel.
 // notify after those: it only subscribes to what the others publish.
+/**
+ * CA1/CA2's question, answered from trades because identity cannot ask it (trades imports identity).
+ * Any trade the user is a party to, or started, that has not reached a terminal state: the strictest
+ * reading, so a closure never strands a counterparty or money in escrow (plan, owner decision 3).
+ */
+const hasActiveTrades = async (db: Pick<Db, 'select'>, userId: string): Promise<boolean> => {
+  const rows = await db
+    .select({ id: trades.id })
+    .from(trades)
+    .where(
+      and(
+        or(
+          eq(trades.buyerUserId, userId),
+          eq(trades.sellerUserId, userId),
+          eq(trades.initiatorUserId, userId),
+        ),
+        notInArray(trades.status, [...TERMINAL_STATUSES]),
+      ),
+    )
+    .limit(1);
+  return rows.length > 0;
+};
+
 export const createModules: ModuleBuilder = (deps) => {
-  const auth = createIdentityAuth({ ...deps, cities: getCitiesByIds });
+  const auth = createIdentityAuth({
+    ...deps,
+    cities: getCitiesByIds,
+    hasActiveTrades,
+    // M1 §15 step 6: the avatar (and every other upload) is tombstoned through files, after commit.
+    tombstoneUserFiles: ({ userId, reason }) =>
+      tombstoneByUploader(deps.db, { uploaderUserId: userId, reason }),
+  });
   // Built before the array so trust can be handed its gateway, and placed LAST in the array so the
   // start order is unchanged: it produces nothing of its own, it only pushes what the others
   // produce. It takes identity's own resolver so a socket's handshake and its re-validation sweep
