@@ -70,6 +70,25 @@ cost and to find work to resume.
     window, or past it. The clock keeps running while a case awaits evidence.
   - Any manager may reassign a case to themselves; a reason is required. Only the case's owner may decide it.
   - The policy citation is free text until a policy registry exists.
+- **T-039 account-lifecycle defaults** (merged 2026-11-07; all 18 are in
+  `docs/superpowers/plans/2026-11-07-t-039-account-lifecycle.md`). The ones most worth a look:
+  - Suspended, locked and closed users have no session, so the AS1/AS2 notice comes back in the login 403
+    (notice key, support reference, abilities; never the staff reason). It has no `openTrades` count.
+    Does AS2 need it?
+  - Any non-terminal trade blocks closing. Self-close is allowed from ACTIVE, PENDING_VERIFICATION and
+    RESTRICTED. Is a staff-assisted close or erasure needed for SUSPENDED and LOCKED accounts?
+  - Every recovery request needs a human reviewer (threshold 0), and the reviewer reuses `user.reinstate`.
+    Approval only unlocks and signs out. The public route takes no evidence uploads.
+  - Erasure closes the account at once. Anonymisation isn't scheduled; T-104 must call it.
+  - Lock is system-only, and anonymising a staff member is refused.
+- **T-141 work-queue defaults** (merged 2026-11-07; listed in `docs/superpowers/plans/2026-11-07-t-141-work-queue.md`):
+  - the orient screens are tabs under `/queue`, not top-level routes;
+  - the case-type-to-area mapping, and the P1 "flagged" and "cleared today" definitions;
+  - Trade 360 finds a trade's cases by `subjectType` TRADE with the trade reference as `subjectId`;
+  - staff can only reassign a case to themselves until a roster read exists;
+  - queues refresh by polling every 60 s.
+  - Backend gaps it exposed: `GET /admin/me`, a staff roster, queue aggregates, a staff trade read model and an
+    alert inbox. No module calls `registerCase` yet, so the queues stay empty against a real backend.
 - Q1 (hosting and the GitHub remote) still blocks T-005 and the T-183 push.
 - Q3 (wallet) still blocks T-131.
 - ~~Disputes in the MVP?~~ Answered 2026-11-06: yes. T-120, T-196, T-199, T-200 and the new T-221 are in the MVP.
@@ -314,3 +333,27 @@ cost and to find work to resume.
 - Note for T-072: T-107 took migrations 0040 and 0041. The T-072 merge must renumber its migration to 0042.
 - Next: T-039 (account lifecycle). T-072 once the fee question is answered; T-029 once the compose change is
   approved.
+
+## 2026-11-07 13:03 WAT — run summary
+
+- Usage at start: 5h 1%, week 69%. At end: 5h 45%, week 75%.
+- Capacity: 2 (`est` 19: 1 + 2×19 ≤ 90; week 69 + 2 ≤ 85). Tickets: T-141 (merged), T-039 (merged).
+  - T-141 (Sonnet, operations-app and api-client, no migration): the work queue, universal case page,
+    Trade 360 cases view and the mobile proposal check-in. Sonnet review: 2 must-fix items (a footnote
+    promised "both parties are told", and every failure showed the same retry text) and 8 should-fix items,
+    all fixed. 151 operations-app and 159 api-client tests are green on `main`. `main` first failed because
+    its `node_modules` lacked the operations-app dependencies; `pnpm install` fixed that.
+  - T-039 (Sonnet, identity, no migration): the status machine, close guard, recovery with human review,
+    export and erasure events, and §15 anonymisation. Sonnet review: 4 must-fix items (close raced trade
+    creation, so trade creation now takes `FOR SHARE` on the party rows; the suspension notice couldn't be
+    reached; anonymisation left PII behind; the recovery receipt revealed whether an account exists) and 9
+    should-fix items, all fixed. Two full infra-on runs on `main` each failed one different
+    test (`verification.int`, then `processes.int`). Both files pass on their own and T-039 touched
+    neither, so this is the known T-029 load flake. 4547 of 4548 tests passed.
+- Subagents could not change directory into the manager's `t-0xx` worktrees and committed on their own
+  `worktree-agent-*` branches instead. The manager fast-forwarded the ticket branches from those branches.
+- Ticket costs, together: 5h-cost=44 week-cost=6, so about 22 and 3 each.
+- Not resumed: `t-072-funding` (waiting on the fee question) and `t-029-infra-isolation` (waiting on the
+  docker-compose go-ahead).
+- Next: T-052 (KYC review queue; trust module, now that T-107 is in). T-072 once the fee question is
+  answered; T-029 once the compose change is approved.
