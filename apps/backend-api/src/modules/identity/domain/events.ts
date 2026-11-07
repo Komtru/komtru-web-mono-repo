@@ -498,8 +498,8 @@ export const identityRecoveryRequestedEvent = defineEvent(
   1,
   z.object({
     recoveryRequestId: z.uuid(),
-    /** Null when the claimed identifier did not resolve to an account: the requester is told nothing either way. */
-    userId: z.uuid().nullable(),
+    /** Only requests that resolved to an account are published: an unknown identifier opens no ticket. */
+    userId: z.uuid(),
     method: z.enum(RECOVERY_METHODS),
     riskScore: z.number().int().min(0).max(100),
     /** True above the review threshold: the ticket M10 opens is the human in the loop. */
