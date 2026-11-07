@@ -1,6 +1,7 @@
 import type { CaseView } from '@komtru/api-client';
 import { describe, expect, it } from 'vitest';
 import {
+  agoLabel,
   areaOf,
   clockLabel,
   clockTone,
@@ -69,5 +70,15 @@ describe('labels', () => {
     expect(ownerLabel(null, 'u1')).toBe('Unassigned');
     expect(ownerLabel('u1', 'u1')).toBe('You');
     expect(ownerLabel('0190b0a0-0000-7000-8000-000000000042', 'u1')).toBe('Staff 000000000042');
+  });
+});
+
+describe('agoLabel', () => {
+  const now = new Date('2026-11-07T12:00:00.000Z');
+  it("says how long ago in the clock's own units", () => {
+    expect(agoLabel('2026-11-07T11:52:00.000Z', now)).toBe('8m');
+    expect(agoLabel('2026-11-07T11:00:00.000Z', now)).toBe('1h');
+    expect(agoLabel('2026-11-05T09:00:00.000Z', now)).toBe('2d');
+    expect(agoLabel('2026-11-07T12:00:30.000Z', now)).toBe('0m');
   });
 });

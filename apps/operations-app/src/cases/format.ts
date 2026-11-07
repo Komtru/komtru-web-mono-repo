@@ -74,6 +74,14 @@ export function clockTone(sla: CaseView['sla']): ChipTone | undefined {
   return undefined;
 }
 
+/** "8m", "1h", "2d": how long ago, rounded down to the largest unit. */
+export function agoLabel(iso: string, now: Date = new Date()): string {
+  const minutes = Math.max(0, Math.floor((now.getTime() - new Date(iso).getTime()) / 60_000));
+  if (minutes >= 1440) return `${Math.floor(minutes / 1440)}d`;
+  if (minutes >= 60) return `${Math.floor(minutes / 60)}h`;
+  return `${minutes}m`;
+}
+
 /** `SELLER_ACCEPTED` and `sellerAccepted` both read "Seller accepted". */
 export function humanise(code: string): string {
   const words = code
