@@ -4,6 +4,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { CaseDetail } from '../src/cases/CaseDetail';
 import { expectNoAxeViolations } from './axe';
 import {
+  callsTo,
+  type CallFn,
   MANAGE,
   READ,
   ME,
@@ -17,7 +19,7 @@ import {
 
 const router = vi.hoisted(() => ({ replace: vi.fn(), refresh: vi.fn() }));
 vi.mock('next/navigation', () => ({ useRouter: () => router }));
-const api = vi.hoisted(() => ({ call: vi.fn() }));
+const api = vi.hoisted(() => ({ call: vi.fn<CallFn>() }));
 vi.mock('@komtru/app-kit/react', () => ({ useApiClient: () => api }));
 
 const CASE_ID = id(1);
@@ -91,7 +93,7 @@ const serve = (permissions: string[], caseDetail = detail(), extra: Record<strin
     ...extra,
   });
 
-const posts = (path: string) => api.call.mock.calls.filter(([endpoint]) => endpoint.path === path);
+const posts = (path: string) => callsTo(api.call, path);
 
 const fillDecision = (over: Partial<Record<'Outcome' | 'Reason' | 'Policy' | 'Clause', string>> = {}) => {
   const values = {
@@ -149,18 +151,16 @@ describe('the universal case page', () => {
     renderWithQuery(<CaseDetail caseId={CASE_ID} />);
     await screen.findByRole('region', { name: 'AI-suggested — not a decision' });
     for (const label of ['Outcome', 'Reason', 'Policy', 'Clause']) {
-      expect((screen.getByLabelText(label) as HTMLInputElement).value).toBe('');
+      expect(screen.getByLabelText<HTMLInputElement>(label).value).toBe('');
     }
-    expect((screen.getByRole('button', { name: 'Record decision' }) as HTMLButtonElement).disabled).toBe(
-      true,
-    );
+    expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Record decision' }).disabled).toBe(true);
   });
 
   it('keeps Record decision disabled until outcome, reason, policy and clause are all given', async () => {
     serve(MANAGE);
     renderWithQuery(<CaseDetail caseId={CASE_ID} />);
     await screen.findByRole('group', { name: 'Decision actions' });
-    const button = screen.getByRole('button', { name: 'Record decision' }) as HTMLButtonElement;
+    const button = screen.getByRole<HTMLButtonElement>('button', { name: 'Record decision' });
     for (const missing of ['Outcome', 'Reason', 'Policy', 'Clause'] as const) {
       fillDecision({ [missing]: '' });
       expect(button.disabled).toBe(true);
@@ -217,7 +217,7 @@ describe('the universal case page', () => {
     await screen.findByText(/Only its owner can decide/);
     expect(screen.queryByRole('button', { name: 'Record decision' })).toBeNull();
 
-    const button = screen.getByRole('button', { name: 'Reassign to me' }) as HTMLButtonElement;
+    const button = screen.getByRole<HTMLButtonElement>('button', { name: 'Reassign to me' });
     expect(button.disabled).toBe(true);
     fireEvent.change(screen.getByLabelText('Reason for reassigning'), {
       target: { value: 'Covering a shift' },
@@ -267,7 +267,7 @@ describe('the universal case page', () => {
     serve(MANAGE, detail(), { 'POST /cases/:id/escalate': caseRow(1, { state: 'ESCALATED' }) });
     renderWithQuery(<CaseDetail caseId={CASE_ID} />);
     await screen.findByRole('group', { name: 'Decision actions' });
-    const button = screen.getByRole('button', { name: 'Escalate' }) as HTMLButtonElement;
+    const button = screen.getByRole<HTMLButtonElement>('button', { name: 'Escalate' });
     expect(button.disabled).toBe(true);
     fireEvent.change(screen.getByLabelText('Reason for escalating'), { target: { value: 'Needs Tier 2' } });
     fireEvent.click(button);

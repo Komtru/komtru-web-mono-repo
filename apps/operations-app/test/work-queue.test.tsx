@@ -8,6 +8,8 @@ import { TeamQueue } from '../src/cases/TeamQueue';
 import { Today } from '../src/cases/Today';
 import { expectNoAxeViolations } from './axe';
 import {
+  callsTo,
+  type CallFn,
   MANAGE,
   READ,
   SHELL_RULES,
@@ -22,7 +24,7 @@ import {
 
 const router = vi.hoisted(() => ({ replace: vi.fn(), refresh: vi.fn() }));
 vi.mock('next/navigation', () => ({ useRouter: () => router }));
-const api = vi.hoisted(() => ({ call: vi.fn() }));
+const api = vi.hoisted(() => ({ call: vi.fn<CallFn>() }));
 vi.mock('@komtru/app-kit/react', () => ({ useApiClient: () => api }));
 
 const counts = { mine: 6, mineUrgent: 2, unassigned: 11, escalated: 3, slaAtRisk: 4 };
@@ -113,8 +115,8 @@ describe('My work (OP-02)', () => {
     answerWith(api.call, { 'GET /admin/me': staff(READ), 'GET /cases/queue': page(rows) });
     renderWithQuery(<MyWork />);
     await screen.findByRole('table', { name: 'My work' });
-    const queueCall = api.call.mock.calls.find(([endpoint]) => endpoint.path === '/cases/queue');
-    expect(queueCall?.[1].query.view).toBe('mine');
+    const queueCall = callsTo(api.call, '/cases/queue')[0];
+    expect(queueCall?.[1].query?.view).toBe('mine');
   });
 
   it('offers a retry when the list cannot load', async () => {
@@ -155,7 +157,7 @@ describe('Team queue (OP-03)', () => {
     const table = await screen.findByRole('table', { name: 'Unassigned' });
     fireEvent.click(within(table).getAllByRole('button', { name: /Take/ })[0]!);
     await waitFor(() => expect(screen.queryByText('First trade, new number')).toBeNull());
-    const take = api.call.mock.calls.find(([endpoint]) => endpoint.path === '/cases/:id/take');
+    const take = callsTo(api.call, '/cases/:id/take')[0];
     expect(take?.[1]).toEqual({ params: { id: id(10) } });
   });
 
@@ -233,8 +235,8 @@ describe('Cases (OP-19)', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Risk' }));
     await waitFor(() => {
-      const last = api.call.mock.calls.filter(([endpoint]) => endpoint.path === '/cases').at(-1);
-      expect(last?.[1].query.type).toBe('FRAUD');
+      const last = callsTo(api.call, '/cases').at(-1);
+      expect(last?.[1].query?.type).toBe('FRAUD');
     });
 
     fireEvent.change(screen.getByRole('searchbox', { name: 'Search by case number' }), {
@@ -242,8 +244,8 @@ describe('Cases (OP-19)', () => {
     });
     await waitFor(
       () => {
-        const last = api.call.mock.calls.filter(([endpoint]) => endpoint.path === '/cases').at(-1);
-        expect(last?.[1].query.q).toBe('C-000031');
+        const last = callsTo(api.call, '/cases').at(-1);
+        expect(last?.[1].query?.q).toBe('C-000031');
       },
       { timeout: 2000 },
     );

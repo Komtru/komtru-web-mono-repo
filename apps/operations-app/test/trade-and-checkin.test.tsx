@@ -4,11 +4,22 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ProposalCheckIn } from '../src/cases/ProposalCheckIn';
 import { TradeView } from '../src/cases/TradeView';
 import { expectNoAxeViolations } from './axe';
-import { READ, SHELL_RULES, answerWith, caseRow, id, page, renderWithQuery, staff } from './support/cases';
+import {
+  callsTo,
+  type CallFn,
+  READ,
+  SHELL_RULES,
+  answerWith,
+  caseRow,
+  id,
+  page,
+  renderWithQuery,
+  staff,
+} from './support/cases';
 
 const router = vi.hoisted(() => ({ replace: vi.fn(), refresh: vi.fn() }));
 vi.mock('next/navigation', () => ({ useRouter: () => router }));
-const api = vi.hoisted(() => ({ call: vi.fn() }));
+const api = vi.hoisted(() => ({ call: vi.fn<CallFn>() }));
 vi.mock('@komtru/app-kit/react', () => ({ useApiClient: () => api }));
 
 beforeEach(() => {
@@ -52,7 +63,7 @@ describe('Trade 360 (OP-12)', () => {
 
     const cases = await screen.findByRole('table', { name: 'Cases on this Trade' });
     expect(within(cases).getByText('Dispute opened, return approved')).toBeTruthy();
-    const call = api.call.mock.calls.find(([endpoint]) => endpoint.path === '/cases');
+    const call = callsTo(api.call, '/cases')[0];
     expect(call?.[1].query).toMatchObject({ subjectType: 'TRADE', subjectId: 'KMT-90428' });
 
     const history = await screen.findByRole('region', { name: 'Trust Trail' });
@@ -112,8 +123,8 @@ describe('Proposal check-in (P1)', () => {
     expect(within(cleared).getByText('8m')).toBeTruthy();
     expect(within(cleared).queryByText(/KMT-80001/)).toBeNull();
 
-    const call = api.call.mock.calls.find(([endpoint]) => endpoint.path === '/cases');
-    expect(call?.[1].query.type).toBe('TRADE_PROPOSAL');
+    const call = callsTo(api.call, '/cases')[0];
+    expect(call?.[1].query?.type).toBe('TRADE_PROPOSAL');
     await expectNoAxeViolations(container, SHELL_RULES);
   });
 

@@ -3,6 +3,17 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render } from '@testing-library/react';
 import type { Mock } from 'vitest';
 
+export interface CallEndpoint {
+  method: string;
+  path: string;
+}
+export interface CallInput {
+  params?: Record<string, string>;
+  query?: Record<string, unknown>;
+  body?: unknown;
+}
+export type CallFn = (endpoint: CallEndpoint, input?: CallInput) => Promise<unknown>;
+
 export const id = (n: number): string => `0190b0a0-0000-7000-8000-${String(n).padStart(12, '0')}`;
 export const ME = id(900);
 
@@ -53,15 +64,13 @@ type Handler = (input: {
  * Makes a mocked `client.call` answer by "METHOD /path": a table of handlers. An endpoint with no
  * handler rejects, so a screen that calls something the test did not expect fails loudly.
  */
-export function answerWith(call: Mock, handlers: Record<string, Handler | unknown>): void {
-  call.mockImplementation(
-    (endpoint: { method: string; path: string }, input: Parameters<Handler>[0] = {}) => {
-      const key = `${endpoint.method.toUpperCase()} ${endpoint.path}`;
-      if (!(key in handlers)) return Promise.reject(new Error(`no handler for ${key}`));
-      const handler = handlers[key];
-      return Promise.resolve(typeof handler === 'function' ? (handler as Handler)(input) : handler);
-    },
-  );
+export function answerWith(call: Mock<CallFn>, handlers: Record<string, unknown>): void {
+  call.mockImplementation((endpoint, input = {}) => {
+    const key = `${endpoint.method.toUpperCase()} ${endpoint.path}`;
+    if (!(key in handlers)) return Promise.reject(new Error(`no handler for ${key}`));
+    const handler = handlers[key];
+    return Promise.resolve(typeof handler === 'function' ? (handler as Handler)(input) : handler);
+  });
 }
 
 export const renderWithQuery = (ui: React.ReactElement) =>
@@ -74,3 +83,9 @@ export const renderWithQuery = (ui: React.ReactElement) =>
 // `ConsoleShell` hides each rail label below `lg` and `EmptyState` draws a fixed `h4` under the
 // shell's `h1`; both are outside these screens, as in console-frame.test.tsx.
 export const SHELL_RULES = ['label-content-name-mismatch', 'heading-order'];
+
+/** Every call the screen made to one endpoint, as [endpoint, input] pairs, in order. */
+export const callsTo = (call: Mock<CallFn>, path: string): [CallEndpoint, CallInput][] =>
+  call.mock.calls
+    .filter(([endpoint]) => endpoint.path === path)
+    .map(([endpoint, input]) => [endpoint, input ?? {}]);

@@ -72,7 +72,7 @@ describe('the cases endpoints', () => {
     });
     const client = createApiClient({
       baseUrl: 'https://api.test/v1',
-      fetch: fetch as unknown as typeof globalThis.fetch,
+      fetch,
     });
     const page = await client.call(listCaseQueue, { query: { view: 'unassigned', type: 'TRADE_PROPOSAL' } });
     expect(urls[0]).toContain('/cases/queue?');
@@ -93,7 +93,7 @@ describe('the cases endpoints', () => {
   });
 
   it('keeps the decision body to outcome, reason and citation only', () => {
-    const body = decideCase.schema.body;
+    const body = decideCase.schema.body as NonNullable<typeof decideCase.schema.body>;
     expect(body.safeParse({ outcome: 'APPROVE', reason: 'r', policyCitation: 'P §1' }).success).toBe(true);
     expect(
       body.safeParse({
