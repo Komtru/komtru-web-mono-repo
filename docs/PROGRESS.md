@@ -5,11 +5,11 @@ after every run. The run-by-run history is [`manager/RUN_LOG.md`](manager/RUN_LO
 behind it is [`BUILD_PLAN.md`](BUILD_PLAN.md).
 
 ```
-MVP   ██████████████····················  47/111  (42%)
-Total ██████████························  47/168  (28%)
+MVP   ███████████████···················  48/111  (43%)
+Total ██████████························  48/168  (29%)
 ```
 
-64 MVP tickets left, 57 deferred past it.
+63 MVP tickets left, 57 deferred past it.
 
 ## By epic
 
@@ -22,7 +22,7 @@ Total ██████████······················
 | 04-files-notify-config | 6    | 7     |
 | 05-trust               | 2    | 3     |
 | 06-merchant-search     | 0    | 3     |
-| 07-trades              | 1    | 9     |
+| 07-trades              | 2    | 9     |
 | 08-ledger              | 2    | 8     |
 | 09-disputes            | 0    | 2     |
 | 10-logistics           | 0    | 3     |
@@ -40,7 +40,6 @@ Total ██████████······················
 | Ticket | Title                                                   | MVP |
 | ------ | ------------------------------------------------------- | --- |
 | T-029  | Isolate the integration suite's shared Redis and queues | yes |
-| T-061  | Proposal flow                                           | yes |
 
 ## Ready to start (MVP first)
 
@@ -48,15 +47,16 @@ Total ██████████······················
 | ------ | ----------------------------------------------------------------- | --- |
 | T-029  | Isolate the integration suite's shared Redis and queues           | yes |
 | T-039  | Account lifecycle, recovery and NDPA hooks                        | yes |
-| T-061  | Proposal flow                                                     | yes |
 | T-072  | Funding a trade                                                   | yes |
 | T-107  | Universal case model, work queue and advisory                     | yes |
 | T-034  | Social login                                                      |     |
 | T-041  | Avatars                                                           |     |
+| T-067  | IMEI verification                                                 |     |
 | T-085  | Logistics schema and Park seed                                    |     |
 | T-100  | Support tickets (M10)                                             |     |
 | T-101  | Risk and fraud (M13)                                              |     |
 | T-103  | Administration: impersonation and admin action log (M14, adapted) |     |
+| T-108  | Trade messaging                                                   |     |
 | T-155  | Location catalog management                                       |     |
 | T-219  | TrustOps: people development                                      |     |
 
@@ -79,7 +79,6 @@ Total ██████████······················
 | T-055  | Merchant applications and certification                                   | yes |
 | T-056  | Listings lifecycle, images and stock                                      | yes |
 | T-057  | Search and discovery (M19)                                                | yes |
-| T-061  | Proposal flow                                                             | yes |
 | T-063  | Orders and multi-item trades (M9)                                         | yes |
 | T-064  | Fulfilment: ship step, delivery signals, deadlines                        | yes |
 | T-065  | Inspection and completion                                                 | yes |

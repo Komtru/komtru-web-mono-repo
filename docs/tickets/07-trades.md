@@ -41,7 +41,7 @@ State machine: design §6 (decision C1). Trades never touch money; they request 
   - "Do not ship yet" state after acceptance (W3) is `PENDING_PAYMENT`. Acceptance snapshots the fee schedule version and computed fees onto the trade (T-047), so the buyer sees the exact total before funding.
   - Every action is idempotent, writes state changes and activity, and publishes events.
   - The buyer picks a saved address as the delivery address and the seller picks one as the ships-from address; both are snapshotted into the terms. Sending, accepting or claiming a trade without a usable address returns `422 ADDRESS_REQUIRED`, and the client sends the user to add one. Changing either address is a term change.
-- **Status (2026-11-07): in progress** — implement phase reached (branch `t-061-proposal-flow`, 5 commits, migration 0039, backend 3047 unit and 289 trades infra tests green; plan `docs/superpowers/plans/2026-11-07-t-061-proposal-flow.md`); next: review, then fix and merge; open review items: none yet. Reviewer should check that no payment deadline is set although `trades.payment_deadline_hours` exists (T-048). The risk hold (`UNDER_PROPOSAL_REVIEW`) is left to T-062.
+- **Status:** Done (2026-11-07). Plan: `docs/superpowers/plans/2026-11-07-t-061-proposal-flow.md`. Review: 10 items fixed (2 must-fix).
 
 ### T-062 — Proposal risk hold and TrustOps review
 
