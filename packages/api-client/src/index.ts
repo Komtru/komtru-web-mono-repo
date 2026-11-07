@@ -7,6 +7,7 @@
 //   @komtru/api-client/react     TanStack Query helpers and the Socket.IO provider
 export * from './addresses.js';
 export * from './auth/session.js';
+export * from './cases.js';
 export * from './client.js';
 export * from './contracts.js';
 export * from './geo.js';
