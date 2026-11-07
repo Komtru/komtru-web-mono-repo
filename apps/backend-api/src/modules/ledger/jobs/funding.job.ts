@@ -6,8 +6,16 @@ import type { Logger } from '../../../platform/logger.js';
 import type { QueueFactory } from '../../../platform/queue/factory.js';
 import type { VerifiedChargeView } from '../domain/funding.js';
 import type { PaymentProviderAdapter } from '../domain/providerAdapter.js';
-import { listStaleDeliveries } from '../infrastructure/postgres/paymentsRepository.js';
-import { processDelivery, settleCharge, type SettleResult } from '../services/webhookIngest.service.js';
+import {
+  claimStaleDeliveries,
+  markExhaustedDeliveries,
+} from '../infrastructure/postgres/paymentsRepository.js';
+import {
+  processDelivery,
+  settleCharge,
+  verifyRecorded,
+  type SettleResult,
+} from '../services/webhookIngest.service.js';
 
 export const VERIFY_CHARGE_QUEUE = 'ledger.verify-charge';
 export const PROCESS_PAYMENT_WEBHOOK_QUEUE = 'ledger.process-payment-webhook';
@@ -23,6 +31,9 @@ export const FUNDING_JOB_BACKOFF_MS = 5_000;
 /** Deliveries unprocessed this long are re-queued by the sweep. */
 export const STALE_DELIVERY_MS = 2 * 60_000;
 export const SWEEP_BATCH = 100;
+/** A delivery older than this, or re-queued this often, is marked exhausted and left for ops. */
+export const SWEEP_MAX_AGE_MS = 24 * 60 * 60_000;
+export const SWEEP_MAX_COUNT = 12;
 
 export interface VerifyChargeJob {
   reference: string;
@@ -41,7 +52,7 @@ export interface FundingJobDeps {
 }
 
 export async function verifyChargeJob(deps: FundingJobDeps, data: VerifyChargeJob): Promise<SettleResult> {
-  const verified = await deps.verify(data.reference);
+  const verified = await verifyRecorded(deps, data.reference);
   return settleCharge(deps, data.reference, verified);
 }
 
@@ -85,10 +96,18 @@ export async function sweepPaymentWebhooks(deps: {
   logger: Logger;
   enqueue: (webhookId: bigint) => Promise<void>;
   now?: Date;
-}): Promise<{ requeued: number }> {
+}): Promise<{ requeued: number; exhausted: number }> {
   const now = deps.now ?? new Date();
-  const stale = await listStaleDeliveries(deps.db, new Date(now.getTime() - STALE_DELIVERY_MS), SWEEP_BATCH);
+  const receivedAfter = new Date(now.getTime() - SWEEP_MAX_AGE_MS);
+  const exhausted = await markExhaustedDeliveries(deps.db, { receivedAfter, maxSweeps: SWEEP_MAX_COUNT });
+  const stale = await claimStaleDeliveries(deps.db, {
+    before: new Date(now.getTime() - STALE_DELIVERY_MS),
+    receivedAfter,
+    maxSweeps: SWEEP_MAX_COUNT,
+    limit: SWEEP_BATCH,
+  });
   for (const id of stale) await deps.enqueue(id);
   if (stale.length) deps.logger.warn({ requeued: stale.length }, 'ledger: re-queued unprocessed webhooks');
-  return { requeued: stale.length };
+  if (exhausted) deps.logger.error({ exhausted }, 'ledger: payment webhooks exhausted their sweeps');
+  return { requeued: stale.length, exhausted };
 }

@@ -21,18 +21,24 @@ import {
   FundingSnapshotError,
   fundingAmounts,
   fundingReference,
+  MAX_ATTEMPTS_PER_TRADE,
   paymentDisplayState,
+  RESTART_MIN_INTERVAL_MS,
+  type FundingAmounts,
   PAYSTACK_INLINE_CHANNELS,
   type PaymentDisplayState,
 } from '../domain/funding.js';
 import { providerForNewCharge } from '../infrastructure/providerRegistry.js';
 import {
+  attemptHistory,
   findCurrentAttempt,
   findOpenAttempt,
   findSucceededAttempt,
   insertPaymentAttempt,
+  lockOpenAttempt,
   updatePaymentAttempt,
 } from '../infrastructure/postgres/paymentsRepository.js';
+import type { Tx } from '../../../platform/events/publish.js';
 import type { PaymentAttemptRow } from '../infrastructure/postgres/schema/payments.js';
 import {
   buyerEmail,
@@ -48,7 +54,11 @@ export interface ChargeDeps {
   /** Queues a verify of one charge. */
   enqueueVerify: (reference: string) => Promise<void>;
   logger: Logger;
+  /** The clock the grace rules read; tests move it. Defaults to the wall clock. */
+  now?: () => Date;
 }
+
+const clock = (deps: Pick<ChargeDeps, 'now'>): Date => deps.now?.() ?? new Date();
 
 export interface PaymentAttemptView {
   id: string;
@@ -85,11 +95,11 @@ export interface InitiatedPayment extends PaymentStatusView {
   };
 }
 
-const attemptView = (row: PaymentAttemptRow): PaymentAttemptView => ({
+const attemptView = (row: PaymentAttemptRow, now: Date): PaymentAttemptView => ({
   id: row.id,
   reference: row.reference,
   status: row.status,
-  displayState: paymentDisplayState(row),
+  displayState: paymentDisplayState(row, now),
   currency: row.currency,
   amountMinor: koboToJson(row.amountMinor),
   itemAmountMinor: koboToJson(row.itemAmountMinor),
@@ -98,11 +108,15 @@ const attemptView = (row: PaymentAttemptRow): PaymentAttemptView => ({
   confirmedAt: row.confirmedAt?.toISOString() ?? null,
 });
 
-const statusView = (trade: TradeForFunding, row: PaymentAttemptRow | undefined): PaymentStatusView => ({
+const statusView = (
+  trade: TradeForFunding,
+  row: PaymentAttemptRow | undefined,
+  now = new Date(),
+): PaymentStatusView => ({
   tradeId: trade.tradeId,
   tradeCode: trade.tradeCode,
-  displayState: row ? paymentDisplayState(row) : 'NONE',
-  attempt: row ? attemptView(row) : null,
+  displayState: row ? paymentDisplayState(row, now) : 'NONE',
+  attempt: row ? attemptView(row, now) : null,
 });
 
 const alreadyFunded = () =>
@@ -192,29 +206,39 @@ export async function initiateFunding(
       'the payment provider sends its receipt to an email address',
     );
   }
-  const amount = Number(amounts.totalMinor);
-  if (!Number.isSafeInteger(amount)) {
-    throw new ApiError(409, 'CONFLICT', 'This trade cannot be paid for online', 'the total is too large');
-  }
-
   const attempt = await db
     .transaction(async (tx) => {
-      const open = await findOpenAttempt(tx, trade.tradeId);
+      const now = clock(deps);
+      // Locked, so a settle of this attempt either finished before us (and we see it closed) or
+      // waits for us; never the KT012 refusal of writing over an attempt that just closed.
+      const open = await lockOpenAttempt(tx, trade.tradeId);
       if (open) {
-        if (!input.restart) return open;
-        if (!canSupersedeAttempt(open)) {
-          throw new ApiError(
-            409,
-            'CONFLICT',
-            'Your last payment is still being confirmed',
-            'an attempt still verifying cannot be replaced',
-          );
+        const drifted = !sameAmounts(open, amounts);
+        if (!drifted && !input.restart) return open;
+        if (!canSupersedeAttempt(open, now)) {
+          throw drifted
+            ? new ApiError(
+                409,
+                'CONFLICT',
+                'Your last payment is still being confirmed',
+                'the open checkout no longer matches the trade and cannot be replaced yet',
+              )
+            : new ApiError(
+                409,
+                'CONFLICT',
+                'Your last payment is still being confirmed',
+                'this checkout cannot be replaced yet',
+              );
         }
+        await assertMayMint(tx, trade.tradeId, now);
         await updatePaymentAttempt(tx, open.id, {
           status: 'ABANDONED',
-          closedAt: new Date(),
-          failureReason: 'superseded by a new checkout',
+          closedAt: now,
+          failureReason: drifted ? 'superseded: the trade total changed' : 'superseded by a new checkout',
         });
+      } else {
+        if (await findSucceededAttempt(tx, trade.tradeId)) throw alreadyFunded();
+        await assertMayMint(tx, trade.tradeId, now);
       }
       const id = randomUUID();
       return insertPaymentAttempt(tx, {
@@ -232,17 +256,24 @@ export async function initiateFunding(
     })
     .catch(async (error: unknown) => {
       // Two first taps racing: the loser's insert hits the one-open index, and the winner's attempt
-      // is the answer to both.
+      // is the answer to both — if it is for the same amounts.
       if (isUniqueViolation(error, 'payment_attempts_one_open')) {
         const open = await findOpenAttempt(db, trade.tradeId);
-        if (open) return open;
+        if (open && sameAmounts(open, amounts)) return open;
       }
       throw error;
     });
 
+  // What the buyer is asked to pay is the attempt's own amount: the verify checks against exactly
+  // this, so the two can never disagree.
+  const amount = Number(attempt.amountMinor);
+  if (!Number.isSafeInteger(amount)) {
+    throw new ApiError(409, 'CONFLICT', 'This trade cannot be paid for online', 'the total is too large');
+  }
+  const now = clock(deps);
   return {
-    ...statusView(trade, attempt),
-    attempt: attemptView(attempt),
+    ...statusView(trade, attempt, now),
+    attempt: attemptView(attempt, now),
     inline: {
       key: deps.publicKey,
       email,
@@ -254,6 +285,33 @@ export async function initiateFunding(
   };
 }
 
+/** Whether an open attempt still asks for exactly what the trade's snapshot says. */
+const sameAmounts = (attempt: PaymentAttemptRow, amounts: FundingAmounts): boolean =>
+  attempt.currency === amounts.currency &&
+  attempt.feeScheduleVersion === amounts.feeScheduleVersion &&
+  attempt.itemAmountMinor === amounts.itemAmountMinor &&
+  attempt.buyerProtectionFeeMinor === amounts.buyerProtectionFeeMinor &&
+  attempt.amountMinor === amounts.totalMinor;
+
+/** The restart limits: a cap on checkouts per trade, and a least interval between two. */
+async function assertMayMint(tx: Tx, tradeId: string, now: Date): Promise<void> {
+  const history = await attemptHistory(tx, tradeId);
+  if (history.count >= MAX_ATTEMPTS_PER_TRADE) {
+    throw new ApiError(
+      409,
+      'CONFLICT',
+      'This trade has had too many payment attempts',
+      `at most ${String(MAX_ATTEMPTS_PER_TRADE)} checkouts per trade; contact support`,
+    );
+  }
+  if (
+    history.latestInitiatedAt &&
+    now.getTime() - history.latestInitiatedAt.getTime() < RESTART_MIN_INTERVAL_MS
+  ) {
+    throw new ApiError(429, 'RATE_LIMITED', 'Wait a moment before starting a new payment');
+  }
+}
+
 /**
  * `POST /trades/:code/payment/confirm`: Inline's success callback, and AB4's "check again". Moves
  * the open attempt to PENDING and queues a verify. Believes nothing: only the verify posts.
@@ -263,26 +321,29 @@ export async function confirmFunding(
   input: { userId: string; trade: TradeRef },
 ): Promise<PaymentStatusView> {
   const trade = await buyersTrade(deps.db, input.trade, input.userId);
-  const succeeded = await findSucceededAttempt(deps.db, trade.tradeId);
-  if (succeeded) return statusView(trade, succeeded);
+  const result = await deps.db.transaction(async (tx) => {
+    const open = await lockOpenAttempt(tx, trade.tradeId);
+    if (!open) return { row: await findCurrentAttempt(tx, trade.tradeId), open: false };
+    const row =
+      open.status === 'INITIATED'
+        ? await updatePaymentAttempt(tx, open.id, { status: 'PENDING', pendingAt: new Date() })
+        : open;
+    return { row, open: true };
+  });
 
-  const open = await findOpenAttempt(deps.db, trade.tradeId);
-  if (!open) throw new ApiError(409, 'CONFLICT', 'Start a payment first', 'there is no open payment attempt');
-
-  const row = await deps.db.transaction(async (tx) =>
-    open.status === 'INITIATED'
-      ? updatePaymentAttempt(tx, open.id, { status: 'PENDING', pendingAt: new Date() })
-      : open,
-  );
-  await deps.enqueueVerify(row.reference);
-  return statusView(trade, row);
+  if (!result.row) {
+    throw new ApiError(409, 'CONFLICT', 'Start a payment first', 'there is no payment attempt');
+  }
+  // Settled already (often by the webhook, a moment before the buyer's callback): nothing to verify.
+  if (result.open) await deps.enqueueVerify(result.row.reference);
+  return statusView(trade, result.row, clock(deps));
 }
 
 /** `GET /trades/:code/payment/status`: AB3, AB4 and V3, derived from the attempt. */
 export async function paymentStatus(
-  deps: Pick<ChargeDeps, 'db'>,
+  deps: Pick<ChargeDeps, 'db' | 'now'>,
   input: { userId: string; trade: TradeRef },
 ): Promise<PaymentStatusView> {
   const trade = await buyersTrade(deps.db, input.trade, input.userId);
-  return statusView(trade, await findCurrentAttempt(deps.db, trade.tradeId));
+  return statusView(trade, await findCurrentAttempt(deps.db, trade.tradeId), clock(deps));
 }

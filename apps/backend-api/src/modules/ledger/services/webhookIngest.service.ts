@@ -20,8 +20,10 @@ import {
   assessVerifiedCharge,
   fundingIdempotencyKey,
   fundingJournalLines,
+  ChargeNotFoundError,
   isFundingReference,
   isOpenAttempt,
+  PROVIDER_STATUS_NOT_FOUND,
   type VerifiedChargeView,
   type VerifyOutcome,
 } from '../domain/funding.js';
@@ -121,11 +123,13 @@ export class ChargeStillPendingError extends Error {
   }
 }
 
-const verifiedColumns = (verified: VerifiedChargeView, now: Date) => ({
+/** What a verify answer teaches the attempt; the first answer at all is the provider's sighting. */
+const verifiedColumns = (attempt: PaymentAttemptRow, verified: VerifiedChargeView, now: Date) => ({
   lastProviderStatus: verified.status,
   lastVerifiedAt: now,
   verifiedAmountMinor: Number.isSafeInteger(verified.amountMinor) ? BigInt(verified.amountMinor) : null,
   verifiedCurrency: verified.currency,
+  ...(attempt.providerSeenAt === null ? { providerSeenAt: now } : {}),
 });
 
 async function requireReview(
@@ -135,15 +139,21 @@ async function requireReview(
   reason: string,
   now: Date,
 ): Promise<void> {
-  // An open attempt is closed for review. A closed one cannot change (it is final), so the event is
-  // the whole record: money arrived on a reference nobody is waiting on any more.
+  // One alert per attempt, however many times its money is reported. An open attempt is closed for
+  // review and marked in the same write; a closed one is final except for that mark, which is the
+  // whole record that money arrived on a reference nobody is waiting on any more. The caller holds
+  // the attempt's row lock, so two verifies cannot both see the mark unset.
+  if (attempt.reviewPublishedAt !== null) return;
   if (isOpenAttempt(attempt.status)) {
     await updatePaymentAttempt(tx, attempt.id, {
-      ...verifiedColumns(verified, now),
+      ...verifiedColumns(attempt, verified, now),
       status: 'NEEDS_REVIEW',
       closedAt: now,
       failureReason: reason,
+      reviewPublishedAt: now,
     });
+  } else {
+    await updatePaymentAttempt(tx, attempt.id, { reviewPublishedAt: now });
   }
   await publish(tx, paymentReviewRequiredEvent, {
     aggregateType: 'ledger_payment_attempt',
@@ -186,7 +196,7 @@ async function postFunding(
   });
 
   await updatePaymentAttempt(tx, attempt.id, {
-    ...verifiedColumns(verified, now),
+    ...verifiedColumns(attempt, verified, now),
     status: 'SUCCEEDED',
     providerReference: verified.reference,
     journalEntryId: posted.journalEntry.id,
@@ -253,7 +263,7 @@ export async function settleCharge(
       case 'NOT_CONFIRMED':
       case 'PENDING':
         await updatePaymentAttempt(tx, attempt.id, {
-          ...verifiedColumns(verified, now),
+          ...verifiedColumns(attempt, verified, now),
           ...(attempt.status === 'INITIATED' ? { status: 'PENDING' as const, pendingAt: now } : {}),
         });
         break;
@@ -289,6 +299,11 @@ export async function processDelivery(deps: ProcessDeliveryDeps, webhookId: bigi
 
   let event;
   try {
+    // These are NOT the bytes Paystack signed: jsonb normalised them on the way in, and stringifying
+    // reorders and re-escapes again. That is fine because nothing here is trusted on the strength of
+    // the payload. The signature was checked on the raw bytes before the row existed, and the only
+    // fields read are the event type and the reference; amount and status come from the verify call,
+    // which is the trust anchor.
     event = deps.parse(Buffer.from(JSON.stringify(delivery.payload), 'utf8'));
   } catch (error) {
     const detail = error instanceof ApiError ? (error.detail ?? error.title) : 'unparseable';
@@ -311,8 +326,9 @@ export async function processDelivery(deps: ProcessDeliveryDeps, webhookId: bigi
     return 'UNKNOWN_REFERENCE';
   }
 
-  // A ChargeStillPendingError leaves the delivery unprocessed: the retry asks again.
-  const verified = await deps.verify(event.reference);
+  // A verify that fails, or a ChargeStillPendingError, leaves the delivery unprocessed and nothing
+  // posted: the retry asks again.
+  const verified = await verifyRecorded(deps, event.reference);
   const outcome = await settleCharge(deps, event.reference, verified);
   await markDeliveryProcessed(
     deps.db,
@@ -321,3 +337,38 @@ export async function processDelivery(deps: ProcessDeliveryDeps, webhookId: bigi
   );
   return outcome.kind;
 }
+
+/**
+ * The verify call, with its failure written onto the attempt before it is rethrown: a reference the
+ * provider does not know becomes `last_provider_status = 'not_found'` (AB4, and the grace clock for
+ * replacing the checkout), and anything else is kept as the last verify error. Neither posts.
+ */
+export async function verifyRecorded(
+  deps: SettleDeps & { verify: (reference: string) => Promise<VerifiedChargeView> },
+  reference: string,
+): Promise<VerifiedChargeView> {
+  try {
+    return await deps.verify(reference);
+  } catch (error) {
+    const now = new Date();
+    await deps.db.transaction(async (tx) => {
+      const attempt = await lockAttemptByReference(tx, reference);
+      if (!attempt || !isOpenAttempt(attempt.status)) return;
+      await updatePaymentAttempt(
+        tx,
+        attempt.id,
+        error instanceof ChargeNotFoundError
+          ? { lastProviderStatus: PROVIDER_STATUS_NOT_FOUND, lastVerifiedAt: now }
+          : { lastVerifyError: verifyErrorSummary(error), lastVerifyErrorAt: now },
+      );
+    });
+    throw error;
+  }
+}
+
+/** A short, payload-free reason: the error's code or name, and its detail when it is ours. */
+const verifyErrorSummary = (error: unknown): string => {
+  if (error instanceof ApiError) return `${error.code}: ${error.detail ?? error.title}`.slice(0, 300);
+  if (error instanceof Error) return error.name.slice(0, 300);
+  return 'unknown error';
+};

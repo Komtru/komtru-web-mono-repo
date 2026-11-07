@@ -13,7 +13,9 @@ import { mountRoutes } from '../../../src/platform/http/mount.js';
 import { createLogger } from '../../../src/platform/logger.js';
 import {
   accountBalance,
+  ChargeNotFoundError,
   fundingReference,
+  MAX_ATTEMPTS_PER_TRADE,
   type VerifiedChargeView,
 } from '../../../src/modules/ledger/index.js';
 import { paymentRoutes } from '../../../src/modules/ledger/http/routes.js';
@@ -35,9 +37,11 @@ import {
 } from '../../../src/modules/ledger/services/webhookIngest.service.js';
 import {
   processPaymentWebhookJob,
+  SWEEP_MAX_COUNT,
   sweepPaymentWebhooks,
   verifyChargeJob,
 } from '../../../src/modules/ledger/jobs/funding.job.js';
+import { ApiError } from '../../../src/platform/errors.js';
 import { testActor } from '../../support/actors.js';
 import { infraEnabled, testRedisEnv, testRedisUrl } from '../../support/db-urls.js';
 import { useTestDatabase } from '../../support/db.js';
@@ -141,6 +145,12 @@ describe.runIf(infraEnabled)('funding a trade (T-072)', () => {
     return rows[0];
   };
 
+  /** Charge deps whose clock reads `minutes` from now: what the grace rules are tested with. */
+  const later = (minutes: number, overrides: Partial<ChargeDeps> = {}) =>
+    chargeDeps({ now: () => new Date(Date.now() + minutes * 60_000), ...overrides });
+  const restart = (minutes: number) =>
+    initiateFunding(later(minutes), { userId: buyer, trade: { tradeCode }, restart: true });
+
   const start = async () =>
     (await initiateFunding(chargeDeps(), { userId: buyer, trade: { tradeCode } })).attempt;
 
@@ -195,13 +205,74 @@ describe.runIf(infraEnabled)('funding a trade (T-072)', () => {
       expect(await count(`SELECT count(*) AS n FROM ledger.payment_attempts`)).toBe(1);
     });
 
-    it('starts over with a new reference only when asked, abandoning the old one', async () => {
+    it('starts over only when asked, and only once the provider-unseen grace has passed', async () => {
       const first = await start();
-      const second = (
-        await initiateFunding(chargeDeps(), { userId: buyer, trade: { tradeCode }, restart: true })
-      ).attempt;
+      // Fresh and never seen by the provider: the buyer may still be paying on it.
+      await expect(restart(5)).rejects.toMatchObject({ status: 409 });
+      const second = (await restart(31)).attempt;
       expect(second.id).not.toBe(first.id);
       expect((await attemptRow(first.reference))?.status).toBe('ABANDONED');
+    });
+
+    it('starts over at once when the provider says the checkout was abandoned', async () => {
+      const first = await start();
+      await settleCharge(
+        { db: t.db(), logger },
+        first.reference,
+        success(first.reference, { status: 'abandoned' }),
+      );
+      // ...but not within the minimum interval between two checkouts.
+      await expect(restart(0)).rejects.toMatchObject({ status: 429 });
+      expect((await restart(2)).attempt.id).not.toBe(first.id);
+    });
+
+    it('waits out the short grace after a declined card', async () => {
+      const first = await start();
+      await settleCharge(
+        { db: t.db(), logger },
+        first.reference,
+        success(first.reference, { status: 'failed' }),
+      );
+      await expect(restart(5)).rejects.toMatchObject({ status: 409 });
+      expect((await restart(11)).attempt.id).not.toBe(first.id);
+    });
+
+    it('caps checkouts per trade', async () => {
+      await start();
+      let minutes = 0;
+      for (let i = 1; i < MAX_ATTEMPTS_PER_TRADE; i++) {
+        minutes += 31;
+        await restart(minutes);
+      }
+      expect(await count(`SELECT count(*) AS n FROM ledger.payment_attempts`)).toBe(MAX_ATTEMPTS_PER_TRADE);
+      await expect(restart(minutes + 31)).rejects.toMatchObject({ status: 409 });
+    });
+
+    it('asks Inline for the attempt’s own amount, and replaces an attempt that no longer matches', async () => {
+      // An open attempt minted under an older snapshot, as a backfill or a bug might leave one.
+      const stale = randomUUID();
+      await t.owner().query(
+        `INSERT INTO ledger.payment_attempts (id, trade_id, buyer_user_id, provider, reference, fee_schedule_version,
+                                              item_amount_minor, buyer_protection_fee_minor, amount_minor, initiated_at)
+         VALUES ($1::uuid, $2, $3, 'PAYSTACK', 'fund-' || $1::text, 'older-schedule', 40000000, 600000, 40600000,
+                 now() - interval '2 hours')`,
+        [stale, tradeId, buyer],
+      );
+      const result = await start();
+      expect(result.id).not.toBe(stale);
+      expect(result.amountMinor).toBe(TOTAL.toString());
+      expect((await attemptRow(`fund-${stale}`))?.status).toBe('ABANDONED');
+    });
+
+    it('refuses to hand out a drifted attempt it cannot yet replace', async () => {
+      const fresh = randomUUID();
+      await t.owner().query(
+        `INSERT INTO ledger.payment_attempts (id, trade_id, buyer_user_id, provider, reference, fee_schedule_version,
+                                              item_amount_minor, buyer_protection_fee_minor, amount_minor)
+         VALUES ($1::uuid, $2, $3, 'PAYSTACK', 'fund-' || $1::text, 'older-schedule', 40000000, 600000, 40600000)`,
+        [fresh, tradeId, buyer],
+      );
+      await expect(start()).rejects.toMatchObject({ status: 409 });
     });
 
     it('will not start over while a payment is still verifying', async () => {
@@ -279,6 +350,45 @@ describe.runIf(infraEnabled)('funding a trade (T-072)', () => {
       );
     });
 
+    it('never turns a confirm racing the settle into an error, and never verifies a settled charge', async () => {
+      for (let round = 0; round < 5; round++) {
+        // One success per trade: clear the last round's attempt (TRUNCATE fires no row trigger).
+        await t.owner().query(`TRUNCATE ledger.payment_attempts`);
+        verifies = [];
+        const attempt = await start();
+        const [view, outcome] = await Promise.all([
+          confirmFunding(chargeDeps(), { userId: buyer, trade: { tradeCode } }),
+          settleCharge({ db: t.db(), logger }, attempt.reference, success(attempt.reference)),
+        ]);
+        expect(outcome.kind).toBe('POST');
+        expect(['VERIFYING', 'CONFIRMED']).toContain(view.displayState);
+        if (view.displayState === 'CONFIRMED') expect(verifies).toEqual([]);
+      }
+      expect((await confirmFunding(chargeDeps(), { userId: buyer, trade: { tradeCode } })).displayState).toBe(
+        'CONFIRMED',
+      );
+    });
+
+    it('never turns a restart racing the settle into an error', async () => {
+      const attempt = await start();
+      await settleCharge(
+        { db: t.db(), logger },
+        attempt.reference,
+        success(attempt.reference, { status: 'abandoned' }),
+      );
+      const [restarted, settled] = await Promise.allSettled([
+        restart(2),
+        settleCharge({ db: t.db(), logger }, attempt.reference, success(attempt.reference)),
+      ]);
+      expect(settled.status).toBe('fulfilled');
+      // Either the settle won (409 already funded) or the restart did (the money goes to review).
+      if (restarted.status === 'rejected') expect(restarted.reason).toMatchObject({ status: 409 });
+      const outcome = settled.status === 'fulfilled' ? settled.value.kind : '';
+      expect(['POST', 'NEEDS_REVIEW']).toContain(outcome);
+      expect(outcome === 'POST').toBe(restarted.status === 'rejected');
+      expect(await journals()).toBe(outcome === 'POST' ? 1 : 0);
+    });
+
     it('retries a charge the provider has not decided, keeping what it learned', async () => {
       const attempt = await start();
       await expect(
@@ -348,6 +458,21 @@ describe.runIf(infraEnabled)('funding a trade (T-072)', () => {
       expect(rows).toEqual([{ duplicate_count: 1 }]);
     });
 
+    it('verifies the exact bytes: padded, reordered JSON with \\u escapes', async () => {
+      const attempt = await start();
+      const raw = Buffer.from(
+        `{\n  "data" : { "paid_at":"2026-11-07T10:14:00.000Z", "status" : "success",\n` +
+          `    "reference": "${attempt.reference}", "amount": ${String(Number(TOTAL))}, "id": 9001,\n` +
+          `    "customer": { "first_name": "\\u00c0d\\u00e9" } },\n  "event" : "charge.success"  }\n`,
+        'utf8',
+      );
+      const res = await post(raw, sign(raw));
+      expect(res.status).toBe(200);
+      expect(deliveries).toHaveLength(1);
+      await processDelivery(processDeps(success), deliveries[0] as bigint);
+      expect(await journals()).toBe(1);
+    });
+
     it('serves the buyer routes over HTTP', async () => {
       const initiated = await request(app()).post(`/v1/trades/${tradeCode}/payment/initiate`).send({});
       expect(initiated.status).toBe(200);
@@ -382,12 +507,114 @@ describe.runIf(infraEnabled)('funding a trade (T-072)', () => {
           enqueue: (id) => Promise.resolve(void requeued.push(id)),
         });
 
-      expect(await sweep(new Date())).toEqual({ requeued: 0 });
-      expect(await sweep(new Date(Date.now() + 10 * 60_000))).toEqual({ requeued: 1 });
+      expect(await sweep(new Date())).toEqual({ requeued: 0, exhausted: 0 });
+      expect(await sweep(new Date(Date.now() + 10 * 60_000))).toEqual({ requeued: 1, exhausted: 0 });
 
       await processPaymentWebhookJob(processDeps(success), { webhookId: String(requeued[0]) });
-      expect(await sweep(new Date(Date.now() + 10 * 60_000))).toEqual({ requeued: 0 });
+      expect(await sweep(new Date(Date.now() + 10 * 60_000))).toEqual({ requeued: 0, exhausted: 0 });
       expect(await journals()).toBe(1);
+    });
+
+    it('give up on a delivery after a bounded number of sweeps, and mark it for ops', async () => {
+      const body = chargeEvent(`fund-${randomUUID()}`);
+      await recordWebhook(
+        { ...webhookDeps(), enqueueDelivery: () => Promise.reject(new Error('down')) },
+        body,
+        sign(body),
+      );
+      const at = new Date(Date.now() + 10 * 60_000);
+      let requeued = 0;
+      for (let i = 0; i < SWEEP_MAX_COUNT + 3; i++) {
+        requeued += (
+          await sweepPaymentWebhooks({ db: t.db(), logger, now: at, enqueue: () => Promise.resolve() })
+        ).requeued;
+      }
+      expect(requeued).toBe(SWEEP_MAX_COUNT);
+      const { rows } = await t
+        .app()
+        .query<{ processing_error: string | null; processed_at: Date | null }>(
+          `SELECT processing_error, processed_at FROM ledger.payment_provider_webhooks`,
+        );
+      expect(rows[0]?.processing_error).toMatch(/^exhausted:/);
+      expect(rows[0]?.processed_at).toBeNull();
+    });
+
+    it('give up on a delivery older than a day', async () => {
+      const body = chargeEvent(`fund-${randomUUID()}`);
+      await recordWebhook(
+        { ...webhookDeps(), enqueueDelivery: () => Promise.reject(new Error('down')) },
+        body,
+        sign(body),
+      );
+      const result = await sweepPaymentWebhooks({
+        db: t.db(),
+        logger,
+        now: new Date(Date.now() + 25 * 60 * 60_000),
+        enqueue: () => Promise.resolve(),
+      });
+      expect(result).toEqual({ requeued: 0, exhausted: 1 });
+    });
+
+    it('leave the delivery unprocessed and post nothing when the verify call fails', async () => {
+      const attempt = await start();
+      const body = chargeEvent(attempt.reference);
+      await recordWebhook(webhookDeps(), body, sign(body));
+      const outage = {
+        ...processDeps(success),
+        verify: () =>
+          Promise.reject(
+            new ApiError(502, 'PAYMENT_PROVIDER_UNAVAILABLE', 'down', 'paystack charge.verify: HTTP 503'),
+          ),
+      };
+      await expect(processDelivery(outage, deliveries[0] as bigint)).rejects.toBeInstanceOf(ApiError);
+      await expect(verifyChargeJob(outage, { reference: attempt.reference })).rejects.toBeInstanceOf(
+        ApiError,
+      );
+
+      expect(await journals()).toBe(0);
+      expect(
+        await count(`SELECT count(*) AS n FROM ledger.payment_provider_webhooks WHERE processed_at IS NULL`),
+      ).toBe(1);
+      const { rows } = await t
+        .app()
+        .query<{ last_verify_error: string | null; status: string }>(
+          `SELECT last_verify_error, status FROM ledger.payment_attempts`,
+        );
+      expect(rows[0]?.status).toBe('INITIATED');
+      expect(rows[0]?.last_verify_error).toContain('HTTP 503');
+    });
+
+    it('record a reference the provider never saw, so the buyer is not left on "verifying"', async () => {
+      const attempt = await start();
+      await confirmFunding(chargeDeps(), { userId: buyer, trade: { tradeCode } });
+      const unknown = {
+        ...processDeps(success),
+        verify: (reference: string) => Promise.reject(new ChargeNotFoundError(reference)),
+      };
+      await expect(verifyChargeJob(unknown, { reference: attempt.reference })).rejects.toBeInstanceOf(
+        ChargeNotFoundError,
+      );
+      expect(await attemptRow(attempt.reference)).toMatchObject({
+        status: 'PENDING',
+        last_provider_status: 'not_found',
+      });
+      expect((await paymentStatus(chargeDeps(), { userId: buyer, trade: { tradeCode } })).displayState).toBe(
+        'NOT_CONFIRMED',
+      );
+      // And never seen, so replaceable once the grace has passed.
+      await expect(restart(5)).rejects.toMatchObject({ status: 409 });
+      expect((await restart(31)).attempt.id).not.toBe(attempt.id);
+    });
+
+    it('stop showing "verifying" for a never-seen attempt once the grace has passed', async () => {
+      await start();
+      await confirmFunding(chargeDeps(), { userId: buyer, trade: { tradeCode } });
+      expect((await paymentStatus(later(5), { userId: buyer, trade: { tradeCode } })).displayState).toBe(
+        'VERIFYING',
+      );
+      expect((await paymentStatus(later(31), { userId: buyer, trade: { tradeCode } })).displayState).toBe(
+        'NOT_CONFIRMED',
+      );
     });
   });
 
@@ -496,13 +723,59 @@ describe.runIf(infraEnabled)('funding a trade (T-072)', () => {
       expect(await journals()).toBe(0);
     });
 
-    it('holds money that lands on an abandoned reference, without touching the final row', async () => {
+    it('holds money that lands on an abandoned reference once, without touching the final row', async () => {
       const first = await start();
-      await initiateFunding(chargeDeps(), { userId: buyer, trade: { tradeCode }, restart: true });
-      const outcome = await settleCharge({ db: t.db(), logger }, first.reference, success(first.reference));
-      expect(outcome.kind).toBe('NEEDS_REVIEW');
+      await restart(31);
+      for (let i = 0; i < 3; i++) {
+        const outcome = await settleCharge({ db: t.db(), logger }, first.reference, success(first.reference));
+        expect(outcome.kind).toBe('NEEDS_REVIEW');
+      }
       expect((await attemptRow(first.reference))?.status).toBe('ABANDONED');
       expect(await outbox('ledger.payment.review_required')).toBe(1);
+      expect(await journals()).toBe(0);
+    });
+
+    it('alerts ops once for a mismatched charge however often it is verified', async () => {
+      const attempt = await start();
+      const short = success(attempt.reference, { amountMinor: Number(TOTAL) - 1 });
+      await Promise.all(
+        Array.from({ length: 4 }, () => settleCharge({ db: t.db(), logger }, attempt.reference, short)),
+      );
+      await settleCharge({ db: t.db(), logger }, attempt.reference, short);
+      expect(await outbox('ledger.payment.review_required')).toBe(1);
+    });
+
+    it('posts once when two distinct charge.success events for one reference are processed at once', async () => {
+      const attempt = await start();
+      const a = chargeEvent(attempt.reference, 501);
+      const b = chargeEvent(attempt.reference, 502);
+      await recordWebhook(webhookDeps(), a, sign(a));
+      await recordWebhook(webhookDeps(), b, sign(b));
+      expect(deliveries).toHaveLength(2);
+      await Promise.all(deliveries.map((id) => processDelivery(processDeps(success), id)));
+      expect(await journals()).toBe(1);
+      expect(await outbox('ledger.payment.escrow_funded')).toBe(1);
+    });
+
+    it('holds the money when the trade leaves PENDING_PAYMENT while the settle waits for its lock', async () => {
+      const attempt = await start();
+      const client = await t.owner().connect();
+      try {
+        await client.query('BEGIN');
+        await client.query(`SELECT 1 FROM trade.trades WHERE id = $1 FOR UPDATE`, [tradeId]);
+        await client.query(
+          `UPDATE trade.trades SET status = 'EXPIRED', status_action = 'EXPIRE', status_actor_type = 'SYSTEM',
+                  status_revision = status_revision + 1 WHERE id = $1`,
+          [tradeId],
+        );
+        const settling = settleCharge({ db: t.db(), logger }, attempt.reference, success(attempt.reference));
+        // The settle has read the attempt and is now waiting on the trade row.
+        await new Promise((resolve) => setTimeout(resolve, 300));
+        await client.query('COMMIT');
+        expect((await settling).kind).toBe('NEEDS_REVIEW');
+      } finally {
+        client.release();
+      }
       expect(await journals()).toBe(0);
     });
 

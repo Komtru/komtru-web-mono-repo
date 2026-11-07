@@ -5,6 +5,10 @@ import {
   assertBalanced,
   assessVerifiedCharge,
   canSupersedeAttempt,
+  FUNDING_FAILED_GRACE_MS,
+  FUNDING_UNSEEN_GRACE_MS,
+  MAX_ATTEMPTS_PER_TRADE,
+  RESTART_MIN_INTERVAL_MS,
   FundingSnapshotError,
   fundingAmounts,
   fundingIdempotencyKey,
@@ -17,6 +21,7 @@ import {
   paymentDisplayState,
   paymentEscrowFundedEvent,
   type AttemptForVerify,
+  type PaymentAttemptStatus,
   type TradeFundingSnapshot,
 } from '../../../src/modules/ledger/index.js';
 
@@ -207,40 +212,77 @@ describe('believing a verified charge', () => {
   );
 });
 
+const NOW = new Date('2026-11-07T12:00:00.000Z');
+const minutesAgo = (minutes: number) => new Date(NOW.getTime() - minutes * 60_000);
+
+/** An attempt's progress, `minutes` after it was initiated, seen by the provider or not. */
+const progress = (
+  status: PaymentAttemptStatus,
+  lastProviderStatus: string | null,
+  { minutes = 1, seen = lastProviderStatus !== null && lastProviderStatus !== 'not_found' } = {},
+) => ({
+  status,
+  lastProviderStatus,
+  initiatedAt: minutesAgo(minutes),
+  providerSeenAt: seen ? minutesAgo(minutes) : null,
+});
+
+describe('the funding grace periods', () => {
+  it('are thirty minutes for a reference the provider never saw, ten for a declined card', () => {
+    expect(FUNDING_UNSEEN_GRACE_MS).toBe(30 * 60_000);
+    expect(FUNDING_FAILED_GRACE_MS).toBe(10 * 60_000);
+    expect(MAX_ATTEMPTS_PER_TRADE).toBe(10);
+    expect(RESTART_MIN_INTERVAL_MS).toBeGreaterThan(0);
+  });
+});
+
 describe('the buyer-facing payment state (AB3, AB4)', () => {
   it.each([
-    ['INITIATED', null, 'AWAITING_PAYMENT'],
-    ['PENDING', null, 'VERIFYING'],
-    ['PENDING', 'ongoing', 'VERIFYING'],
-    ['PENDING', 'abandoned', 'NOT_CONFIRMED'],
-    ['PENDING', 'failed', 'NOT_CONFIRMED'],
-    ['SUCCEEDED', 'success', 'CONFIRMED'],
-    ['FAILED', 'failed', 'NOT_CONFIRMED'],
-    ['ABANDONED', null, 'NOT_CONFIRMED'],
+    ['INITIATED', null, 1, 'AWAITING_PAYMENT'],
+    ['PENDING', null, 1, 'VERIFYING'],
+    ['PENDING', 'ongoing', 1, 'VERIFYING'],
+    // A transfer the provider says is in flight stays "verifying", however long it takes.
+    ['PENDING', 'ongoing', 120, 'VERIFYING'],
+    ['PENDING', 'abandoned', 1, 'NOT_CONFIRMED'],
+    ['PENDING', 'failed', 1, 'NOT_CONFIRMED'],
+    ['PENDING', 'not_found', 1, 'NOT_CONFIRMED'],
+    // Never seen by the provider, past the grace: not stuck on "verifying" forever.
+    ['PENDING', null, 31, 'NOT_CONFIRMED'],
+    ['SUCCEEDED', 'success', 1, 'CONFIRMED'],
+    ['FAILED', 'failed', 1, 'NOT_CONFIRMED'],
+    ['ABANDONED', null, 1, 'NOT_CONFIRMED'],
     // Money may have arrived: never tell this buyer "nothing has been charged".
-    ['NEEDS_REVIEW', 'success', 'UNDER_REVIEW'],
-  ] as const)('%s with provider status %s is %s', (status, lastProviderStatus, expected) => {
-    expect(paymentDisplayState({ status, lastProviderStatus })).toBe(expected);
+    ['NEEDS_REVIEW', 'success', 1, 'UNDER_REVIEW'],
+  ] as const)('%s with provider status %s after %i min is %s', (status, last, minutes, expected) => {
+    expect(paymentDisplayState(progress(status, last, { minutes }), NOW)).toBe(expected);
   });
 
   it('covers every attempt status', () => {
     for (const status of PAYMENT_ATTEMPT_STATUSES) {
-      expect(paymentDisplayState({ status, lastProviderStatus: null })).toEqual(expect.any(String));
+      expect(paymentDisplayState(progress(status, null), NOW)).toEqual(expect.any(String));
     }
   });
 });
 
 describe('starting over with a new reference', () => {
   it.each([
-    ['INITIATED', null, true],
-    ['PENDING', 'abandoned', true],
-    ['PENDING', 'failed', true],
-    ['PENDING', null, false],
-    ['PENDING', 'ongoing', false],
-    ['SUCCEEDED', 'success', false],
-    ['NEEDS_REVIEW', 'success', false],
-  ] as const)('%s with provider status %s: %s', (status, lastProviderStatus, expected) => {
-    expect(canSupersedeAttempt({ status, lastProviderStatus })).toBe(expected);
+    // Unseen by the provider: only after the thirty-minute grace, verified or not.
+    ['INITIATED', null, 5, false],
+    ['INITIATED', null, 31, true],
+    ['PENDING', null, 5, false],
+    ['PENDING', 'not_found', 5, false],
+    ['PENDING', 'not_found', 31, true],
+    // The provider says the buyer walked away: at once.
+    ['PENDING', 'abandoned', 1, true],
+    // A declined card can be retried on the same reference inside Inline: ten minutes.
+    ['PENDING', 'failed', 5, false],
+    ['PENDING', 'failed', 11, true],
+    // Seen and still in flight: never.
+    ['PENDING', 'ongoing', 300, false],
+    ['SUCCEEDED', 'success', 300, false],
+    ['NEEDS_REVIEW', 'success', 300, false],
+  ] as const)('%s with provider status %s after %i min: %s', (status, last, minutes, expected) => {
+    expect(canSupersedeAttempt(progress(status, last, { minutes }), NOW)).toBe(expected);
   });
 });
 

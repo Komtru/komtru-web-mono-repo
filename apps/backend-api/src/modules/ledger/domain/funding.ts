@@ -167,23 +167,57 @@ export type VerifyOutcome =
 const OPEN: ReadonlySet<PaymentAttemptStatus> = new Set(['INITIATED', 'PENDING']);
 
 /** Provider statuses that leave an attempt open but unpaid: AB4 rather than AB3. */
-const NOT_CONFIRMED_STATUSES: ReadonlySet<string> = new Set(['failed', 'abandoned']);
+const NOT_CONFIRMED_STATUSES: ReadonlySet<string> = new Set(['failed', 'abandoned', 'not_found']);
+
+/**
+ * What `last_provider_status` holds when the verify call says the provider has no transaction with
+ * this reference at all — the buyer closed Inline before it opened one. Ours, not Paystack's word.
+ */
+export const PROVIDER_STATUS_NOT_FOUND = 'not_found';
+
+/**
+ * How long an attempt the provider has never seen stays the buyer's only checkout (T-072 plan,
+ * decision 8). Past it the attempt may be replaced and stops showing "verifying".
+ */
+export const FUNDING_UNSEEN_GRACE_MS = 30 * 60_000;
+/** How long after a decline a buyer must wait to replace it: Inline can retry the card (decision 9). */
+export const FUNDING_FAILED_GRACE_MS = 10 * 60_000;
+/** Checkouts one trade may ever have, restarts included. */
+export const MAX_ATTEMPTS_PER_TRADE = 10;
+/** The least time between two checkouts on one trade. */
+export const RESTART_MIN_INTERVAL_MS = 60_000;
 
 /** True while an attempt can still be paid against. */
 export const isOpenAttempt = (status: PaymentAttemptStatus): boolean => OPEN.has(status);
 
-/**
- * Whether a buyer may start over with a new reference. Only an attempt nobody has paid against
- * as far as the provider has said: never one still verifying, where money may be in flight.
- */
-export const canSupersedeAttempt = (attempt: {
+/** What the grace rules read off an attempt. */
+export interface AttemptProgress {
   status: PaymentAttemptStatus;
   lastProviderStatus: string | null;
-}): boolean =>
-  attempt.status === 'INITIATED' ||
-  (attempt.status === 'PENDING' &&
-    attempt.lastProviderStatus !== null &&
-    NOT_CONFIRMED_STATUSES.has(attempt.lastProviderStatus));
+  initiatedAt: Date;
+  /** NULL while no verify has found the charge at the provider. */
+  providerSeenAt: Date | null;
+}
+
+const elapsed = (attempt: AttemptProgress, now: Date): number =>
+  now.getTime() - attempt.initiatedAt.getTime();
+
+/**
+ * Whether a buyer may abandon this checkout for a new reference. Never while money may be in
+ * flight on it:
+ *  - the provider says the buyer walked away (`abandoned`): at once;
+ *  - a declined card (`failed`): after the short grace, because Inline retries cards in place;
+ *  - never seen by the provider (unverified, or verify said not found): after the long grace;
+ *  - anything else the provider has said (`ongoing`, `pending`, …): never.
+ * Money that lands on an abandoned reference later still reaches ops through review.
+ */
+export function canSupersedeAttempt(attempt: AttemptProgress, now: Date): boolean {
+  if (!OPEN.has(attempt.status)) return false;
+  if (attempt.lastProviderStatus === 'abandoned') return true;
+  if (attempt.lastProviderStatus === 'failed') return elapsed(attempt, now) >= FUNDING_FAILED_GRACE_MS;
+  if (attempt.providerSeenAt === null) return elapsed(attempt, now) >= FUNDING_UNSEEN_GRACE_MS;
+  return false;
+}
 
 /**
  * Whether a charge Paystack has verified may be posted. Never trusts the webhook (m8 §5): this runs on
@@ -240,17 +274,19 @@ export function assessVerifiedCharge(attempt: AttemptForVerify, verified: Verifi
 export type PaymentDisplayState =
   'AWAITING_PAYMENT' | 'VERIFYING' | 'CONFIRMED' | 'NOT_CONFIRMED' | 'UNDER_REVIEW';
 
-export function paymentDisplayState(attempt: {
-  status: PaymentAttemptStatus;
-  lastProviderStatus: string | null;
-}): PaymentDisplayState {
+export function paymentDisplayState(attempt: AttemptProgress, now: Date): PaymentDisplayState {
   switch (attempt.status) {
     case 'INITIATED':
       return 'AWAITING_PAYMENT';
     case 'PENDING':
-      return attempt.lastProviderStatus !== null && NOT_CONFIRMED_STATUSES.has(attempt.lastProviderStatus)
-        ? 'NOT_CONFIRMED'
-        : 'VERIFYING';
+      if (attempt.lastProviderStatus !== null && NOT_CONFIRMED_STATUSES.has(attempt.lastProviderStatus)) {
+        return 'NOT_CONFIRMED';
+      }
+      // Never found at the provider and past the grace: there is nothing to wait for (AB4).
+      if (attempt.providerSeenAt === null && elapsed(attempt, now) >= FUNDING_UNSEEN_GRACE_MS) {
+        return 'NOT_CONFIRMED';
+      }
+      return 'VERIFYING';
     case 'SUCCEEDED':
       return 'CONFIRMED';
     case 'FAILED':
@@ -258,5 +294,17 @@ export function paymentDisplayState(attempt: {
       return 'NOT_CONFIRMED';
     case 'NEEDS_REVIEW':
       return 'UNDER_REVIEW';
+  }
+}
+
+/**
+ * The verify call's answer when the provider has no transaction with this reference at all. Thrown
+ * by the client rather than dressed as a status, so nothing can mistake it for a charge.
+ */
+export class ChargeNotFoundError extends Error {
+  readonly code = 'CHARGE_NOT_FOUND';
+  constructor(readonly reference: string) {
+    super(`the provider has no charge with reference ${reference}`);
+    this.name = 'ChargeNotFoundError';
   }
 }

@@ -24,6 +24,9 @@ export function webhookRoutes(deps: () => RecordWebhookDeps): RouteDefinition[] 
       summary: 'Paystack webhook receiver',
       // A replay is harmless by construction: the dedup index absorbs it.
       retryable: false,
+      // Per IP, and generous: Paystack sends from a handful of addresses and retries in bursts, so
+      // this only bounds someone hammering the endpoint with bodies that fail the signature check.
+      rateLimit: { points: 600, durationSeconds: 60, by: ['ip'] },
       schema: { response: webhookAckSchema },
       handler: async (ctx) => {
         await recordWebhook(deps(), rawBody(ctx.req), ctx.req.get(PAYSTACK_SIGNATURE_HEADER));
