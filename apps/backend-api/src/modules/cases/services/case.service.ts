@@ -11,6 +11,7 @@ import {
   caseNotFound,
   evidenceRequestNotFound,
   evidenceRequestResolved,
+  requesteeNotFound,
   notCaseOwner,
 } from '../domain/errors.js';
 import { caseAssigned, caseDecided, caseEscalated } from '../domain/events.js';
@@ -22,6 +23,7 @@ import {
   stateAfterEvidenceResolved,
 } from '../domain/lifecycle.js';
 import type { CasePriority, EvidenceRequestStatus } from '../domain/types.js';
+import { users } from '../../identity/index.js';
 import { caseIndex } from '../infrastructure/postgres/schema/cases.js';
 import { caseDecisions } from '../infrastructure/postgres/schema/decisions.js';
 import { caseEvidenceRequests } from '../infrastructure/postgres/schema/evidence.js';
@@ -201,6 +203,10 @@ export async function requestEvidence(
   return db.transaction(async (tx) => {
     const row = await lockCase(tx, input.caseId);
     assertWorkable(row.state);
+    if (input.fromUserId) {
+      const [asked] = await tx.select({ id: users.id }).from(users).where(eq(users.id, input.fromUserId));
+      if (!asked) throw requesteeNotFound();
+    }
 
     const [request] = await tx
       .insert(caseEvidenceRequests)
@@ -239,6 +245,8 @@ export async function resolveEvidenceRequest(
   db: Db,
   input: {
     actor: CaseActor | null;
+    /** Required when `actor` is null: the module resolving it, written to the trail. */
+    source?: string | undefined;
     caseId: string;
     requestId: string;
     status: Exclude<EvidenceRequestStatus, 'OPEN'>;
@@ -271,7 +279,11 @@ export async function resolveEvidenceRequest(
       .where(and(eq(caseEvidenceRequests.caseId, row.id), eq(caseEvidenceRequests.status, 'OPEN')));
     const updated = await save(tx, row, { state: stateAfterEvidenceResolved(row.state, open?.n ?? 0) });
 
-    const metadata = { requestId: request.id, status: input.status };
+    const metadata = {
+      requestId: request.id,
+      status: input.status,
+      ...(input.actor ? {} : { systemActor: input.source ?? 'unspecified' }),
+    };
     await writeTrail(tx, {
       caseId: row.id,
       type: 'EVIDENCE_RESOLVED',

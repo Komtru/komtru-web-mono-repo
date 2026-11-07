@@ -4,7 +4,7 @@ import { and, asc, desc, eq, isNull, lt, sql, type SQL } from 'drizzle-orm';
 import type { Paginated } from '@komtru/shared-types';
 import type { Db } from '../../../db/index.js';
 import { cursorPage, type CursorKey } from '../../../platform/http/paginate.js';
-import { caseNotFound } from '../domain/errors.js';
+import { caseNotFound, wrongCursor } from '../domain/errors.js';
 import { atRiskSeconds } from '../domain/sla.js';
 import type { CasePriority, CaseState, CaseType } from '../domain/types.js';
 import { caseIndex } from '../infrastructure/postgres/schema/cases.js';
@@ -97,7 +97,8 @@ const readQueueCursor = (cursor: CursorKey | undefined): { d: string; id: string
     !Number.isNaN(Date.parse(d)) &&
     typeof id === 'string' &&
     /^[0-9a-f-]{36}$/i.test(id);
-  return valid ? { d, id } : undefined;
+  if (!valid) throw wrongCursor();
+  return { d, id };
 };
 
 export async function listQueue(
@@ -149,8 +150,10 @@ export async function queueCounts(db: ReadDb, userId: string): Promise<QueueCoun
 
 const listCursor = (row: { caseNumber: number }): CursorKey => ({ n: row.caseNumber });
 const readListCursor = (cursor: CursorKey | undefined): number | undefined => {
-  const n = cursor?.n;
-  return typeof n === 'number' && Number.isSafeInteger(n) ? n : undefined;
+  if (!cursor) return undefined;
+  const n = cursor.n;
+  if (typeof n !== 'number' || !Number.isSafeInteger(n)) throw wrongCursor();
+  return n;
 };
 
 /** The universal list: every case, finished ones included, newest case number first. */
@@ -201,7 +204,11 @@ export async function listTrail(
 ): Promise<Paginated<TrailView>> {
   const [exists] = await db.select({ id: caseIndex.id }).from(caseIndex).where(eq(caseIndex.id, caseId));
   if (!exists) throw caseNotFound();
-  const before = typeof cursor?.id === 'number' ? cursor.id : undefined;
+  let before: number | undefined;
+  if (cursor) {
+    if (typeof cursor.id !== 'number' || !Number.isSafeInteger(cursor.id)) throw wrongCursor();
+    before = cursor.id;
+  }
   const rows = await db
     .select()
     .from(caseTrail)

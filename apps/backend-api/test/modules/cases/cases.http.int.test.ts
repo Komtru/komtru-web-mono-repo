@@ -151,6 +151,18 @@ describe.runIf(infraEnabled)('cases routes (T-107)', () => {
     expect(trail.nextCursor).not.toBeNull();
   });
 
+  it('answers 409 when a manager who does not own the case tries to decide it', async () => {
+    const owner = await staff(['cases.view', 'cases.manage']);
+    const other = await staff(['cases.view', 'cases.manage']);
+    const row = await register('owned');
+    await request(appFor(owner.actor)).post(`/v1/cases/${row.id}/take`);
+    const res = await request(appFor(other.actor))
+      .post(`/v1/cases/${row.id}/decisions`)
+      .send({ outcome: 'APPROVE', reason: 'ok', policyCitation: 'KYB §1' });
+    expect(res.status).toBe(409);
+    expect(await count('cases.case_decisions')).toBe(0);
+  });
+
   describe('the advisory', () => {
     it('suggests with a rationale, labelled, and writes nothing', async () => {
       const me = await staff(['cases.view']);

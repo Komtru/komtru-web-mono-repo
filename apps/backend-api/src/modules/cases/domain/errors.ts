@@ -41,3 +41,17 @@ export const assigneeNotEligible = () =>
 
 export const evidenceRequestResolved = () =>
   new ApiError(409, 'INVALID_TRANSITION', 'This evidence request is already resolved');
+
+/** A well-formed cursor that is not one of this list's: the client's mistake, never page one again. */
+export const wrongCursor = () =>
+  new ApiError(
+    422,
+    'VALIDATION_FAILED',
+    'Invalid cursor',
+    'Use the nextCursor from the previous page of this list',
+  );
+
+export const requesteeNotFound = () =>
+  new ApiError(422, 'VALIDATION_FAILED', 'No such user to ask for evidence', undefined, [
+    { path: 'fromUserId', message: 'Unknown user' },
+  ]);

@@ -5,6 +5,7 @@ import { and, eq, sql } from 'drizzle-orm';
 import { publish, type Tx } from '../../../platform/events/publish.js';
 import { caseClosed, caseRegistered } from '../domain/events.js';
 import { caseNotFound } from '../domain/errors.js';
+import { isFinished } from '../domain/lifecycle.js';
 import { SLA_HOURS, slaDueAt } from '../domain/sla.js';
 import { MAX_FACT_KEYS, type CaseFacts, type CasePriority, type CaseType } from '../domain/types.js';
 import { caseIndex } from '../infrastructure/postgres/schema/cases.js';
@@ -47,14 +48,22 @@ const subjectWhere = (subject: CaseSubject) =>
     eq(caseIndex.subjectId, subject.subjectId),
   );
 
+export interface RegisterResult {
+  case: CaseRow;
+  created: boolean;
+  /**
+   * True when the subject already has a case that is DECIDED or CLOSED: the old case is returned
+   * untouched (a closed case is never silently reopened), and a caller that needs fresh staff work
+   * for the same subject must handle that, for example by registering under a new subject id.
+   */
+  reopenRequired: boolean;
+}
+
 /**
  * Idempotent on (type, subject): registering a record twice returns the case it already has, writes
  * nothing and publishes nothing, so an owning module may retry or re-run a backfill freely.
  */
-export async function registerCase(
-  tx: Tx,
-  input: RegisterCaseInput,
-): Promise<{ case: CaseRow; created: boolean }> {
+export async function registerCase(tx: Tx, input: RegisterCaseInput): Promise<RegisterResult> {
   const facts = input.facts ?? {};
   assertFacts(facts);
   const slaHours = input.slaHours ?? SLA_HOURS[input.type];
@@ -79,7 +88,7 @@ export async function registerCase(
   if (!created) {
     const [existing] = await tx.select().from(caseIndex).where(subjectWhere(input));
     if (!existing) throw new Error('cases: a case conflicted on registration and then vanished');
-    return { case: existing, created: false };
+    return { case: existing, created: false, reopenRequired: isFinished(existing.state) };
   }
 
   await writeTrail(tx, {
@@ -93,7 +102,7 @@ export async function registerCase(
     aggregateType: 'cases.case',
     aggregateId: created.id,
   });
-  return { case: created, created: true };
+  return { case: created, created: true, reopenRequired: false };
 }
 
 /**
