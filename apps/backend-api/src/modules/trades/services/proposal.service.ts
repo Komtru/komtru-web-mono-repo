@@ -11,7 +11,7 @@
 // transaction that wrote the evidence would roll the evidence back with it.
 import type { Kobo } from '@komtru/shared-types';
 import { isDeepStrictEqual } from 'node:util';
-import { eq } from 'drizzle-orm';
+import { and, eq, inArray, ne } from 'drizzle-orm';
 import { ApiError } from '../../../platform/errors.js';
 import type { Tx } from '../../../platform/events/publish.js';
 import {
@@ -91,24 +91,58 @@ async function refuseMerchantBuyer(
 
 const proofRequirement = (standard: TradeStandard): ProofRequirement => standard.proofMedia;
 
-/** Seller-uploaded, finished, private-to-the-case files only: nobody else's media, no public ones. */
-async function attachProof(
+/**
+ * The seller's own proof, checked and not yet written: finished, private-to-the-case uploads that
+ * the seller made and that are not already doing a job somewhere else.
+ *
+ * "Somewhere else" is the files module's linkage as far as it goes: it records grants and nothing
+ * else about what a file is for. So a file qualifies when it is not attached to another trade
+ * (this module's own table) and holds no live grant to anybody (another case's evidence, another
+ * trade's buyer). A file already on this trade is always fine, which keeps a re-attach idempotent.
+ * The trade carries at most MAX_PROOF_FILES in total, across every send, counter and accept.
+ *
+ * Returns the files that are new to the trade.
+ */
+async function checkProofFiles(
   deps: Pick<TradeDeps, 'proofFiles'>,
   tx: Tx,
   trade: { id: string },
   sellerUserId: string,
   fileIds: readonly string[],
-): Promise<void> {
+): Promise<string[]> {
   const unique = [...new Set(fileIds)];
-  if (unique.length === 0) return;
-  if (unique.length > MAX_PROOF_FILES) {
-    throw new ApiError(422, 'VALIDATION_FAILED', `Attach at most ${MAX_PROOF_FILES} files`);
+  if (unique.length === 0) return [];
+  const attached = new Set(await proofFileIds(tx, trade.id));
+  const fresh = unique.filter((id) => !attached.has(id));
+  if (attached.size + fresh.length > MAX_PROOF_FILES) {
+    throw new ApiError(
+      422,
+      'VALIDATION_FAILED',
+      `A trade can carry at most ${MAX_PROOF_FILES} proof files`,
+      undefined,
+      [{ path: 'proofFileIds', message: `${attached.size} already attached` }],
+    );
   }
   const found = await deps.proofFiles(tx, unique);
-  const usable = new Map(
+  const elsewhere = fresh.length
+    ? new Set(
+        (
+          await tx
+            .select({ fileId: tradeProofMedia.fileId })
+            .from(tradeProofMedia)
+            .where(and(inArray(tradeProofMedia.fileId, fresh), ne(tradeProofMedia.tradeId, trade.id)))
+        ).map((row) => row.fileId),
+      )
+    : new Set<string>();
+  const usable = new Set(
     found
-      .filter((f) => f.uploaderUserId === sellerUserId && f.visibility === 'PRIVATE_CASE')
-      .map((f) => [f.id, f]),
+      .filter(
+        (f) =>
+          f.uploaderUserId === sellerUserId &&
+          f.visibility === 'PRIVATE_CASE' &&
+          (attached.has(f.id) || (!elsewhere.has(f.id) && f.grantedUserIds.length === 0)),
+      )
+      .map((f) => f.id),
   );
   const rejected = unique.filter((id) => !usable.has(id));
   if (rejected.length > 0) {
@@ -116,13 +150,25 @@ async function attachProof(
       422,
       'VALIDATION_FAILED',
       'Some proof files cannot be used',
-      'Proof must be your own finished uploads.',
+      'Proof must be your own finished uploads, not used anywhere else.',
       rejected.map((id) => ({ path: 'proofFileIds', message: `${id} is not an usable upload` })),
     );
   }
+  return fresh;
+}
+
+async function attachProof(
+  deps: Pick<TradeDeps, 'proofFiles'>,
+  tx: Tx,
+  trade: { id: string },
+  sellerUserId: string,
+  fileIds: readonly string[],
+): Promise<void> {
+  const fresh = await checkProofFiles(deps, tx, trade, sellerUserId, fileIds);
+  if (fresh.length === 0) return;
   await tx
     .insert(tradeProofMedia)
-    .values(unique.map((fileId) => ({ tradeId: trade.id, fileId, attachedByUserId: sellerUserId })))
+    .values(fresh.map((fileId) => ({ tradeId: trade.id, fileId, attachedByUserId: sellerUserId })))
     .onConflictDoNothing();
 }
 

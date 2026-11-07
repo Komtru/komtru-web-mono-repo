@@ -13,7 +13,7 @@ import {
   tradeStandards,
   type StandardView,
 } from '../../config/index.js';
-import { findServableFile, grantAccess } from '../../files/index.js';
+import { findServableFile, grantAccess, listGrants } from '../../files/index.js';
 import type { CityLookup, InvitationDeps, PartyDeps } from '../../identity/index.js';
 import type { SellerKind, TradeFeeSnapshot } from '../domain/feeSnapshot.js';
 
@@ -26,6 +26,8 @@ export interface ProofFile {
   contentType: string;
   uploaderUserId: string;
   visibility: string;
+  /** Users holding a live access grant on the file; a file granted to anyone is already in use. */
+  grantedUserIds: string[];
 }
 
 export interface TradeDeps {
@@ -75,17 +77,20 @@ export const postgresStandards = (db: Db): TradeDeps['standards'] => {
 
 export const postgresProofFiles = (): TradeDeps['proofFiles'] => async (tx, ids) => {
   const found = await Promise.all(ids.map((id) => findServableFile(tx, id)));
-  return found.flatMap((file) =>
-    file
-      ? [
-          {
-            id: file.id,
-            contentType: file.contentType,
-            uploaderUserId: file.uploaderUserId,
-            visibility: file.visibility,
-          },
-        ]
-      : [],
+  return Promise.all(
+    found.flatMap((file) =>
+      file
+        ? [
+            listGrants(tx, file.id).then((grants) => ({
+              id: file.id,
+              contentType: file.contentType,
+              uploaderUserId: file.uploaderUserId,
+              visibility: file.visibility,
+              grantedUserIds: grants.flatMap((g) => (g.granteeUserId ? [g.granteeUserId] : [])),
+            })),
+          ]
+        : [],
+    ),
   );
 };
 

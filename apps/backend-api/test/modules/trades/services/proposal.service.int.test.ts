@@ -62,7 +62,10 @@ describe.runIf(infraEnabled)('proposal flow (T-061)', () => {
   const t = useTestDatabase();
   const granted: { fileIds: readonly string[]; buyer: string }[] = [];
   /** Finished uploads by id; each belongs to whoever `file()` says. */
-  const files = new Map<string, { contentType: string; uploaderUserId: string; visibility: string }>();
+  const files = new Map<
+    string,
+    { contentType: string; uploaderUserId: string; visibility: string; grantedUserIds: string[] }
+  >();
 
   const deps = (overrides: Partial<TradeDeps> = {}): TradeDeps => ({
     db: t.db(),
@@ -113,7 +116,7 @@ describe.runIf(infraEnabled)('proposal flow (T-061)', () => {
 
   const upload = (uploaderUserId: string, contentType = 'image/jpeg', visibility = 'PRIVATE_CASE') => {
     const id = randomUUID();
-    files.set(id, { contentType, uploaderUserId, visibility });
+    files.set(id, { contentType, uploaderUserId, visibility, grantedUserIds: [] });
     return id;
   };
 
@@ -367,6 +370,68 @@ describe.runIf(infraEnabled)('proposal flow (T-061)', () => {
         }),
       );
       expect(error.status).toBe(422);
+    });
+
+    it('refuses proof that is already on another trade or granted to someone', async () => {
+      const seller = await person('seller');
+      const shared = upload(seller.id);
+      const first = await createProposal(deps(), {
+        userId: seller.id,
+        role: 'SELLER',
+        categoryCode: 'PHONES',
+        itemAmountMinor: PRICE,
+        itemSpec: SPEC,
+        addressId: await address(seller.id),
+        proofFileIds: [shared, upload(seller.id)],
+      });
+      const base = {
+        userId: seller.id,
+        role: 'SELLER' as const,
+        categoryCode: 'PHONES',
+        itemAmountMinor: PRICE,
+        itemSpec: SPEC,
+        addressId: await address(seller.id),
+      };
+      const onAnotherTrade = await failure(createProposal(deps(), { ...base, proofFileIds: [shared] }));
+      expect(onAnotherTrade.status).toBe(422);
+
+      const inUse = upload(seller.id);
+      files.get(inUse)!.grantedUserIds = [randomUUID()];
+      const granted = await failure(createProposal(deps(), { ...base, proofFileIds: [inUse] }));
+      expect(granted.status).toBe(422);
+
+      // The same files on the same trade are not "elsewhere": re-attaching is a no-op.
+      const again = await sendProposal(deps(), {
+        userId: seller.id,
+        tradeId: first.id,
+        counterparty: { channel: 'EMAIL', value: 'chidi@example.com' },
+        proofFileIds: [shared],
+      });
+      expect(again.proofMediaCount).toBe(2);
+    });
+
+    it('caps the proof media on a trade at 20 across attachments', async () => {
+      const seller = await person('seller');
+      const draft = await createProposal(deps(), {
+        userId: seller.id,
+        role: 'SELLER',
+        categoryCode: 'PHONES',
+        itemAmountMinor: PRICE,
+        itemSpec: SPEC,
+        addressId: await address(seller.id),
+        proofFileIds: Array.from({ length: 20 }, () => upload(seller.id)),
+      });
+      expect(draft.proofMediaCount).toBe(20);
+      const over = await failure(
+        sendProposal(deps(), {
+          userId: seller.id,
+          tradeId: draft.id,
+          counterparty: { channel: 'EMAIL', value: 'chidi@example.com' },
+          proofFileIds: [upload(seller.id)],
+        }),
+      );
+      expect([over.status, over.code]).toEqual([422, 'VALIDATION_FAILED']);
+      expect(over.title ?? over.message).toContain('at most 20');
     });
 
     it('rejects naming a certified merchant as the buyer, before send', async () => {
