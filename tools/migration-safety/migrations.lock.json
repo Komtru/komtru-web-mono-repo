@@ -199,6 +199,16 @@
       "tag": "0039_trade_proposal_flow",
       "when": 1794007401698,
       "sha256": "f2eb4a2076a5d5ba9585b1f8e5d7de62cf8556203278d7e946bb195e28312e73"
+    },
+    {
+      "tag": "0040_cases_index",
+      "when": 1794044242926,
+      "sha256": "c1db31d34ccb4da943a4ce79c64dfaf10b15518dadae023c7c873a9e33ef821b"
+    },
+    {
+      "tag": "0041_cases_append_only",
+      "when": 1794044252601,
+      "sha256": "4242a5c22d432f8b44a8832cd1d33b728f6f0ca62a8e7fa560fa026a25c4f705"
     }
   ]
 }

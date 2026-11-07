@@ -129,6 +129,51 @@
   ],
   "checkConstraints": [
     {
+      "table": "cases.case_decisions",
+      "name": "case_decisions_citation_not_blank",
+      "definition": "CHECK ((length(btrim(policy_citation)) > 0))"
+    },
+    {
+      "table": "cases.case_decisions",
+      "name": "case_decisions_outcome_not_blank",
+      "definition": "CHECK ((length(btrim(outcome)) > 0))"
+    },
+    {
+      "table": "cases.case_decisions",
+      "name": "case_decisions_reason_not_blank",
+      "definition": "CHECK ((length(btrim(reason)) > 0))"
+    },
+    {
+      "table": "cases.case_evidence_requests",
+      "name": "case_evidence_requests_description_not_blank",
+      "definition": "CHECK ((length(btrim(description)) > 0))"
+    },
+    {
+      "table": "cases.case_evidence_requests",
+      "name": "case_evidence_requests_resolved_together",
+      "definition": "CHECK (((status = 'OPEN'::cases.evidence_request_status) = (resolved_at IS NULL)))"
+    },
+    {
+      "table": "cases.case_trail",
+      "name": "case_trail_reason_not_blank",
+      "definition": "CHECK (((reason IS NULL) OR (length(btrim(reason)) > 0)))"
+    },
+    {
+      "table": "cases.cases",
+      "name": "cases_sla_positive",
+      "definition": "CHECK ((sla_hours > 0))"
+    },
+    {
+      "table": "cases.cases",
+      "name": "cases_subject_not_blank",
+      "definition": "CHECK (((length(subject_type) > 0) AND (length(subject_id) > 0)))"
+    },
+    {
+      "table": "cases.cases",
+      "name": "cases_title_not_blank",
+      "definition": "CHECK ((length(btrim(title)) > 0))"
+    },
+    {
       "table": "config.config_change_log",
       "name": "config_change_log_target",
       "definition": "CHECK ((change_target = ANY (ARRAY['SETTING'::text, 'FLAG'::text])))"
@@ -395,6 +440,16 @@
     }
   ],
   "triggers": [
+    {
+      "table": "cases.case_decisions",
+      "name": "komtru_append_only",
+      "definition": "[O] CREATE TRIGGER komtru_append_only BEFORE DELETE OR UPDATE ON cases.case_decisions FOR EACH ROW EXECUTE FUNCTION platform.reject_mutation()"
+    },
+    {
+      "table": "cases.case_trail",
+      "name": "komtru_append_only",
+      "definition": "[O] CREATE TRIGGER komtru_append_only BEFORE DELETE OR UPDATE ON cases.case_trail FOR EACH ROW EXECUTE FUNCTION platform.reject_mutation()"
+    },
     {
       "table": "config.config_change_log",
       "name": "komtru_append_only",
