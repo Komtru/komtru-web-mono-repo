@@ -388,11 +388,21 @@ describe.runIf(infraEnabled)('the admin surface (T-037, M1 section 10.6)', () =>
       });
       expect(same.status).toBe(409);
       expect(bodyOf<Problem>(same).code).toBe('INVALID_TRANSITION');
+      // T-039 owns closing and it is now reachable, but this app is built with no trade port, which
+      // fails closed: an unwired process refuses to close rather than closing blind.
       const closed = await as(ops.token).post(`/admin/users/${target.userId}/status`, {
         status: 'CLOSED',
         reason: REASON,
       });
-      expect(closed.status).toBe(400);
+      expect(closed.status).toBe(409);
+      // Locking and anonymising stay out of staff's hands.
+      for (const status of ['LOCKED', 'ANONYMISED']) {
+        const refused = await as(ops.token).post(`/admin/users/${target.userId}/status`, {
+          status,
+          reason: REASON,
+        });
+        expect(refused.status, status).toBe(400);
+      }
     });
 
     it('revokes every session of a user', async () => {

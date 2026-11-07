@@ -475,3 +475,79 @@ export const identityAddressDefaultChangedEvent = defineEvent(
     previousAddressId: z.uuid().nullable(),
   }),
 );
+
+// ---------------------------------------------------------------------------
+// T-039: account recovery and the NDPA hand-offs (M1 §11, §15).
+//
+// None of these carries an address, a phone number or the identifier the requester claimed: an
+// outbox row is kept (§S12), so they carry ids, the method and the decision.
+// ---------------------------------------------------------------------------
+
+export const RECOVERY_METHODS = [
+  'LOST_PASSWORD',
+  'LOST_PHONE',
+  'LOST_DEVICE',
+  'LOST_ALL',
+  'MFA_LOCKOUT',
+] as const;
+export type RecoveryMethod = (typeof RECOVERY_METHODS)[number];
+
+/** Someone asked for help getting into an account. M13 scores it; M10 opens a ticket for it. */
+export const identityRecoveryRequestedEvent = defineEvent(
+  'identity.account.recovery_requested',
+  1,
+  z.object({
+    recoveryRequestId: z.uuid(),
+    /** Null when the claimed identifier did not resolve to an account: the requester is told nothing either way. */
+    userId: z.uuid().nullable(),
+    method: z.enum(RECOVERY_METHODS),
+    riskScore: z.number().int().min(0).max(100),
+    /** True above the review threshold: the ticket M10 opens is the human in the loop. */
+    requiresHuman: z.boolean(),
+    evidenceCount: z.number().int().min(0),
+  }),
+);
+
+/** A human decided a recovery request. `outcome` is what they decided; a rejection completes nothing. */
+export const identityRecoveryCompletedEvent = defineEvent(
+  'identity.account.recovery_completed',
+  1,
+  z.object({
+    recoveryRequestId: z.uuid(),
+    userId: z.uuid(),
+    reviewedBy: z.uuid(),
+    outcome: z.enum(['APPROVED', 'REJECTED']),
+  }),
+);
+
+/** `POST /me/data-export` (NDPA portability). Compliance (T-104) builds the archive and the signed link. */
+export const identityDataExportRequestedEvent = defineEvent(
+  'identity.account.data_export_requested',
+  1,
+  z.object({
+    userId: z.uuid(),
+    requestedAt: z.iso.datetime(),
+    /** The 30-day SLA of M1 §15, as a date compliance can sort its queue on. */
+    dueBy: z.iso.datetime(),
+  }),
+);
+
+/** `POST /me/erasure-request`. Compliance decides legal hold, then calls the anonymisation procedure. */
+export const identityErasureRequestedEvent = defineEvent(
+  'identity.account.erasure_requested',
+  1,
+  z.object({
+    userId: z.uuid(),
+    scheduledFor: z.iso.datetime(),
+  }),
+);
+
+/** The M1 §15 procedure committed. Files tombstones the uploads on this; it is also the retry hook if that call failed. */
+export const identityAccountAnonymisedEvent = defineEvent(
+  'identity.account.anonymised',
+  1,
+  z.object({
+    userId: z.uuid(),
+    anonymisedAt: z.iso.datetime(),
+  }),
+);

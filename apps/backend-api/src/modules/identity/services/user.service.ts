@@ -33,7 +33,9 @@ import {
   type userStatus,
   type VerificationLevelName,
 } from '../infrastructure/postgres/schema/enums.js';
+import { staffPermissionFor } from '../domain/lifecycle.js';
 import { AUDIT_ACTIONS } from './audit.service.js';
+import { applyStatusTransition, dropEpochCache, type LifecyclePorts } from './lifecycle.service.js';
 import { auditStaff, holdsStaffRole, requireAuthorised, type StaffActor } from './rbac.service.js';
 import { bumpSessionsEpoch, revokeAllSessions } from './session.service.js';
 
@@ -313,31 +315,21 @@ export async function revealPii(
   });
 }
 
-/** M1 section 9.1's transitions that staff may make through this ticket; the rest are T-039's. */
-const STAFF_TRANSITIONS: Readonly<Record<string, readonly UserStatusName[]>> = {
-  ACTIVE: ['RESTRICTED', 'SUSPENDED'],
-  RESTRICTED: ['ACTIVE', 'SUSPENDED'],
-  SUSPENDED: ['ACTIVE'],
-  LOCKED: ['ACTIVE'],
-};
-
-const PERMISSION_FOR_STATUS: Partial<Record<UserStatusName, PermissionCode>> = {
-  RESTRICTED: 'user.restrict',
-  SUSPENDED: 'user.suspend',
-  ACTIVE: 'user.reinstate',
-};
-
-export const STAFF_SETTABLE_STATUSES = Object.keys(PERMISSION_FOR_STATUS);
+export const STAFF_SETTABLE_STATUSES: readonly string[] = ['RESTRICTED', 'SUSPENDED', 'ACTIVE', 'CLOSED'];
 
 export interface StatusChangeDeps {
   db: Db;
   epochs?: { invalidate(userId: string): Promise<void> };
+  /** T-039: the trade check behind a staff closure. Absent means "a trade is open" (fail closed). */
+  ports?: LifecyclePorts;
 }
 
 /**
- * `POST /admin/users/{id}/status`. Restrict, suspend and reinstate only: closing needs the
- * active-trade check and anonymising needs the erasure procedure, and both are T-039's. Suspension
- * is M1 D5's kill switch in the same transaction: epoch bump and every session revoked.
+ * `POST /admin/users/{id}/status`. Restrict, suspend, reinstate and (T-039) close. The machine
+ * itself is `applyStatusTransition`; this adds the staff half: the permission for the target status
+ * and the dual-control rules `requireAuthorised` applies. Suspension and closure are M1 D5's kill
+ * switch in the same transaction: epoch bump and every session revoked. Locking is a risk rule's
+ * (`lockAccount`) and anonymising is the erasure procedure's, so neither is reachable here.
  */
 export async function changeUserStatus(
   deps: StatusChangeDeps,
@@ -349,13 +341,13 @@ export async function changeUserStatus(
     evidenceRef?: string | undefined;
   },
 ): Promise<{ from: UserStatusName; to: UserStatusName }> {
-  const permission = PERMISSION_FOR_STATUS[input.to];
+  const permission = staffPermissionFor(input.to);
   if (!permission) {
     throw new ApiError(
       400,
       'VALIDATION_FAILED',
       'That status cannot be set here',
-      `Staff may set ${STAFF_SETTABLE_STATUSES.join(', ')}; closing and anonymising are the lifecycle service's.`,
+      `Staff may set ${STAFF_SETTABLE_STATUSES.join(', ')}; locking is a risk rule's and anonymising is the erasure procedure's.`,
     );
   }
   await requireAuthorised(
@@ -365,58 +357,26 @@ export async function changeUserStatus(
     input.reason,
   );
 
-  const result = await deps.db.transaction(async (tx) => {
-    const row = (
-      await tx.select({ status: users.status }).from(users).where(eq(users.id, input.userId)).for('update')
-    )[0];
-    if (!row) throw notFound();
-    if (!STAFF_TRANSITIONS[row.status]?.includes(input.to)) {
-      throw new ApiError(
-        409,
-        'INVALID_TRANSITION',
-        'That status change is not allowed',
-        `An account that is ${row.status} cannot become ${input.to}`,
-      );
-    }
-
-    await tx
-      .update(users)
-      .set({
-        status: input.to,
-        statusReason: input.reason,
-        statusChangedAt: sql`now()`,
-        updatedAt: sql`now()`,
-      })
-      .where(eq(users.id, input.userId));
-
-    let revoked = 0;
-    if (input.to === 'SUSPENDED') {
-      await bumpSessionsEpoch(tx, input.userId);
-      revoked = await revokeAllSessions(tx, { userId: input.userId, reason: 'suspended by staff' });
-    }
-
-    await publish(tx, identityUserStatusChangedEvent, {
-      payload: { userId: input.userId, from: row.status, to: input.to, reason: input.reason },
-      aggregateType: 'identity.user',
-      aggregateId: input.userId,
-      actor: { type: 'STAFF', id: input.actor.userId },
-    });
-    await auditStaff(tx, input.actor, {
-      action: AUDIT_ACTIONS.ADMIN_STATUS_CHANGED,
-      subjectUserId: input.userId,
+  const result = await deps.db.transaction((tx) =>
+    applyStatusTransition(tx, deps.ports ?? {}, {
+      userId: input.userId,
+      to: input.to,
+      by: 'STAFF',
       reason: input.reason,
-      metadata: {
-        from: row.status,
-        to: input.to,
-        evidenceRef: input.evidenceRef ?? null,
-        sessionsRevoked: revoked,
+      actor: {
+        type: 'STAFF',
+        userId: input.actor.userId,
+        sessionId: input.actor.sessionId,
+        ip: input.actor.ip,
+        userAgent: input.actor.userAgent,
       },
-    });
-    return { from: row.status, to: input.to };
-  });
+      auditAction: AUDIT_ACTIONS.ADMIN_STATUS_CHANGED,
+      auditMetadata: { evidenceRef: input.evidenceRef ?? null },
+    }),
+  );
 
-  if (input.to === 'SUSPENDED') await deps.epochs?.invalidate(input.userId).catch(() => undefined);
-  return result;
+  if (result.killedSessions) await dropEpochCache(deps.epochs, input.userId);
+  return { from: result.from, to: result.to };
 }
 
 /** `POST /admin/users/{id}/sessions/revoke-all`. */
