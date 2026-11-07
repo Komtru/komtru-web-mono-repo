@@ -274,6 +274,13 @@
       "when": 1794004994519,
       "tag": "0038_identity_addresses",
       "breakpoints": true
+    },
+    {
+      "idx": 39,
+      "version": "7",
+      "when": 1794007401698,
+      "tag": "0039_trade_proposal_flow",
+      "breakpoints": true
     }
   ]
 }

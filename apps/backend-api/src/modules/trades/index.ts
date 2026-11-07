@@ -11,3 +11,7 @@ export * from './infrastructure/postgres/schema/index.js';
 export * from './infrastructure/postgres/transitions.js';
 export * from './infrastructure/postgres/tradeCodes.js';
 export * from './infrastructure/postgres/principals.js';
+export * from './domain/proposal.js';
+export * from './services/trade.service.js';
+export * from './services/proposal.service.js';
+export { createTradesModule, type TradesModuleOptions } from './module.js';

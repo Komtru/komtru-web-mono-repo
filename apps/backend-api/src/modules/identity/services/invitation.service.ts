@@ -146,6 +146,21 @@ export async function createInvitation(
   });
 }
 
+/**
+ * Withdraws an invitation nobody has claimed: the inviter changed their mind, or what the invitation
+ * was for fell through. Only a PENDING one moves (a claimed or expired invitation is history), so
+ * calling it twice, or after a claim, changes nothing. Takes any executor so a caller can do it
+ * inside its own transaction. No event: nothing downstream is waiting on a withdrawn invitation.
+ */
+export async function cancelInvitation(executor: Pick<Db, 'update'>, invitationId: string): Promise<boolean> {
+  const moved = await executor
+    .update(partyInvitations)
+    .set({ status: 'CANCELLED' })
+    .where(and(eq(partyInvitations.id, invitationId), eq(partyInvitations.status, 'PENDING')))
+    .returning({ id: partyInvitations.id });
+  return moved.length > 0;
+}
+
 export interface InvitationPreview {
   status: string;
   intendedRole: InvitedRole;

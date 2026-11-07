@@ -4,7 +4,14 @@
 import { describe, expect, it } from 'vitest';
 import { infraEnabled } from '../../../support/db-urls.js';
 import { useTestDatabase } from '../../../support/db.js';
-import { ADDRESS, constraintName, insertRow, insertTrade, insertUser } from '../support.js';
+import {
+  ADDRESS,
+  constraintName,
+  insertRow,
+  insertTermsVersion,
+  insertTrade,
+  insertUser,
+} from '../support.js';
 
 describe.runIf(infraEnabled)('pinning a terms version', () => {
   const t = useTestDatabase();
@@ -64,5 +71,25 @@ describe.runIf(infraEnabled)('pinning a terms version', () => {
     const { tradeId, termsId } = await aTradeWithTerms();
     await pin(tradeId, 'accepted_terms_version_id', termsId);
     await expect(t.app().query('DELETE FROM trade.trades WHERE id = $1', [tradeId])).resolves.toBeTruthy();
+  });
+
+  describe('a proposal carries at least one address (migration 0039)', () => {
+    const version = async (overrides: Record<string, unknown>) => {
+      const buyer = await insertUser(t.app());
+      const seller = await insertUser(t.app());
+      const tradeId = await insertTrade(t.app(), { buyer, seller });
+      return insertTermsVersion(t.app(), tradeId, buyer, overrides);
+    };
+
+    it('accepts either side alone', async () => {
+      await expect(version({ ships_from_address: null })).resolves.toBeTruthy();
+      await expect(version({ delivery_address: null })).resolves.toBeTruthy();
+    });
+
+    it('refuses a version with neither', async () => {
+      expect(await constraintName(version({ delivery_address: null, ships_from_address: null }))).toBe(
+        'trade_terms_has_an_address',
+      );
+    });
   });
 });

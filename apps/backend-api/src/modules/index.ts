@@ -16,6 +16,7 @@ import { createIdentityAuth, identityModule, identitySeed, resolvePrincipal } fr
 import { ledgerModule } from './ledger/index.js';
 import { notifyModule } from './notify/index.js';
 import { createSocketModule } from './socket/index.js';
+import { createTradesModule } from './trades/index.js';
 import { createTrustModule } from './trust/index.js';
 
 export interface ProcessDeps {
@@ -57,6 +58,9 @@ export const createModules: ModuleBuilder = (deps) => {
     // After identity, whose audit log every staff change to the catalog writes.
     geoModule,
     ledgerModule,
+    // After identity (party lookup, invitations, addresses), config (standards, fees) and files
+    // (proof media), which it reads through their barrels.
+    createTradesModule(deps),
     notifyModule,
     socket,
   ];

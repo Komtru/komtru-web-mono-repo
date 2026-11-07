@@ -7,3 +7,4 @@ export * from './terms.js';
 export * from './audit.js';
 export * from './fulfilment.js';
 export * from './escrow.js';
+export * from './proof.js';

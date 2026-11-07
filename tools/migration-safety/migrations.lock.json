@@ -194,6 +194,11 @@
       "tag": "0038_identity_addresses",
       "when": 1794004994519,
       "sha256": "a2cb4a3cd98a1254edf8d8098eba84b6e9aa369ada66f8b79493815d3992336b"
+    },
+    {
+      "tag": "0039_trade_proposal_flow",
+      "when": 1794007401698,
+      "sha256": "f2eb4a2076a5d5ba9585b1f8e5d7de62cf8556203278d7e946bb195e28312e73"
     }
   ]
 }

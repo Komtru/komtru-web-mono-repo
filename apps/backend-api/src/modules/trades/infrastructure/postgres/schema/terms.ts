@@ -25,11 +25,11 @@ import { trades } from './trades.js';
  * addresses have no landmark worth writing, and an empty one is honest where a made-up one is not.
  */
 const addressShape = (column: PgColumn): SQL =>
-  sql`${column} ?& array['street', 'landmark', 'recipient', 'state_id', 'city_id']
+  sql`${column} IS NULL OR (${column} ?& array['street', 'landmark', 'recipient', 'state_id', 'city_id']
       AND length(coalesce(${column} ->> 'street', '')) > 0
       AND length(coalesce(${column} ->> 'recipient', '')) > 0
       AND length(coalesce(${column} ->> 'state_id', '')) > 0
-      AND length(coalesce(${column} ->> 'city_id', '')) > 0`;
+      AND length(coalesce(${column} ->> 'city_id', '')) > 0)`;
 
 export const tradeTermsVersions = trade.table(
   'trade_terms_versions',
@@ -53,8 +53,11 @@ export const tradeTermsVersions = trade.table(
     deliveryGraceHours: integer('delivery_grace_hours').notNull(),
 
     /** Snapshots, not pointers: an address edited later must not restate an agreed trade. */
-    deliveryAddress: jsonb('delivery_address').notNull(),
-    shipsFromAddress: jsonb('ships_from_address').notNull(),
+    /** NULL until the buyer has chosen one: a seller's proposal cannot snapshot an address the buyer
+     * has not picked yet. The acceptor's version fills it, and the service refuses acceptance
+     * without both (T-061). */
+    deliveryAddress: jsonb('delivery_address'),
+    shipsFromAddress: jsonb('ships_from_address'),
 
     supersededAt: timestamp('superseded_at', { withTimezone: true }),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
@@ -68,6 +71,11 @@ export const tradeTermsVersions = trade.table(
     ),
     check('trade_terms_delivery_address_shape', addressShape(table.deliveryAddress)),
     check('trade_terms_ships_from_address_shape', addressShape(table.shipsFromAddress)),
+    // A proposal carries the proposer's own side; the other is filled later, but never both missing.
+    check(
+      'trade_terms_has_an_address',
+      sql`${table.deliveryAddress} IS NOT NULL OR ${table.shipsFromAddress} IS NOT NULL`,
+    ),
     // The turn-flipping guard: two counter-proposals racing cannot both become version N, so the
     // loser retries against the version it has actually seen rather than silently overwriting.
     uniqueIndex('trade_terms_versions_trade_version').on(table.tradeId, table.versionNumber),
