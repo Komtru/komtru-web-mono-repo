@@ -7,11 +7,13 @@
 // and the Trades service has no staff read yet. The card shows the trade reference, how urgent it is
 // and why it was flagged.
 import { Chip, EmptyState, Skeleton } from '@komtru/ui-kit';
+import { useEffect } from 'react';
 import Link from 'next/link';
 import { agoLabel, priorityLabel, stateLabel } from './format';
 import { useCaseList } from './hooks';
 import { caseHref, QueueFrame } from './shared';
 
+const MAX_LOADED = 250;
 const FINISHED = new Set(['DECIDED', 'CLOSED']);
 
 function startOfToday(now: Date): Date {
@@ -20,6 +22,12 @@ function startOfToday(now: Date): Date {
 
 export function ProposalCheckIn(): React.JSX.Element {
   const result = useCaseList({ type: 'TRADE_PROPOSAL' });
+  // The platform lists one page at a time and cannot filter on "not finished", so follow the cursor
+  // (up to MAX_LOADED cases) until flagged and cleared are both complete.
+  const { hasMore, loadingMore, loadMore, cases } = result;
+  useEffect(() => {
+    if (hasMore && !loadingMore && cases.length < MAX_LOADED) loadMore();
+  }, [hasMore, loadingMore, loadMore, cases.length]);
   const now = new Date();
   const midnight = startOfToday(now).getTime();
 
@@ -52,7 +60,10 @@ export function ProposalCheckIn(): React.JSX.Element {
         <div className="mb-[14px] flex items-center justify-between gap-[10px]">
           <h2 className="m-0 text-[14px] font-semibold">Trade Proposals</h2>
           {flagged.length > 0 && (
-            <Chip tone="risk" dot={false}>{`${flagged.length}${result.hasMore ? '+' : ''} flagged`}</Chip>
+            <Chip
+              tone="risk"
+              dot={false}
+            >{`${flagged.length}${result.hasMore && result.cases.length >= MAX_LOADED ? '+' : ''} flagged`}</Chip>
           )}
         </div>
 

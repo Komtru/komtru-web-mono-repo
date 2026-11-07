@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { ProblemError } from '@komtru/api-client';
 import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { CaseDetail } from '../src/cases/CaseDetail';
@@ -311,5 +312,88 @@ describe('the universal case page', () => {
     answerWith(api.call, { 'GET /admin/me': staff(READ) });
     renderWithQuery(<CaseDetail caseId={CASE_ID} />);
     expect(await screen.findByText('We could not load this case')).toBeTruthy();
+  });
+});
+
+const problem = (status: number): Error =>
+  Object.assign(Object.create(ProblemError.prototype) as Error, { status });
+const failWith = (status: number) => () => {
+  throw problem(status);
+};
+
+describe('when an action fails', () => {
+  it('tells the person a conflict will not mend by retrying (decide, 409)', async () => {
+    serve(MANAGE, detail(), { 'POST /cases/:id/decisions': failWith(409) });
+    renderWithQuery(<CaseDetail caseId={CASE_ID} />);
+    await screen.findByRole('group', { name: 'Decision actions' });
+    fillDecision();
+    fireEvent.click(screen.getByRole('button', { name: 'Record decision' }));
+    expect(await screen.findByText(/Reload the page; trying again will not work/)).toBeTruthy();
+  });
+
+  it('says it is not allowed on a 403', async () => {
+    serve(MANAGE, detail(), { 'POST /cases/:id/decisions': failWith(403) });
+    renderWithQuery(<CaseDetail caseId={CASE_ID} />);
+    await screen.findByRole('group', { name: 'Decision actions' });
+    fillDecision();
+    fireEvent.click(screen.getByRole('button', { name: 'Record decision' }));
+    expect(await screen.findByText(/You cannot record the decision/)).toBeTruthy();
+  });
+
+  it('asks for a reason on a 400', async () => {
+    serve(MANAGE, detail(), { 'POST /cases/:id/escalate': failWith(400) });
+    renderWithQuery(<CaseDetail caseId={CASE_ID} />);
+    await screen.findByRole('group', { name: 'Decision actions' });
+    fireEvent.change(screen.getByLabelText('Reason for escalating'), { target: { value: 'x' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Escalate' }));
+    expect(await screen.findByText(/A reason is required to escalate this case/)).toBeTruthy();
+  });
+
+  it('reports a failed take', async () => {
+    serve(MANAGE, detail({ ownerUserId: null, state: 'OPEN' }), { 'POST /cases/:id/take': failWith(409) });
+    renderWithQuery(<CaseDetail caseId={CASE_ID} />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Take this case' }));
+    expect(await screen.findByText(/cannot take this case/)).toBeTruthy();
+  });
+
+  it('reports a failed reassign', async () => {
+    serve(MANAGE, detail({ ownerUserId: OTHER }), { 'POST /cases/:id/reassign': failWith(403) });
+    renderWithQuery(<CaseDetail caseId={CASE_ID} />);
+    await screen.findByText(/Only its owner can decide/);
+    fireEvent.change(screen.getByLabelText('Reason for reassigning'), { target: { value: 'cover' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Reassign to me' }));
+    expect(await screen.findByText(/You cannot reassign this case/)).toBeTruthy();
+  });
+
+  it('keeps a view-only person on the case when the advisory is refused with 403', async () => {
+    serve(READ, detail(), { 'GET /cases/:id/advisory': failWith(403) });
+    renderWithQuery(<CaseDetail caseId={CASE_ID} />);
+    expect(await screen.findByText(/can read cases but not decide them/)).toBeTruthy();
+    expect(screen.queryByRole('region', { name: 'AI-suggested — not a decision' })).toBeNull();
+  });
+});
+
+describe('the Trust Trail', () => {
+  it('says it did not load when the trail fails, and the rest of the page stays', async () => {
+    serve(MANAGE, detail(), { 'GET /cases/:id/trail': failWith(500) });
+    renderWithQuery(<CaseDetail caseId={CASE_ID} />);
+    expect(await screen.findByText(/The Trust Trail did not load/)).toBeTruthy();
+    expect(screen.getByRole('group', { name: 'Decision actions' })).toBeTruthy();
+  });
+
+  it('loads older entries on request', async () => {
+    let calls = 0;
+    serve(MANAGE, detail(), {
+      'GET /cases/:id/trail': () => {
+        calls += 1;
+        return calls === 1
+          ? { items: [trail.items[0]], nextCursor: 'c1' }
+          : { items: [trail.items[1]], nextCursor: null };
+      },
+    });
+    renderWithQuery(<CaseDetail caseId={CASE_ID} />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Load older' }));
+    expect(await screen.findByText('Registered')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Load older' })).toBeNull();
   });
 });

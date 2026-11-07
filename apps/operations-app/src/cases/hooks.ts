@@ -139,10 +139,25 @@ export function useCaseDetail(id: string) {
 
 export function useCaseTrail(id: string) {
   const client = useApiClient();
-  return useQuery({
+  const query = useInfiniteQuery({
     queryKey: casesKeys.trail(id),
-    queryFn: ({ signal }) => client.call(listCaseTrail, { params: { id }, query: { limit: 50 } }, { signal }),
+    initialPageParam: undefined as string | undefined,
+    queryFn: ({ pageParam, signal }) =>
+      client.call(
+        listCaseTrail,
+        { params: { id }, query: { limit: 50, ...(pageParam ? { cursor: pageParam } : {}) } },
+        { signal },
+      ),
+    getNextPageParam: nextPageParam,
   });
+  return {
+    entries: query.data?.pages.flatMap((page) => page.items) ?? [],
+    hasMore: query.hasNextPage,
+    loadMore: () => void query.fetchNextPage(),
+    loadingMore: query.isFetchingNextPage,
+    loading: query.isPending,
+    failed: query.isError && query.data === undefined,
+  };
 }
 
 /** The advisory is a read and stays a read: nothing here posts, and nothing takes it as an input. */

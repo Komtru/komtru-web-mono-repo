@@ -15,7 +15,7 @@ export function MyWork(): React.JSX.Element {
 
   const present = AREAS.filter((candidate) => result.cases.some((row) => areaOf(row.type) === candidate));
   const chips: FilterChip[] = [
-    { id: 'all', label: `All (${result.cases.length})`, active: area === null },
+    { id: 'all', label: `All (${result.cases.length}${result.hasMore ? '+' : ''})`, active: area === null },
     ...present.map((candidate) => ({ id: candidate, label: candidate, active: area === candidate })),
   ];
 

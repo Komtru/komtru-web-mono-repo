@@ -37,6 +37,7 @@ import {
 } from '@komtru/ui-kit';
 import { useId, useState } from 'react';
 import {
+  failureMessage,
   clockLabel,
   clockTone,
   humanise,
@@ -179,11 +180,7 @@ function EvidenceRequests({
           ))}
         </ul>
       )}
-      {resolve.isError && (
-        <Banner tone="risk" className="mt-[10px]">
-          We could not update that request. It may already have been resolved.
-        </Banner>
-      )}
+      <ErrorLine error={resolve.error} what="update that request" />
     </Panel>
   );
 }
@@ -205,7 +202,7 @@ function trailEvents(entries: CaseTrailEntry[], viewerId: string | undefined): T
 function Trail({ caseId }: { caseId: string }): React.JSX.Element {
   const viewerId = useViewerId();
   const trail = useCaseTrail(caseId);
-  if (trail.isError) {
+  if (trail.failed) {
     return (
       <Panel heading="Trust Trail">
         <p className="text-[12px] text-slate">The Trust Trail did not load. Reload the page to try again.</p>
@@ -213,25 +210,44 @@ function Trail({ caseId }: { caseId: string }): React.JSX.Element {
     );
   }
   return (
-    <TrustTrail
-      events={trail.data === undefined ? [] : trailEvents(trail.data.items, viewerId)}
-      empty={trail.isPending ? 'Loading the Trust Trail…' : undefined}
-    />
+    <>
+      <TrustTrail
+        events={trailEvents(trail.entries, viewerId)}
+        empty={trail.loading ? 'Loading the Trust Trail…' : undefined}
+      />
+      {trail.hasMore && (
+        <Button
+          type="button"
+          variant="secondary"
+          disabled={trail.loadingMore}
+          onClick={trail.loadMore}
+          className={`${SMALL} mt-[10px]`}
+        >
+          {trail.loadingMore ? 'Loading…' : 'Load older'}
+        </Button>
+      )}
+    </>
   );
 }
 
-function ErrorLine({ failed, what }: { failed: boolean; what: string }): React.JSX.Element | null {
-  return failed ? (
+function ErrorLine({ error, what }: { error: unknown; what: string }): React.JSX.Element | null {
+  return error === null || error === undefined ? null : (
     <Banner tone="risk" className="mt-[10px]">
-      We could not {what}. The case was not changed; try again.
+      {failureMessage(error, what)}
     </Banner>
-  ) : null;
+  );
 }
 
 /** Escalate, change priority, request evidence: the owner's other moves besides deciding. */
 function WorkThisCase({ data }: { data: CaseDetailData }): React.JSX.Element {
   const [escalateReason, setEscalateReason] = useState('');
   const [priority, setPriority] = useState(data.priority);
+  // A refetch can change the priority under the form (someone else changed it); follow it.
+  const [seenPriority, setSeenPriority] = useState(data.priority);
+  if (seenPriority !== data.priority) {
+    setSeenPriority(data.priority);
+    setPriority(data.priority);
+  }
   const [priorityReason, setPriorityReason] = useState('');
   const [description, setDescription] = useState('');
 
@@ -264,7 +280,7 @@ function WorkThisCase({ data }: { data: CaseDetailData }): React.JSX.Element {
           >
             Escalate
           </Button>
-          <ErrorLine failed={escalate.isError} what="escalate this case" />
+          <ErrorLine error={escalate.error} what="escalate this case" />
         </div>
       )}
 
@@ -295,7 +311,7 @@ function WorkThisCase({ data }: { data: CaseDetailData }): React.JSX.Element {
         >
           Change priority
         </Button>
-        <ErrorLine failed={changePriority.isError} what="change the priority" />
+        <ErrorLine error={changePriority.error} what="change the priority" />
       </div>
 
       <div className="grid gap-[8px]">
@@ -314,7 +330,7 @@ function WorkThisCase({ data }: { data: CaseDetailData }): React.JSX.Element {
         >
           Request evidence
         </Button>
-        <ErrorLine failed={askEvidence.isError} what="request that evidence" />
+        <ErrorLine error={askEvidence.error} what="request that evidence" />
       </div>
     </Panel>
   );
@@ -347,7 +363,7 @@ function DecisionForm({
         policy: present(policy) ? policy.trim() : 'the policy named below',
         section: clauseText || '…',
       }}
-      footnote="Your reason and the policy are saved to the Trust Trail. Both parties are told."
+      footnote="Your reason and the policy are saved to the Trust Trail."
       actions={
         <>
           <TextField
@@ -382,7 +398,7 @@ function DecisionForm({
           >
             Record decision
           </Button>
-          <ErrorLine failed={decide.isError} what="record the decision" />
+          <ErrorLine error={decide.error} what="record the decision" />
         </>
       }
     />
@@ -448,7 +464,7 @@ function Decision({
         <Button type="button" disabled={take.isPending} onClick={() => take.mutate()} className={SMALL}>
           Take this case
         </Button>
-        <ErrorLine failed={take.isError} what="take this case" />
+        <ErrorLine error={take.error} what="take this case" />
       </Panel>
     );
   }
@@ -479,7 +495,7 @@ function Decision({
         >
           Reassign to me
         </Button>
-        <ErrorLine failed={reassign.isError} what="reassign this case" />
+        <ErrorLine error={reassign.error} what="reassign this case" />
       </Panel>
     );
   }

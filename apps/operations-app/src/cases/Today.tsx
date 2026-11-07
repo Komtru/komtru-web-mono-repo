@@ -5,7 +5,7 @@
 // Left out because the platform has no read for them: "Decided today" and "Just decided" (no
 // recent-decisions feed) and "Where the work is" (no per-area totals or oldest-clock figures).
 // Drawing them from invented rows would be worse than not drawing them.
-import { KpiCard } from '@komtru/ui-kit';
+import { Banner, KpiCard } from '@komtru/ui-kit';
 import Link from 'next/link';
 import { caseColumns, CaseListView, QueueFrame, useViewerId } from './shared';
 import { useCaseCounts, useCaseQueue } from './hooks';
@@ -32,6 +32,14 @@ export function Today(): React.JSX.Element {
       title="Today"
       description="What is waiting for you, where the work is and what is escalated."
     >
+      {counts.isError && data === undefined && (
+        <Banner tone="risk" title="We could not load the queue figures" className="mb-[12px]">
+          The tiles below show a dash until they load.{' '}
+          <button type="button" onClick={() => void counts.refetch()} className="font-semibold underline">
+            Try again
+          </button>
+        </Banner>
+      )}
       <section aria-label="Queue at a glance" className="grid grid-cols-2 gap-[12px] lg:grid-cols-4">
         <KpiCard
           label="Waiting for you"

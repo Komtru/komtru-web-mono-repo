@@ -6,8 +6,12 @@
 // list of invented colleagues is worse than none. Assigning to someone else is Reassign on the case.
 import { Banner, Button, type DataColumn } from '@komtru/ui-kit';
 import { takeCase, type CaseView } from '@komtru/api-client';
+import { failureMessage } from './format';
 import { useCaseAction, useCaseQueue } from './hooks';
 import { caseColumns, CaseListView, QueueFrame, useCanManage, useViewerId } from './shared';
+
+const caseCodeFor = (cases: CaseView[], id: string | undefined): string =>
+  cases.find((row) => row.id === id)?.code ?? 'that case';
 
 export function TeamQueue(): React.JSX.Element {
   const viewerId = useViewerId();
@@ -22,7 +26,7 @@ export function TeamQueue(): React.JSX.Element {
       <Button
         type="button"
         variant="secondary"
-        disabled={take.isPending}
+        disabled={take.isPending && take.variables === row.id}
         onClick={() => take.mutate(row.id)}
         className="w-auto!"
       >
@@ -39,7 +43,8 @@ export function TeamQueue(): React.JSX.Element {
     >
       {take.isError && (
         <Banner tone="risk" title="We could not take that case" className="mb-[12px]">
-          Someone may have taken it first. The list has been refreshed.
+          {failureMessage(take.error, `take ${caseCodeFor(result.cases, take.variables)}`)} The list has been
+          refreshed.
         </Banner>
       )}
       <CaseListView

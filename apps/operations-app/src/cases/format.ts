@@ -1,4 +1,5 @@
 // How a case is written on screen: the area it belongs to, the clock on it, plain words for codes.
+import { ProblemError } from '@komtru/api-client';
 import type { CasePriority, CaseState, CaseTrailType, CaseType, CaseView } from '@komtru/api-client';
 import type { ChipTone } from '@komtru/ui-kit';
 
@@ -122,4 +123,20 @@ export function ownerLabel(ownerUserId: string | null, viewerId: string | undefi
   if (ownerUserId === null) return 'Unassigned';
   if (ownerUserId === viewerId) return 'You';
   return `Staff ${ownerUserId.slice(-12)}`;
+}
+
+/** What went wrong, by what the platform said: a retry only helps when the failure was a blip. */
+export function failureMessage(error: unknown, what: string): string {
+  if (error instanceof ProblemError) {
+    if (error.status === 403) {
+      return `You cannot ${what}. Only the case owner, holding the case permission, can; check who owns it.`;
+    }
+    if (error.status === 409) {
+      return `The case changed while you were looking (it may already be owned or decided), so you cannot ${what}. Reload the page; trying again will not work.`;
+    }
+    if (error.status === 400) {
+      return `A reason is required to ${what}. Add one and try again.`;
+    }
+  }
+  return `We could not ${what}. The case was not changed; try again.`;
 }

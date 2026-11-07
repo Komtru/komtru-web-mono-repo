@@ -73,6 +73,13 @@ describe('Today (OP-01)', () => {
     await expectNoAxeViolations(container, SHELL_RULES);
   });
 
+  it('says when the queue figures did not load, with a way to retry', async () => {
+    answerWith(api.call, { 'GET /admin/me': staff(READ), 'GET /cases/queue': page([]) });
+    renderWithQuery(<Today />);
+    expect(await screen.findByText('We could not load the queue figures')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Try again' })).toBeTruthy();
+  });
+
   it('says so when nothing is waiting', async () => {
     answerWith(api.call, {
       'GET /admin/me': staff(READ),
@@ -179,7 +186,7 @@ describe('Team queue (OP-03)', () => {
     renderWithQuery(<TeamQueue />);
     const table = await screen.findByRole('table', { name: 'Unassigned' });
     fireEvent.click(within(table).getAllByRole('button', { name: /Take/ })[0]!);
-    expect(await screen.findByText(/could not take/i)).toBeTruthy();
+    expect(await screen.findByText(/could not take C-000010.*The list has been refreshed/s)).toBeTruthy();
   });
 
   it('does not invent a capacity roster', async () => {
