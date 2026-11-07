@@ -64,7 +64,7 @@ describe.runIf(infraEnabled)('proposal flow (T-061)', () => {
   /** Finished uploads by id; each belongs to whoever `file()` says. */
   const files = new Map<string, { contentType: string; uploaderUserId: string; visibility: string }>();
 
-  const deps = (): TradeDeps => ({
+  const deps = (overrides: Partial<TradeDeps> = {}): TradeDeps => ({
     db: t.db(),
     cities: (_db, ids) => Promise.resolve(ids.map((id) => ({ id, active: true })) as never),
     party: { db: t.db(), budget: NO_LOOKUP_BUDGET },
@@ -85,6 +85,7 @@ describe.runIf(infraEnabled)('proposal flow (T-061)', () => {
     grantProofAccess: (fileIds, buyer) => Promise.resolve(void granted.push({ fileIds, buyer })),
     snapshotFees,
     graceHours: () => Promise.resolve(48),
+    ...overrides,
   });
 
   const person = async (username: string, overrides: Record<string, unknown> = {}) => {
@@ -329,6 +330,26 @@ describe.runIf(infraEnabled)('proposal flow (T-061)', () => {
       expect(error.status).toBe(422);
       expect(error.detail).toContain('2 more photos');
       expect((await getTrade(deps(), { userId: seller.id, tradeId: draft.id })).status).toBe('DRAFT');
+    });
+
+    it('heals a failed post-commit proof grant when the send is retried', async () => {
+      const seller = await person('seller');
+      const buyer = await person('buyer');
+      const draft = await sellerDraft(seller);
+      const send = {
+        userId: seller.id,
+        tradeId: draft.id,
+        counterparty: { channel: 'USERNAME' as const, value: 'buyer' },
+      };
+      const failing = deps({ grantProofAccess: () => Promise.reject(new Error('files are down')) });
+      await expect(sendProposal(failing, send)).rejects.toThrow('files are down');
+      expect((await getTrade(deps(), { userId: seller.id, tradeId: draft.id })).status).toBe(
+        'AWAITING_ACCEPTANCE',
+      );
+      const before = granted.length;
+      const replay = await sendProposal(deps(), send);
+      expect(replay.status).toBe('AWAITING_ACCEPTANCE');
+      expect(granted.slice(before).map((g) => g.buyer)).toEqual([buyer.id]);
     });
 
     it("rejects proof that is not the seller's own or not private to the case", async () => {
@@ -602,6 +623,8 @@ describe.runIf(infraEnabled)('proposal flow (T-061)', () => {
       const claimed = await claimTradeInvitation(deps(), { userId: claimer.id, tradeId: draft.id });
       expect(claimed.status).toBe('AWAITING_ACCEPTANCE');
       expect(claimed.yourRole).toBe('BUYER');
+      // The claim binds the buyer, so the seller's proof opens to them now (and not before).
+      expect(granted.filter((g) => g.buyer === claimer.id)).toHaveLength(1);
       // Replay changes nothing.
       expect(
         (await claimTradeInvitation(deps(), { userId: claimer.id, tradeId: draft.id })).statusRevision,

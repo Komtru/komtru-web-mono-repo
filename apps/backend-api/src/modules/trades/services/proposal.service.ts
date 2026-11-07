@@ -338,7 +338,13 @@ export async function sendProposal(deps: TradeDeps, input: SendInput): Promise<T
   if (draft.initiatorUserId !== input.userId) throw tradeNotFoundError();
   // Idempotent replay: already sent means the answer is the trade as it stands.
   if (draft.status !== 'DRAFT') {
-    if (draft.sentAt) return deps.db.transaction(async (tx) => viewTrade(tx, draft, input.userId));
+    if (draft.sentAt) {
+      const view = await deps.db.transaction(async (tx) => viewTrade(tx, draft, input.userId));
+      // The grant runs after the send commits, so a failure there leaves a sent trade without it:
+      // the retry is where it heals (the grant is idempotent).
+      await grantProofToBuyer(deps, input.tradeId);
+      return view;
+    }
     throw new ApiError(409, 'INVALID_TRANSITION', 'That step is not available on this trade');
   }
 
@@ -652,7 +658,9 @@ export async function claimTradeInvitation(
   const counterpartyRole = otherRole(before.initiatorRole);
   if (before.status !== 'PENDING_COUNTERPARTY') {
     // Already claimed by this person (a replay) is fine; anything else is not theirs to see.
-    return deps.db.transaction(async (tx) => viewTrade(tx, before, input.userId));
+    const view = await deps.db.transaction(async (tx) => viewTrade(tx, before, input.userId));
+    await grantProofToBuyer(deps, input.tradeId);
+    return view;
   }
   if (counterpartyRole === 'BUYER') {
     await refuseMerchantBuyer(deps, {
@@ -663,7 +671,7 @@ export async function claimTradeInvitation(
     });
   }
 
-  return deps.db.transaction(async (tx) => {
+  const view = await deps.db.transaction(async (tx) => {
     const trade = await loadTrade(tx, input.tradeId, true);
     if (trade.status !== 'PENDING_COUNTERPARTY') return viewTrade(tx, trade, input.userId);
     if (!trade.counterpartyInvitationId) throw tradeNotFoundError();
@@ -694,6 +702,9 @@ export async function claimTradeInvitation(
     });
     return viewTrade(tx, await loadTrade(tx, trade.id), input.userId);
   });
+  // Only on the success path, and after the commit: a claimer who is the buyer opens the proof now.
+  await grantProofToBuyer(deps, input.tradeId);
+  return view;
 }
 
 async function requireAnyUsableAddress(
