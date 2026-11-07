@@ -77,6 +77,21 @@
       "definition": "CREATE UNIQUE INDEX user_phones_verified_unique ON identity.user_phones USING btree (phone_e164) WHERE (verified_at IS NOT NULL)"
     },
     {
+      "table": "ledger.payment_attempts",
+      "name": "payment_attempts_one_open",
+      "definition": "CREATE UNIQUE INDEX payment_attempts_one_open ON ledger.payment_attempts USING btree (trade_id) WHERE (status = ANY (ARRAY['INITIATED'::ledger.payment_attempt_status, 'PENDING'::ledger.payment_attempt_status]))"
+    },
+    {
+      "table": "ledger.payment_attempts",
+      "name": "payment_attempts_one_success",
+      "definition": "CREATE UNIQUE INDEX payment_attempts_one_success ON ledger.payment_attempts USING btree (trade_id) WHERE (status = 'SUCCEEDED'::ledger.payment_attempt_status)"
+    },
+    {
+      "table": "ledger.payment_attempts",
+      "name": "payment_attempts_provider_ref",
+      "definition": "CREATE UNIQUE INDEX payment_attempts_provider_ref ON ledger.payment_attempts USING btree (provider, provider_reference) WHERE (provider_reference IS NOT NULL)"
+    },
+    {
       "table": "trade.delivery_signals",
       "name": "delivery_signals_shipment_event",
       "definition": "CREATE UNIQUE INDEX delivery_signals_shipment_event ON trade.delivery_signals USING btree (trade_id, source, shipment_event_id) WHERE (shipment_event_id IS NOT NULL)"
@@ -284,6 +299,36 @@
       "definition": "CHECK (((provider IS NULL) = (provider_reference IS NULL)))"
     },
     {
+      "table": "ledger.payment_attempts",
+      "name": "payment_attempts_amounts",
+      "definition": "CHECK (((item_amount_minor > 0) AND (buyer_protection_fee_minor >= 0) AND (amount_minor = (item_amount_minor + buyer_protection_fee_minor))))"
+    },
+    {
+      "table": "ledger.payment_attempts",
+      "name": "payment_attempts_closed",
+      "definition": "CHECK (((status = ANY (ARRAY['FAILED'::ledger.payment_attempt_status, 'ABANDONED'::ledger.payment_attempt_status, 'NEEDS_REVIEW'::ledger.payment_attempt_status])) = (closed_at IS NOT NULL)))"
+    },
+    {
+      "table": "ledger.payment_attempts",
+      "name": "payment_attempts_currency",
+      "definition": "CHECK ((currency ~ '^[A-Z]{3}$'::text))"
+    },
+    {
+      "table": "ledger.payment_attempts",
+      "name": "payment_attempts_reference_shape",
+      "definition": "CHECK ((reference = ('fund-'::text || (id)::text)))"
+    },
+    {
+      "table": "ledger.payment_attempts",
+      "name": "payment_attempts_succeeded_posted",
+      "definition": "CHECK (((status = 'SUCCEEDED'::ledger.payment_attempt_status) = ((journal_entry_id IS NOT NULL) AND (confirmed_at IS NOT NULL))))"
+    },
+    {
+      "table": "ledger.payment_provider_webhooks",
+      "name": "payment_provider_webhooks_signed",
+      "definition": "CHECK (signature_valid)"
+    },
+    {
       "table": "notify.notifications",
       "name": "notifications_suppressed_has_reason",
       "definition": "CHECK (((status <> 'SUPPRESSED'::notify.notification_status) OR (failed_reason IS NOT NULL)))"
@@ -464,6 +509,26 @@
       "table": "ledger.ledger_journal_entries",
       "name": "ledger_journal_entry_balanced",
       "definition": "[O] CREATE CONSTRAINT TRIGGER ledger_journal_entry_balanced AFTER INSERT ON ledger.ledger_journal_entries DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION ledger.journal_entry_balanced()"
+    },
+    {
+      "table": "ledger.payment_attempts",
+      "name": "komtru_no_delete",
+      "definition": "[O] CREATE TRIGGER komtru_no_delete BEFORE DELETE ON ledger.payment_attempts FOR EACH ROW EXECUTE FUNCTION ledger.reject_delete()"
+    },
+    {
+      "table": "ledger.payment_attempts",
+      "name": "komtru_payment_attempt_guard",
+      "definition": "[O] CREATE TRIGGER komtru_payment_attempt_guard BEFORE UPDATE ON ledger.payment_attempts FOR EACH ROW EXECUTE FUNCTION ledger.guard_payment_attempt()"
+    },
+    {
+      "table": "ledger.payment_provider_webhooks",
+      "name": "komtru_no_delete",
+      "definition": "[O] CREATE TRIGGER komtru_no_delete BEFORE DELETE ON ledger.payment_provider_webhooks FOR EACH ROW EXECUTE FUNCTION ledger.reject_delete()"
+    },
+    {
+      "table": "ledger.payment_provider_webhooks",
+      "name": "komtru_payment_webhook_guard",
+      "definition": "[O] CREATE TRIGGER komtru_payment_webhook_guard BEFORE UPDATE ON ledger.payment_provider_webhooks FOR EACH ROW EXECUTE FUNCTION ledger.guard_payment_webhook()"
     },
     {
       "table": "notify.notification_delivery_attempts",

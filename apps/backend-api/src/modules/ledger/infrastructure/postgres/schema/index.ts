@@ -4,3 +4,4 @@ export * from './columns.js';
 export * from './enums.js';
 export * from './accounts.js';
 export * from './journal.js';
+export * from './payments.js';

@@ -281,6 +281,13 @@
       "when": 1794007401698,
       "tag": "0039_trade_proposal_flow",
       "breakpoints": true
+    },
+    {
+      "idx": 40,
+      "version": "7",
+      "when": 1794030771924,
+      "tag": "0040_ledger_payments",
+      "breakpoints": true
     }
   ]
 }

@@ -199,6 +199,11 @@
       "tag": "0039_trade_proposal_flow",
       "when": 1794007401698,
       "sha256": "f2eb4a2076a5d5ba9585b1f8e5d7de62cf8556203278d7e946bb195e28312e73"
+    },
+    {
+      "tag": "0040_ledger_payments",
+      "when": 1794030771924,
+      "sha256": "3a76001342d5fda6cbae965ba8899f8537e87adf2379acae2e2155517afd2590"
     }
   ]
 }
