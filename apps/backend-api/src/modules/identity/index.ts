@@ -38,6 +38,13 @@ import { createLookupBudget } from './infrastructure/redis/lookup-budget.js';
 import { createTokenSigner, type TokenSigner } from './infrastructure/jwt/access-token.js';
 import { createEpochCache, type EpochCache } from './infrastructure/redis/epoch-cache.js';
 import { seedIdentityCatalogue } from './infrastructure/postgres/seed.js';
+import { lifecycleRoutes } from './http/routes/lifecycle.routes.js';
+import type { LifecycleControllerDeps } from './http/controllers/lifecycle.controller.js';
+import { requireStepUp as requireStepUpToken } from './services/step-up.service.js';
+import { activeFactors } from './services/mfa.service.js';
+import { sweepAbandonedRegistrations, type LifecyclePorts } from './services/lifecycle.service.js';
+import { expireRecoveryRequests } from './services/recovery.service.js';
+import type { NdpaDeps } from './services/ndpa.service.js';
 
 export * from './infrastructure/postgres/schema/index.js';
 export * from './domain/events.js';
@@ -197,6 +204,42 @@ export const PARTY_INVITATIONS_EXPIRE_SCHEDULE = 'identity.party-invitations-exp
 export const STAFF_INVITATIONS_EXPIRE_CRON = '15 2 * * *';
 export const STAFF_INVITATIONS_EXPIRE_SCHEDULE = 'identity.staff-invitations-expire';
 
+// T-039. The lifecycle machine, the NDPA procedures and account recovery.
+export * from './domain/lifecycle.js';
+export * from './domain/recovery.js';
+export {
+  applyStatusTransition,
+  assertNoActiveTrades,
+  closeOwnAccount,
+  getAccountNotice,
+  lockAccount,
+  lockUserForTrade,
+  sweepAbandonedRegistrations,
+  type AccountNotice,
+  type LifecyclePorts,
+  type TransitionResult,
+} from './services/lifecycle.service.js';
+export {
+  anonymiseUser,
+  requestDataExport,
+  requestErasure,
+  type AnonymiseInput,
+  type AnonymiseResult,
+  type NdpaDeps,
+} from './services/ndpa.service.js';
+export {
+  decideRecovery,
+  expireRecoveryRequests,
+  listRecoveryRequests,
+  requestRecovery,
+} from './services/recovery.service.js';
+
+export const ABANDONED_REGISTRATIONS_SCHEDULE = 'identity.abandoned-registrations-close';
+/** 02:25 Africa/Lagos, after the invitation sweeps. */
+export const ABANDONED_REGISTRATIONS_CRON = '25 2 * * *';
+export const RECOVERY_EXPIRE_SCHEDULE = 'identity.recovery-requests-expire';
+export const RECOVERY_EXPIRE_CRON = '35 2 * * *';
+
 export interface IdentityAuthOptions {
   db: Db;
   redis: Redis;
@@ -209,6 +252,14 @@ export interface IdentityAuthOptions {
    * identity). Absent means address writes fail loudly rather than skip the city check.
    */
   cities?: CityLookup;
+  /**
+   * True when the user is a party to a trade that has not reached a terminal state (CA1/CA2). Wired
+   * by the registry from trades, which imports identity. ABSENT MEANS "YES": an unwired process
+   * refuses to close an account rather than closing it blind.
+   */
+  hasActiveTrades?: NonNullable<LifecyclePorts['hasActiveTrades']>;
+  /** Files' `tombstoneByUploader`, called after an anonymisation commits (M1 §15, M20 D4). */
+  tombstoneUserFiles?: NdpaDeps['tombstoneUserFiles'];
 }
 
 export interface IdentityAuth {
@@ -292,6 +343,28 @@ export function createIdentityAuth(options: IdentityAuthOptions): IdentityAuth {
     logger,
   };
 
+  const ports: LifecyclePorts = options.hasActiveTrades ? { hasActiveTrades: options.hasActiveTrades } : {};
+  // A password is the proof for closing an account that has one; one that has none (a social or
+  // passkey-only account) presents a step-up token, whose accepted factors are its live ones.
+  const lifecycle: LifecycleControllerDeps = {
+    db,
+    ports,
+    epochs,
+    hasher: account.hasher,
+    breach: account.breach,
+    logger,
+    identifierHasher: account.otpHasher,
+    requireStepUp: async (tx, userId, token) => {
+      const live = await activeFactors(tx, userId);
+      await requireStepUpToken(tx, account, {
+        userId,
+        token,
+        acceptedFactors: live.length > 0 ? live.map((factor) => factor.factorType) : ['PASSWORD'],
+      });
+    },
+    ...(options.tombstoneUserFiles ? { tombstoneUserFiles: options.tombstoneUserFiles } : {}),
+  };
+
   return {
     signer,
     epochs,
@@ -325,13 +398,14 @@ export function createIdentityAuth(options: IdentityAuthOptions): IdentityAuth {
       ...registrationRoutes(account),
       ...passwordRoutes(account),
       ...staffAuthRoutes(account),
-      ...adminRoutes({ db, epochs }),
+      ...adminRoutes({ db, epochs, ports }),
       ...staffInvitationRoutes({ db, hasher: account.otpHasher, encryption, logger }),
       ...usernameRoutes({ db }),
       ...partyRoutes(party),
       ...deviceRoutes({ db, logger }),
       ...addressRoutes({ db, cities: options.cities ?? missingCityLookup }),
       ...mfaRoutes(account),
+      ...lifecycleRoutes(lifecycle),
     ],
     schedules: [
       {
@@ -345,6 +419,18 @@ export function createIdentityAuth(options: IdentityAuthOptions): IdentityAuth {
         cron: STAFF_INVITATIONS_EXPIRE_CRON,
         description: 'Expires staff invitations unaccepted after 7 days (T-038).',
         handler: () => expireStaffInvitations(db),
+      },
+      {
+        name: ABANDONED_REGISTRATIONS_SCHEDULE,
+        cron: ABANDONED_REGISTRATIONS_CRON,
+        description: 'Closes registrations that verified no channel within 30 days (M1 §9.1).',
+        handler: () => sweepAbandonedRegistrations({ db, ports }),
+      },
+      {
+        name: RECOVERY_EXPIRE_SCHEDULE,
+        cron: RECOVERY_EXPIRE_CRON,
+        description: 'Expires account recovery requests nobody decided within 7 days (M1 §5.8).',
+        handler: () => expireRecoveryRequests(db),
       },
     ],
   };

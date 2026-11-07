@@ -130,18 +130,25 @@ describe.runIf(infraEnabled)('enumeration (M1 §17)', () => {
     expect(unknown.body).toEqual(wrong.body);
   });
 
-  it('answers a suspended account the same way as a wrong password (S3)', async () => {
+  it('answers a suspended account like an unknown one until the password is proved (S3)', async () => {
     const userId = await seedKnownUser();
     await t.owner().query(`UPDATE identity.users SET status = 'SUSPENDED' WHERE id = $1`, [userId]);
 
+    // Without the password the suspended account is indistinguishable from an unknown one.
     const suspended = await request(app)
       .post('/v1/auth/login')
-      .send({ identifier: KNOWN, password: PASSWORD });
+      .send({ identifier: KNOWN, password: 'not the password 1' });
     const unknown = await request(app)
       .post('/v1/auth/login')
-      .send({ identifier: UNKNOWN, password: PASSWORD });
+      .send({ identifier: UNKNOWN, password: 'not the password 1' });
     expect(suspended.status).toBe(401);
     expect(suspended.body).toEqual(unknown.body);
+
+    // T-039 (AS1/AS2): the holder of the right password is told why, with a reference and no reason text.
+    const owner = await request(app).post('/v1/auth/login').send({ identifier: KNOWN, password: PASSWORD });
+    expect(owner.status).toBe(403);
+    expect(owner.body).toMatchObject({ account: { status: 'SUSPENDED', noticeKey: 'ACCOUNT_SUSPENDED' } });
+    expect(JSON.stringify(owner.body)).not.toContain('accessToken');
   });
 
   it('returns an identical forgot-password response for a known and an unknown identifier', async () => {

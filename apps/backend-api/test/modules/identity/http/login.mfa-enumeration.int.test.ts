@@ -260,8 +260,13 @@ describe.runIf(infraEnabled)('the mfaRequired branch is not an enumeration signa
     const response = await request(app)
       .post('/v1/auth/login')
       .send({ identifier: MFA_USER, password: PASSWORD });
-    expect(response.status).toBe(401);
+    // Password proved, status refused: the AS1/AS2 notice (T-039), and still never a challenge.
+    expect(response.status).toBe(403);
     expect(bodyOf<LoginBody>(response).mfaRequired).toBeUndefined();
+    const wrong = await request(app)
+      .post('/v1/auth/login')
+      .send({ identifier: MFA_USER, password: 'not the password 1' });
+    expect(wrong.status).toBe(401);
   });
 
   /** The challenge says what to present, and nothing about the account beyond that. */
