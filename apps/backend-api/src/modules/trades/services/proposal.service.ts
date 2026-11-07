@@ -15,6 +15,7 @@ import { and, eq, inArray, ne } from 'drizzle-orm';
 import { ApiError } from '../../../platform/errors.js';
 import type { Tx } from '../../../platform/events/publish.js';
 import {
+  cancelInvitation,
   createInvitation,
   hasUsableAddress,
   lookupKeyForEmail,
@@ -338,14 +339,11 @@ const keyFor = (counterparty: SendInput['counterparty']): LookupKey | null =>
       ? lookupKeyForEmail(counterparty.value)
       : lookupKeyForPhone(counterparty.value);
 
+type Found = { kind: 'USER'; userId: string } | { kind: 'INVITE' };
 type Resolved = { kind: 'USER'; userId: string } | { kind: 'INVITED'; invitationId: string };
 
-async function resolveCounterparty(
-  deps: TradeDeps,
-  input: SendInput,
-  trade: TradeRow,
-  counterpartyRole: TradeInitiatorRole,
-): Promise<Resolved> {
+/** Who the sender named, without creating anything: an existing person, or somebody to invite. */
+async function findCounterparty(deps: TradeDeps, input: SendInput): Promise<Found> {
   const key = keyFor(input.counterparty);
   if (!key) {
     throw new ApiError(422, 'VALIDATION_FAILED', 'That is not a valid username, email or phone', undefined, [
@@ -365,6 +363,16 @@ async function resolveCounterparty(
     // A username that matches nobody: usernames cannot be invited, only found.
     throw new ApiError(404, 'NOT_FOUND', 'No one has that username');
   }
+  return { kind: 'INVITE' };
+}
+
+/** Writes the invitation. Called last, once everything that can refuse the send has been checked. */
+async function inviteCounterparty(
+  deps: TradeDeps,
+  input: SendInput,
+  trade: TradeRow,
+  counterpartyRole: TradeInitiatorRole,
+): Promise<Resolved> {
   const invited = await createInvitation(deps.invitations, {
     inviterUserId: input.userId,
     channel: input.counterparty.channel === 'EMAIL' ? 'EMAIL' : 'PHONE',
@@ -379,6 +387,34 @@ async function resolveCounterparty(
     ]);
   }
   return { kind: 'INVITED', invitationId: invited.invitationId };
+}
+
+/**
+ * Everything about the sender's side that can refuse a send, read-only: the address is still
+ * usable, and a seller's proof (what is attached plus what this call adds) meets the standard.
+ * Run before an invitation exists, so a refusal leaves nothing behind. The send repeats these
+ * checks under the row lock, which is the one that counts.
+ */
+async function assertSendable(
+  deps: TradeDeps,
+  tx: Tx,
+  trade: TradeRow,
+  input: SendInput,
+  standard: TradeStandard,
+): Promise<void> {
+  const terms = await loadTerms(tx, trade.currentTermsVersionId);
+  await snapshotAddress(
+    deps,
+    tx,
+    input.userId,
+    addressOf(terms, trade.initiatorRole)?.source_address_id,
+    trade.initiatorRole,
+  );
+  if (trade.initiatorRole !== 'SELLER') return;
+  const fresh = await checkProofFiles(deps, tx, trade, input.userId, input.proofFileIds ?? []);
+  const files = await deps.proofFiles(tx, [...(await proofFileIds(tx, trade.id)), ...fresh]);
+  const check = checkProofMedia(proofRequirement(standard), files);
+  if (!check.ok) throw proofMediaRequiredError(check);
 }
 
 export async function sendProposal(deps: TradeDeps, input: SendInput): Promise<TradeView> {
@@ -397,14 +433,13 @@ export async function sendProposal(deps: TradeDeps, input: SendInput): Promise<T
   }
 
   const counterpartyRole = otherRole(draft.initiatorRole);
-  const resolved = await resolveCounterparty(deps, input, draft, counterpartyRole);
-
-  if (resolved.kind === 'USER') {
-    if (resolved.userId === input.userId) throw selfTradeError();
+  const target = await findCounterparty(deps, input);
+  if (target.kind === 'USER') {
+    if (target.userId === input.userId) throw selfTradeError();
     // Rejected before send: a certified merchant cannot be named as the buyer.
     if (counterpartyRole === 'BUYER') {
       await refuseMerchantBuyer(deps, {
-        buyerUserId: resolved.userId,
+        buyerUserId: target.userId,
         actorId: input.userId,
         path: 'NAMED_AS_BUYER',
         tradeId: draft.id,
@@ -413,8 +448,63 @@ export async function sendProposal(deps: TradeDeps, input: SendInput): Promise<T
   }
 
   const standard = await deps.standards.pinned(requireCategory(draft), requireVersion(draft));
+  await deps.db.transaction((tx) => assertSendable(deps, tx, draft, input, standard));
 
-  const result = await deps.db.transaction(async (tx) => {
+  // Only now, with nothing left that can refuse the send, is the invitation written.
+  const resolved: Resolved =
+    target.kind === 'USER' ? target : await inviteCounterparty(deps, input, draft, counterpartyRole);
+
+  let result: TradeView;
+  try {
+    result = await sendInTransaction(deps, input, standard, resolved, counterpartyRole);
+  } catch (error) {
+    // The send failed after the invitation was written: withdraw it rather than leave a live
+    // invitation pointing at a trade that never went out.
+    if (resolved.kind === 'INVITED') await cancelInvitation(deps.db, resolved.invitationId);
+    throw error;
+  }
+
+  if (resolved.kind === 'INVITED')
+    result = await settleEarlyClaim(deps, input, resolved.invitationId, result);
+  await grantProofToBuyer(deps, input.tradeId);
+  return result;
+}
+
+/**
+ * The invitee may have claimed between the invitation being written and the send committing; the
+ * claimed-invitation subscriber then found a DRAFT and did nothing. Run the claim now so the trade
+ * does not stall in PENDING_COUNTERPARTY. A refusal (no usable address yet, a merchant claiming a
+ * buyer invitation) is the claimer's to resolve through POST /trades/:id/claim and does not undo
+ * the send.
+ */
+async function settleEarlyClaim(
+  deps: TradeDeps,
+  input: SendInput,
+  invitationId: string,
+  sent: TradeView,
+): Promise<TradeView> {
+  const [invitation] = await deps.db
+    .select({ status: partyInvitations.status, claimedByUserId: partyInvitations.claimedByUserId })
+    .from(partyInvitations)
+    .where(eq(partyInvitations.id, invitationId));
+  if (invitation?.status !== 'CLAIMED' || !invitation.claimedByUserId) return sent;
+  try {
+    await claimTradeInvitation(deps, { userId: invitation.claimedByUserId, tradeId: input.tradeId });
+  } catch (error) {
+    if (!(error instanceof ApiError)) throw error;
+    return sent;
+  }
+  return deps.db.transaction(async (tx) => viewTrade(tx, await loadTrade(tx, input.tradeId), input.userId));
+}
+
+async function sendInTransaction(
+  deps: TradeDeps,
+  input: SendInput,
+  standard: TradeStandard,
+  resolved: Resolved,
+  counterpartyRole: TradeInitiatorRole,
+): Promise<TradeView> {
+  return deps.db.transaction(async (tx) => {
     const trade = await loadTrade(tx, input.tradeId, true);
     if (trade.status !== 'DRAFT') return viewTrade(tx, trade, input.userId);
     const terms = await loadTerms(tx, trade.currentTermsVersionId);
@@ -456,9 +546,6 @@ export async function sendProposal(deps: TradeDeps, input: SendInput): Promise<T
     });
     return viewTrade(tx, await loadTrade(tx, trade.id), input.userId);
   });
-
-  await grantProofToBuyer(deps, input.tradeId);
-  return result;
 }
 
 const requireCategory = (trade: TradeRow): string => {

@@ -910,6 +910,97 @@ describe.runIf(infraEnabled)('proposal flow (T-061)', () => {
       ).toBe(claimed.statusRevision);
     });
 
+    const invitationStatuses = async (tradeId: string) =>
+      (
+        await t
+          .owner()
+          .query<{ status: string }>(`SELECT status FROM identity.party_invitations WHERE context_id = $1`, [
+            tradeId,
+          ])
+      ).rows.map((r) => r.status);
+
+    /** Deps whose invitation write is followed by `afterInvite`, as if something happened right after it. */
+    const afterInviting = (afterInvite: () => Promise<void>): TradeDeps => {
+      const base = deps();
+      const db = new Proxy(base.db, {
+        get: (target, prop, receiver) =>
+          prop === 'transaction'
+            ? async (...args: Parameters<typeof target.transaction>) => {
+                const result = await target.transaction(...args);
+                await afterInvite();
+                return result;
+              }
+            : (Reflect.get(target, prop, receiver) as unknown),
+      });
+      return { ...base, invitations: { ...base.invitations, db } };
+    };
+
+    it('writes no invitation when the send is refused first', async () => {
+      const seller = await person('seller');
+      const draft = await sellerDraft(seller, false);
+      const error = await failure(
+        sendProposal(deps(), {
+          userId: seller.id,
+          tradeId: draft.id,
+          counterparty: { channel: 'EMAIL', value: 'chidi@example.com' },
+        }),
+      );
+      expect(error.status).toBe(422);
+      expect(await invitationStatuses(draft.id)).toEqual([]);
+    });
+
+    it('withdraws the invitation when the send fails after it was written', async () => {
+      const seller = await person('seller');
+      const ownAddress = await address(seller.id);
+      const draft = await createProposal(deps(), {
+        userId: seller.id,
+        role: 'SELLER',
+        categoryCode: 'PHONES',
+        itemAmountMinor: PRICE,
+        itemSpec: SPEC,
+        addressId: ownAddress,
+        proofFileIds: [upload(seller.id), upload(seller.id)],
+      });
+      const racing = afterInviting(async () => {
+        await t
+          .owner()
+          .query(`UPDATE identity.user_addresses SET archived_at = now() WHERE id = $1`, [ownAddress]);
+      });
+      const error = await failure(
+        sendProposal(racing, {
+          userId: seller.id,
+          tradeId: draft.id,
+          counterparty: { channel: 'EMAIL', value: 'chidi@example.com' },
+        }),
+      );
+      expect(error.code).toBe('ADDRESS_REQUIRED');
+      expect(await invitationStatuses(draft.id)).toEqual(['CANCELLED']);
+      expect((await getTrade(deps(), { userId: seller.id, tradeId: draft.id })).status).toBe('DRAFT');
+    });
+
+    it('completes a claim that landed before the send committed', async () => {
+      const seller = await person('seller');
+      const claimer = await person('chidi');
+      await address(claimer.id);
+      const draft = await sellerDraft(seller);
+      const racing = afterInviting(async () => {
+        await t
+          .owner()
+          .query(
+            `UPDATE identity.party_invitations SET status = 'CLAIMED', claimed_by_user_id = $1, claimed_at = now()`,
+            [claimer.id],
+          );
+      });
+      const sent = await sendProposal(racing, {
+        userId: seller.id,
+        tradeId: draft.id,
+        counterparty: { channel: 'EMAIL', value: 'chidi@example.com' },
+      });
+      expect(sent.status).toBe('AWAITING_ACCEPTANCE');
+      expect((await getTrade(deps(), { userId: claimer.id, tradeId: draft.id })).yourRole).toBe('BUYER');
+      expect(granted.some((g) => g.buyer === claimer.id)).toBe(true);
+    });
+
     it('re-checks canBuy at claim', async () => {
       const seller = await person('seller');
       const draft = await sellerDraft(seller);

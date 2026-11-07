@@ -176,6 +176,7 @@ export {
   type PartyPorts,
 } from './services/party.service.js';
 export {
+  cancelInvitation,
   claimInvitationsForDestination,
   createInvitation,
   expireInvitations,
