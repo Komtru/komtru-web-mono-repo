@@ -55,6 +55,7 @@ import {
   proofFileIds,
   recordActivity,
   requireParty,
+  revokeProofFromBuyer,
   snapshotAddress,
   viewTrade,
   type AddressSnapshot,
@@ -931,7 +932,7 @@ async function requireAnyUsableAddress(
 
 /** M1 §8.5 step 7: the 14-day window ran out with nobody claiming. The trade expires with it. */
 export async function expireTradeInvitation(
-  deps: Pick<TradeDeps, 'db'>,
+  deps: Pick<TradeDeps, 'db' | 'revokeProofAccess'>,
   input: { tradeId: string; invitationId: string },
 ): Promise<void> {
   await deps.db.transaction(async (tx) => {
@@ -952,4 +953,7 @@ export async function expireTradeInvitation(
       summary: 'The invitation expired unclaimed',
     });
   });
+  // No buyer is bound while an invitation is open, so this is normally a no-op; it keeps the rule
+  // in one place for every way a trade ends unfunded.
+  await revokeProofFromBuyer(deps, input.tradeId);
 }

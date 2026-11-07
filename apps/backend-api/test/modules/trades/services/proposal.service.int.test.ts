@@ -61,6 +61,7 @@ const failure = async (promise: Promise<unknown>): Promise<ApiError> => {
 describe.runIf(infraEnabled)('proposal flow (T-061)', () => {
   const t = useTestDatabase();
   const granted: { fileIds: readonly string[]; buyer: string }[] = [];
+  const revoked: { fileIds: readonly string[]; buyer: string }[] = [];
   /** Finished uploads by id; each belongs to whoever `file()` says. */
   const files = new Map<
     string,
@@ -86,6 +87,7 @@ describe.runIf(infraEnabled)('proposal flow (T-061)', () => {
         }),
       ),
     grantProofAccess: (fileIds, buyer) => Promise.resolve(void granted.push({ fileIds, buyer })),
+    revokeProofAccess: (fileIds, buyer) => Promise.resolve(void revoked.push({ fileIds, buyer })),
     snapshotFees,
     graceHours: () => Promise.resolve(48),
     ...overrides,
@@ -432,6 +434,32 @@ describe.runIf(infraEnabled)('proposal flow (T-061)', () => {
       );
       expect([over.status, over.code]).toEqual([422, 'VALIDATION_FAILED']);
       expect(over.title ?? over.message).toContain('at most 20');
+    });
+
+    it("takes the buyer's access to the proof back on decline, cancel and a retry of either", async () => {
+      const seller = await person('seller');
+      const buyer = await person('buyer');
+      const send = async () => {
+        const draft = await sellerDraft(seller);
+        await sendProposal(deps(), {
+          userId: seller.id,
+          tradeId: draft.id,
+          counterparty: { channel: 'USERNAME', value: 'buyer' },
+        });
+        return draft.id;
+      };
+      const declinedId = await send();
+      await declineTrade(deps(), { userId: buyer.id, tradeId: declinedId, reason: 'Not interested' });
+      expect(revoked.at(-1)?.buyer).toBe(buyer.id);
+      expect(revoked.at(-1)?.fileIds).toHaveLength(2);
+
+      const cancelledId = await send();
+      const before = revoked.length;
+      await cancelTrade(deps(), { userId: seller.id, tradeId: cancelledId });
+      expect(revoked.slice(before).map((r) => r.buyer)).toEqual([buyer.id]);
+      // A retry is where a revoke that failed after the commit heals.
+      await cancelTrade(deps(), { userId: seller.id, tradeId: cancelledId });
+      expect(revoked.slice(before)).toHaveLength(2);
     });
 
     it('rejects naming a certified merchant as the buyer, before send', async () => {
@@ -999,6 +1027,20 @@ describe.runIf(infraEnabled)('proposal flow (T-061)', () => {
       expect(sent.status).toBe('AWAITING_ACCEPTANCE');
       expect((await getTrade(deps(), { userId: claimer.id, tradeId: draft.id })).yourRole).toBe('BUYER');
       expect(granted.some((g) => g.buyer === claimer.id)).toBe(true);
+    });
+
+    it('withdraws the invitation when the trade is cancelled while pending', async () => {
+      const seller = await person('seller');
+      const draft = await sellerDraft(seller);
+      await sendProposal(deps(), {
+        userId: seller.id,
+        tradeId: draft.id,
+        counterparty: { channel: 'EMAIL', value: 'chidi@example.com' },
+      });
+      expect(await invitationStatuses(draft.id)).toEqual(['PENDING']);
+      const cancelled = await cancelTrade(deps(), { userId: seller.id, tradeId: draft.id });
+      expect(cancelled.status).toBe('CANCELLED');
+      expect(await invitationStatuses(draft.id)).toEqual(['CANCELLED']);
     });
 
     it('re-checks canBuy at claim', async () => {

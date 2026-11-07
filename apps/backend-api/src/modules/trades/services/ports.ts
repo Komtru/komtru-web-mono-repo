@@ -13,7 +13,7 @@ import {
   tradeStandards,
   type StandardView,
 } from '../../config/index.js';
-import { findServableFile, grantAccess, listGrants } from '../../files/index.js';
+import { findServableFile, grantAccess, listGrants, revokeGrant } from '../../files/index.js';
 import type { CityLookup, InvitationDeps, PartyDeps } from '../../identity/index.js';
 import type { SellerKind, TradeFeeSnapshot } from '../domain/feeSnapshot.js';
 
@@ -46,6 +46,8 @@ export interface TradeDeps {
   proofFiles(tx: Tx, ids: readonly string[]): Promise<ProofFile[]>;
   /** Lets the buyer see the seller's proof. Idempotent; called after the trade commits. */
   grantProofAccess(fileIds: readonly string[], buyerUserId: string, tradeCode: string): Promise<void>;
+  /** Takes the buyer's access back (decline, cancel, expiry). Idempotent; called after the trade commits. */
+  revokeProofAccess(fileIds: readonly string[], buyerUserId: string): Promise<void>;
   snapshotFees(itemMinor: Kobo, sellerKind: SellerKind): TradeFeeSnapshot;
   /** M7 D4: hours a buyer has to confirm delivery, snapshotted onto the trade. */
   graceHours(): Promise<number>;
@@ -103,6 +105,16 @@ export const postgresGrantProofAccess =
         granteeUserId: buyerUserId,
         reason: `Seller proof for trade ${tradeCode}`,
       });
+    }
+  };
+
+export const postgresRevokeProofAccess =
+  (db: Db): TradeDeps['revokeProofAccess'] =>
+  async (fileIds, buyerUserId) => {
+    for (const fileId of fileIds) {
+      for (const grant of await listGrants(db, fileId)) {
+        if (grant.granteeUserId === buyerUserId) await revokeGrant(db, fileId, grant.id);
+      }
     }
   };
 

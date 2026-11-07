@@ -20,6 +20,7 @@ import { tradeRoutes } from './http/trade.routes.js';
 import {
   postgresGrantProofAccess,
   postgresProofFiles,
+  postgresRevokeProofAccess,
   postgresStandards,
   snapshotFees,
   type TradeDeps,
@@ -50,6 +51,7 @@ export function buildTradeDeps({ db, redis, config, logger }: TradesModuleOption
     standards: postgresStandards(db),
     proofFiles: postgresProofFiles(),
     grantProofAccess: postgresGrantProofAccess(db),
+    revokeProofAccess: postgresRevokeProofAccess(db),
     snapshotFees,
     graceHours: () => accessor.getInteger('trades', 'unconfirmed_delivery_grace_hours'),
   };

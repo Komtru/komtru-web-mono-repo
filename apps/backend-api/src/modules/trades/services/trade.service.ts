@@ -9,7 +9,7 @@
 import { and, eq, isNull } from 'drizzle-orm';
 import { ApiError } from '../../../platform/errors.js';
 import type { Tx } from '../../../platform/events/publish.js';
-import { userAddresses } from '../../identity/index.js';
+import { cancelInvitation, userAddresses } from '../../identity/index.js';
 import { addressRequiredError, notYourTurnError, tradeNotFoundError } from '../domain/errors.js';
 import type { TradeInitiatorRole } from '../domain/eligibility.js';
 import { sideOf, type ProofCheck } from '../domain/proposal.js';
@@ -133,6 +133,24 @@ export async function proofFileIds(tx: Tx, tradeId: string): Promise<string[]> {
   return rows.map((row) => row.fileId);
 }
 
+/**
+ * After a trade ends without funding (declined, cancelled, expired) the buyer's view of the seller's
+ * proof closes again. The privacy-safe default: the buyer only ever saw it to decide, and a trade
+ * that did not happen is no reason for them to keep it. Run after the transition commits; the
+ * revoke is idempotent, so replays of the action heal a failed one.
+ */
+export async function revokeProofFromBuyer(
+  deps: Pick<TradeDeps, 'db' | 'revokeProofAccess'>,
+  tradeId: string,
+): Promise<void> {
+  const { trade, files } = await deps.db.transaction(async (tx) => ({
+    trade: await loadTrade(tx, tradeId),
+    files: await proofFileIds(tx, tradeId),
+  }));
+  if (!trade.buyerUserId || files.length === 0) return;
+  await deps.revokeProofAccess(files, trade.buyerUserId);
+}
+
 export type ProofFailure = Exclude<ProofCheck, { ok: true }>;
 
 /** Turn answers: only the party who did not write the current version may accept, decline or counter. */
@@ -234,10 +252,10 @@ export async function getTrade(deps: Pick<TradeDeps, 'db'>, input: { userId: str
 // ---------------------------------------------------------------------------
 
 export async function declineTrade(
-  deps: Pick<TradeDeps, 'db'>,
+  deps: Pick<TradeDeps, 'db' | 'revokeProofAccess'>,
   input: { userId: string; tradeId: string; reason: string },
 ): Promise<TradeView> {
-  return deps.db.transaction(async (tx) => {
+  const view = await deps.db.transaction(async (tx) => {
     const trade = await loadTrade(tx, input.tradeId, true);
     const role = requireParty(trade, input.userId);
     if (trade.status === 'DECLINED' && trade.statusActorId === input.userId) {
@@ -271,6 +289,8 @@ export async function declineTrade(
     });
     return viewTrade(tx, await loadTrade(tx, trade.id), input.userId);
   });
+  await revokeProofFromBuyer(deps, input.tradeId);
+  return view;
 }
 
 // ---------------------------------------------------------------------------
@@ -278,10 +298,10 @@ export async function declineTrade(
 // ---------------------------------------------------------------------------
 
 export async function cancelTrade(
-  deps: Pick<TradeDeps, 'db'>,
+  deps: Pick<TradeDeps, 'db' | 'revokeProofAccess'>,
   input: { userId: string; tradeId: string; reason?: string },
 ): Promise<TradeView> {
-  return deps.db.transaction(async (tx) => {
+  const view = await deps.db.transaction(async (tx) => {
     const trade = await loadTrade(tx, input.tradeId, true);
     const role = requireParty(trade, input.userId);
     if (trade.status === 'CANCELLED') return viewTrade(tx, trade, input.userId);
@@ -294,6 +314,10 @@ export async function cancelTrade(
       ...(input.reason ? { reason: input.reason } : {}),
       set: { cancellationReason: role === 'BUYER' ? 'BUYER_WITHDREW' : 'SELLER_WITHDREW' },
     });
+    // Nobody has claimed the invitation yet and nobody now can: withdraw it with the trade.
+    if (trade.status === 'PENDING_COUNTERPARTY' && trade.counterpartyInvitationId) {
+      await cancelInvitation(tx, trade.counterpartyInvitationId);
+    }
     await recordActivity(tx, {
       tradeId: trade.id,
       type: 'NOTE',
@@ -304,4 +328,6 @@ export async function cancelTrade(
     });
     return viewTrade(tx, await loadTrade(tx, trade.id), input.userId);
   });
+  await revokeProofFromBuyer(deps, input.tradeId);
+  return view;
 }
