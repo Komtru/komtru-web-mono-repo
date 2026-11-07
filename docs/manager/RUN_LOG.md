@@ -35,13 +35,26 @@ cost and to find work to resume.
 - **Q16, the T-046 city seed.** It is merged with a default list: 37 states and 129 cities (the 37 capitals plus 92 commercial
   cities) in `apps/backend-api/src/modules/geo/seed/nigeria-locations.seed.ts`. Review the list. Staff can also add,
   rename or deactivate cities later through `/admin/geo`. `geo.manage` is held by SUPER_ADMIN and OPERATIONS_ADMIN.
-- **T-061 proposal-flow defaults** (in `docs/superpowers/plans/2026-11-07-t-061-proposal-flow.md`; the
-  ticket is not merged yet):
+- **T-061 proposal-flow defaults** (merged 2026-11-07; listed in `docs/superpowers/plans/2026-11-07-t-061-proposal-flow.md`):
   - seller proof media is stored as `PRIVATE_CASE` files with the buyer granted access, because files has
     no trade-proof category;
+  - a proof file is accepted only if it is unused elsewhere, and a trade holds at most 20 proof files;
+  - the buyer's proof access is revoked when a trade is declined, cancelled or expires unfunded;
   - either party may cancel before funding, and the initiator may cancel before the counterparty binds;
   - a certified merchant who asks to be the BUYER is refused (403 `MERCHANT_CANNOT_BUY`), not silently
     switched to SELLER.
+- **T-072 funding: blocks merge.** Where does the buyer protection fee sit between funding and release? The AC
+  says "fee liability", but the chart of accounts has no fee-liability account. Default built: a second credit
+  line on the trade's escrow liability account (isolated in `fundingJournalLines`). A separate account needs a
+  new enum value and a migration that rewrites account keys. The branch `t-072-funding` is reviewed, fixed and
+  green, waiting on this answer. Other money defaults in `docs/superpowers/plans/2026-11-07-t-072-funding.md`:
+  - under-, over- or reversed payment, or money on a closed attempt or a trade no longer awaiting payment, is
+    held in full for manual review (no auto-refund);
+  - reference `fund-<uuid>`; a buyer with no email gets 422;
+  - a checkout Paystack never saw can be replaced after 30 minutes, a declined card after 10, an abandoned
+    one at once; at most 10 attempts per trade, 1 minute apart;
+  - whether attempt expiry should tie to `trades.payment_deadline_hours` (a trade-side deadline job);
+  - stock reservation (T-056) consumes `ledger.payment.escrow_funded`.
 - Q1 (hosting and the GitHub remote) still blocks T-005 and the T-183 push.
 - Q3 (wallet) still blocks T-131.
 - ~~Disputes in the MVP?~~ Answered 2026-11-06: yes. T-120, T-196, T-199, T-200 and the new T-221 are in the MVP.
@@ -249,3 +262,23 @@ cost and to find work to resume.
 - In-flight, not a cheap tail, so not resumed: `t-061-proposal-flow` (review, fix and merge
   left) and `t-029-infra-isolation`.
 - Next: T-061 review, fix and merge, then T-072 funding (opus), T-107 and T-039.
+
+## 2026-11-07 06:16 WAT — run summary
+
+- Usage at start: 5h 1%, week 60%. At end: 5h 56%, week 67%.
+- Capacity: 2 (`est` 14). Tickets: T-061 (merged), T-072 (saved at fix, awaiting the owner's fee decision).
+  - T-061: Sonnet review gave 2 must-fix items (proof access was never granted on claim or on a send
+    retry) and 8 should-fix items. A fresh Sonnet fixer fixed all 10, including concurrency tests and an
+    "at least one address" check in migration 0039. Merged; 3048 backend tests green on `main`, and
+    migration safety is clean.
+  - T-072 (Opus): it first stopped, as told, because `payment_attempts` and `payment_provider_webhooks` did
+    not exist. After T-061 merged it took migration 0040 and built initiate, confirm and status, the
+    Paystack webhook, and the verify job. Sonnet review: 4 must-fix items (the Inline amount could drift
+    from the attempt, confirm and restart raced the settle, a buyer could be locked out, and review events
+    were duplicated) and 6 should-fix items, all fixed. 3121 unit and 359 ledger infra tests green. Not
+    merged: the fee-liability placement is a money rule for the owner.
+- Ticket costs: T-061 (review+fix) 5h-cost=21 week-cost=2; T-072 5h-cost=34 week-cost=5.
+- Not resumed: `t-029-infra-isolation` (cross-cutting, so it can't run alongside other work, and it's not a
+  cheap tail).
+- Next: merge T-072 once the owner answers the fee question (rebase onto `main`, re-run checks). Otherwise
+  T-107 and T-039, or T-029 on its own.

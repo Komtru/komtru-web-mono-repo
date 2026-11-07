@@ -41,6 +41,7 @@ Decisions C4, C5, C8, C10, C11 (design §5). The ledger is authoritative; Paysta
   - The job re-verifies via the transaction verify call, then posts: debit escrow pool, credit trade escrow liability (item) and fee liability; publishes `payment.escrow_funded`. Replayed webhooks never double-post (test).
   - Verifying and not-confirmed states (AB3, AB4) are derivable from `payment_attempts`.
   - Stock reservation event emitted for merchant (T-056).
+- **Status (2026-11-07): in progress** — implement, review and fix done (branch `t-072-funding`, 8 commits, migration 0040 `ledger_payments`, backend 3121 unit and 359 ledger infra tests green; plan `docs/superpowers/plans/2026-11-07-t-072-funding.md`); next: merge once the owner decides where the buyer protection fee sits between funding and release (default: a second credit line on the trade escrow liability); open review items: none (4 must-fix and 6 should-fix fixed).
 
 ### T-073 — Payout accounts, preferences and payouts
 
