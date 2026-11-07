@@ -1,5 +1,5 @@
 // How a case is written on screen: the area it belongs to, the clock on it, plain words for codes.
-import type { CasePriority, CaseState, CaseType, CaseView } from '@komtru/api-client';
+import type { CasePriority, CaseState, CaseTrailType, CaseType, CaseView } from '@komtru/api-client';
 import type { ChipTone } from '@komtru/ui-kit';
 
 export type Area = 'People' | 'Proposals' | 'Money' | 'Custody' | 'Cases' | 'Risk';
@@ -73,6 +73,41 @@ export function clockTone(sla: CaseView['sla']): ChipTone | undefined {
   if (sla.status === 'AT_RISK') return 'awaiting';
   return undefined;
 }
+
+/** `SELLER_ACCEPTED` and `sellerAccepted` both read "Seller accepted". */
+export function humanise(code: string): string {
+  const words = code
+    .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
+    .replace(/[_-]+/g, ' ')
+    .trim()
+    .toLowerCase();
+  return words === '' ? '' : words.charAt(0).toUpperCase() + words.slice(1);
+}
+
+/** A fact's key as the owning module wrote it, in words. */
+export const factLabel = humanise;
+
+const TRAIL_LABELS: Record<CaseTrailType, string> = {
+  REGISTERED: 'Registered',
+  TAKEN: 'Taken',
+  REASSIGNED: 'Reassigned',
+  PRIORITY_CHANGED: 'Priority changed',
+  ESCALATED: 'Escalated',
+  EVIDENCE_REQUESTED: 'Evidence requested',
+  EVIDENCE_RESOLVED: 'Evidence request resolved',
+  FACTS_UPDATED: 'Facts updated',
+  DECISION_RECORDED: 'Decision recorded',
+  CLOSED: 'Closed',
+};
+export const trailLabel = (type: CaseTrailType): string => TRAIL_LABELS[type];
+
+const WHEN = new Intl.DateTimeFormat('en-GB', {
+  day: 'numeric',
+  month: 'short',
+  hour: '2-digit',
+  minute: '2-digit',
+});
+export const whenLabel = (iso: string): string => WHEN.format(new Date(iso));
 
 /** Cases carry user ids only (no staff directory yet), so a colleague is a short id. */
 export function ownerLabel(ownerUserId: string | null, viewerId: string | undefined): string {
