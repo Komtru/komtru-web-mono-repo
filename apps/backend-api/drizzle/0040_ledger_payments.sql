@@ -14,10 +14,14 @@ CREATE TABLE "ledger"."payment_attempts" (
 	"status" "ledger"."payment_attempt_status" DEFAULT 'INITIATED' NOT NULL,
 	"last_provider_status" text,
 	"last_verified_at" timestamp with time zone,
+	"provider_seen_at" timestamp with time zone,
+	"last_verify_error" text,
+	"last_verify_error_at" timestamp with time zone,
 	"verified_amount_minor" bigint,
 	"verified_currency" text,
 	"journal_entry_id" uuid,
 	"failure_reason" text,
+	"review_published_at" timestamp with time zone,
 	"initiated_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"pending_at" timestamp with time zone,
 	"confirmed_at" timestamp with time zone,
@@ -43,6 +47,7 @@ CREATE TABLE "ledger"."payment_provider_webhooks" (
 	"processed_at" timestamp with time zone,
 	"processing_error" text,
 	"duplicate_count" integer DEFAULT 0 NOT NULL,
+	"sweep_count" integer DEFAULT 0 NOT NULL,
 	CONSTRAINT "payment_provider_webhooks_signed" CHECK ("ledger"."payment_provider_webhooks"."signature_valid")
 );
 --> statement-breakpoint
@@ -60,16 +65,27 @@ CREATE INDEX "payment_provider_webhooks_unprocessed_idx" ON "ledger"."payment_pr
 -- write may restate them; the provider reference and the funding posting may be set once and never
 -- re-pointed; INITIATED may become PENDING, both may close, and a closed or succeeded attempt is
 -- final in every column. A replayed webhook therefore finds the attempt exactly where the first
--- delivery left it. SQLSTATE KT012 (KT010/KT011 are the journal's, KT001/KT002 the platform's).
+-- delivery left it. The one exception is `review_published_at`, which a final attempt may have set
+-- once: money landing on a closed attempt is announced to ops exactly once. SQLSTATE KT012
+-- (KT010/KT011 are the journal's, KT001/KT002 the platform's).
+--
+-- No foreign keys to trade.trades or identity.users: cross-schema references are plain uuid columns
+-- (design §4.2), so each module's migrations and retention stay its own. The one real FK is to this
+-- schema's own journal.
 CREATE FUNCTION ledger.guard_payment_attempt() RETURNS trigger
   LANGUAGE plpgsql SET search_path = pg_catalog, ledger AS $$
 DECLARE
   refused text;
 BEGIN
   refused := CASE
+    WHEN OLD.review_published_at IS NOT NULL
+      AND NEW.review_published_at IS DISTINCT FROM OLD.review_published_at THEN 'review_published_at'
     WHEN OLD.status IN ('SUCCEEDED', 'FAILED', 'ABANDONED', 'NEEDS_REVIEW')
-      AND (to_jsonb(NEW) - 'updated_at') IS DISTINCT FROM (to_jsonb(OLD) - 'updated_at')
+      AND (to_jsonb(NEW) - 'updated_at' - 'review_published_at')
+          IS DISTINCT FROM (to_jsonb(OLD) - 'updated_at' - 'review_published_at')
       THEN 'status ' || OLD.status || ' is final'
+    WHEN OLD.provider_seen_at IS NOT NULL
+      AND NEW.provider_seen_at IS DISTINCT FROM OLD.provider_seen_at THEN 'provider_seen_at'
     WHEN OLD.status = 'PENDING' AND NEW.status = 'INITIATED' THEN 'status cannot go back to INITIATED'
     WHEN NEW.id IS DISTINCT FROM OLD.id THEN 'id'
     WHEN NEW.trade_id IS DISTINCT FROM OLD.trade_id THEN 'trade_id'
@@ -101,16 +117,18 @@ $$;
 --> statement-breakpoint
 CREATE TRIGGER komtru_payment_attempt_guard BEFORE UPDATE ON "ledger"."payment_attempts" FOR EACH ROW EXECUTE FUNCTION ledger.guard_payment_attempt();
 --> statement-breakpoint
--- A delivery is evidence: only its processing outcome may be written, once, and the replay counter
--- only counts up.
+-- A delivery is evidence: only its processing outcome may be written, once, and the replay and
+-- sweep counters only count up. Until it is processed its processing_error may change: the sweep
+-- marks an exhausted delivery, and a later successful run clears that mark.
 CREATE FUNCTION ledger.guard_payment_webhook() RETURNS trigger
   LANGUAGE plpgsql SET search_path = pg_catalog, ledger AS $$
 BEGIN
-  IF (to_jsonb(NEW) - 'processed_at' - 'processing_error' - 'duplicate_count')
-       IS DISTINCT FROM (to_jsonb(OLD) - 'processed_at' - 'processing_error' - 'duplicate_count')
+  IF (to_jsonb(NEW) - 'processed_at' - 'processing_error' - 'duplicate_count' - 'sweep_count')
+       IS DISTINCT FROM (to_jsonb(OLD) - 'processed_at' - 'processing_error' - 'duplicate_count' - 'sweep_count')
      OR (OLD.processed_at IS NOT NULL AND NEW.processed_at IS DISTINCT FROM OLD.processed_at)
      OR (OLD.processed_at IS NOT NULL AND NEW.processing_error IS DISTINCT FROM OLD.processing_error)
-     OR NEW.duplicate_count < OLD.duplicate_count THEN
+     OR NEW.duplicate_count < OLD.duplicate_count
+     OR NEW.sweep_count < OLD.sweep_count THEN
     RAISE EXCEPTION 'komtru: payment webhook % may only record its processing outcome', OLD.id
       USING ERRCODE = 'KT012';
   END IF;
@@ -124,7 +142,7 @@ CREATE TRIGGER komtru_payment_webhook_guard BEFORE UPDATE ON "ledger"."payment_p
 -- provider's word. DELETE raises KT002 for everyone, the owner included. A row trigger does not fire
 -- on TRUNCATE, which the test harness uses between tests and which komtru_app cannot do.
 CREATE FUNCTION ledger.reject_delete() RETURNS trigger
-  LANGUAGE plpgsql AS $$
+  LANGUAGE plpgsql SET search_path = pg_catalog, ledger AS $$
 BEGIN
   RAISE EXCEPTION 'komtru: %.% rows are never deleted', TG_TABLE_SCHEMA, TG_TABLE_NAME
     USING ERRCODE = 'KT002';
@@ -135,4 +153,6 @@ CREATE TRIGGER komtru_no_delete BEFORE DELETE ON "ledger"."payment_attempts" FOR
 --> statement-breakpoint
 CREATE TRIGGER komtru_no_delete BEFORE DELETE ON "ledger"."payment_provider_webhooks" FOR EACH ROW EXECUTE FUNCTION ledger.reject_delete();
 --> statement-breakpoint
+-- grantRuntimeAccess() re-grants DELETE on every migrate (it grants all four verbs on any table without
+-- the append-only trigger), so this REVOKE is belt and braces; the trigger above is the guard.
 REVOKE DELETE ON "ledger"."payment_attempts", "ledger"."payment_provider_webhooks" FROM komtru_app;

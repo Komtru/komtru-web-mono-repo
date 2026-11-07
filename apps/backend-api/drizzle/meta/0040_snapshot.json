@@ -1,5 +1,5 @@
 {
-  "id": "94371762-9a0c-4a96-b368-7a5a1cbaccaa",
+  "id": "52a7cf83-f515-4ae8-bb25-a01d037ede66",
   "prevId": "90b476fa-ff40-4aa8-a535-0067cd716ea6",
   "version": "7",
   "dialect": "postgresql",
@@ -5696,6 +5696,24 @@
           "primaryKey": false,
           "notNull": false
         },
+        "provider_seen_at": {
+          "name": "provider_seen_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "last_verify_error": {
+          "name": "last_verify_error",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "last_verify_error_at": {
+          "name": "last_verify_error_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
         "verified_amount_minor": {
           "name": "verified_amount_minor",
           "type": "bigint",
@@ -5717,6 +5735,12 @@
         "failure_reason": {
           "name": "failure_reason",
           "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "review_published_at": {
+          "name": "review_published_at",
+          "type": "timestamp with time zone",
           "primaryKey": false,
           "notNull": false
         },
@@ -5937,6 +5961,13 @@
         },
         "duplicate_count": {
           "name": "duplicate_count",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "sweep_count": {
+          "name": "sweep_count",
           "type": "integer",
           "primaryKey": false,
           "notNull": true,

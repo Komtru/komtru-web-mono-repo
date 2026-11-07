@@ -57,11 +57,25 @@ export const paymentAttempts = ledger.table(
     /** The verify call's raw status ('ongoing', 'abandoned', …): what AB3 versus AB4 reads. */
     lastProviderStatus: text('last_provider_status'),
     lastVerifiedAt: timestamp('last_verified_at', { withTimezone: true }),
+    /**
+     * The first verify that found the charge at the provider at all. NULL while the provider has
+     * never seen this reference — the buyer closed Inline before it opened a transaction, or every
+     * verify so far failed — which is what lets such an attempt expire (T-072 plan, decision 8).
+     */
+    providerSeenAt: timestamp('provider_seen_at', { withTimezone: true }),
+    /** The last verify call that failed outright (timeout, 5xx), and why. Never a provider payload. */
+    lastVerifyError: text('last_verify_error'),
+    lastVerifyErrorAt: timestamp('last_verify_error_at', { withTimezone: true }),
     verifiedAmountMinor: bigint('verified_amount_minor', { mode: 'bigint' }),
     verifiedCurrency: text('verified_currency'),
     /** The funding posting, once there is one. */
     journalEntryId: uuid('journal_entry_id').references(() => ledgerJournalEntries.id),
     failureReason: text('failure_reason'),
+    /**
+     * When `ledger.payment.review_required` was published for this attempt. Set once, by the
+     * transaction that publishes it, so a replayed success on a closed attempt alerts ops once.
+     */
+    reviewPublishedAt: timestamp('review_published_at', { withTimezone: true }),
     initiatedAt: timestamp('initiated_at', { withTimezone: true }).notNull().defaultNow(),
     pendingAt: timestamp('pending_at', { withTimezone: true }),
     confirmedAt: timestamp('confirmed_at', { withTimezone: true }),
@@ -120,6 +134,8 @@ export const paymentProviderWebhooks = ledger.table(
     processingError: text('processing_error'),
     /** Replays of this event that hit the dedup index. */
     duplicateCount: integer('duplicate_count').notNull().default(0),
+    /** Times the sweep re-queued this delivery; bounded, after which it is marked exhausted. */
+    sweepCount: integer('sweep_count').notNull().default(0),
   },
   (table) => [
     uniqueIndex('payment_provider_webhooks_dedup').on(table.provider, table.providerEventId),

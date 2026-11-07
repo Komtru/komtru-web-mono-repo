@@ -134,6 +134,31 @@ describe.runIf(infraEnabled)('ledger payments schema', () => {
     );
   });
 
+  it('lets a final attempt record its review alert once, and nothing else', async () => {
+    const id = await insertAttempt();
+    await update(id, `status = 'ABANDONED', closed_at = now()`);
+    await update(id, `review_published_at = now()`);
+    expect(await sqlState(update(id, `review_published_at = now() + interval '1 minute'`))).toBe('KT012');
+    expect(await sqlState(update(id, `review_published_at = NULL`))).toBe('KT012');
+  });
+
+  it('records the first provider sighting once', async () => {
+    const id = await insertAttempt();
+    await update(id, `provider_seen_at = now(), last_verify_error = 'timeout', last_verify_error_at = now()`);
+    expect(await sqlState(update(id, `provider_seen_at = now() + interval '1 minute'`))).toBe('KT012');
+  });
+
+  it('is reached as komtru_app, which can read, write and update both tables', async () => {
+    const { rows } = await t.app().query<{ who: string; attempts: boolean; webhooks: boolean }>(
+      `SELECT current_user AS who,
+              (has_table_privilege('ledger.payment_attempts', 'SELECT') AND has_table_privilege('ledger.payment_attempts', 'INSERT')
+               AND has_table_privilege('ledger.payment_attempts', 'UPDATE')) AS attempts,
+              (has_table_privilege('ledger.payment_provider_webhooks', 'SELECT') AND has_table_privilege('ledger.payment_provider_webhooks', 'INSERT')
+               AND has_table_privilege('ledger.payment_provider_webhooks', 'UPDATE')) AS webhooks`,
+    );
+    expect(rows[0]).toEqual({ who: 'komtru_app', attempts: true, webhooks: true });
+  });
+
   describe('the webhook log', () => {
     const insertDelivery = (eventId: string) =>
       t.app().query<{ id: string }>(
@@ -166,7 +191,9 @@ describe.runIf(infraEnabled)('ledger payments schema', () => {
       const set = (clause: string) =>
         t.app().query(`UPDATE ledger.payment_provider_webhooks SET ${clause} WHERE id = $1`, [id]);
 
-      await set('duplicate_count = duplicate_count + 1');
+      await set('duplicate_count = duplicate_count + 1, sweep_count = sweep_count + 1');
+      await set(`processing_error = 'exhausted'`);
+      expect(await sqlState(set('sweep_count = 0'))).toBe('KT012');
       expect(await sqlState(set(`payload = '{"a":1}'::jsonb`))).toBe('KT012');
       expect(await sqlState(set('duplicate_count = 0'))).toBe('KT012');
       await set(`processed_at = now()`);
