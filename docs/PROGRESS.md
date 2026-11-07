@@ -5,11 +5,11 @@ after every run. The run-by-run history is [`manager/RUN_LOG.md`](manager/RUN_LO
 behind it is [`BUILD_PLAN.md`](BUILD_PLAN.md).
 
 ```
-MVP   ███████████████···················  48/111  (43%)
-Total ██████████························  48/168  (29%)
+MVP   ███████████████···················  49/111  (44%)
+Total ██████████························  49/168  (29%)
 ```
 
-63 MVP tickets left, 57 deferred past it.
+62 MVP tickets left, 57 deferred past it.
 
 ## By epic
 
@@ -27,7 +27,7 @@ Total ██████████······················
 | 09-disputes            | 0    | 2     |
 | 10-logistics           | 0    | 3     |
 | 11-park                | 0    | 6     |
-| 12-ops-domains         | 0    | 9     |
+| 12-ops-domains         | 1    | 9     |
 | 13-web-app-ui          | 1    | 22    |
 | 14-operations-app      | 1    | 16    |
 | 15-logistics-ops       | 0    | 3     |
@@ -48,8 +48,9 @@ Total ██████████······················
 | ------ | ----------------------------------------------------------------- | --- |
 | T-029  | Isolate the integration suite's shared Redis and queues           | yes |
 | T-039  | Account lifecycle, recovery and NDPA hooks                        | yes |
+| T-052  | Duplicate identity detection and KYC review queue                 | yes |
 | T-072  | Funding a trade                                                   | yes |
-| T-107  | Universal case model, work queue and advisory                     | yes |
+| T-141  | Work queue and universal case                                     | yes |
 | T-034  | Social login                                                      |     |
 | T-041  | Avatars                                                           |     |
 | T-067  | IMEI verification                                                 |     |
@@ -92,7 +93,6 @@ Total ██████████······················
 | T-080  | Disputes core                                                             | yes |
 | T-081  | Evidence comparison and dispute read models                               | yes |
 | T-102  | Reputation and ratings (M12)                                              | yes |
-| T-107  | Universal case model, work queue and advisory                             | yes |
 | T-111  | Entry and authentication                                                  | yes |
 | T-112  | First-time onboarding                                                     | yes |
 | T-113  | Home and discovery                                                        | yes |

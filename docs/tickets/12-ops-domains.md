@@ -74,6 +74,7 @@
   - Work queue endpoints for P0-01 (my work, unassigned, escalated, SLA at risk) and the universal case read model for P0-02, paginated and filterable.
   - `advisory` interface returning a suggestion plus rationale, labelled "AI-suggested — not a decision"; v1 is rule-based per case type (Q9 default). A decision can never be recorded by the advisory path (test).
   - Every decision writes the trust trail, the admin action log and a policy citation.
+- **Status:** Done (2026-11-07). Plan: `docs/superpowers/plans/2026-11-07-t-107-cases.md`. Review: 9 items fixed.
 
 ### T-108 — Trade messaging
 
