@@ -3,7 +3,7 @@
 // (types), and by what happens to the database when it runs (cases.http.int.test.ts).
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, expectTypeOf, it } from 'vitest';
 import type { Db } from '../../../src/db/index.js';
 import { caseRoutes } from '../../../src/modules/cases/http/routes.js';
 import type { ReadDb } from '../../../src/modules/cases/services/read.service.js';
@@ -27,9 +27,11 @@ describe('the advisory path cannot record a decision', () => {
   });
 
   it('is served by a read-only handle', () => {
-    const handle = (db: ReadDb) => db;
-    // @ts-expect-error a ReadDb has no insert: the advisory service cannot write through it
-    handle({} as ReadDb).insert;
+    // A ReadDb has no insert, update or delete: the advisory service cannot write through it.
+    expectTypeOf<ReadDb>().not.toHaveProperty('insert');
+    expectTypeOf<ReadDb>().not.toHaveProperty('update');
+    expectTypeOf<ReadDb>().not.toHaveProperty('delete');
+    expectTypeOf<ReadDb>().not.toHaveProperty('transaction');
     // The full Db is assignable to it, so the route can hand over the one it has.
     const fromDb = (db: Db): ReadDb => db;
     expect(fromDb).toBeTypeOf('function');
