@@ -55,6 +55,21 @@ cost and to find work to resume.
     one at once; at most 10 attempts per trade, 1 minute apart;
   - whether attempt expiry should tie to `trades.payment_deadline_hours` (a trade-side deadline job);
   - stock reservation (T-056) consumes `ledger.payment.escrow_funded`.
+- **T-029 infra isolation: needs a go-ahead to edit `docker-compose.yml`.** The last open flake is
+  Postgres connection exhaustion (12 parallel test databases × PgBouncer pool 20 against
+  `max_connections` 100). The proposed fix: Postgres `max_connections=300`; PgBouncer
+  `DEFAULT_POOL_SIZE: 10`, `MAX_DB_CONNECTIONS: 15`, `SERVER_LOGIN_RETRY: 0`. It's a shared-resource
+  file, so the manager won't change it without your go-ahead. The worktree `t-029-infra-isolation`
+  has no unmerged commits.
+- **T-107 case defaults** (merged 2026-11-07; all 16 are in `docs/superpowers/plans/2026-11-07-t-107-cases.md`):
+  - **Which roles may own and decide cases?** Today only `cases.manage` holders can: SUPER_ADMIN,
+    OPERATIONS_ADMIN and PARK_OPERATIONS. COMPLIANCE_OFFICER, FRAUD_ANALYST and KYC_ANALYST can only
+    view cases, so an escalation that needs an expert decision can't reach an expert.
+  - SLA hours: DISPUTE 48, KYB 72, MERCHANT_APPLICATION 72, IDENTITY 24, FRAUD 24, CUSTODY 48,
+    PAYMENT_EXCEPTION 24, TRADE_PROPOSAL 24, PARK_HUB_APPLICATION 120. "At risk" means the last 25% of the
+    window, or past it. The clock keeps running while a case awaits evidence.
+  - Any manager may reassign a case to themselves; a reason is required. Only the case's owner may decide it.
+  - The policy citation is free text until a policy registry exists.
 - Q1 (hosting and the GitHub remote) still blocks T-005 and the T-183 push.
 - Q3 (wallet) still blocks T-131.
 - ~~Disputes in the MVP?~~ Answered 2026-11-06: yes. T-120, T-196, T-199, T-200 and the new T-221 are in the MVP.
@@ -282,3 +297,20 @@ cost and to find work to resume.
   cheap tail).
 - Next: merge T-072 once the owner answers the fee question (rebase onto `main`, re-run checks). Otherwise
   T-107 and T-039, or T-029 on its own.
+
+## 2026-11-07 10:57 WAT — run summary
+
+- Usage at start: 5h 56%, week 67%. At end: 5h 74%, week 69%.
+- Capacity: 1. `est` 19 (median of the last 5 completed tickets), and 56 + 2×19 > 90. Tickets: T-107 (merged).
+  - T-107: Sonnet implemented `src/modules/cases/**` with migrations 0040 and 0041. Sonnet review gave 2
+    must-fix items (a cursor of the wrong shape silently restarted at page 1, and expert roles can never
+    own or decide a case) and 7 should-fix items. The fixer fixed all 9; the role question went to the
+    owner, with the RBAC catalogue unchanged. The first full run on `main` failed 3 identity MFA tests on
+    timeouts, which is the known T-029 load flake. Those files passed on their own, and a second full run
+    was green: 244 files, 4478 tests. Migration safety reports 0 errors.
+- Ticket costs: T-107 5h-cost=18 week-cost=2.
+- Not resumed: `t-072-funding` (waiting on the fee question) and `t-029-infra-isolation` (waiting on the
+  docker-compose go-ahead; it has no unmerged commits).
+- Note for T-072: T-107 took migrations 0040 and 0041. The T-072 merge must renumber its migration to 0042.
+- Next: T-039 (account lifecycle). T-072 once the fee question is answered; T-029 once the compose change is
+  approved.
