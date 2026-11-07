@@ -13,6 +13,3 @@ CREATE TRIGGER komtru_append_only BEFORE UPDATE OR DELETE ON "cases"."case_trail
 REVOKE ALL ON "cases"."case_trail" FROM komtru_app;
 --> statement-breakpoint
 GRANT INSERT, SELECT ON "cases"."case_trail" TO komtru_app;
---> statement-breakpoint
--- A case and its evidence requests are closed, never deleted: the decisions and the trail point at them.
-REVOKE DELETE ON "cases"."cases", "cases"."case_evidence_requests" FROM komtru_app;

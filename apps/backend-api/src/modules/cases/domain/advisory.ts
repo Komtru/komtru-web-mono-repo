@@ -164,8 +164,8 @@ export const RULES_SOURCE = 'RULES_V1';
 
 const FALLBACK = 'Review the case file; no automated suggestion applies';
 
-export const ruleBasedAdvisory: AdvisoryProvider = {
-  suggest(input) {
+export const ruleBasedAdvisory = {
+  suggest(input: AdvisoryInput): Advisory {
     const rules = [...COMMON_RULES, ...RULES[input.type]];
     const matched = rules.filter((rule) => rule.when(input));
     const [first] = matched;
@@ -178,4 +178,4 @@ export const ruleBasedAdvisory: AdvisoryProvider = {
         : ['No rule for this case type matched the facts on record'],
     };
   },
-};
+} satisfies AdvisoryProvider;
