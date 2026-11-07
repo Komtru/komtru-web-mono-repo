@@ -38,3 +38,27 @@ export const ledgerJournalPostedEvent = defineEvent(
     lines: z.array(postedLineSchema).min(2),
   }),
 );
+
+/**
+ * A trade's escrow is funded (M8 §9, design §6.4): the funding journal has posted, in the same
+ * transaction as this event. M7 consumes it to move the trade `PENDING_PAYMENT → FUNDED`; T-056's
+ * stock reservation keys on `tradeId` from it. The ledger never transitions a trade itself.
+ */
+export const paymentEscrowFundedEvent = defineEvent(
+  'ledger.payment.escrow_funded',
+  1,
+  z.object({
+    tradeId: z.uuid(),
+    paymentAttemptId: z.uuid(),
+    journalEntryId: z.uuid(),
+    provider: z.enum(PAYMENT_PROVIDERS),
+    /** OUR charge reference, `fund-<attempt id>`. */
+    reference: z.string().min(1),
+    currency: z.string(),
+    /** What the buyer paid: the item plus the buyer protection fee. */
+    amountMinor: amountMinorSchema,
+    itemAmountMinor: amountMinorSchema,
+    buyerProtectionFeeMinor: amountMinorSchema,
+    fundedAt: z.iso.datetime(),
+  }),
+);

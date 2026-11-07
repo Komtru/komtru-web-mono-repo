@@ -22,6 +22,7 @@ import {
 export * from './domain/accounts.js';
 export * from './domain/journal.js';
 export * from './domain/events.js';
+export * from './domain/funding.js';
 export * from './infrastructure/postgres/schema/index.js';
 export {
   findAccountId,
@@ -63,6 +64,7 @@ export type {
   TransferRecipientInput,
   TransferRecipientResult,
 } from './domain/providerAdapter.js';
+export { paystackEventId } from './infrastructure/providers/paystack/eventId.js';
 export { createProviderRegistry, providerForNewCharge } from './infrastructure/providerRegistry.js';
 export { createRedisBankListCache, type BankListCache } from './infrastructure/bankListCache.js';
 export { RESOLVE_ACCOUNT_NAME_QUEUE, type ResolveAccountNameJob };
