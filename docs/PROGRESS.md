@@ -5,11 +5,11 @@ after every run. The run-by-run history is [`manager/RUN_LOG.md`](manager/RUN_LO
 behind it is [`BUILD_PLAN.md`](BUILD_PLAN.md).
 
 ```
-MVP   ███████████████···················  49/111  (44%)
-Total ██████████························  49/168  (29%)
+MVP   ███████████████···················  50/111  (45%)
+Total ██████████························  50/168  (30%)
 ```
 
-62 MVP tickets left, 57 deferred past it.
+61 MVP tickets left, 57 deferred past it.
 
 ## By epic
 
@@ -29,7 +29,7 @@ Total ██████████······················
 | 11-park                | 0    | 6     |
 | 12-ops-domains         | 1    | 9     |
 | 13-web-app-ui          | 1    | 22    |
-| 14-operations-app      | 1    | 16    |
+| 14-operations-app      | 2    | 16    |
 | 15-logistics-ops       | 0    | 3     |
 | 16-park-agent-app      | 0    | 5     |
 | 17-release             | 0    | 4     |
@@ -50,7 +50,6 @@ Total ██████████······················
 | T-039  | Account lifecycle, recovery and NDPA hooks                        | yes |
 | T-052  | Duplicate identity detection and KYC review queue                 | yes |
 | T-072  | Funding a trade                                                   | yes |
-| T-141  | Work queue and universal case                                     | yes |
 | T-034  | Social login                                                      |     |
 | T-041  | Avatars                                                           |     |
 | T-067  | IMEI verification                                                 |     |
@@ -108,7 +107,6 @@ Total ██████████······················
 | T-123  | Seller trade handling and shipping                                        | yes |
 | T-124  | Seller payouts                                                            | yes |
 | T-126  | Trust, account and settings                                               | yes |
-| T-141  | Work queue and universal case                                             | yes |
 | T-143  | Disputes                                                                  | yes |
 | T-144  | Identity review                                                           | yes |
 | T-154  | Merchant certification review                                             | yes |
