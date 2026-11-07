@@ -62,3 +62,25 @@ export const paymentEscrowFundedEvent = defineEvent(
     fundedAt: z.iso.datetime(),
   }),
 );
+
+/**
+ * A verified charge the ledger would not post: an under- or over-payment, another currency, a
+ * reversal, money on a trade no longer awaiting it, or money on an attempt already closed. Nothing
+ * was posted; ops decides (T-076 consumes it). Published in the transaction that recorded it.
+ */
+export const paymentReviewRequiredEvent = defineEvent(
+  'ledger.payment.review_required',
+  1,
+  z.object({
+    tradeId: z.uuid(),
+    paymentAttemptId: z.uuid(),
+    provider: z.enum(PAYMENT_PROVIDERS),
+    reference: z.string().min(1),
+    reason: z.string().min(1),
+    providerStatus: z.string(),
+    /** What the provider says was paid, which is not what was due. */
+    verifiedAmountMinor: amountMinorSchema.nullable(),
+    verifiedCurrency: z.string().nullable(),
+    dueAmountMinor: amountMinorSchema,
+  }),
+);

@@ -150,9 +150,12 @@ export interface VerifiedChargeView {
 export type VerifyOutcome =
   /** Post the funding journal and mark the attempt SUCCEEDED. */
   | { kind: 'POST' }
-  /** Close the attempt FAILED. */
-  | { kind: 'FAILED'; reason: string }
-  /** Leave the attempt open and stop retrying: the buyer has not paid yet, but still may (AB4). */
+  /**
+   * Leave the attempt open and stop retrying: the buyer has not paid yet, but still may (AB4).
+   * Paystack's `failed` lands here as well as `abandoned`: Inline lets a buyer whose card was
+   * declined try another one against the same transaction, so closing the attempt on the first
+   * decline would send the eventual success to review.
+   */
   | { kind: 'NOT_CONFIRMED'; providerStatus: string }
   /** Leave the attempt open and retry with backoff. */
   | { kind: 'PENDING'; providerStatus: string }
@@ -162,6 +165,25 @@ export type VerifyOutcome =
   | { kind: 'NO_OP' };
 
 const OPEN: ReadonlySet<PaymentAttemptStatus> = new Set(['INITIATED', 'PENDING']);
+
+/** Provider statuses that leave an attempt open but unpaid: AB4 rather than AB3. */
+const NOT_CONFIRMED_STATUSES: ReadonlySet<string> = new Set(['failed', 'abandoned']);
+
+/** True while an attempt can still be paid against. */
+export const isOpenAttempt = (status: PaymentAttemptStatus): boolean => OPEN.has(status);
+
+/**
+ * Whether a buyer may start over with a new reference. Only an attempt nobody has paid against
+ * as far as the provider has said: never one still verifying, where money may be in flight.
+ */
+export const canSupersedeAttempt = (attempt: {
+  status: PaymentAttemptStatus;
+  lastProviderStatus: string | null;
+}): boolean =>
+  attempt.status === 'INITIATED' ||
+  (attempt.status === 'PENDING' &&
+    attempt.lastProviderStatus !== null &&
+    NOT_CONFIRMED_STATUSES.has(attempt.lastProviderStatus));
 
 /**
  * Whether a charge Paystack has verified may be posted. Never trusts the webhook (m8 §5): this runs on
@@ -200,10 +222,9 @@ export function assessVerifiedCharge(attempt: AttemptForVerify, verified: Verifi
       }
       return { kind: 'POST' };
     }
-    case 'failed':
-      return { kind: 'FAILED', reason: 'the provider reports the charge failed' };
     case 'reversed':
       return { kind: 'NEEDS_REVIEW', reason: 'the provider reports the charge reversed' };
+    case 'failed':
     case 'abandoned':
       return { kind: 'NOT_CONFIRMED', providerStatus: status };
     default:
@@ -227,7 +248,9 @@ export function paymentDisplayState(attempt: {
     case 'INITIATED':
       return 'AWAITING_PAYMENT';
     case 'PENDING':
-      return attempt.lastProviderStatus === 'abandoned' ? 'NOT_CONFIRMED' : 'VERIFYING';
+      return attempt.lastProviderStatus !== null && NOT_CONFIRMED_STATUSES.has(attempt.lastProviderStatus)
+        ? 'NOT_CONFIRMED'
+        : 'VERIFYING';
     case 'SUCCEEDED':
       return 'CONFIRMED';
     case 'FAILED':

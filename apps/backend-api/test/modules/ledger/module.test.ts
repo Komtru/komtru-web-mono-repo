@@ -3,7 +3,13 @@ import type { Redis } from 'ioredis';
 import { loadConfig } from '../../../src/config/env.js';
 import type { ModuleContext } from '../../../src/platform/module.js';
 import { testRedisEnv, testRedisUrl } from '../../support/db-urls.js';
-import { ledgerModule, RESOLVE_ACCOUNT_NAME_QUEUE } from '../../../src/modules/ledger/index.js';
+import {
+  ledgerModule,
+  PROCESS_PAYMENT_WEBHOOK_QUEUE,
+  RESOLVE_ACCOUNT_NAME_QUEUE,
+  VERIFY_CHARGE_QUEUE,
+} from '../../../src/modules/ledger/index.js';
+import { assertRouteInvariants, routeLabel } from '../../../src/platform/http/route.js';
 import { testModules } from '../../support/modules.js';
 import { createScheduleRegistry } from '../../../src/platform/scheduler/registry.js';
 
@@ -12,12 +18,29 @@ describe('the ledger module', () => {
     expect(testModules().map((m) => m.name)).toContain('ledger');
   });
 
-  it('declares no routes yet: the funding and payout surfaces are T-072 and T-073', () => {
-    expect(ledgerModule.routes ?? []).toEqual([]);
+  it('declares the funding surface and the Paystack webhook (T-072)', () => {
+    const routes = ledgerModule.routes ?? [];
+    expect(routes.map(routeLabel)).toEqual([
+      'POST /trades/:code/payment/initiate',
+      'POST /trades/:code/payment/confirm',
+      'GET /trades/:code/payment/status',
+      'POST /webhooks/paystack',
+    ]);
+    const webhook = routes.find((r) => r.path === '/webhooks/paystack');
+    expect(webhook?.scope).toBe('PUBLIC');
+    for (const route of routes.filter((r) => r.path.startsWith('/trades'))) {
+      expect(route.scope, routeLabel(route)).toBe('CONSUMER');
+      if (route.method === 'post') expect(route.retryable, routeLabel(route)).toBe(true);
+    }
+    expect(() => assertRouteInvariants(routes)).not.toThrow();
   });
 
-  it('consumes the name-resolution queue', () => {
-    expect((ledgerModule.queues ?? []).map((q) => q.name)).toEqual([RESOLVE_ACCOUNT_NAME_QUEUE]);
+  it('consumes the name-resolution and funding queues', () => {
+    expect((ledgerModule.queues ?? []).map((q) => q.name)).toEqual([
+      RESOLVE_ACCOUNT_NAME_QUEUE,
+      VERIFY_CHARGE_QUEUE,
+      PROCESS_PAYMENT_WEBHOOK_QUEUE,
+    ]);
     expect(RESOLVE_ACCOUNT_NAME_QUEUE).toBe('ledger.resolve-account-name');
   });
 
@@ -26,7 +49,10 @@ describe('the ledger module', () => {
     const registry = createScheduleRegistry();
     for (const job of ledgerModule.schedules ?? []) registry.register(job);
 
-    expect(registry.list().map((j) => j.name)).toEqual(['ledger.refresh-bank-list']);
+    expect(registry.list().map((j) => j.name)).toEqual([
+      'ledger.refresh-bank-list',
+      'ledger.sweep-payment-webhooks',
+    ]);
     expect(registry.get('ledger.refresh-bank-list')?.cron).toMatch(/^\S+ \S+ \* \* \*$/);
   });
 

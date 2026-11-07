@@ -6,11 +6,29 @@
 // the registry and its jobs. Funding, the webhook route and the payouts are T-072 and T-073.
 import type { Redis } from 'ioredis';
 import type { AppConfig } from '../../config/env.js';
+import type { Db } from '../../db/index.js';
+import type { QueueFactory } from '../../platform/queue/factory.js';
 import type { Logger } from '../../platform/logger.js';
 import { defineModule, type ModuleContext } from '../../platform/module.js';
 import { createRedisBankListCache, type BankListCache } from './infrastructure/bankListCache.js';
 import type { ProviderRegistry } from './infrastructure/providerRegistry.js';
-import { paymentProviders } from './jobs/providers.js';
+import { paymentRoutes } from './http/routes.js';
+import { webhookRoutes } from './http/webhookRoutes.js';
+import type { VerifiedChargeView } from './domain/funding.js';
+import {
+  enqueuePaymentWebhook,
+  enqueueVerifyCharge,
+  PROCESS_PAYMENT_WEBHOOK_QUEUE,
+  processPaymentWebhookJob,
+  sweepPaymentWebhooks,
+  VERIFY_CHARGE_QUEUE,
+  verifyChargeJob,
+  FUNDING_JOB_ATTEMPTS,
+  FUNDING_JOB_BACKOFF_MS,
+  type ProcessPaymentWebhookJob,
+  type VerifyChargeJob,
+} from './jobs/funding.job.js';
+import { chargeVerifier, paymentProviders } from './jobs/providers.js';
 import { refreshBankList } from './jobs/refresh-bank-list.job.js';
 import {
   resolveAccountNameJob,
@@ -69,6 +87,13 @@ export { createProviderRegistry, providerForNewCharge } from './infrastructure/p
 export { createRedisBankListCache, type BankListCache } from './infrastructure/bankListCache.js';
 export { RESOLVE_ACCOUNT_NAME_QUEUE, type ResolveAccountNameJob };
 
+// Funding a trade (T-072).
+export { PROCESS_PAYMENT_WEBHOOK_QUEUE, VERIFY_CHARGE_QUEUE };
+
+/** Every five minutes: re-queues signed deliveries whose first enqueue never ran. */
+export const SWEEP_PAYMENT_WEBHOOKS_CRON = '*/5 * * * *';
+export const SWEEP_PAYMENT_WEBHOOKS_SCHEDULE = 'ledger.sweep-payment-webhooks';
+
 /** 03:15 Africa/Lagos: off-peak, and before the first payout of the working day. */
 export const REFRESH_BANK_LIST_CRON = '15 3 * * *';
 export const REFRESH_BANK_LIST_SCHEDULE = 'ledger.refresh-bank-list';
@@ -77,6 +102,10 @@ interface LedgerDeps {
   registry: ProviderRegistry;
   cache: BankListCache;
   logger: Logger;
+  db: Db;
+  queues: QueueFactory;
+  publicKey: string | undefined;
+  verify: (reference: string) => Promise<VerifiedChargeView>;
 }
 
 /**
@@ -95,7 +124,13 @@ const started = (): LedgerDeps => {
   return deps;
 };
 
-const buildDeps = (ctx: { config: AppConfig; logger: Logger; redis: Redis }): LedgerDeps => {
+const buildDeps = (ctx: {
+  config: AppConfig;
+  logger: Logger;
+  redis: Redis;
+  db: Db;
+  queues: QueueFactory;
+}): LedgerDeps => {
   // Without a key every job 503s and every webhook signature returns false, which in the logs looks
   // exactly like an attack. One line at boot is the difference between "misconfigured" and "under
   // attack" for whoever has to read them.
@@ -103,22 +138,71 @@ const buildDeps = (ctx: { config: AppConfig; logger: Logger; redis: Redis }): Le
     ctx.logger.warn('ledger: PAYSTACK_SECRET_KEY is not set; every provider call will fail closed');
   }
 
+  const paystack = {
+    logger: ctx.logger,
+    ...(ctx.config.paystack.secretKey ? { secretKey: ctx.config.paystack.secretKey } : {}),
+  };
   return {
-    registry: paymentProviders({
-      logger: ctx.logger,
-      ...(ctx.config.paystack.secretKey ? { secretKey: ctx.config.paystack.secretKey } : {}),
-    }),
+    registry: paymentProviders(paystack),
     cache: createRedisBankListCache(ctx.redis),
     logger: ctx.logger,
+    db: ctx.db,
+    queues: ctx.queues,
+    publicKey: ctx.config.paystack.publicKey,
+    verify: chargeVerifier(paystack),
+  };
+};
+
+const fundingJobDeps = () => {
+  const d = started();
+  const adapter = d.registry.getAdapter('PAYSTACK');
+  return {
+    db: d.db,
+    logger: d.logger,
+    verify: d.verify,
+    parse: (rawBody: Buffer) => adapter.parseWebhookEvent(rawBody),
   };
 };
 
 export const ledgerModule = defineModule({
   name: 'ledger',
+  routes: [
+    ...paymentRoutes(() => {
+      const d = started();
+      return {
+        db: d.db,
+        publicKey: d.publicKey,
+        logger: d.logger,
+        enqueueVerify: (reference) => enqueueVerifyCharge(d.queues, reference),
+      };
+    }),
+    ...webhookRoutes(() => {
+      const d = started();
+      return {
+        db: d.db,
+        adapter: d.registry.getAdapter('PAYSTACK'),
+        logger: d.logger,
+        enqueueDelivery: (webhookId) => enqueuePaymentWebhook(d.queues, webhookId),
+      };
+    }),
+  ],
   queues: [
     {
       name: RESOLVE_ACCOUNT_NAME_QUEUE,
       process: async (data: ResolveAccountNameJob) => await resolveAccountNameJob(started(), data),
+    },
+    {
+      name: VERIFY_CHARGE_QUEUE,
+      attempts: FUNDING_JOB_ATTEMPTS,
+      backoffMs: FUNDING_JOB_BACKOFF_MS,
+      process: async (data: VerifyChargeJob) => await verifyChargeJob(fundingJobDeps(), data),
+    },
+    {
+      name: PROCESS_PAYMENT_WEBHOOK_QUEUE,
+      attempts: FUNDING_JOB_ATTEMPTS,
+      backoffMs: FUNDING_JOB_BACKOFF_MS,
+      process: async (data: ProcessPaymentWebhookJob) =>
+        await processPaymentWebhookJob(fundingJobDeps(), data),
     },
   ],
   schedules: [
@@ -127,6 +211,19 @@ export const ledgerModule = defineModule({
       cron: REFRESH_BANK_LIST_CRON,
       description: 'Refreshes the cached bank list from the payment provider.',
       handler: async () => await refreshBankList(started()),
+    },
+    {
+      name: SWEEP_PAYMENT_WEBHOOKS_SCHEDULE,
+      cron: SWEEP_PAYMENT_WEBHOOKS_CRON,
+      description: 'Re-queues signed payment webhooks that were stored but never processed.',
+      handler: async () => {
+        const d = started();
+        await sweepPaymentWebhooks({
+          db: d.db,
+          logger: d.logger,
+          enqueue: (webhookId) => enqueuePaymentWebhook(d.queues, webhookId, { deduplicate: false }),
+        });
+      },
     },
   ],
   start: (ctx: ModuleContext) => {

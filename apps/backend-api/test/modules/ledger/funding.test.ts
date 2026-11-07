@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest';
 import {
   assertBalanced,
   assessVerifiedCharge,
+  canSupersedeAttempt,
   FundingSnapshotError,
   fundingAmounts,
   fundingIdempotencyKey,
@@ -173,16 +174,15 @@ describe('believing a verified charge', () => {
     expect(assessVerifiedCharge(attempt(), verified({ status: 'reversed' })).kind).toBe('NEEDS_REVIEW');
   });
 
-  it('closes a failed charge', () => {
-    expect(assessVerifiedCharge(attempt(), verified({ status: 'failed' })).kind).toBe('FAILED');
-  });
-
-  it('leaves an abandoned charge open, because a bank transfer can still land', () => {
-    expect(assessVerifiedCharge(attempt(), verified({ status: 'abandoned' }))).toEqual({
-      kind: 'NOT_CONFIRMED',
-      providerStatus: 'abandoned',
-    });
-  });
+  it.each(['abandoned', 'failed'])(
+    'leaves a %s charge open, because a transfer or another card can still land',
+    (status) => {
+      expect(assessVerifiedCharge(attempt(), verified({ status }))).toEqual({
+        kind: 'NOT_CONFIRMED',
+        providerStatus: status,
+      });
+    },
+  );
 
   it.each(['ongoing', 'pending', 'processing', 'queued', 'something-new'])(
     'retries a charge still %s',
@@ -213,6 +213,7 @@ describe('the buyer-facing payment state (AB3, AB4)', () => {
     ['PENDING', null, 'VERIFYING'],
     ['PENDING', 'ongoing', 'VERIFYING'],
     ['PENDING', 'abandoned', 'NOT_CONFIRMED'],
+    ['PENDING', 'failed', 'NOT_CONFIRMED'],
     ['SUCCEEDED', 'success', 'CONFIRMED'],
     ['FAILED', 'failed', 'NOT_CONFIRMED'],
     ['ABANDONED', null, 'NOT_CONFIRMED'],
@@ -226,6 +227,20 @@ describe('the buyer-facing payment state (AB3, AB4)', () => {
     for (const status of PAYMENT_ATTEMPT_STATUSES) {
       expect(paymentDisplayState({ status, lastProviderStatus: null })).toEqual(expect.any(String));
     }
+  });
+});
+
+describe('starting over with a new reference', () => {
+  it.each([
+    ['INITIATED', null, true],
+    ['PENDING', 'abandoned', true],
+    ['PENDING', 'failed', true],
+    ['PENDING', null, false],
+    ['PENDING', 'ongoing', false],
+    ['SUCCEEDED', 'success', false],
+    ['NEEDS_REVIEW', 'success', false],
+  ] as const)('%s with provider status %s: %s', (status, lastProviderStatus, expected) => {
+    expect(canSupersedeAttempt({ status, lastProviderStatus })).toBe(expected);
   });
 });
 
