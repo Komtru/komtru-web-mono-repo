@@ -518,6 +518,125 @@ describe.runIf(infraEnabled)('proposal flow (T-061)', () => {
       expect(await activityTypes(draft.id)).toContain('COUNTER_PROPOSED');
     });
 
+    it('answers a retried counter with the trade as it stands, and refuses one that changes nothing', async () => {
+      const buyer = await person('buyer');
+      const seller = await person('seller');
+      const draft = await buyerDraft(buyer);
+      await sendProposal(deps(), {
+        userId: buyer.id,
+        tradeId: draft.id,
+        counterparty: { channel: 'USERNAME', value: 'seller' },
+      });
+      const first = await getTrade(deps(), { userId: seller.id, tradeId: draft.id });
+      const sellerAddress = await address(seller.id);
+
+      const counter = {
+        userId: seller.id,
+        tradeId: draft.id,
+        expectedRevision: first.statusRevision,
+        itemAmountMinor: 50_000_000n,
+        addressId: sellerAddress,
+      };
+      const countered = await counterPropose(deps(), counter);
+      const retried = await counterPropose(deps(), counter);
+      expect(retried.statusRevision).toBe(countered.statusRevision);
+      expect(retried.terms?.versionNumber).toBe(countered.terms?.versionNumber);
+      expect(await activityTypes(draft.id)).toEqual(['NOTE', 'PROPOSAL_SENT', 'COUNTER_PROPOSED']);
+
+      // The buyer's turn: sending back the very same price is not a counter.
+      const nothing = await failure(
+        counterPropose(deps(), {
+          userId: buyer.id,
+          tradeId: draft.id,
+          expectedRevision: countered.statusRevision,
+          itemAmountMinor: 50_000_000n,
+        }),
+      );
+      expect([nothing.status, nothing.code]).toEqual([422, 'VALIDATION_FAILED']);
+    });
+
+    it('re-checks canBuy when a buyer counters', async () => {
+      const buyer = await person('buyer');
+      const seller = await person('seller');
+      const draft = await buyerDraft(buyer);
+      await sendProposal(deps(), {
+        userId: buyer.id,
+        tradeId: draft.id,
+        counterparty: { channel: 'USERNAME', value: 'seller' },
+      });
+      const first = await getTrade(deps(), { userId: seller.id, tradeId: draft.id });
+      await counterPropose(deps(), {
+        userId: seller.id,
+        tradeId: draft.id,
+        expectedRevision: first.statusRevision,
+        itemAmountMinor: 50_000_000n,
+        addressId: await address(seller.id),
+      });
+      await certify(buyer.id);
+      const now = await getTrade(deps(), { userId: buyer.id, tradeId: draft.id });
+      const error = await failure(
+        counterPropose(deps(), {
+          userId: buyer.id,
+          tradeId: draft.id,
+          expectedRevision: now.statusRevision,
+          itemAmountMinor: 48_000_000n,
+        }),
+      );
+      expect(error.code).toBe('MERCHANT_CANNOT_BUY');
+    });
+
+    it('answers a wrong-state accept with 409 INVALID_TRANSITION before any address or proof check', async () => {
+      const buyer = await person('buyer');
+      const seller = await person('seller');
+      const draft = await buyerDraft(buyer);
+      await sendProposal(deps(), {
+        userId: buyer.id,
+        tradeId: draft.id,
+        counterparty: { channel: 'USERNAME', value: 'seller' },
+      });
+      const view = await getTrade(deps(), { userId: seller.id, tradeId: draft.id });
+      await cancelTrade(deps(), { userId: buyer.id, tradeId: draft.id });
+      // No address, no proof: those would be 422s if the state were checked second.
+      const error = await failure(
+        acceptProposal(deps(), {
+          userId: seller.id,
+          tradeId: draft.id,
+          termsVersionId: view.terms!.versionId,
+        }),
+      );
+      expect([error.status, error.code]).toEqual([409, 'INVALID_TRANSITION']);
+    });
+
+    it('replays an accept only for the person who accepted', async () => {
+      const buyer = await person('buyer');
+      const seller = await person('seller');
+      const draft = await buyerDraft(buyer);
+      await sendProposal(deps(), {
+        userId: buyer.id,
+        tradeId: draft.id,
+        counterparty: { channel: 'USERNAME', value: 'seller' },
+      });
+      const view = await getTrade(deps(), { userId: seller.id, tradeId: draft.id });
+      const accept = {
+        userId: seller.id,
+        tradeId: draft.id,
+        termsVersionId: view.terms!.versionId,
+        addressId: await address(seller.id),
+        proofFileIds: [upload(seller.id), upload(seller.id)],
+      };
+      const accepted = await acceptProposal(deps(), accept);
+      expect((await acceptProposal(deps(), accept)).statusRevision).toBe(accepted.statusRevision);
+      // The proposer asking to accept the same trade is not a replay, whatever version they quote.
+      const other = await failure(
+        acceptProposal(deps(), {
+          userId: buyer.id,
+          tradeId: draft.id,
+          termsVersionId: accepted.terms!.versionId,
+        }),
+      );
+      expect([other.status, other.code]).toEqual([409, 'INVALID_TRANSITION']);
+    });
+
     it('declines with a reason (SD1) and replays harmlessly', async () => {
       const buyer = await person('buyer');
       const seller = await person('seller');

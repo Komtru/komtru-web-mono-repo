@@ -44,13 +44,22 @@ export const sendTradeBodySchema = z
     path: ['username'],
   });
 
-export const counterBodySchema = z.object({
-  expectedRevision: z.int().min(0),
-  itemAmountMinor: koboInput.optional(),
-  itemSpec: itemSpecSchema.optional(),
-  addressId: z.uuid().optional(),
-  proofFileIds: proofFileIdsSchema.optional(),
-});
+export const counterBodySchema = z
+  .object({
+    expectedRevision: z.int().min(0),
+    itemAmountMinor: koboInput.optional(),
+    itemSpec: itemSpecSchema.optional(),
+    addressId: z.uuid().optional(),
+    proofFileIds: proofFileIdsSchema.optional(),
+  })
+  .refine(
+    (body) =>
+      body.itemAmountMinor !== undefined ||
+      body.itemSpec !== undefined ||
+      body.addressId !== undefined ||
+      (body.proofFileIds?.length ?? 0) > 0,
+    { message: 'Change at least one term', path: ['itemAmountMinor'] },
+  );
 
 export const acceptBodySchema = z.object({
   termsVersionId: z.uuid(),

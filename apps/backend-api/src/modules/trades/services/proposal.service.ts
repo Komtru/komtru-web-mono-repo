@@ -10,6 +10,7 @@
 // runs in its own short transaction and the error is thrown after it commits: throwing inside the
 // transaction that wrote the evidence would roll the evidence back with it.
 import type { Kobo } from '@komtru/shared-types';
+import { isDeepStrictEqual } from 'node:util';
 import { eq } from 'drizzle-orm';
 import { ApiError } from '../../../platform/errors.js';
 import type { Tx } from '../../../platform/events/publish.js';
@@ -28,6 +29,7 @@ import { validateItemSpec } from '../../config/index.js';
 import { canActAsBuyer, type TradeInitiatorRole } from '../domain/eligibility.js';
 import {
   addressRequiredError,
+  invalidTransitionError,
   itemSpecInvalidError,
   merchantCannotBuyError,
   proofMediaRequiredError,
@@ -448,12 +450,50 @@ export interface CounterInput {
   proofFileIds?: string[];
 }
 
+const staleTradeError = (): ApiError =>
+  new ApiError(
+    409,
+    'CONFLICT',
+    'The trade changed',
+    'The trade moved on while you were looking. Review the latest terms and try again.',
+  );
+
 export async function counterPropose(deps: TradeDeps, input: CounterInput): Promise<TradeView> {
+  const before = await deps.db.transaction((tx) => loadTrade(tx, input.tradeId));
+  const side = requireParty(before, input.userId);
+  // The buyer gate, re-checked: a buyer countering is taking the buyer side again, and
+  // certification can be granted after the proposal was sent. A retry on a trade that has moved on
+  // is answered below, not refused here.
+  if (side === 'BUYER' && before.status === 'AWAITING_ACCEPTANCE') {
+    await refuseMerchantBuyer(deps, {
+      buyerUserId: input.userId,
+      actorId: input.userId,
+      path: 'ACCEPT_AS_BUYER',
+      tradeId: before.id,
+    });
+  }
+
   const result = await deps.db.transaction(async (tx) => {
     const trade = await loadTrade(tx, input.tradeId, true);
     const role = requireParty(trade, input.userId);
     const current = await loadTerms(tx, trade.currentTermsVersionId);
-    if (trade.status === 'AWAITING_ACCEPTANCE') assertTheirTurn(current, input.userId);
+
+    // Idempotent replay: these terms are already this person's own proposal and the trade has
+    // moved past the revision the retry carries, so the first attempt got through.
+    if (
+      trade.status === 'AWAITING_ACCEPTANCE' &&
+      current.proposedByUserId === input.userId &&
+      trade.statusRevision > input.expectedRevision
+    ) {
+      return viewTrade(tx, trade, input.userId);
+    }
+    // The state guard runs before anything that looks at the body, so the wrong state is always
+    // the same answer whatever was sent with it.
+    if (trade.statusRevision !== input.expectedRevision) throw staleTradeError();
+    if (trade.status !== 'AWAITING_ACCEPTANCE') {
+      throw invalidTransitionError('COUNTER_PROPOSE', trade.status, 'AWAITING_ACCEPTANCE');
+    }
+    assertTheirTurn(current, input.userId);
 
     const standard = await deps.standards.pinned(requireCategory(trade), requireVersion(trade));
     const amount = input.itemAmountMinor ?? current.itemAmountMinor;
@@ -466,6 +506,25 @@ export async function counterPropose(deps: TradeDeps, input: CounterInput): Prom
       input.addressId || !ownBefore
         ? await snapshotAddress(deps, tx, input.userId, input.addressId, role)
         : ownBefore;
+
+    // A counter that changes nothing is not a counter: it would burn a version and hand the turn
+    // back with the same terms.
+    const attached = new Set(await proofFileIds(tx, trade.id));
+    const newProof = role === 'SELLER' && (input.proofFileIds ?? []).some((id) => !attached.has(id));
+    if (
+      amount === current.itemAmountMinor &&
+      isDeepStrictEqual(spec, current.itemSpec) &&
+      own.source_address_id === ownBefore?.source_address_id &&
+      !newProof
+    ) {
+      throw new ApiError(
+        422,
+        'VALIDATION_FAILED',
+        'Nothing was changed',
+        'Change the price, the item details, your address or the proof.',
+        [{ path: 'itemAmountMinor', message: 'Change at least one term' }],
+      );
+    }
 
     const version = await insertNextVersion(tx, current, {
       proposedByUserId: input.userId,
@@ -551,9 +610,31 @@ export interface AcceptInput {
   proofFileIds?: string[];
 }
 
+/**
+ * The state guard for accept, ahead of every check that looks at addresses, proof or eligibility, so
+ * a trade in the wrong state is always 409 INVALID_TRANSITION. Returns 'REPLAY' for the one case
+ * that is a success: the acceptor asking again after their accept went through.
+ */
+function acceptGuard(trade: TradeRow, userId: string): 'OPEN' | 'REPLAY' {
+  if (trade.status === 'AWAITING_ACCEPTANCE') return 'OPEN';
+  if (
+    trade.status === 'PENDING_PAYMENT' &&
+    trade.statusAction === 'ACCEPT' &&
+    trade.statusActorId === userId
+  ) {
+    return 'REPLAY';
+  }
+  throw invalidTransitionError('ACCEPT', trade.status, 'PENDING_PAYMENT');
+}
+
 export async function acceptProposal(deps: TradeDeps, input: AcceptInput): Promise<TradeView> {
   const before = await deps.db.transaction((tx) => loadTrade(tx, input.tradeId));
   const side = requireParty(before, input.userId);
+  if (acceptGuard(before, input.userId) === 'REPLAY') {
+    const view = await deps.db.transaction((tx) => viewTrade(tx, before, input.userId));
+    await grantProofToBuyer(deps, input.tradeId);
+    return view;
+  }
   // The buyer gate, re-checked now: certification can be granted between send and acceptance.
   if (side === 'BUYER') {
     await refuseMerchantBuyer(deps, {
@@ -567,23 +648,17 @@ export async function acceptProposal(deps: TradeDeps, input: AcceptInput): Promi
 
   const result = await deps.db.transaction(async (tx) => {
     const trade = await loadTrade(tx, input.tradeId, true);
-    if (trade.acceptedTermsVersionId && trade.status !== 'AWAITING_ACCEPTANCE') {
-      // Replay of an accept that already went through.
-      if (trade.acceptedTermsVersionId === input.termsVersionId || trade.statusActorId === input.userId) {
-        return viewTrade(tx, trade, input.userId);
-      }
-    }
+    // Re-decided under the lock: a concurrent accept or counter may have moved the trade since.
+    if (acceptGuard(trade, input.userId) === 'REPLAY') return viewTrade(tx, trade, input.userId);
     const current = await loadTerms(tx, trade.currentTermsVersionId);
-    if (trade.status === 'AWAITING_ACCEPTANCE') {
-      assertTheirTurn(current, input.userId);
-      if (current.id !== input.termsVersionId) {
-        throw new ApiError(
-          409,
-          'CONFLICT',
-          'The terms changed',
-          'The other party changed the terms while you were looking. Review the latest and try again.',
-        );
-      }
+    assertTheirTurn(current, input.userId);
+    if (current.id !== input.termsVersionId) {
+      throw new ApiError(
+        409,
+        'CONFLICT',
+        'The terms changed',
+        'The other party changed the terms while you were looking. Review the latest and try again.',
+      );
     }
 
     let accepted = current;

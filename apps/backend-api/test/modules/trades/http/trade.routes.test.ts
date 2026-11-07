@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { tradeRoutes } from '../../../../src/modules/trades/http/trade.routes.js';
 import {
   acceptBodySchema,
+  counterBodySchema,
   createTradeBodySchema,
   declineBodySchema,
   sendTradeBodySchema,
@@ -52,6 +53,12 @@ describe('trade request bodies', () => {
     });
     expect(parsed.itemAmountMinor).toBe(45_000_000n);
     expect(createTradeBodySchema.safeParse({ ...parsed, itemAmountMinor: 450000.5 }).success).toBe(false);
+  });
+
+  it('rejects a counter that changes nothing', () => {
+    expect(counterBodySchema.safeParse({ expectedRevision: 2 }).success).toBe(false);
+    expect(counterBodySchema.safeParse({ expectedRevision: 2, proofFileIds: [] }).success).toBe(false);
+    expect(counterBodySchema.safeParse({ expectedRevision: 2, itemAmountMinor: '100' }).success).toBe(true);
   });
 
   it('wants the version on screen to accept, and a reason to decline', () => {
