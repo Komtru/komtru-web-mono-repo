@@ -478,12 +478,16 @@ export async function counterPropose(deps: TradeDeps, input: CounterInput): Prom
     const role = requireParty(trade, input.userId);
     const current = await loadTerms(tx, trade.currentTermsVersionId);
 
-    // Idempotent replay: these terms are already this person's own proposal and the trade has
-    // moved past the revision the retry carries, so the first attempt got through.
+    // Idempotent replay: these terms are already this person's own proposal, they say what the
+    // retry says, and the trade has moved past the revision the retry carries, so the first attempt
+    // got through. A different body at a stale revision is a lost race, not a retry.
     if (
       trade.status === 'AWAITING_ACCEPTANCE' &&
       current.proposedByUserId === input.userId &&
-      trade.statusRevision > input.expectedRevision
+      trade.statusRevision > input.expectedRevision &&
+      (input.itemAmountMinor === undefined || input.itemAmountMinor === current.itemAmountMinor) &&
+      (input.itemSpec === undefined || isDeepStrictEqual(input.itemSpec, current.itemSpec)) &&
+      (input.addressId === undefined || input.addressId === addressOf(current, role)?.source_address_id)
     ) {
       return viewTrade(tx, trade, input.userId);
     }

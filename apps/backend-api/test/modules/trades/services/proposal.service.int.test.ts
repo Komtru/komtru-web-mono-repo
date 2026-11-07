@@ -702,6 +702,101 @@ describe.runIf(infraEnabled)('proposal flow (T-061)', () => {
     });
   });
 
+  describe('concurrency', () => {
+    /** A sent buyer proposal, with the seller about to answer it. */
+    const openProposal = async () => {
+      const buyer = await person('buyer');
+      const seller = await person('seller');
+      const draft = await createProposal(deps(), {
+        userId: buyer.id,
+        role: 'BUYER',
+        categoryCode: 'PHONES',
+        itemAmountMinor: PRICE,
+        itemSpec: SPEC,
+        addressId: await address(buyer.id),
+      });
+      await sendProposal(deps(), {
+        userId: buyer.id,
+        tradeId: draft.id,
+        counterparty: { channel: 'USERNAME', value: 'seller' },
+      });
+      const view = await getTrade(deps(), { userId: seller.id, tradeId: draft.id });
+      return { buyer, seller, tradeId: draft.id, view };
+    };
+
+    const count = async (tradeId: string, type: string) =>
+      (
+        await t
+          .owner()
+          .query(`SELECT 1 FROM trade.trade_activity WHERE trade_id = $1 AND type = $2`, [tradeId, type])
+      ).rows.length;
+
+    it('lets one of two simultaneous accepts win and answers the other as a replay', async () => {
+      const { seller, tradeId, view } = await openProposal();
+      const accept = {
+        userId: seller.id,
+        tradeId,
+        termsVersionId: view.terms!.versionId,
+        addressId: await address(seller.id),
+        proofFileIds: [upload(seller.id), upload(seller.id)],
+      };
+      const [a, b] = await Promise.all([acceptProposal(deps(), accept), acceptProposal(deps(), accept)]);
+      expect([a.status, b.status]).toEqual(['PENDING_PAYMENT', 'PENDING_PAYMENT']);
+      expect(a.statusRevision).toBe(b.statusRevision);
+      expect(await count(tradeId, 'PROPOSAL_ACCEPTED')).toBe(1);
+    });
+
+    it('lets an accept and a counter race: one wins, the other is a 409 CONFLICT', async () => {
+      const { seller, tradeId, view } = await openProposal();
+      const results = await Promise.allSettled([
+        acceptProposal(deps(), {
+          userId: seller.id,
+          tradeId,
+          termsVersionId: view.terms!.versionId,
+          addressId: await address(seller.id),
+          proofFileIds: [upload(seller.id), upload(seller.id)],
+        }),
+        counterPropose(deps(), {
+          userId: seller.id,
+          tradeId,
+          expectedRevision: view.statusRevision,
+          itemAmountMinor: 50_000_000n,
+          addressId: await address(seller.id),
+        }),
+      ]);
+      const lost = results.filter((r) => r.status === 'rejected');
+      expect(results.filter((r) => r.status === 'fulfilled')).toHaveLength(1);
+      expect(lost).toHaveLength(1);
+      const error = (lost[0] as PromiseRejectedResult).reason as ApiError;
+      expect([error.status, error.code]).toEqual([409, 'CONFLICT']);
+      expect((await count(tradeId, 'PROPOSAL_ACCEPTED')) + (await count(tradeId, 'COUNTER_PROPOSED'))).toBe(
+        1,
+      );
+    });
+
+    it('lets two counters at the same revision race: one wins, one version is written', async () => {
+      const { seller, tradeId, view } = await openProposal();
+      const counter = async (amount: bigint) =>
+        counterPropose(deps(), {
+          userId: seller.id,
+          tradeId,
+          expectedRevision: view.statusRevision,
+          itemAmountMinor: amount,
+          addressId: await address(seller.id),
+        });
+      const results = await Promise.allSettled([counter(50_000_000n), counter(51_000_000n)]);
+      expect(results.filter((r) => r.status === 'fulfilled')).toHaveLength(1);
+      const lost = results.find((r) => r.status === 'rejected') as PromiseRejectedResult;
+      expect([(lost.reason as ApiError).status, (lost.reason as ApiError).code]).toEqual([409, 'CONFLICT']);
+      const { rows } = await t
+        .owner()
+        .query(`SELECT version_number FROM trade.trade_terms_versions WHERE trade_id = $1 ORDER BY 1`, [
+          tradeId,
+        ]);
+      expect(rows.map((r: { version_number: number }) => r.version_number)).toEqual([1, 2]);
+    });
+  });
+
   describe('invitations (non-users)', () => {
     it('parks the trade in PENDING_COUNTERPARTY, binds on claim, and needs an address to claim', async () => {
       const seller = await person('seller');
