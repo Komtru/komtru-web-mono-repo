@@ -41,13 +41,6 @@ Read summaries, not whole files, and delegate everything heavy to subagents.
 - Run `git worktree list` and `git branch --list 't-*' 'wip/*'`. A worktree whose ticket is not
   Done is **in-flight work**. Resume it before starting anything new; in-flight tickets use up
   capacity first.
-- The `wip/main-uncommitted-2026-10-15` branch holds unverified T-028, T-037, T-040 and T-051
-  work found uncommitted on `main`. When the manager starts any of those tickets, the
-  implementer cherry-picks the relevant files from that branch instead of rewriting them. Once
-  all four are Done, delete the branch and remove this bullet.
-- `t-051-business-verification` has three commits plus uncommitted edits. It conflicts with the
-  `wip` branch's migration 0031. Its implementer must keep one migration and renumber it if
-  `main` has moved on.
 - Bring infrastructure up: `pnpm infra:up`. If Docker is not running, log it and run only
   tickets that need no Postgres or Redis, such as T-190 or docs and UI planning.
 
