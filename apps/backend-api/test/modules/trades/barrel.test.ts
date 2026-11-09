@@ -30,6 +30,18 @@ describe('the trades module surface', () => {
       'recordEligibilityBlock',
       'blockBuyerOrPass',
       'assertFundingEligibilityRecorded',
+      'dispatchGuard',
+      'buildShipOptions',
+      'decideDeliverySignal',
+      'isTrustedSignal',
+      'deliverySignalPayloadSchema',
+      'decideOverdueDelivery',
+      'applyDeliverySignal',
+      'assertDispatchOpen',
+      'openDeadline',
+      'sweepDeliveryDeadlines',
+      'tradeRefundRequestedEvent',
+      'tradeDeliveryOverdueEvent',
     ]) {
       expect(trades).toHaveProperty(name);
     }

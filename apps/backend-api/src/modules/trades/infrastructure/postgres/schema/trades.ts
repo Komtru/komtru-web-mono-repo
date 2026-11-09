@@ -14,7 +14,14 @@
 import { sql } from 'drizzle-orm';
 import { bigint, check, index, integer, jsonb, text, timestamp, uuid } from 'drizzle-orm/pg-core';
 import { trade } from './columns.js';
-import { cancellationReason, tradeAction, tradeActorType, tradeInitiatorRole, tradeStatus } from './enums.js';
+import {
+  cancellationReason,
+  fulfilmentSubstate,
+  tradeAction,
+  tradeActorType,
+  tradeInitiatorRole,
+  tradeStatus,
+} from './enums.js';
 
 /** Statuses a trade can hold before its terms are accepted, so before it has a fee snapshot. */
 const BEFORE_ACCEPTANCE = sql`('DRAFT', 'PENDING_COUNTERPARTY', 'UNDER_PROPOSAL_REVIEW', 'AWAITING_ACCEPTANCE', 'DECLINED', 'REJECTED', 'CANCELLED', 'EXPIRED')`;
@@ -61,6 +68,9 @@ export const trades = trade.table(
     statusReason: text('status_reason'),
     statusContext: jsonb('status_context'),
     statusChangedAt: timestamp('status_changed_at', { withTimezone: true }).notNull().defaultNow(),
+
+    /** Set by T-087 while a logistics company has a request open; cleared when custody begins. */
+    fulfilmentSubstate: fulfilmentSubstate('fulfilment_substate'),
 
     currency: text('currency').notNull().default('NGN'),
 

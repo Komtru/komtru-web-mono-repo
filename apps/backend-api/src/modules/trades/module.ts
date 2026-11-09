@@ -16,7 +16,12 @@ import type { Redis } from 'ioredis';
 import type { AppConfig } from '../../config/env.js';
 import type { Logger } from '../../platform/logger.js';
 import { createConfigAccessor } from '../config/index.js';
+import { tradeStateChangedEvent } from './domain/events.js';
+import { fulfilmentRoutes } from './http/fulfilment.routes.js';
 import { tradeRoutes } from './http/trade.routes.js';
+import { deliveryDeadlineJob } from './jobs/deliveryDeadline.job.js';
+import { openDeliveryDeadline } from './services/deadline.service.js';
+import { noLogisticsCompanies, noParkCoverage, type FulfilmentDeps } from './services/fulfilmentPorts.js';
 import {
   postgresGrantProofAccess,
   postgresProofFiles,
@@ -57,12 +62,31 @@ export function buildTradeDeps({ db, redis, config, logger }: TradesModuleOption
   };
 }
 
+/**
+ * Fulfilment's ports. The two seams are explicit: until the logistics schema (T-085, T-087) and Park's
+ * coverage service (T-093) exist there are no companies to offer and no serviceable city, which is
+ * what the ship step then truthfully reports.
+ */
+export function buildFulfilmentDeps(deps: TradeDeps): FulfilmentDeps {
+  return {
+    db: deps.db,
+    cities: deps.cities,
+    proofFiles: (tx, ids) => deps.proofFiles(tx, ids),
+    standards: deps.standards,
+    logistics: noLogisticsCompanies,
+    park: noParkCoverage,
+    now: () => new Date(),
+  };
+}
+
 export function createTradesModule(options: TradesModuleOptions): KomtruModule {
   const deps = buildTradeDeps(options);
+  const fulfilment = buildFulfilmentDeps(deps);
 
   return defineModule({
     name: 'trades',
-    routes: tradeRoutes(() => deps),
+    routes: [...tradeRoutes(() => deps), ...fulfilmentRoutes(() => fulfilment)],
+    schedules: [deliveryDeadlineJob(() => fulfilment)],
 
     start: (ctx: ModuleContext) => {
       // Both subscribers act only on invitations whose context is a trade; identity publishes the
@@ -95,6 +119,16 @@ export function createTradesModule(options: TradesModuleOptions): KomtruModule {
             tradeId: payload.contextId,
             invitationId: payload.invitationId,
           });
+        },
+      });
+      // Funding starts the delivery clock (DE1, DE3). Idempotent, so a redelivered event is harmless;
+      // it runs in the event's own transaction, so the deadline and the claim on the event commit together.
+      ctx.events.subscribe({
+        name: 'trades.open-delivery-deadline',
+        event: tradeStateChangedEvent,
+        handler: async ({ payload }, tx) => {
+          if (payload.to !== 'FUNDED') return;
+          await openDeliveryDeadline(fulfilment, tx, payload.tradeId);
         },
       });
       return Promise.resolve();
