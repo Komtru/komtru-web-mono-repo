@@ -7,11 +7,11 @@ behind it is [`BUILD_PLAN.md`](BUILD_PLAN.md). The unit of work is the feature, 
 thing in an app.
 
 ```
-MVP   ████████··························  13/52   (25%)
-Total ██████····························  13/80   (16%)
+MVP   █████████·························  14/52   (27%)
+Total ██████····························  14/80   (18%)
 ```
 
-39 MVP features left, 28 deferred past it.
+38 MVP features left, 28 deferred past it.
 
 ## Backend done, UI outstanding
 
@@ -34,7 +34,7 @@ The engine exists and only the UI is missing, so these are the highest-value wor
 | Platform (not a user journey)           | 9    | 10    | 9        | 10        |
 | Arrive & verify                         | 2    | 4     | 2        | 3         |
 | Home & discover                         | 0    | 2     | 0        | 2         |
-| Propose & agree                         | 0    | 5     | 0        | 3         |
+| Propose & agree                         | 1    | 5     | 1        | 3         |
 | The trade workspace                     | 0    | 2     | 0        | 2         |
 | Fund & protect                          | 0    | 2     | 0        | 1         |
 | Fulfil & dispatch                       | 0    | 1     | 0        | 1         |
@@ -55,6 +55,7 @@ The engine exists and only the UI is missing, so these are the highest-value wor
 | ------- | ------------------------------------------------- | --------------------------------------- | --- |
 | F-005   | Deterministic integration test suite              | Platform (not a user journey)           | yes |
 | F-013   | First-time onboarding walkthrough                 | Arrive & verify                         | yes |
+| F-018   | Create a trade: buyer starts, seller completes    | Propose & agree                         | yes |
 | F-030   | Cancel a trade and get a refund                   | Issues & resolution                     | yes |
 | F-037   | Get paid out                                      | Complete & grow                         | yes |
 | F-075   | Hosting and real deploy jobs                      | Launch & assurance (not a user journey) | yes |
@@ -69,40 +70,39 @@ The engine exists and only the UI is missing, so these are the highest-value wor
 
 ## Remaining MVP features
 
-| Feature | Title                                                            | Journey                                 | MVP |
-| ------- | ---------------------------------------------------------------- | --------------------------------------- | --- |
-| F-005   | Deterministic integration test suite                             | Platform (not a user journey)           | yes |
-| F-013   | First-time onboarding walkthrough                                | Arrive & verify                         | yes |
-| F-015   | Home, search, categories and find-a-trade-by-code                | Home & discover                         | yes |
-| F-016   | View a seller's profile and Trust Passport                       | Home & discover                         | yes |
-| F-017   | Propose a trade, invite the other party and order multiple items | Propose & agree                         | yes |
-| F-018   | Create a trade: buyer starts, seller completes                   | Propose & agree                         | yes |
-| F-019   | Create a trade: seller starts, buyer completes                   | Propose & agree                         | yes |
-| F-023   | Terms, agreement and payment detail in the workspace             | The trade workspace                     | yes |
-| F-028   | Delivery and evidence in the workspace                           | Deliver & inspect                       | yes |
-| F-029   | Capture and compare proof media                                  | Deliver & inspect                       | yes |
-| F-030   | Cancel a trade and get a refund                                  | Issues & resolution                     | yes |
-| F-031   | Lifecycle exceptions: expiry, withdrawal and inspection updates  | Issues & resolution                     | yes |
-| F-032   | Report an issue and open a dispute                               | Issues & resolution                     | yes |
-| F-033   | Resolution execution: the return track                           | Issues & resolution                     | yes |
-| F-034   | Resolution execution: replacement and mutual settlement          | Issues & resolution                     | yes |
-| F-035   | Decide a dispute in TrustOps                                     | Issues & resolution                     | yes |
-| F-037   | Get paid out                                                     | Complete & grow                         | yes |
-| F-040   | Apply for merchant certification and have it reviewed            | Sell on Komtru                          | yes |
-| F-041   | List items and manage stock                                      | Sell on Komtru                          | yes |
-| F-042   | Shop settings and catalogue import                               | Sell on Komtru                          | yes |
-| F-046   | Trust history, account and notification settings                 | Account, trust & support                | yes |
-| F-067   | Desktop: arrive, home and discover                               | Desktop & tablet journeys               | yes |
-| F-068   | Desktop: propose, agree and fund                                 | Desktop & tablet journeys               | yes |
-| F-069   | Desktop: fulfil, deliver, inspect and complete                   | Desktop & tablet journeys               | yes |
-| F-070   | Desktop and tablet: issues and resolution                        | Desktop & tablet journeys               | yes |
-| F-072   | Tablet: arrive, home, discover, propose and fund                 | Desktop & tablet journeys               | yes |
-| F-073   | Tablet: fulfil, deliver, inspect and payouts                     | Desktop & tablet journeys               | yes |
-| F-075   | Hosting and real deploy jobs                                     | Launch & assurance (not a user journey) | yes |
-| F-076   | End-to-end critical paths                                        | Launch & assurance (not a user journey) | yes |
-| F-077   | Security review                                                  | Launch & assurance (not a user journey) | yes |
-| F-078   | Definition-of-done audit and first push                          | Launch & assurance (not a user journey) | yes |
-| F-080   | Order multiple items in one trade                                | Launch & assurance (not a user journey) | yes |
+| Feature | Title                                                           | Journey                                 | MVP |
+| ------- | --------------------------------------------------------------- | --------------------------------------- | --- |
+| F-005   | Deterministic integration test suite                            | Platform (not a user journey)           | yes |
+| F-013   | First-time onboarding walkthrough                               | Arrive & verify                         | yes |
+| F-015   | Home, search, categories and find-a-trade-by-code               | Home & discover                         | yes |
+| F-016   | View a seller's profile and Trust Passport                      | Home & discover                         | yes |
+| F-018   | Create a trade: buyer starts, seller completes                  | Propose & agree                         | yes |
+| F-019   | Create a trade: seller starts, buyer completes                  | Propose & agree                         | yes |
+| F-023   | Terms, agreement and payment detail in the workspace            | The trade workspace                     | yes |
+| F-028   | Delivery and evidence in the workspace                          | Deliver & inspect                       | yes |
+| F-029   | Capture and compare proof media                                 | Deliver & inspect                       | yes |
+| F-030   | Cancel a trade and get a refund                                 | Issues & resolution                     | yes |
+| F-031   | Lifecycle exceptions: expiry, withdrawal and inspection updates | Issues & resolution                     | yes |
+| F-032   | Report an issue and open a dispute                              | Issues & resolution                     | yes |
+| F-033   | Resolution execution: the return track                          | Issues & resolution                     | yes |
+| F-034   | Resolution execution: replacement and mutual settlement         | Issues & resolution                     | yes |
+| F-035   | Decide a dispute in TrustOps                                    | Issues & resolution                     | yes |
+| F-037   | Get paid out                                                    | Complete & grow                         | yes |
+| F-040   | Apply for merchant certification and have it reviewed           | Sell on Komtru                          | yes |
+| F-041   | List items and manage stock                                     | Sell on Komtru                          | yes |
+| F-042   | Shop settings and catalogue import                              | Sell on Komtru                          | yes |
+| F-046   | Trust history, account and notification settings                | Account, trust & support                | yes |
+| F-067   | Desktop: arrive, home and discover                              | Desktop & tablet journeys               | yes |
+| F-068   | Desktop: propose, agree and fund                                | Desktop & tablet journeys               | yes |
+| F-069   | Desktop: fulfil, deliver, inspect and complete                  | Desktop & tablet journeys               | yes |
+| F-070   | Desktop and tablet: issues and resolution                       | Desktop & tablet journeys               | yes |
+| F-072   | Tablet: arrive, home, discover, propose and fund                | Desktop & tablet journeys               | yes |
+| F-073   | Tablet: fulfil, deliver, inspect and payouts                    | Desktop & tablet journeys               | yes |
+| F-075   | Hosting and real deploy jobs                                    | Launch & assurance (not a user journey) | yes |
+| F-076   | End-to-end critical paths                                       | Launch & assurance (not a user journey) | yes |
+| F-077   | Security review                                                 | Launch & assurance (not a user journey) | yes |
+| F-078   | Definition-of-done audit and first push                         | Launch & assurance (not a user journey) | yes |
+| F-080   | Order multiple items in one trade                               | Launch & assurance (not a user journey) | yes |
 
 ## Ticket layer (detail view)
 
@@ -110,11 +110,11 @@ The same work counted per ticket. Useful for the detail in `docs/tickets/`, not 
 it counts backend and frontend layers separately, which is how the build drifted.
 
 ```
-MVP   ██████████████████················  59/109  (54%)
-Total ████████████······················  59/168  (35%)
+MVP   ███████████████████···············  60/109  (55%)
+Total ████████████······················  60/168  (36%)
 ```
 
-50 MVP tickets left, 59 deferred past it.
+49 MVP tickets left, 59 deferred past it.
 
 ### Tickets in progress
 
@@ -130,6 +130,7 @@ Total ████████████···················
 | T-073  | Payout accounts, preferences and payouts                          | yes |
 | T-075  | Refunds                                                           | yes |
 | T-112  | First-time onboarding                                             | yes |
+| T-116  | Buyer trade core and canonical trade detail                       | yes |
 | T-144  | Identity review                                                   | yes |
 | T-034  | Social login                                                      |     |
 | T-067  | IMEI verification                                                 |     |
@@ -168,7 +169,6 @@ Total ████████████···················
 | T-112  | First-time onboarding                                                     | yes |
 | T-113  | Home and discovery                                                        | yes |
 | T-114  | Seller profile and Trust Passport                                         | yes |
-| T-115  | Create and propose a trade                                                | yes |
 | T-116  | Buyer trade core and canonical trade detail                               | yes |
 | T-117  | Escrow funding                                                            | yes |
 | T-118  | Delivery, pickup PIN and inspection                                       | yes |
