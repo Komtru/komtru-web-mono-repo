@@ -477,6 +477,21 @@ export const identityAddressDefaultChangedEvent = defineEvent(
 );
 
 // ---------------------------------------------------------------------------
+// T-041: avatars. File ids only; the signed URL is made at read time and is never an event field.
+// ---------------------------------------------------------------------------
+
+/** The avatar moved: to `fileId` (null when removed), from `previousFileId` (null when there was none). */
+export const identityProfileAvatarChangedEvent = defineEvent(
+  'identity.profile.avatar_changed',
+  1,
+  z.object({
+    userId: z.uuid(),
+    fileId: z.uuid().nullable(),
+    previousFileId: z.uuid().nullable(),
+  }),
+);
+
+// ---------------------------------------------------------------------------
 // T-039: account recovery and the NDPA hand-offs (M1 §11, §15).
 //
 // None of these carries an address, a phone number or the identifier the requester claimed: an
