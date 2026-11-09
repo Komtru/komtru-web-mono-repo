@@ -1,6 +1,6 @@
 // The durable half of a review. The PNGs are regenerated on every run and are not committed; this
 // file is, because the deviation list is what the next reader needs and it diffs as text.
-import { REFERENCE_FILE } from '@komtru/ui-kit/extract-tokens';
+import { REFERENCE_NAME } from './screen-index.ts';
 
 import type { Device } from './frames.ts';
 import type { ScreenRow } from './screen-index.ts';
@@ -28,7 +28,7 @@ export function renderStub(input: StubInput): string {
   return [
     `# ${row.id} — ${row.screen} (${row.ticket})`,
     '',
-    `- **Reference:** \`docs/design-reference/${REFERENCE_FILE}\` line ${row.line} — ${row.section}`,
+    `- **Reference:** \`docs/design-reference/${REFERENCE_NAME}\` line ${row.line} — ${row.section}`,
     `- **Built:** ${input.url}`,
     `- **Frame:** ${input.device}, ${input.frameWidth}px reference frame; compared at ${compared.width} × ${compared.height}`,
     `- **Differing pixels:** ${diff.changed.toLocaleString('en-GB')} of ${diff.total.toLocaleString('en-GB')} (${percent(diff.ratio)})`,

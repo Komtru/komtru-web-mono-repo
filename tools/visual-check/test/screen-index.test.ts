@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { findScreen, loadScreens, ticketId } from '../src/screen-index.ts';
 
 const rows = loadScreens();
@@ -46,5 +46,27 @@ describe('ticketId', () => {
 
   it('refuses a row that names no ticket', () => {
     expect(() => ticketId({ ...rows[0]!, ticket: 'none' })).toThrow(/E1/);
+  });
+});
+
+describe('the reference selector', () => {
+  it('reads the v1 index and HTML unless told otherwise', async () => {
+    const module = await import('../src/screen-index.ts');
+    expect(module.SCREEN_INDEX_PATH.pathname).toMatch(/SCREEN_INDEX-v1\.md$/);
+    expect(module.REFERENCE_NAME).toBe('Komtru — UI Screens Living Master File.html');
+  });
+
+  it('reads the v2 master and its index when KOMTRU_VISUAL_CHECK_REFERENCE=v2, where F-017 screens live', async () => {
+    vi.resetModules();
+    vi.stubEnv('KOMTRU_VISUAL_CHECK_REFERENCE', 'v2');
+    try {
+      const module = await import('../src/screen-index.ts');
+      expect(module.SCREEN_INDEX_PATH.pathname).toMatch(/SCREEN_INDEX\.md$/);
+      expect(module.REFERENCE_NAME).toBe('Komtru — UI Living Master v2.html');
+      expect(findScreen(module.loadScreens(), 'TC-05')).toMatchObject({ line: 10315, ticket: 'T-115' });
+    } finally {
+      vi.unstubAllEnvs();
+      vi.resetModules();
+    }
   });
 });

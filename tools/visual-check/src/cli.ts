@@ -5,7 +5,9 @@ import { UI_REVIEW_DIR, visualCheck } from './run.ts';
 
 const USAGE = `Usage: pnpm visual-check --screen <id> --url <url> [--out <dir>] [--line <n>] [--threshold <0-1>]
 
-  --screen     A screen id from docs/design-reference/SCREEN_INDEX-v1.md, for example U4 or P2-D1.
+  --screen     A screen id from the reference's screen index, for example U4 or P2-D1. The index is
+               docs/design-reference/SCREEN_INDEX-v1.md by default, and SCREEN_INDEX.md (the v2 master)
+               when KOMTRU_VISUAL_CHECK_REFERENCE=v2 is set.
   --url        The built screen, already running, for example http://localhost:3004/handover/KMT-88213.
   --out        Where the artefacts go. Default: docs/ui-review.
   --line       The reference line, for the one id the reference draws twice (TO-PA10).
