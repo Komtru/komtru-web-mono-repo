@@ -272,13 +272,13 @@ list a trade.
 
 - **Journey:** Propose & agree
 - **Actor:** buyer, seller
-- **Absorbs:** T-060 (done), T-061 (done), T-035 (done), T-049 (done), T-063 (todo), T-115 (todo)
-- **Backend scope:** Trade schema, state machine and audit; the proposal flow; party lookup and invitations; Trade Standards by category; orders and multi-item trades. Backend is built except multi-item orders (T-060, T-061, T-035, T-049 done; T-063 outstanding).
+- **Absorbs:** T-060 (done), T-061 (done), T-035 (done), T-049 (done), T-115 (todo)
+- **Backend scope:** Trade schema, state machine and audit; the proposal flow; party lookup and invitations; Trade Standards by category. **Already built in full** (T-060, T-061, T-035, T-049). Multi-item ordering moved to F-080.
 - **Frontend scope:** Create and propose a trade: seller pick (I3), Trade Standards (CTS1), proposal follow-through (Q1, R1), held-for-review (IF1), agreement (TC-05, TC-06), invite (G3), buyer tab (Customer-2), plus the IMEI entry points MI1, MI2 gated off until F-020. _12 v2 screens._
 - **Status:** Not started
-- **Depends on:** F-020 _(post-MVP)_, F-021 _(post-MVP)_, F-041
+- **Depends on:** F-020 _(post-MVP)_, F-021 _(post-MVP)_ — **nothing blocking for MVP**
 - **MVP:** yes
-- **Note:** T-115's dependencies on IMEI (F-020) and the risk hold (F-021) are dropped for MVP, per docs/MVP.md.
+- **Note:** T-115's dependencies on IMEI (F-020) and the risk hold (F-021) are dropped for MVP, per docs/MVP.md. **Amended 2026-11-09:** multi-item ordering (T-063) was split out to F-080. T-063 depends on listings (T-056), so folding it in here made the whole buyer/seller trade arc wait on the merchant storefront — F-037 → F-040 → F-041 → F-017 — when a single-item trade needs no listings at all. Splitting it moves this feature from tier 4 to tier 1 and pulls the trade workspace forward with it.
 
 #### F-018 — Create a trade: buyer starts, seller completes
 
@@ -1028,6 +1028,18 @@ list a trade.
 - **Depends on:** F-076
 - **MVP:** no
 - **Note:** Deliberately after the MVP ships, when there is real traffic shape to test against.
+
+#### F-080 — Order multiple items in one trade
+
+- **Journey:** Propose & agree
+- **Actor:** buyer, seller
+- **Absorbs:** T-063 (todo)
+- **Backend scope:** Orders and multi-item trades (M9) — several items under one escrowed trade.
+- **Frontend scope:** The item steps inside the Create a Trade flow. v2 draws no screen of its own for this (gap 6), so it extends F-018's and F-019's stages rather than adding a surface.
+- **Status:** Not started
+- **Depends on:** F-017, F-041
+- **MVP:** yes
+- **Note:** Split out of F-017 on 2026-11-09. It genuinely needs listings (T-056 via F-041); the rest of proposing a trade does not, and keeping them together put the entire trade journey behind the storefront.
 
 ## 3. Coverage table
 
