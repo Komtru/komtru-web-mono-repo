@@ -399,6 +399,26 @@
       "definition": "CHECK ((amount_minor > 0))"
     },
     {
+      "table": "trade.inspection_acknowledgements",
+      "name": "inspection_ack_statement_length",
+      "definition": "CHECK (((char_length(statement_code) >= 1) AND (char_length(statement_code) <= 60)))"
+    },
+    {
+      "table": "trade.inspection_extension_requests",
+      "name": "inspection_extension_answered",
+      "definition": "CHECK (((status = ANY (ARRAY['ACCEPTED'::trade.inspection_extension_status, 'DECLINED'::trade.inspection_extension_status])) = (responded_at IS NOT NULL)))"
+    },
+    {
+      "table": "trade.inspection_extension_requests",
+      "name": "inspection_extension_hours_positive",
+      "definition": "CHECK ((extra_hours > 0))"
+    },
+    {
+      "table": "trade.inspection_extension_requests",
+      "name": "inspection_extension_later",
+      "definition": "CHECK ((requested_due_at > current_due_at))"
+    },
+    {
       "table": "trade.self_arranged_shipments",
       "name": "self_arranged_phone_e164",
       "definition": "CHECK ((driver_phone ~ '^\\+[1-9][0-9]{6,14}$'::text))"
@@ -624,6 +644,11 @@
       "table": "notify.notification_delivery_attempts",
       "name": "komtru_append_only",
       "definition": "[O] CREATE TRIGGER komtru_append_only BEFORE DELETE OR UPDATE ON notify.notification_delivery_attempts FOR EACH ROW EXECUTE FUNCTION platform.reject_mutation()"
+    },
+    {
+      "table": "trade.inspection_acknowledgements",
+      "name": "komtru_append_only",
+      "definition": "[O] CREATE TRIGGER komtru_append_only BEFORE DELETE OR UPDATE ON trade.inspection_acknowledgements FOR EACH ROW EXECUTE FUNCTION platform.reject_mutation()"
     },
     {
       "table": "trade.self_arranged_shipments",
