@@ -5,11 +5,11 @@ after every run. The run-by-run history is [`manager/RUN_LOG.md`](manager/RUN_LO
 behind it is [`BUILD_PLAN.md`](BUILD_PLAN.md).
 
 ```
-MVP   ████████████████··················  52/112  (46%)
-Total ███████████·······················  52/168  (31%)
+MVP   ████████████████··················  53/112  (47%)
+Total ███████████·······················  53/168  (32%)
 ```
 
-60 MVP tickets left, 56 deferred past it.
+59 MVP tickets left, 56 deferred past it.
 
 ## By epic
 
@@ -28,7 +28,7 @@ Total ███████████····················�
 | 10-logistics           | 0    | 3     |
 | 11-park                | 0    | 6     |
 | 12-ops-domains         | 1    | 9     |
-| 13-web-app-ui          | 1    | 22    |
+| 13-web-app-ui          | 2    | 22    |
 | 14-operations-app      | 2    | 16    |
 | 15-logistics-ops       | 0    | 3     |
 | 16-park-agent-app      | 0    | 5     |
@@ -50,6 +50,7 @@ Total ███████████····················�
 | T-029  | Isolate the integration suite's shared Redis and queues           | yes |
 | T-052  | Duplicate identity detection and KYC review queue                 | yes |
 | T-072  | Funding a trade                                                   | yes |
+| T-112  | First-time onboarding                                             | yes |
 | T-034  | Social login                                                      |     |
 | T-067  | IMEI verification                                                 |     |
 | T-085  | Logistics schema and Park seed                                    |     |
@@ -90,7 +91,6 @@ Total ███████████····················�
 | T-080  | Disputes core                                                             | yes |
 | T-081  | Evidence comparison and dispute read models                               | yes |
 | T-102  | Reputation and ratings (M12)                                              | yes |
-| T-111  | Entry and authentication                                                  | yes |
 | T-112  | First-time onboarding                                                     | yes |
 | T-113  | Home and discovery                                                        | yes |
 | T-114  | Seller profile and Trust Passport                                         | yes |
