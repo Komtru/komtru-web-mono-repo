@@ -49,8 +49,12 @@ const DELIVERED_OR_BEYOND: readonly TradeStatus[] = [
  * - Delivery already signalled: close it as met, whatever else is going on.
  * - Any state that is not a live fulfilment (disputed, refunded, cancelled, ...): close it as
  *   cancelled; someone else owns the trade now.
- * - Otherwise a hold or an open extension request means "not yet": the row stays pending and the
- *   next sweep looks again. Holds freeze automatic transitions (design §6.2).
+ * - Otherwise an active hold means "not yet": the row stays pending and the next sweep looks again.
+ *   Holds freeze automatic transitions (design §6.2).
+ * - An open extension request does NOT hold the deadline back. The deadline only ever moves when the
+ *   buyer actively accepts, so a request still unanswered once the original date has passed is
+ *   lapsed (by the caller) and the refund path proceeds. Waiting on a silent buyer would strand the
+ *   escrow with no end. A default applied, not a rule found in the docs (plan, open question 2).
  * - FUNDED, so nothing was shipped, and nobody asked for time: request the refund. DE4 says exactly
  *   this ("nothing shipped and no extension requested").
  * - SHIPPED: design §6.2 draws no refund edge after dispatch, so the deadline only elapses.
@@ -58,11 +62,10 @@ const DELIVERED_OR_BEYOND: readonly TradeStatus[] = [
 export function decideOverdueDelivery(input: {
   status: TradeStatus;
   hasActiveHold: boolean;
-  hasPendingExtension: boolean;
 }): OverdueDecision {
   const { status } = input;
   if (DELIVERED_OR_BEYOND.includes(status)) return 'CLOSE_MET';
   if (status !== 'FUNDED' && status !== 'SHIPPED') return 'CLOSE_CANCELLED';
-  if (input.hasActiveHold || input.hasPendingExtension) return 'WAIT';
+  if (input.hasActiveHold) return 'WAIT';
   return status === 'FUNDED' ? 'REQUEST_REFUND' : 'ELAPSE_NO_REFUND';
 }

@@ -223,6 +223,60 @@ describe.runIf(infraEnabled)('delivery signals (T-064)', () => {
   });
 
   describe('safety', () => {
+    it('never throws for a payload it cannot read', async () => {
+      for (const bad of [
+        null,
+        {},
+        { tradeId: 'nope', source: 'PARTNER_PORTAL' },
+        { ...signal(randomUUID(), 'PARTNER_PORTAL'), source: 'PIGEON' },
+      ]) {
+        expect(await applyDeliverySignal(deps(), bad)).toEqual({
+          outcome: 'REJECTED',
+          why: 'INVALID_PAYLOAD',
+        });
+      }
+    });
+
+    it('a self-report recorded before dispatch does not shadow the real one after shipping', async () => {
+      const { tradeId, seller } = await tradeAt(t, 'FUNDED');
+      const early = await applyDeliverySignal(
+        deps(),
+        signal(tradeId, 'SELLER_SELF_REPORT', { actorUserId: seller }),
+      );
+      expect(early).toMatchObject({ outcome: 'RECORDED' });
+      await t
+        .owner()
+        .query(
+          `UPDATE trade.trades SET status = 'SHIPPED', status_action = 'BEGIN_CUSTODY', status_actor_type = 'SYSTEM', status_revision = status_revision + 1 WHERE id = $1`,
+          [tradeId],
+        );
+      const real = await applyDeliverySignal(
+        deps(),
+        signal(tradeId, 'SELLER_SELF_REPORT', { actorUserId: seller }),
+      );
+      expect(real).toMatchObject({ outcome: 'MOVED', to: 'UNCONFIRMED_DELIVERY' });
+      // And only now is a further repeat a duplicate.
+      expect(
+        await applyDeliverySignal(deps(), signal(tradeId, 'SELLER_SELF_REPORT', { actorUserId: seller })),
+      ).toEqual({ outcome: 'DUPLICATE' });
+    });
+
+    it('the same holds for a buyer confirmation that arrived early', async () => {
+      const { tradeId, buyer } = await tradeAt(t, 'FUNDED');
+      expect(
+        await applyDeliverySignal(deps(), signal(tradeId, 'BUYER_CONFIRMATION', { actorUserId: buyer })),
+      ).toMatchObject({ outcome: 'RECORDED' });
+      await t
+        .owner()
+        .query(
+          `UPDATE trade.trades SET status = 'SHIPPED', status_action = 'BEGIN_CUSTODY', status_actor_type = 'SYSTEM', status_revision = status_revision + 1 WHERE id = $1`,
+          [tradeId],
+        );
+      expect(
+        await applyDeliverySignal(deps(), signal(tradeId, 'BUYER_CONFIRMATION', { actorUserId: buyer })),
+      ).toMatchObject({ outcome: 'MOVED', to: 'INSPECTION' });
+    });
+
     it('is replay-safe: the same courier delivery twice is one signal and one transition', async () => {
       const { tradeId } = await tradeAt(t, 'SHIPPED');
       const payload = signal(tradeId, 'PARTNER_PORTAL', { reference: pkg() });

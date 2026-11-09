@@ -27,7 +27,7 @@ export type SignalOutcome =
   | { outcome: 'MOVED'; from: TradeStatus; to: TradeStatus }
   | { outcome: 'RECORDED'; why: 'NOT_AWAITING_DELIVERY' | 'AWAITING_BUYER_OR_GRACE' }
   | { outcome: 'DUPLICATE' }
-  | { outcome: 'REJECTED'; why: 'WRONG_ACTOR' | 'TRADE_NOT_FOUND' };
+  | { outcome: 'REJECTED'; why: 'WRONG_ACTOR' | 'TRADE_NOT_FOUND' | 'INVALID_PAYLOAD' };
 
 const HUMAN_SOURCES: readonly DeliverySignalSource[] = ['BUYER_CONFIRMATION', 'SELLER_SELF_REPORT'];
 
@@ -41,9 +41,12 @@ const HUMAN_SOURCES: readonly DeliverySignalSource[] = ['BUYER_CONFIRMATION', 'S
  */
 export async function applyDeliverySignal(
   deps: Pick<FulfilmentDeps, 'db' | 'now'>,
-  raw: DeliverySignalPayload,
+  raw: unknown,
 ): Promise<SignalOutcome> {
-  const payload = deliverySignalPayloadSchema.parse(raw);
+  // A payload that cannot be read is a publisher's bug and retrying cannot fix it: refuse it quietly.
+  const parsed = deliverySignalPayloadSchema.safeParse(raw);
+  if (!parsed.success) return { outcome: 'REJECTED', why: 'INVALID_PAYLOAD' };
+  const payload = parsed.data;
   return deps.db.transaction(async (tx) => {
     const [trade] = await tx.select().from(trades).where(eq(trades.id, payload.tradeId)).for('update');
     if (!trade) return { outcome: 'REJECTED', why: 'TRADE_NOT_FOUND' };
@@ -64,7 +67,15 @@ export async function applyDeliverySignal(
         .where(eq(deliverySignals.tradeId, trade.id))
     ).map((row) => row.source);
 
-    if (!payload.reference && HUMAN_SOURCES.includes(source) && priorSources.includes(source)) {
+    // A human repeat is deduplicated only when it could not move the trade anyway. A confirmation or
+    // report that arrived early and was only recorded must not shadow the genuine one after shipping.
+    const decision = decideDeliverySignal({ status: trade.status, source, priorSources });
+    if (
+      !payload.reference &&
+      HUMAN_SOURCES.includes(source) &&
+      priorSources.includes(source) &&
+      decision.kind === 'RECORD_ONLY'
+    ) {
       return { outcome: 'DUPLICATE' };
     }
     const [signal] = await tx
@@ -86,7 +97,6 @@ export async function applyDeliverySignal(
     if (!signal) return { outcome: 'DUPLICATE' };
 
     const trusted = isTrustedSignal(source, priorSources);
-    const decision = decideDeliverySignal({ status: trade.status, source, priorSources });
     const actorType =
       source === 'BUYER_CONFIRMATION' ? 'BUYER' : source === 'SELLER_SELF_REPORT' ? 'SELLER' : 'SYSTEM';
 

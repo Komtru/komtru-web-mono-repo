@@ -86,9 +86,11 @@ export const selfArrangedShipments = trade.table(
   'self_arranged_shipments',
   {
     id: uuid('id').primaryKey().defaultRandom(),
+    // restrict, not cascade: the table is append-only, so a cascaded delete would be refused by the
+    // trigger anyway. Say so.
     tradeId: uuid('trade_id')
       .notNull()
-      .references(() => trades.id, { onDelete: 'cascade' }),
+      .references(() => trades.id, { onDelete: 'restrict' }),
     waybillNumber: text('waybill_number').notNull(),
     /** files.file_records(id): the photo of the waybill receipt. A soft reference (design §4.2). */
     receiptFileId: uuid('receipt_file_id').notNull(),
@@ -100,6 +102,9 @@ export const selfArrangedShipments = trade.table(
   },
   (table) => [
     uniqueIndex('self_arranged_shipments_trade').on(table.tradeId),
+    // One photo is evidence for one shipment; the service checks first for a good error, this is the
+    // guard two concurrent shipments cannot both pass.
+    uniqueIndex('self_arranged_receipt_file').on(table.receiptFileId),
     check('self_arranged_waybill_length', sql`char_length(${table.waybillNumber}) BETWEEN 3 AND 60`),
     check('self_arranged_phone_e164', sql`${table.driverPhone} ~ '^\\+[1-9][0-9]{6,14}$'`),
     check('self_arranged_plate_length', sql`char_length(${table.vehiclePlate}) BETWEEN 3 AND 14`),

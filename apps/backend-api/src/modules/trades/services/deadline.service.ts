@@ -349,6 +349,9 @@ export async function respondToExtension(
 
     const wanted = input.decision === 'ACCEPT' ? 'ACCEPTED' : 'DECLINED';
     if (request.status === wanted) return extensionView(request);
+    if (request.status === 'LAPSED') {
+      throw conflict('EXTENSION_LAPSED', 'The original delivery deadline passed before this was answered');
+    }
     if (request.status !== 'PENDING') {
       throw conflict('EXTENSION_ALREADY_ANSWERED', 'This request has already been dealt with');
     }
@@ -473,21 +476,9 @@ export async function processDeliveryDeadline(
     .from(tradeHolds)
     .where(and(eq(tradeHolds.tradeId, trade.id), isNull(tradeHolds.releasedAt)))
     .limit(1);
-  const [pending] = await tx
-    .select({ id: deliveryExtensionRequests.id })
-    .from(deliveryExtensionRequests)
-    .where(
-      and(
-        eq(deliveryExtensionRequests.deadlineId, deadline.id),
-        eq(deliveryExtensionRequests.status, 'PENDING'),
-      ),
-    )
-    .limit(1);
-
   const decision = decideOverdueDelivery({
     status: trade.status,
     hasActiveHold: hold !== undefined,
-    hasPendingExtension: pending !== undefined,
   });
   const outcome = OUTCOME[decision];
   if (decision === 'WAIT') return outcome;
@@ -504,6 +495,27 @@ export async function processDeliveryDeadline(
     .returning({ id: tradeDeadlines.id });
   if (claimed.length === 0) return 'NOT_DUE';
   if (closes) return outcome;
+
+  // The buyer never answered before the original date: the request lapses, and the history says so.
+  const lapsed = await tx
+    .update(deliveryExtensionRequests)
+    .set({ status: 'LAPSED' })
+    .where(
+      and(
+        eq(deliveryExtensionRequests.deadlineId, deadline.id),
+        eq(deliveryExtensionRequests.status, 'PENDING'),
+      ),
+    )
+    .returning({ id: deliveryExtensionRequests.id });
+  for (const { id } of lapsed) {
+    await recordActivity(tx, {
+      tradeId: trade.id,
+      type: 'NOTE',
+      actorType: 'SYSTEM',
+      summary: 'The buyer did not answer the request for more time before the original deadline',
+      metadata: { event: 'EXTENSION_LAPSED', requestId: id },
+    });
+  }
 
   const refund = decision === 'REQUEST_REFUND';
   await recordActivity(tx, {

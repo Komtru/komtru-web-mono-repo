@@ -354,7 +354,7 @@ describe.runIf(infraEnabled)('delivery deadlines (T-064)', () => {
       expect(await sweep()).toMatchObject({ REFUND_REQUESTED: 1 });
     });
 
-    it('waits while an extension request is open, and a decline after the date refunds at once', async () => {
+    it('lapses an unanswered request once the original date has passed, and refunds', async () => {
       const f = await tradeAt(t, 'FUNDED');
       const dueAt = new Date(Date.now() + 2 * H);
       const deadlineId = await insertDeadline(f.tradeId, dueAt);
@@ -364,7 +364,7 @@ describe.runIf(infraEnabled)('delivery deadlines (T-064)', () => {
         reason: 'RESTOCKING_ITEM',
         requestedDueAt: new Date(dueAt.getTime() + DAY),
       });
-      // Time passes with the request unanswered.
+      // Time passes with the buyer silent.
       await t
         .owner()
         .query(
@@ -378,16 +378,80 @@ describe.runIf(infraEnabled)('delivery deadlines (T-064)', () => {
           [request.id],
         );
 
-      expect(await sweep()).toMatchObject({ WAIT: 1 });
-      expect(await outboxOf(t.owner(), f.tradeId, 'trades.refund.requested')).toHaveLength(0);
+      expect(await sweep()).toMatchObject({ REFUND_REQUESTED: 1 });
+      expect((await deadline(deadlineId)).status).toBe('ELAPSED');
+      expect(await outboxOf(t.owner(), f.tradeId, 'trades.refund.requested')).toHaveLength(1);
+      const row = (
+        await t
+          .owner()
+          .query(`SELECT status, responded_at FROM trade.delivery_extension_requests WHERE id = $1`, [
+            request.id,
+          ])
+      ).rows[0];
+      expect(row).toEqual({ status: 'LAPSED', responded_at: null });
+      const lapsed = await t
+        .owner()
+        .query(
+          `SELECT 1 FROM trade.trade_activity WHERE trade_id = $1 AND metadata ->> 'event' = 'EXTENSION_LAPSED'`,
+          [f.tradeId],
+        );
+      expect(lapsed.rows).toHaveLength(1);
+      // Too late to grant it now.
+      expect(
+        await failure(
+          respondToExtension(deps(), {
+            userId: f.buyer,
+            tradeId: f.tradeId,
+            requestId: request.id,
+            decision: 'ACCEPT',
+          }),
+        ),
+      ).toMatchObject({ status: 409, extensions: { reason: 'EXTENSION_LAPSED' } });
+    });
 
+    it('an extension the buyer accepted in time keeps the deadline from firing', async () => {
+      const f = await tradeAt(t, 'FUNDED');
+      const dueAt = new Date(Date.now() + 2 * H);
+      const deadlineId = await insertDeadline(f.tradeId, dueAt);
+      const request = await requestExtension(deps(), {
+        userId: f.seller,
+        tradeId: f.tradeId,
+        reason: 'RESTOCKING_ITEM',
+        requestedDueAt: new Date(dueAt.getTime() + DAY),
+      });
+      await respondToExtension(deps(), {
+        userId: f.buyer,
+        tradeId: f.tradeId,
+        requestId: request.id,
+        decision: 'ACCEPT',
+      });
+      expect(await sweep()).toMatchObject({ examined: 0 });
+      expect((await deadline(deadlineId)).status).toBe('PENDING');
+    });
+
+    it('a decline after the date refunds at once', async () => {
+      const f = await tradeAt(t, 'FUNDED');
+      const dueAt = new Date(Date.now() + 2 * H);
+      const deadlineId = await insertDeadline(f.tradeId, dueAt);
+      const request = await requestExtension(deps(), {
+        userId: f.seller,
+        tradeId: f.tradeId,
+        reason: 'RESTOCKING_ITEM',
+        requestedDueAt: new Date(dueAt.getTime() + DAY),
+      });
       await respondToExtension(deps(), {
         userId: f.buyer,
         tradeId: f.tradeId,
         requestId: request.id,
         decision: 'DECLINE',
       });
-      expect((await deadline(deadlineId)).status).toBe('ELAPSED');
+      await t
+        .owner()
+        .query(
+          `UPDATE trade.trade_deadlines SET due_at = now() - interval '1 hour', original_due_at = now() - interval '1 hour' WHERE id = $1`,
+          [deadlineId],
+        );
+      await sweep();
       expect(await outboxOf(t.owner(), f.tradeId, 'trades.refund.requested')).toHaveLength(1);
     });
 

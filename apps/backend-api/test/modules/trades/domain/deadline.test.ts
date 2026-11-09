@@ -60,7 +60,7 @@ describe('extension request (DE1)', () => {
 });
 
 describe('overdue decision (DE3, DE4)', () => {
-  const clear = { hasActiveHold: false, hasPendingExtension: false };
+  const clear = { hasActiveHold: false };
 
   it('requests a refund for a funded trade with nothing shipped and no extension', () => {
     expect(decideOverdueDelivery({ status: 'FUNDED', ...clear })).toBe('REQUEST_REFUND');
@@ -70,18 +70,15 @@ describe('overdue decision (DE3, DE4)', () => {
     expect(decideOverdueDelivery({ status: 'SHIPPED', ...clear })).toBe('ELAPSE_NO_REFUND');
   });
 
-  it('waits on a hold or an open extension request, in FUNDED and SHIPPED alike', () => {
+  it('waits on a hold, in FUNDED and SHIPPED alike', () => {
     for (const status of ['FUNDED', 'SHIPPED'] as const) {
-      expect(decideOverdueDelivery({ status, hasActiveHold: true, hasPendingExtension: false })).toBe('WAIT');
-      expect(decideOverdueDelivery({ status, hasActiveHold: false, hasPendingExtension: true })).toBe('WAIT');
+      expect(decideOverdueDelivery({ status, hasActiveHold: true })).toBe('WAIT');
     }
   });
 
   it('closes the deadline as met once delivery has been signalled, ignoring holds', () => {
     for (const status of ['UNCONFIRMED_DELIVERY', 'INSPECTION', 'COMPLETED', 'SETTLED'] as const) {
-      expect(decideOverdueDelivery({ status, hasActiveHold: true, hasPendingExtension: true })).toBe(
-        'CLOSE_MET',
-      );
+      expect(decideOverdueDelivery({ status, hasActiveHold: true })).toBe('CLOSE_MET');
     }
   });
 

@@ -3,6 +3,7 @@
 // (T-093) are completed in their own tickets; both go through `assertDispatchOpen` and the ports in
 // fulfilmentPorts.ts, so neither has to re-derive when shipping is allowed or what is offered.
 import { and, eq, ne } from 'drizzle-orm';
+import { isUniqueViolation } from '../../../db/errors.js';
 import { ApiError } from '../../../platform/errors.js';
 import type { Tx } from '../../../platform/events/publish.js';
 import {
@@ -221,6 +222,7 @@ export async function shipSelfArranged(
     await assertDispatchOpen(tx, trade);
     await checkReceipt(deps, tx, trade, input.userId, input.shipment.receiptFileId);
 
+    // The read check above gives the good error; the unique index is what two concurrent shipments hit.
     const [row] = await tx
       .insert(selfArrangedShipments)
       .values({
@@ -231,7 +233,11 @@ export async function shipSelfArranged(
         vehiclePlate: input.shipment.vehiclePlate,
         shippedByUserId: input.userId,
       })
-      .returning();
+      .returning()
+      .catch((error: unknown) => {
+        if (isUniqueViolation(error, 'self_arranged_receipt_file')) throw receiptRejected();
+        throw error;
+      });
     if (!row) throw new Error('trades: the shipment insert returned no row');
 
     await applyTransition(tx, {

@@ -167,4 +167,6 @@ export const deliveryExtensionStatus = trade.enum('delivery_extension_status', [
   'ACCEPTED',
   'DECLINED',
   'CANCELLED',
+  // The original date passed with the buyer silent: the request no longer blocks the deadline.
+  'LAPSED',
 ]);

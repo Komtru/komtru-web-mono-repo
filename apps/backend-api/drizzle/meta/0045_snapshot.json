@@ -1,5 +1,5 @@
 {
-  "id": "596f8446-e460-4ec6-9622-4615a47e11fc",
+  "id": "07aa2a78-671e-460d-8709-2c2db4604cae",
   "prevId": "23f94adc-d4e9-4b48-921d-d3f41f145e8d",
   "version": "7",
   "dialect": "postgresql",
@@ -8090,6 +8090,21 @@
           "concurrently": false,
           "method": "btree",
           "with": {}
+        },
+        "self_arranged_receipt_file": {
+          "name": "self_arranged_receipt_file",
+          "columns": [
+            {
+              "expression": "receipt_file_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
         }
       },
       "foreignKeys": {
@@ -8100,7 +8115,7 @@
           "schemaTo": "trade",
           "columnsFrom": ["trade_id"],
           "columnsTo": ["id"],
-          "onDelete": "cascade",
+          "onDelete": "restrict",
           "onUpdate": "no action"
         }
       },
@@ -10834,7 +10849,7 @@
     "trade.delivery_extension_status": {
       "name": "delivery_extension_status",
       "schema": "trade",
-      "values": ["PENDING", "ACCEPTED", "DECLINED", "CANCELLED"]
+      "values": ["PENDING", "ACCEPTED", "DECLINED", "CANCELLED", "LAPSED"]
     },
     "trade.delivery_signal_source": {
       "name": "delivery_signal_source",

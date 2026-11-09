@@ -35,6 +35,22 @@ describe.runIf(infraEnabled)('fulfilment evidence tables (migration 0045)', () =
     expect(await constraintName(shipment(tradeId, seller))).toBe('self_arranged_shipments_trade');
   });
 
+  it('lets one receipt photo evidence one shipment only', async () => {
+    const first = await fundedTrade();
+    const second = await fundedTrade();
+    const receipt = randomUUID();
+    await shipment(first.tradeId, first.seller, { receipt_file_id: receipt });
+    expect(await constraintName(shipment(second.tradeId, second.seller, { receipt_file_id: receipt }))).toBe(
+      'self_arranged_receipt_file',
+    );
+  });
+
+  it('does not let a trade with shipment evidence be deleted', async () => {
+    const { tradeId, seller } = await fundedTrade();
+    await shipment(tradeId, seller);
+    await expect(t.owner().query(`DELETE FROM trade.trades WHERE id = $1`, [tradeId])).rejects.toThrow();
+  });
+
   it('refuses a phone that is not E.164, a short waybill and a long plate', async () => {
     const { tradeId, seller } = await fundedTrade();
     expect(await constraintName(shipment(tradeId, seller, { driver_phone: '08031234567' }))).toBe(
@@ -127,6 +143,7 @@ describe.runIf(infraEnabled)('fulfilment evidence tables (migration 0045)', () =
       'ACCEPTED',
       'DECLINED',
       'CANCELLED',
+      'LAPSED',
     ]);
   });
 
