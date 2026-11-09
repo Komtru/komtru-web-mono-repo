@@ -57,10 +57,12 @@ export function VerifyForm(): React.JSX.Element {
   const [busy, setBusy] = useState(false);
   const [sending, setSending] = useState(false);
   const cells = useRef<HTMLDivElement>(null);
+  /** Set once the session opens: forgetting the draft then is the flow finishing, not a cold start. */
+  const finished = useRef(false);
   const secondsLeft = useResendCountdown(sent?.sentAt);
 
   useEffect(() => {
-    if (sent === null) router.replace(ENTRY.signUp);
+    if (sent === null && !finished.current) router.replace(ENTRY.signUp);
   }, [sent, router]);
 
   const focusFirstCell = () => {
@@ -73,6 +75,7 @@ export function VerifyForm(): React.JSX.Element {
     setBusy(true);
     const outcome: CodeOutcome = await proveCode(sent.challengeId, code);
     if (outcome.kind === 'session') {
+      finished.current = true;
       await openSession(outcome);
       return;
     }

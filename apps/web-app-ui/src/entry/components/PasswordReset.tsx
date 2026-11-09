@@ -4,7 +4,7 @@ import { useApiClient } from '@komtru/app-kit/react';
 import { changePassword, forgotPassword, ProblemError, resendOtp, resetPassword } from '@komtru/api-client';
 import { Button, OtpInput, TextField } from '@komtru/ui-kit';
 import { useRouter } from 'next/navigation';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { resetCode, type SentCode } from '../drafts';
 import { checkNewPassword, ENTRY, failureMessage, MIN_PASSWORD_LENGTH, UNAVAILABLE } from '../flow';
 import { proveCode } from '../session-calls';
@@ -109,9 +109,11 @@ export function ResetPasswordForm(): React.JSX.Element {
   const [busy, setBusy] = useState(false);
   const [sending, setSending] = useState(false);
   const secondsLeft = useResendCountdown(sent?.sentAt);
+  /** Set once the password is saved: forgetting the code then is the flow finishing, not a cold start. */
+  const finished = useRef(false);
 
   useEffect(() => {
-    if (sent === null) router.replace(ENTRY.forgot);
+    if (sent === null && !finished.current) router.replace(ENTRY.forgot);
   }, [sent, router]);
 
   const resend = async () => {
@@ -177,6 +179,7 @@ export function ResetPasswordForm(): React.JSX.Element {
 
     try {
       await client.call(resetPassword, { body: { resetToken: token, newPassword: password } });
+      finished.current = true;
       resetCode.clear();
       router.replace(`${ENTRY.login}?reset=done`);
     } catch (error) {

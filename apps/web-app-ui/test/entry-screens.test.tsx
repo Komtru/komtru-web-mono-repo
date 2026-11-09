@@ -252,8 +252,10 @@ describe('E3 and E3b Verify', () => {
     });
     expect(network.to('/api/auth/verify')[0]?.body).toEqual({ challengeId, code: '482390' });
     expect(tokenNow()).toBe('at-1');
-    // Finished: nothing about the sign-up stays behind in this tab.
+    // Finished: nothing about the sign-up stays behind in this tab, and forgetting it does not send
+    // the person back to the start.
     expect(signUpCode.read()).toBeNull();
+    expect(router.replace).not.toHaveBeenCalledWith('/signup');
   });
 
   it('asks for a fresh code once the code is spent', async () => {
@@ -389,6 +391,9 @@ describe('AC3 Set new password', () => {
       newPassword: 'a long passphrase',
     });
     expect(resetCode.read()).toBeNull();
+    // Clearing the remembered code must not trip the screen's own "nothing remembered" redirect,
+    // which would land the person back on AC2 instead of at log in.
+    expect(router.replace).not.toHaveBeenCalledWith('/reset-password');
   });
 
   it('keeps the proved code when the platform refuses the password, so a second try costs nothing', async () => {
