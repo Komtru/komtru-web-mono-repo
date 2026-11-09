@@ -10,6 +10,7 @@
 // amount or address: what each party may SEE is decided by the HTTP read, re-authorised on every
 // request.
 import { z } from 'zod';
+import { paginatedSchema } from './pagination.js';
 
 /** Design section 6.1, in lifecycle order. The order is what "forwards" means. */
 export const TRADE_STATUSES = [
@@ -118,3 +119,94 @@ export const tradeUpdateSchema = z
       need(v.decision !== undefined, 'decision', 'a response carries its decision');
   });
 export type TradeUpdate = z.infer<typeof tradeUpdateSchema>;
+
+// ---------------------------------------------------------------------------
+// The trades list and the lookup by code (T-068 follow-up, from F-017's review)
+// ---------------------------------------------------------------------------
+
+/** Which trades `GET /trades` returns: still moving, finished, or everything. */
+export const TRADE_LIST_STATES = ['ALL', 'OPEN', 'CLOSED'] as const;
+export const tradeListStateSchema = z.enum(TRADE_LIST_STATES);
+export type TradeListState = z.infer<typeof tradeListStateSchema>;
+
+/**
+ * Why a trade is waiting on YOU, decided by the server (a pending extension request is not visible to a
+ * list row, and the rule must not be copied into three clients). `null` means nothing is asked of you.
+ */
+export const TRADE_ATTENTION_KINDS = [
+  'RESPOND_TO_PROPOSAL',
+  'PAY',
+  'SHIP',
+  'CONFIRM_DELIVERY',
+  'INSPECT',
+  'RESPOND_TO_EXTENSION',
+] as const;
+export const tradeAttentionSchema = z.enum(TRADE_ATTENTION_KINDS);
+export type TradeAttention = z.infer<typeof tradeAttentionSchema>;
+
+/**
+ * The other party as a list row or a header shows them: the fields party lookup already returns to any
+ * signed-in user (handle, display name, avatar), and nothing else. No email, phone, legal name,
+ * address or verification detail. `null` where the party is not known yet, or has been erased.
+ */
+export const counterpartyDisplaySchema = z.strictObject({
+  publicId: z.string(),
+  username: z.string().nullable(),
+  displayName: z.string().nullable(),
+  avatarUrl: z.string().nullable(),
+});
+export type CounterpartyDisplay = z.infer<typeof counterpartyDisplaySchema>;
+
+const tradeRoleSchema = z.enum(['BUYER', 'SELLER']);
+
+export const tradeListItemSchema = z.strictObject({
+  id: z.uuid(),
+  tradeCode: canonicalTradeCodeSchema,
+  status: tradeStatusSchema,
+  statusRevision: z.number().int(),
+  yourRole: tradeRoleSchema,
+  initiatorRole: tradeRoleSchema,
+  /** Whose turn it is on an open proposal; `null` once it is not a question of turns. */
+  awaiting: z.enum(['YOU', 'COUNTERPARTY']).nullable(),
+  attention: tradeAttentionSchema.nullable(),
+  counterparty: counterpartyDisplaySchema.nullable(),
+  item: z.strictObject({
+    /** The first of title, name, model or brand in the item details; `null` if none is a string. */
+    title: z.string().nullable(),
+    categoryCode: z.string().nullable(),
+    categoryName: z.string().nullable(),
+  }),
+  currency: z.literal('NGN'),
+  /** Kobo, as a digit string. The current terms' item price; `null` before there are terms. */
+  itemAmountMinor: z.string().nullable(),
+  /** Kobo; present once the fees were frozen on acceptance. */
+  buyerTotalMinor: z.string().nullable(),
+  sentAt: z.iso.datetime().nullable(),
+  createdAt: z.iso.datetime(),
+  /** Newest-relevant first: the list is ordered by this, then by id. */
+  updatedAt: z.iso.datetime(),
+});
+export type TradeListItem = z.infer<typeof tradeListItemSchema>;
+
+export const tradeListResponseSchema = paginatedSchema(tradeListItemSchema);
+
+/**
+ * `PARTY`: the caller is the buyer or seller of record and gets the trade as they always see it.
+ * `INVITEE`: the caller is the named invitee who has not claimed yet; the trade is previewed (no
+ * addresses, no fees) and `POST /trades/:id/claim` with its `id` takes their side.
+ */
+export const TRADE_ACCESS_KINDS = ['PARTY', 'INVITEE'] as const;
+
+export const tradeByCodeResponseSchema = z.strictObject({
+  access: z.enum(TRADE_ACCESS_KINDS),
+  trade: z.looseObject({
+    id: z.uuid(),
+    tradeCode: canonicalTradeCodeSchema,
+    status: tradeStatusSchema,
+    statusRevision: z.number(),
+    yourRole: tradeRoleSchema,
+  }),
+  /** The OTHER party: for an invitee, whoever invited them. */
+  counterparty: counterpartyDisplaySchema.nullable(),
+});
+export type TradeByCodeResponse = z.infer<typeof tradeByCodeResponseSchema>;

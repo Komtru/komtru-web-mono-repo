@@ -90,6 +90,7 @@ describe.runIf(infraEnabled)('proposal flow (T-061)', () => {
     revokeProofAccess: (fileIds, buyer) => Promise.resolve(void revoked.push({ fileIds, buyer })),
     snapshotFees,
     graceHours: () => Promise.resolve(48),
+    displays: () => Promise.resolve(new Map()),
     ...overrides,
   });
 

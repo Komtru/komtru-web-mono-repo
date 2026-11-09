@@ -32,6 +32,7 @@ import { noDisputes, type InspectionDeps } from './services/inspectionPorts.js';
 import { noLogisticsCompanies, noParkCoverage, type FulfilmentDeps } from './services/fulfilmentPorts.js';
 import {
   postgresGrantProofAccess,
+  postgresCounterpartyDisplays,
   postgresProofFiles,
   postgresRevokeProofAccess,
   postgresStandards,
@@ -58,6 +59,11 @@ export interface TradesModuleOptions {
    * worker and cross to whichever API instance holds a socket over the Redis adapter.
    */
   gateway: SocketGateway;
+  /**
+   * Signed avatar URLs for a batch of users, from identity's `resolveAvatarUrls` over the files module
+   * (wired by `createModules`). Absent in a process with no files wiring, where every avatar is null.
+   */
+  avatarUrls?: (userIds: string[]) => Promise<Map<string, string | null>>;
 }
 
 export function buildTradeDeps({
@@ -65,6 +71,7 @@ export function buildTradeDeps({
   redis,
   config,
   logger,
+  avatarUrls,
 }: Omit<TradesModuleOptions, 'gateway'>): TradeDeps {
   if (!config.identity.hmacPepper)
     throw new Error('IDENTITY_HMAC_PEPPER is required to build the trades module');
@@ -85,6 +92,7 @@ export function buildTradeDeps({
     revokeProofAccess: postgresRevokeProofAccess(db),
     snapshotFees,
     graceHours: () => accessor.getInteger('trades', 'unconfirmed_delivery_grace_hours'),
+    displays: postgresCounterpartyDisplays(avatarUrls ?? (() => Promise.resolve(new Map()))),
   };
 }
 
