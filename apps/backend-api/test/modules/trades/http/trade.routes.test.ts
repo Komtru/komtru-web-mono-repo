@@ -18,6 +18,8 @@ describe('trade routes (T-061)', () => {
     expect(routes.map(routeLabel)).toEqual([
       'POST /trades/preview',
       'POST /trades',
+      'GET /trades',
+      'GET /trades/by-code/:code',
       'GET /trades/:id',
       'POST /trades/:id/send',
       'POST /trades/:id/counter',
@@ -26,6 +28,35 @@ describe('trade routes (T-061)', () => {
       'POST /trades/:id/cancel',
       'POST /trades/:id/claim',
     ]);
+  });
+
+  it('paginates the list by cursor and rate limits it', () => {
+    const list = routes.find((r) => routeLabel(r) === 'GET /trades')!;
+    expect(list.paginated).toBe('cursor');
+    expect(list.rateLimit).toMatchObject({ points: 120, durationSeconds: 60 });
+  });
+
+  it('rate limits the lookup by code far harder than any other read, per person and per address', () => {
+    const lookup = routes.find((r) => routeLabel(r) === 'GET /trades/by-code/:code')!;
+    expect(lookup.rateLimit).toMatchObject({ points: 10, durationSeconds: 60, by: ['user', 'ip'] });
+    expect(lookup.rateLimit?.perKey?.ip?.points).toBeLessThanOrEqual(30);
+    const list = routes.find((r) => routeLabel(r) === 'GET /trades')!;
+    expect(lookup.rateLimit!.points).toBeLessThan(list.rateLimit!.points);
+  });
+
+  it('accepts only the canonical trade code in the by-code path', () => {
+    const lookup = routes.find((r) => routeLabel(r) === 'GET /trades/by-code/:code')!;
+    const params = lookup.schema.params!;
+    expect(params.safeParse({ code: 'KMT-7398512-NG' }).success).toBe(true);
+    for (const code of [
+      'kmt-7398512-ng',
+      'KMT-7398512',
+      ' KMT-7398512-NG',
+      'KMT-123-NG',
+      "KMT-1234567-NG' OR 1=1",
+    ]) {
+      expect(params.safeParse({ code }).success, code).toBe(false);
+    }
   });
 
   it('serves consumers only, and every action takes an idempotency key', () => {

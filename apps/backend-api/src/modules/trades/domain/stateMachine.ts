@@ -8,55 +8,14 @@
 // four actions more than one outcome (SEND, CLAIM_INVITATION, DELIVERY_SIGNAL, RESOLVE_DISPUTE).
 // The caller names the target it intends and the whole triple is validated, here and in Postgres.
 
+import { TRADE_ACTIONS, TRADE_STATUSES, type TradeAction, type TradeStatus } from '@komtru/shared-types';
+
 /** Design §6.1, in lifecycle order. The order is what "forwards" means (see the forward-only test). */
-export const TRADE_STATUSES = [
-  'DRAFT',
-  'PENDING_COUNTERPARTY',
-  'UNDER_PROPOSAL_REVIEW',
-  'AWAITING_ACCEPTANCE',
-  'PENDING_PAYMENT',
-  'FUNDED',
-  'SHIPPED',
-  'UNCONFIRMED_DELIVERY',
-  'INSPECTION',
-  'COMPLETED',
-  'SETTLED',
-  'DISPUTED',
-  'RESOLVED_REFUNDED',
-  'RESOLVED_RELEASED',
-  'CANCELLED_REFUNDED',
-  'DECLINED',
-  'REJECTED',
-  'CANCELLED',
-  'EXPIRED',
-] as const;
 
-export type TradeStatus = (typeof TRADE_STATUSES)[number];
-
-export const TRADE_ACTIONS = [
-  'SEND',
-  'CLAIM_INVITATION',
-  'EXPIRE',
-  'CLEAR_REVIEW',
-  'REJECT_REVIEW',
-  'COUNTER_PROPOSE',
-  'ACCEPT',
-  'DECLINE',
-  'CANCEL',
-  'FUND',
-  'BEGIN_CUSTODY',
-  'REFUND_CANCELLATION',
-  'DELIVERY_SIGNAL',
-  'CONFIRM_RECEIPT',
-  'GRACE_ELAPSED',
-  'COMPLETE',
-  'INSPECTION_ELAPSED',
-  'SETTLE',
-  'DISPUTE',
-  'RESOLVE_DISPUTE',
-] as const;
-
-export type TradeAction = (typeof TRADE_ACTIONS)[number];
+// The status and action lists are declared once, in shared-types, because the trade realtime wire
+// contract (T-068) names them and a client must not keep a second copy. Re-exported so every backend
+// import of them is unchanged.
+export { TRADE_ACTIONS, TRADE_STATUSES, type TradeAction, type TradeStatus };
 
 type TransitionMap = Readonly<
   Record<TradeAction, Readonly<Partial<Record<TradeStatus, readonly TradeStatus[]>>>>

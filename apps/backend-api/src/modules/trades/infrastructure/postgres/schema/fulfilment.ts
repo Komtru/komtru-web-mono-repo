@@ -61,6 +61,13 @@ export const tradeDeadlines = trade.table(
     extendedByActorId: uuid('extended_by_actor_id'),
     resolvedAt: timestamp('resolved_at', { withTimezone: true }),
     reason: text('reason'),
+    /**
+     * When the inspection reminder for this deadline was claimed (T-068). Set by one guarded UPDATE in
+     * the transaction that publishes the reminder, so a given due date is reminded at most once, however
+     * many workers sweep and however often the sweep reruns. Accepting an inspection extension clears it,
+     * so the new due date is warned about too.
+     */
+    reminderSentAt: timestamp('reminder_sent_at', { withTimezone: true }),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [

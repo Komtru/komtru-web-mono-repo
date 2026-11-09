@@ -15,11 +15,14 @@ describe.runIf(infraEnabled)('inspection evidence tables (migration 0046)', () =
     const seller = await insertUser(t.app());
     const tradeId = await insertTrade(t.app(), { buyer, seller });
     await driveTo(t.owner(), tradeId, 'INSPECTION');
+    // One instant for both columns: two `Date.now()` calls can straddle a millisecond and trip
+    // `trade_deadlines_never_shortened`.
+    const dueAt = new Date(Date.now() + DAY).toISOString();
     const deadlineId = await insertRow(t.app(), 'trade.trade_deadlines', {
       trade_id: tradeId,
       kind: 'INSPECTION',
-      due_at: new Date(Date.now() + DAY).toISOString(),
-      original_due_at: new Date(Date.now() + DAY).toISOString(),
+      due_at: dueAt,
+      original_due_at: dueAt,
     });
     return { tradeId, buyer, seller, deadlineId };
   };

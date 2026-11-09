@@ -19,6 +19,7 @@ The engine exists and only the UI is missing, so these are the highest-value wor
 
 | Feature | Title                                                  | Journey                  | MVP |
 | ------- | ------------------------------------------------------ | ------------------------ | --- |
+| F-022   | Follow a trade in one role-aware workspace             | The trade workspace      | yes |
 | F-024   | Fund escrow                                            | Fund & protect           | yes |
 | F-026   | Accept, prove, prepare and ship an item                | Fulfil & dispatch        | yes |
 | F-027   | Confirm delivery, inspect, complete and release        | Deliver & inspect        | yes |
@@ -77,7 +78,6 @@ The engine exists and only the UI is missing, so these are the highest-value wor
 | F-017   | Propose a trade, invite the other party and order multiple items | Propose & agree                         | yes |
 | F-018   | Create a trade: buyer starts, seller completes                   | Propose & agree                         | yes |
 | F-019   | Create a trade: seller starts, buyer completes                   | Propose & agree                         | yes |
-| F-022   | Follow a trade in one role-aware workspace                       | The trade workspace                     | yes |
 | F-023   | Terms, agreement and payment detail in the workspace             | The trade workspace                     | yes |
 | F-028   | Delivery and evidence in the workspace                           | Deliver & inspect                       | yes |
 | F-029   | Capture and compare proof media                                  | Deliver & inspect                       | yes |
@@ -110,11 +110,11 @@ The same work counted per ticket. Useful for the detail in `docs/tickets/`, not 
 it counts backend and frontend layers separately, which is how the build drifted.
 
 ```
-MVP   ██████████████████················  58/109  (53%)
-Total ████████████······················  58/168  (35%)
+MVP   ██████████████████················  59/109  (54%)
+Total ████████████······················  59/168  (35%)
 ```
 
-51 MVP tickets left, 59 deferred past it.
+50 MVP tickets left, 59 deferred past it.
 
 ### Tickets in progress
 
@@ -127,7 +127,6 @@ Total ████████████···················
 | Ticket | Title                                                             | MVP |
 | ------ | ----------------------------------------------------------------- | --- |
 | T-029  | Isolate the integration suite's shared Redis and queues           | yes |
-| T-068  | Trade realtime, notifications and deep links                      | yes |
 | T-073  | Payout accounts, preferences and payouts                          | yes |
 | T-075  | Refunds                                                           | yes |
 | T-112  | First-time onboarding                                             | yes |
@@ -161,7 +160,6 @@ Total ████████████···················
 | T-057  | Search and discovery (M19)                                                | yes |
 | T-063  | Orders and multi-item trades (M9)                                         | yes |
 | T-066  | Post-funding cancellation and can't-fulfil refunds                        | yes |
-| T-068  | Trade realtime, notifications and deep links                              | yes |
 | T-073  | Payout accounts, preferences and payouts                                  | yes |
 | T-075  | Refunds                                                                   | yes |
 | T-080  | Disputes core                                                             | yes |

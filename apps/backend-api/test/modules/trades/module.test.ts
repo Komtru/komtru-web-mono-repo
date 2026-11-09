@@ -2,11 +2,21 @@
 // What the trades module registers with the platform (T-064 adds a schedule and a subscriber).
 import { describe, expect, it, vi } from 'vitest';
 import { createTradesModule } from '../../../src/modules/trades/module.js';
+import { TRADE_PUSHES } from '../../../src/modules/trades/infrastructure/realtime.js';
 import { routeLabel } from '../../../src/platform/http/route.js';
 import { testConfig, testLogger } from '../identity/support.js';
 
-const module = () =>
+const gateway = () => ({
+  registerRoomAuthorizer: vi.fn(),
+  emitToRoom: vi.fn(),
+  emitToUser: vi.fn(),
+  disconnectUser: vi.fn(),
+  connectionCount: () => 0,
+});
+
+const module = (g = gateway()) =>
   createTradesModule({
+    gateway: g,
     db: {} as never,
     redis: {} as never,
     logger: testLogger,
@@ -30,13 +40,18 @@ describe('the trades module', () => {
   });
 
   it('schedules the delivery, inspection and grace sweeps every five minutes, for the worker', () => {
-    const jobs = module().schedules ?? [];
+    const jobs = (module().schedules ?? []).filter((job) => job.name !== 'trades.inspection-reminders');
     expect(jobs.map((job) => job.name).sort()).toEqual([
       'trades.delivery-deadlines',
       'trades.grace-deadlines',
       'trades.inspection-deadlines',
     ]);
     for (const job of jobs) expect(job.cron).toBe('*/5 * * * *');
+  });
+
+  it('schedules the inspection reminder sweep every fifteen minutes (T-068)', () => {
+    const job = (module().schedules ?? []).find((j) => j.name === 'trades.inspection-reminders');
+    expect(job?.cron).toBe('*/15 * * * *');
   });
 
   it('subscribes to the ledger releasing escrow, to settle the trade', async () => {
@@ -58,5 +73,20 @@ describe('the trades module', () => {
     await expect(
       subscription.handler({ payload: { to: 'SHIPPED', tradeId: 'x' } }, {}),
     ).resolves.toBeUndefined();
+  });
+
+  it('claims the trade room prefix with an authorizer when it starts, and subscribes every push', async () => {
+    const g = gateway();
+    const subscribe = vi.fn();
+    await module(g).start?.({ events: { subscribe }, logger: testLogger } as never);
+    expect(g.registerRoomAuthorizer).toHaveBeenCalledWith('trade', expect.any(Function));
+    const names = subscribe.mock.calls.map(([subscription]) => subscription.name);
+    for (const push of TRADE_PUSHES) expect(names).toContain(push.subscriber);
+  });
+
+  it('does not claim the room before it starts', () => {
+    const g = gateway();
+    module(g);
+    expect(g.registerRoomAuthorizer).not.toHaveBeenCalled();
   });
 });

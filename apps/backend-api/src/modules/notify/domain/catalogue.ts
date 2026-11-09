@@ -11,6 +11,8 @@
 // for a variable no binding supplies stops the process at boot rather than at 2am.
 //
 // Every later module ticket adds its own templates and mappings to this file.
+import { TRADE_NOTIFICATION_PLANS } from '../../trades/index.js';
+import { tradeTemplates } from './tradeCatalogue.js';
 import { mappingSchema, placeholders, templateSchema } from './template.js';
 import type { NotificationMapping, NotificationTemplate } from './template.js';
 
@@ -157,9 +159,20 @@ const GEO_MAPPINGS: unknown[] = [
   { eventName: 'geo.city_request.decided', templateKey: 'geo.city_request.decided' },
 ];
 
+/**
+ * T-068: every trade notification. The copy is in `tradeCatalogue.ts`; the mappings come from the
+ * trades module's plans, which are what say which event sends which key.
+ */
+const TRADE_MAPPINGS: unknown[] = TRADE_NOTIFICATION_PLANS.map((plan) => ({
+  eventName: plan.event.eventType,
+  templateKey: plan.templateKey,
+}));
+
 export const CATALOGUE: NotificationCatalogue = {
-  templates: [...IDENTITY_TEMPLATES, ...GEO_TEMPLATES].map((t) => templateSchema.parse(t)),
-  mappings: [...IDENTITY_MAPPINGS, ...GEO_MAPPINGS].map((m) => mappingSchema.parse(m)),
+  templates: [...IDENTITY_TEMPLATES, ...GEO_TEMPLATES, ...tradeTemplates()].map((t) =>
+    templateSchema.parse(t),
+  ),
+  mappings: [...IDENTITY_MAPPINGS, ...GEO_MAPPINGS, ...TRADE_MAPPINGS].map((m) => mappingSchema.parse(m)),
 };
 
 const sameSet = (a: string[], b: string[]): boolean =>
