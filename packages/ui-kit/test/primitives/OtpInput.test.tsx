@@ -98,6 +98,52 @@ describe('OtpInput', () => {
     expect(onComplete).toHaveBeenCalledWith('482315');
   });
 
+  it('takes a whole code inserted at once, the way SMS autofill and keyboard suggestions put it', () => {
+    // iOS one-time-code autofill and Android keyboards' code suggestion both insert the full code
+    // into the focused cell as one input event, not as a paste.
+    const onComplete = vi.fn();
+    render(<Harness onComplete={onComplete} />);
+    fireEvent.change(cells()[0]!, { target: { value: '353126' } });
+    expect(cells().map((cell) => (cell as HTMLInputElement).value)).toEqual(['3', '5', '3', '1', '2', '6']);
+    expect(onComplete).toHaveBeenCalledWith('353126');
+  });
+
+  it('takes an autofilled code as the whole code even after a digit was typed', () => {
+    // Typed "1", the caret moved on, then the keyboard's SMS suggestion was tapped: the code is the
+    // code, not "1" followed by it.
+    const onComplete = vi.fn();
+    render(<Harness onComplete={onComplete} />);
+    fireEvent.change(cells()[0]!, { target: { value: '1' } });
+    fireEvent.change(cells()[1]!, { target: { value: '482913' } });
+    expect(onComplete).toHaveBeenLastCalledWith('482913');
+  });
+
+  it('takes an autofilled code over a filled cell without keeping the old digit', () => {
+    const onComplete = vi.fn();
+    render(<Harness onComplete={onComplete} />);
+    fireEvent.change(cells()[0]!, { target: { value: '4' } });
+    fireEvent.change(cells()[0]!, { target: { value: '4123456' } });
+    expect(onComplete).toHaveBeenLastCalledWith('123456');
+  });
+
+  it('keeps every digit when keys arrive faster than the screen redraws', () => {
+    // A parent that has not re-rendered yet still holds the old value; each keystroke must build on
+    // the last one this control reported, or fast typing keeps only the last digit.
+    const onChange = vi.fn();
+    render(<OtpInput label="One-time code" value="" onChange={onChange} />);
+    fireEvent.change(cells()[0]!, { target: { value: '1' } });
+    fireEvent.change(cells()[1]!, { target: { value: '2' } });
+    fireEvent.change(cells()[2]!, { target: { value: '3' } });
+    expect(onChange).toHaveBeenLastCalledWith('123');
+  });
+
+  it('replaces the digit in a filled cell with the one typed over it', () => {
+    render(<Harness />);
+    fireEvent.change(cells()[0]!, { target: { value: '4' } });
+    fireEvent.change(cells()[0]!, { target: { value: '47' } });
+    expect(cells()[0]).toHaveProperty('value', '7');
+  });
+
   it('marks the whole code wrong, not one digit — the person is told the code is wrong', () => {
     render(<Harness invalid />);
     expect(screen.getByRole('group').getAttribute('aria-invalid')).toBe('true');

@@ -41,6 +41,13 @@ export const DEFAULT_LOGIN_PATH = '/auth/login';
 export const DEFAULT_MFA_VERIFY_PATH = '/auth/mfa/verify';
 export const DEFAULT_MFA_CHALLENGE_PATH = '/auth/mfa/challenge';
 
+/**
+ * Where a one-time code is proved. One route for two meanings (M1 §10.1): a channel verification
+ * answers with a session, which is why it has to come through here, and a password-reset code
+ * answers with a reset token and nothing else.
+ */
+export const DEFAULT_VERIFY_OTP_PATH = '/auth/verify-otp';
+
 export interface AuthRouteOptions {
   config: AppConfig;
   sealer: SessionSealer;
@@ -49,6 +56,7 @@ export interface AuthRouteOptions {
   /** A console passes `/auth/staff/mfa/verify`: the staff routes are separate from the consumer ones. */
   mfaVerifyPath?: string;
   mfaChallengePath?: string;
+  verifyOtpPath?: string;
   /**
    * Hands the browser the access token and keeps the refresh token **here**, in this store, with no
    * cookie at all. For a page that needs a bearer token for a few minutes and must not become a
@@ -73,6 +81,9 @@ export interface AuthLimits {
   mfaPerToken: number;
   challengePerIp: number;
   challengePerToken: number;
+  verifyPerIp: number;
+  /** The backend allows five wrong codes per challenge; this only stops a loop around it. */
+  verifyPerChallenge: number;
 }
 
 export const DEFAULT_AUTH_LIMITS: AuthLimits = {
@@ -82,6 +93,8 @@ export const DEFAULT_AUTH_LIMITS: AuthLimits = {
   mfaPerToken: 8,
   challengePerIp: 20,
   challengePerToken: 5,
+  verifyPerIp: 30,
+  verifyPerChallenge: 10,
 };
 
 export interface AuthRouteHandlers {
@@ -92,6 +105,11 @@ export interface AuthRouteHandlers {
   mfa(request: Request): Promise<Response>;
   /** Asks the backend to send the code for an SMS or email factor. Opens nothing. */
   mfaChallenge(request: Request): Promise<Response>;
+  /**
+   * Proves a one-time code. A channel verification opens the session (screen E3); a reset code
+   * hands back only the reset token, with no cookie (screen AC3).
+   */
+  verify(request: Request): Promise<Response>;
   refresh(request: Request): Promise<Response>;
   logout(request: Request): Promise<Response>;
 }
@@ -137,6 +155,28 @@ const mfaChallengeRequestSchema = z.object({
   mfaToken: z.string().min(1).max(512),
   factorId: z.string().min(1),
 });
+
+const verifyRequestSchema = z.object({
+  /** The backend's own shape (`verifyOtpRequestSchema`), so a mangled id is a 422 here, not a 502 later. */
+  challengeId: z.uuid(),
+  code: z.string().min(1).max(16),
+  deviceFingerprint: z.unknown().optional(),
+});
+
+/**
+ * A reset code's answer: proof the SMS arrived, and the token the next call needs. A body carrying
+ * a session beside it is a backend bug; passing it through would hand the browser a credential
+ * this handler never sealed, so it is refused and falls through to the session check, which refuses
+ * it too.
+ */
+const backendResetTokenSchema = z
+  .looseObject({
+    verified: z.literal(true),
+    nextStep: z.literal('SET_PASSWORD'),
+    resetToken: z.string().min(1).max(512),
+    expiresAt: z.number().int().positive(),
+  })
+  .refine((body) => !('accessToken' in body) && !('refreshToken' in body));
 
 const logoutRequestSchema = z.object({ allDevices: z.boolean().default(false) });
 
@@ -198,6 +238,7 @@ export function createAuthRouteHandlers({
   loginPath = DEFAULT_LOGIN_PATH,
   mfaVerifyPath = DEFAULT_MFA_VERIFY_PATH,
   mfaChallengePath = DEFAULT_MFA_CHALLENGE_PATH,
+  verifyOtpPath = DEFAULT_VERIFY_OTP_PATH,
   tokenMode,
   limits,
   now = Date.now,
@@ -260,6 +301,8 @@ export function createAuthRouteHandlers({
     mfaToken: limiter(budgets?.mfaPerToken),
     challengeIp: limiter(budgets?.challengePerIp),
     challengeToken: limiter(budgets?.challengePerToken),
+    verifyIp: limiter(budgets?.verifyPerIp),
+    verifyChallenge: limiter(budgets?.verifyPerChallenge),
   };
 
   /** 403 for a request a cross-site page could have made; null to proceed. */
@@ -415,13 +458,20 @@ export function createAuthRouteHandlers({
     return issue(payload ?? {});
   };
 
-  /** Shared by the two second-step handlers: validate, call, and pass the backend's problem through. */
+  /** A verification is counted against the challenge it names, as a second step is against its token. */
+  const challengeKey = (body: unknown): string => {
+    const id = (body as { challengeId?: unknown } | undefined)?.challengeId;
+    return typeof id === 'string' ? id : 'none';
+  };
+
+  /** Shared by the code-proving handlers: validate, call, and pass the backend's problem through. */
   const secondStep = async (
     request: Request,
     path: string,
     schema: z.ZodType<Record<string, unknown>>,
     perIp: RateLimiter | undefined,
     perToken: RateLimiter | undefined,
+    keyOf: (body: unknown) => string = tokenKey,
   ): Promise<
     | { response: Response }
     | { payload: Record<string, unknown> | undefined; forwarded: Record<string, string> }
@@ -443,7 +493,7 @@ export function createAuthRouteHandlers({
     const forwarded = forwardHeaders(request);
     const limited = spend([
       [perIp, clientIpOf(request)],
-      [perToken, tokenKey(raw)],
+      [perToken, keyOf(raw)],
     ]);
     if (limited !== null) return { response: limited };
     let upstream: Response;
@@ -486,6 +536,26 @@ export function createAuthRouteHandlers({
     );
     // Nothing here can open a session, so the body is the backend's own: kind, destination, options.
     return 'response' in result ? result.response : json(result.payload ?? {}, 200);
+  };
+
+  const verify = async (request: Request): Promise<Response> => {
+    const result = await secondStep(
+      request,
+      verifyOtpPath,
+      verifyRequestSchema,
+      buckets.verifyIp,
+      buckets.verifyChallenge,
+      challengeKey,
+    );
+    if ('response' in result) return result.response;
+    const reset = backendResetTokenSchema.safeParse(result.payload);
+    if (reset.success) {
+      // An allowlist: the four fields screen AC3 needs, and no cookie — proving a reset code is not
+      // being signed in, and a session minted here would skip the password the person is about to set.
+      const { verified, nextStep, resetToken, expiresAt } = reset.data;
+      return json({ verified, nextStep, resetToken, expiresAt }, 200);
+    }
+    return finishSignIn(result.payload, result.forwarded);
   };
 
   const rotate = async (refreshToken: string, forwarded: Record<string, string>): Promise<Response> => {
@@ -569,7 +639,7 @@ export function createAuthRouteHandlers({
     return json({ ok: true }, 200);
   };
 
-  return { login, mfa, mfaChallenge, refresh, logout, release };
+  return { login, mfa, mfaChallenge, verify, refresh, logout, release };
 }
 
 const expiryOf = (maxAgeSeconds: number): number => Date.now() + maxAgeSeconds * 1000;
@@ -593,6 +663,8 @@ export function komtruAuthRoute(
         return handlers.mfa(request);
       case 'mfa-challenge':
         return handlers.mfaChallenge(request);
+      case 'verify':
+        return handlers.verify(request);
       case 'release':
         return handlers.release(request);
       case 'refresh':
@@ -604,7 +676,7 @@ export function komtruAuthRoute(
           404,
           'NOT_FOUND',
           'No such route',
-          'Only login, mfa, mfa-challenge, refresh and logout exist here',
+          'Only login, mfa, mfa-challenge, verify, refresh and logout exist here',
         );
     }
   };

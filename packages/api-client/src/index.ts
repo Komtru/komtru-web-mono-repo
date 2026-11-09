@@ -11,6 +11,7 @@ export * from './auth/session.js';
 export * from './cases.js';
 export * from './client.js';
 export * from './contracts.js';
+export * from './entry.js';
 export * from './geo.js';
 export * from './idempotency.js';
 export * from './pagination.js';

@@ -191,6 +191,16 @@ export const termsResponseSchema = z.object({
   upToDate: z.boolean(),
 });
 
+/**
+ * `GET /auth/terms`: the versions in force and nothing about anybody. Screen TOS1 runs before an
+ * account exists, and registration refuses any `acceptedTermsVersion` but the current one, so the
+ * client needs this to send a version it actually showed rather than one compiled into it.
+ */
+export const publishedTermsResponseSchema = z.object({
+  termsVersion: z.string().min(1),
+  privacyVersion: z.string().min(1),
+});
+
 export const acceptTermsRequestSchema = z.strictObject({
   termsVersion: versionSchema,
   privacyVersion: versionSchema,
