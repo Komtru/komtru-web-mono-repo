@@ -19,6 +19,8 @@ export interface VisualCheckOptions {
   /** Disambiguates the one id the reference draws twice. */
   line?: number;
   threshold?: number;
+  /** Starts the built shot at this element's top edge; see `ShootOptions.contentSelector`. */
+  content?: string;
 }
 
 export interface VisualCheckResult {
@@ -42,7 +44,12 @@ export async function visualCheck(options: VisualCheckOptions): Promise<VisualCh
     const shot = await shootReference(browser, carved);
     return {
       reference: shot,
-      built: await shootBuilt(browser, options.url, { width: shot.width, height: shot.height }),
+      built: await shootBuilt(
+        browser,
+        options.url,
+        { width: shot.width, height: shot.height },
+        options.content === undefined ? {} : { contentSelector: options.content },
+      ),
     };
   });
 

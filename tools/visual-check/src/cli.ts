@@ -3,14 +3,16 @@ import { parseArgs } from 'node:util';
 
 import { UI_REVIEW_DIR, visualCheck } from './run.ts';
 
-const USAGE = `Usage: pnpm visual-check --screen <id> --url <url> [--out <dir>] [--line <n>] [--threshold <0-1>]
+const USAGE = `Usage: pnpm visual-check --screen <id> --url <url> [--out <dir>] [--line <n>] [--threshold <0-1>] [--content <selector>]
 
   --screen     A screen id from the reference's screen index, for example U4 or P2-D1. The index is
-               docs/design-reference/SCREEN_INDEX-v1.md by default, and SCREEN_INDEX.md (the v2 master)
-               when KOMTRU_VISUAL_CHECK_REFERENCE=v2 is set.
+               docs/design-reference/SCREEN_INDEX.md (the v2 master) by default, and SCREEN_INDEX-v1.md
+               when KOMTRU_VISUAL_CHECK_REFERENCE=v1 is set.
   --url        The built screen, already running, for example http://localhost:3004/handover/KMT-88213.
   --out        Where the artefacts go. Default: docs/ui-review.
   --line       The reference line, for the one id the reference draws twice (TO-PA10).
+  --content    A selector for the built screen's content, such as main. The built shot starts at its top
+               edge, so an app shell the reference does not draw does not offset every line.
   --threshold  Per-pixel colour tolerance passed to pixelmatch. Default: 0.1.`;
 
 function fail(message: string): never {
@@ -27,6 +29,7 @@ const { values } = (() => {
         out: { type: 'string' },
         line: { type: 'string' },
         threshold: { type: 'string' },
+        content: { type: 'string' },
       },
       strict: true,
     });
@@ -51,6 +54,7 @@ const result = await visualCheck({
   url: values.url,
   outDir: values.out ?? UI_REVIEW_DIR,
   ...(values.line === undefined ? {} : { line: number('line', values.line) }),
+  ...(values.content === undefined ? {} : { content: values.content }),
   ...(values.threshold === undefined ? {} : { threshold: number('threshold', values.threshold) }),
 }).catch((error: unknown) => {
   const message = error instanceof Error ? error.message : String(error);

@@ -50,15 +50,9 @@ describe('ticketId', () => {
 });
 
 describe('the reference selector', () => {
-  it('reads the v1 index and HTML unless told otherwise', async () => {
-    const module = await import('../src/screen-index.ts');
-    expect(module.SCREEN_INDEX_PATH.pathname).toMatch(/SCREEN_INDEX-v1\.md$/);
-    expect(module.REFERENCE_NAME).toBe('Komtru — UI Screens Living Master File.html');
-  });
-
-  it('reads the v2 master and its index when KOMTRU_VISUAL_CHECK_REFERENCE=v2, where F-017 screens live', async () => {
+  it('draws against the v2 master and its index unless told otherwise', async () => {
     vi.resetModules();
-    vi.stubEnv('KOMTRU_VISUAL_CHECK_REFERENCE', 'v2');
+    vi.stubEnv('KOMTRU_VISUAL_CHECK_REFERENCE', undefined);
     try {
       const module = await import('../src/screen-index.ts');
       expect(module.SCREEN_INDEX_PATH.pathname).toMatch(/SCREEN_INDEX\.md$/);
@@ -68,5 +62,11 @@ describe('the reference selector', () => {
       vi.unstubAllEnvs();
       vi.resetModules();
     }
+  });
+
+  it('reads the v1 file and index when KOMTRU_VISUAL_CHECK_REFERENCE=v1', async () => {
+    const module = await import('../src/screen-index.ts');
+    expect(module.SCREEN_INDEX_PATH.pathname).toMatch(/SCREEN_INDEX-v1\.md$/);
+    expect(module.REFERENCE_NAME).toBe('Komtru — UI Screens Living Master File.html');
   });
 });
