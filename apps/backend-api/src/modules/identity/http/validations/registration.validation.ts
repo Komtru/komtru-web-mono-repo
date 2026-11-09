@@ -42,6 +42,7 @@ export const nextStepSchema = z.enum(NEXT_STEPS);
 export const registerRequestSchema = z
   .strictObject({
     channel: z.enum(['EMAIL', 'PHONE']),
+    /** Required on EMAIL; optional on PHONE, where it is the second channel (see the check below). */
     email: z.string().min(3).max(254).optional(),
     phone: z.string().min(4).max(32).optional(),
     password: z.string().min(1).max(MAX_PASSWORD_LENGTH).optional(),
@@ -99,14 +100,8 @@ export const registerRequestSchema = z
         path: ['phone'],
       });
     }
-    if (body.email) {
-      ctx.issues.push({
-        code: 'custom',
-        message: 'email does not belong on the PHONE channel',
-        input: body,
-        path: ['email'],
-      });
-    }
+    // An email beside the phone is allowed: it is stored as the account's second channel, unverified,
+    // and is where the code goes when SMS cannot be sent outside production (`smsUndeliverable`).
   });
 
 export const registerResponseSchema = z.object({

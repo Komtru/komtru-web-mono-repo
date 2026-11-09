@@ -119,13 +119,25 @@ describe('the registration request shapes', () => {
     );
   });
 
-  it('refuses a body naming one channel and carrying the other', () => {
+  it('takes an email beside the phone on the PHONE path, where the code can be emailed too', () => {
     expect(
       registerRequestSchema.safeParse({
         ...base,
         channel: 'PHONE',
         phone: '08023415567',
         email: 'jane@example.com',
+      }).success,
+    ).toBe(true);
+  });
+
+  it('still refuses a phone on the EMAIL path, which has nothing to do with one', () => {
+    expect(
+      registerRequestSchema.safeParse({
+        ...base,
+        channel: 'EMAIL',
+        email: 'jane@example.com',
+        password: 'a long passphrase',
+        phone: '08023415567',
       }).success,
     ).toBe(false);
   });

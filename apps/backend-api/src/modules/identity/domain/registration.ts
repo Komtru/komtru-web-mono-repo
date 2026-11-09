@@ -37,13 +37,20 @@ export interface OnboardingState {
 export function nextStep(state: OnboardingState): NextStep {
   if (!state.termsUpToDate) return 'ACCEPT_TERMS';
 
-  // The channel they started with. A row that exists but is unverified is the one to chase; a
-  // channel with no row at all is the SECOND channel and is handled further down.
-  if (state.hasPhone && !state.phoneVerified) return 'VERIFY_PHONE';
-  if (state.hasEmail && !state.emailVerified) return 'VERIFY_EMAIL';
+  // Until ONE channel is proven, chase the one they started with — the phone first, because E2 is
+  // phone-first and an email given beside it is the second channel, not the anchor.
+  if (!state.phoneVerified && !state.emailVerified) {
+    if (state.hasPhone) return 'VERIFY_PHONE';
+    if (state.hasEmail) return 'VERIFY_EMAIL';
+  }
 
   if (!state.hasPassword) return 'SET_PASSWORD';
   if (!state.hasUsername) return 'CHOOSE_USERNAME';
+
+  // The second channel, given but not yet proven. After the username, as the doc comment says: it
+  // gates level 1, not getting back in, so it must not stand between a person and their password.
+  if (state.hasPhone && !state.phoneVerified) return 'VERIFY_PHONE';
+  if (state.hasEmail && !state.emailVerified) return 'VERIFY_EMAIL';
 
   if (!state.hasEmail) return 'ADD_EMAIL';
   if (!state.hasPhone) return 'ADD_PHONE';

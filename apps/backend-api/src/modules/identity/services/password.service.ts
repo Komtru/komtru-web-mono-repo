@@ -24,7 +24,7 @@ import { identityPasswordChangedEvent } from '../domain/events.js';
 import type { PasswordRejection } from '../domain/credential/policy.js';
 import { users } from '../infrastructure/postgres/schema/users.js';
 import { AUDIT_ACTIONS, writeAudit } from './audit.service.js';
-import type { AccountDeps } from './auth.service.js';
+import { deliveryChannels, type AccountDeps } from './auth.service.js';
 import { findUserByVerifiedEmail, findUserByVerifiedPhone, primaryContacts } from './contact.service.js';
 import { hasCredential, setPassword, validatePassword, verifyAndRecord } from './credential.service.js';
 import {
@@ -97,11 +97,17 @@ export async function startPasswordReset(
 
   return db.transaction(async (tx): Promise<StartedReset> => {
     const resolved = await resolveResetTarget(tx, kind, trimmed);
+    // A reset by phone goes where any phone code goes: also to the account's email when phone codes
+    // are emailed (the mirror flag, or SMS that cannot send outside production).
+    const channels =
+      resolved?.channels[0] === 'SMS'
+        ? await deliveryChannels(tx, deps, resolved.userId, 'SMS')
+        : resolved?.channels;
 
     const issued = await issueOtp(tx, otpDeps(deps), {
       userId: resolved?.userId ?? null,
       purpose: 'PASSWORD_RESET',
-      channels: resolved?.channels ?? ['SMS'],
+      channels: channels ?? ['SMS'],
       // On a miss the destination is whatever the caller typed, canonicalised as far as it can be.
       // That keeps §S4's per-destination budget meaningful for probing: forty attempts against one
       // unknown address are throttled exactly as forty against a real one would be.
