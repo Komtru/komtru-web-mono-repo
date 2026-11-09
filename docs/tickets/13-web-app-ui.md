@@ -27,8 +27,11 @@ One app for every consumer with no buyer or seller views (design C22, §6.3), pl
 
 ### T-111 — Entry and authentication
 
-- **Screens (v2):** E1, E2, E3, E4, E3b, TOS1, TOS2, AC2, AC3; social callback
-- **Depends on:** T-110, T-032, T-034, T-036, T-190
+- **Screens (v2):** E1, E2, E3, E4, E3b, TOS1, TOS2, AC2, AC3; social callback (moved to T-034, below)
+- **Depends on:** T-110, T-032, T-036, T-190
+- **Owner decision (2026-11-09):** build T-111 without social sign-in rather than wait for T-034. The
+  social buttons and the OAuth callback screen belong to T-034, which adds them to E1, E2 and E4 when
+  it lands.
 
 ### T-112 — First-time onboarding
 

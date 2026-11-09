@@ -59,6 +59,7 @@ Spec: `docs/specs/module-01-identity-and-user-management.md`. Decision C2 (desig
 
 - **Touches:** `identity/infrastructure/providers/{google,apple,facebook}.ts`, `identity/domain/social/linking.ts`, `identity/services/social.service.ts`
 - **Depends on:** T-032
+- **Also owns, since T-111 shipped without it (owner decision 2026-11-09):** the social sign-in buttons on web-app-ui's E1, E2 and E4 and the OAuth callback screen.
 - **Acceptance criteria:**
   - Google, Apple and Facebook (design C17) with PKCE and signed single-use `state`.
   - The §7.4 linking decision tree rewritten from the old reference with full tests: never auto-link an unverified provider email; auto-link only when the target has no password, no other social identity, no passkey and no active MFA; otherwise step-up via `confirm-link`.
