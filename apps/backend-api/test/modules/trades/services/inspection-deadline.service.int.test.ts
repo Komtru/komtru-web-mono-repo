@@ -117,19 +117,35 @@ describe.runIf(infraEnabled)('inspection and grace deadlines (T-065)', () => {
       ).toHaveLength(1);
     });
 
-    it('does not race a buyer who confirms at the same moment: one route wins, one completion', async () => {
+    it('skips a trade another transaction holds, and acts once it is free', async () => {
       reset();
       const f = await trade(t, 'INSPECTION', -1);
-      const outcomes = await Promise.allSettled([
-        confirmAndRelease(deps(), { userId: f.buyer, tradeId: f.tradeId }),
-        sweepInspectionDeadlines(deps()),
-      ]);
-      expect(outcomes.filter((o) => o.status === 'rejected')).toHaveLength(0);
-      expect(await statusOf(t.owner(), f.tradeId)).toBe('COMPLETED');
+      // A buyer's confirmation (or any writer) mid-transaction holds the trade row. The sweep must
+      // skip it rather than wait or act on a stale read.
+      const holder = await t.owner().connect();
+      try {
+        await holder.query('BEGIN');
+        await holder.query(`SELECT id FROM trade.trades WHERE id = $1 FOR UPDATE`, [f.tradeId]);
+
+        expect(await sweepInspectionDeadlines(deps())).toEqual({ examined: 1, LOCKED: 1 });
+        expect(await statusOf(t.owner(), f.tradeId)).toBe('INSPECTION');
+        expect((await deadlineRow(t, f.deadlineId)).status).toBe('PENDING');
+        expect(await outboxOf(t.owner(), f.tradeId, 'trades.trade.completed')).toHaveLength(0);
+      } finally {
+        await holder.query('ROLLBACK');
+        holder.release();
+      }
+      expect(await sweepInspectionDeadlines(deps())).toEqual({ examined: 1, COMPLETED: 1 });
+    });
+
+    it('lets the buyer win when the confirmation committed first: the sweep then finds the row met', async () => {
+      reset();
+      const f = await trade(t, 'INSPECTION', -1);
+      await confirmAndRelease(deps(), { userId: f.buyer, tradeId: f.tradeId });
+      expect(await sweepInspectionDeadlines(deps())).toEqual({ examined: 0 });
+      expect(await stateChanges(t, f.tradeId, 'COMPLETE')).toHaveLength(1);
+      expect(await stateChanges(t, f.tradeId, 'INSPECTION_ELAPSED')).toHaveLength(0);
       expect(await outboxOf(t.owner(), f.tradeId, 'trades.trade.completed')).toHaveLength(1);
-      const complete = await stateChanges(t, f.tradeId, 'COMPLETE');
-      const elapsed = await stateChanges(t, f.tradeId, 'INSPECTION_ELAPSED');
-      expect(complete.length + elapsed.length).toBe(1);
     });
 
     it('closes the row as met for a trade already completed, without touching it', async () => {

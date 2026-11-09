@@ -8,6 +8,7 @@ import { and, asc, desc, eq, isNull } from 'drizzle-orm';
 import { ApiError } from '../../../platform/errors.js';
 import { publish, type Tx } from '../../../platform/events/publish.js';
 import { invalidTransitionError } from '../domain/errors.js';
+import type { TradeStatus } from '../domain/stateMachine.js';
 import {
   extendedInspectionDeadline,
   RELEASE_ACKNOWLEDGEMENT,
@@ -32,6 +33,22 @@ import { applyTransition, type TradeActor } from '../infrastructure/postgres/tra
 import type { InspectionDeps } from './inspectionPorts.js';
 import { loadTrade, recordActivity, requireParty, viewTrade, type TradeRow } from './trade.service.js';
 
+/**
+ * Z4 compares proof with delivery evidence, so it only has something to compare once the parcel has
+ * moved. Before that neither the seller's proof ids nor a waybill is disclosed (a list order would
+ * wrongly admit a trade cancelled before shipment, so the set is explicit).
+ */
+const EVIDENCE_VISIBLE: readonly TradeStatus[] = [
+  'SHIPPED',
+  'UNCONFIRMED_DELIVERY',
+  'INSPECTION',
+  'COMPLETED',
+  'SETTLED',
+  'DISPUTED',
+  'RESOLVED_REFUNDED',
+  'RESOLVED_RELEASED',
+];
+
 type RequestRow = typeof inspectionExtensionRequests.$inferSelect;
 type CompletionRoute = 'BUYER_CONFIRMED' | 'INSPECTION_ELAPSED';
 
@@ -54,7 +71,20 @@ export const inspectionExtensionView = (row: RequestRow) => ({
 // Shared facts and steps
 // ---------------------------------------------------------------------------
 
-/** Holds freeze automatic transitions (design §6.2): any unreleased row, whatever its source. */
+/**
+ * Holds freeze automatic transitions (design §6.2): any unreleased row, whatever its source.
+ *
+ * **CONTRACT FOR WHOEVER WRITES A HOLD (T-062, T-080, admin tooling): lock the trade row `FOR UPDATE`
+ * in the same transaction as the INSERT.** Every caller of this function holds that lock on the trade,
+ * but a lock only protects against writers that also take it, and a share lock does not block an
+ * INSERT into `trade_holds` (the ledger's `activeTradeHolds` states the same rule). Under READ
+ * COMMITTED an uncommitted hold is invisible here.
+ *
+ * The backstop if a hold still lands just after this check: the trade completes, then the ledger's
+ * release sees the hold, returns `HELD` and pays nothing. That is safe, not a loss: the escrow stays
+ * where it is and the trade sits at COMPLETED until the hold is dealt with. It is the reason the
+ * ledger is the last line of defence and this check is only the first.
+ */
 export async function hasActiveHold(tx: Tx, tradeId: string): Promise<boolean> {
   const [hold] = await tx
     .select({ id: tradeHolds.id })
@@ -214,6 +244,7 @@ export async function getInspection(
     const inspecting = trade.status === 'INSPECTION';
     const open = row?.status === 'PENDING' && row.dueAt.getTime() > deps.now().getTime();
     const ship = shipment[0];
+    const evidence = EVIDENCE_VISIBLE.includes(trade.status);
     return {
       tradeId: trade.id,
       tradeCode: trade.tradeCode,
@@ -230,23 +261,27 @@ export async function getInspection(
       canRequestMoreTime: role === 'BUYER' && inspecting && open && request === undefined,
       canRespondToRequest: role === 'SELLER' && inspecting && request?.status === 'PENDING',
       sellerProof: {
-        media: proof.map((p) => ({ fileId: p.fileId, attachedAt: p.attachedAt.toISOString() })),
+        media: (evidence ? proof : []).map((p) => ({
+          fileId: p.fileId,
+          attachedAt: p.attachedAt.toISOString(),
+        })),
       },
       deliveryEvidence: {
-        signals: signals.map((s) => ({
+        signals: (evidence ? signals : []).map((s) => ({
           source: s.source,
           reportedAt: s.reportedAt.toISOString(),
           reference: s.shipmentEventId,
         })),
-        selfArranged: ship
-          ? {
-              waybillNumber: ship.waybillNumber,
-              receiptFileId: ship.receiptFileId,
-              vehiclePlate: ship.vehiclePlate,
-              shippedAt: ship.createdAt.toISOString(),
-              ...(role === 'SELLER' ? { driverPhone: ship.driverPhone } : {}),
-            }
-          : null,
+        selfArranged:
+          ship && evidence
+            ? {
+                waybillNumber: ship.waybillNumber,
+                receiptFileId: ship.receiptFileId,
+                vehiclePlate: ship.vehiclePlate,
+                shippedAt: ship.createdAt.toISOString(),
+                ...(role === 'SELLER' ? { driverPhone: ship.driverPhone } : {}),
+              }
+            : null,
       },
       release: {
         acknowledgement: RELEASE_ACKNOWLEDGEMENT,

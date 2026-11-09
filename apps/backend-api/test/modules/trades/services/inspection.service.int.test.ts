@@ -13,7 +13,7 @@ import {
 import { infraEnabled } from '../../../support/db-urls.js';
 import { useTestDatabase } from '../../../support/db.js';
 import { insertRow } from '../support.js';
-import { failure, newWorld, outboxOf, person, statusOf } from './fulfilment-support.js';
+import { failure, newWorld, outboxOf, person, statusOf, tradeAt } from './fulfilment-support.js';
 import {
   deadlineRow,
   H,
@@ -72,6 +72,44 @@ describe.runIf(infraEnabled)('inspection (T-065)', () => {
       const asSeller = await getInspection(deps(), { userId: f.seller, tradeId: f.tradeId });
       expect(asSeller.deliveryEvidence.selfArranged).toHaveProperty('driverPhone', '+2348031234567');
       expect(asSeller.canRequestMoreTime).toBe(false);
+    });
+
+    it('discloses no proof ids or waybill before the parcel has shipped, and does once it has', async () => {
+      reset();
+      const f = await tradeAt(t, 'FUNDED');
+      await insertRow(t.owner(), 'trade.trade_proof_media', {
+        trade_id: f.tradeId,
+        file_id: randomUUID(),
+        attached_by_user_id: f.seller,
+      });
+      await insertRow(t.owner(), 'trade.delivery_signals', {
+        trade_id: f.tradeId,
+        source: 'SELLER_SELF_REPORT',
+        reported_by: f.seller,
+      });
+      const before = await getInspection(deps(), { userId: f.buyer, tradeId: f.tradeId });
+      expect(before.sellerProof.media).toEqual([]);
+      expect(before.deliveryEvidence.signals).toEqual([]);
+      expect(before.deliveryEvidence.selfArranged).toBeNull();
+
+      await t
+        .owner()
+        .query(
+          `UPDATE trade.trades SET status = 'SHIPPED', status_action = 'BEGIN_CUSTODY', status_revision = status_revision + 1 WHERE id = $1`,
+          [f.tradeId],
+        );
+      await insertRow(t.owner(), 'trade.self_arranged_shipments', {
+        trade_id: f.tradeId,
+        waybill_number: 'WB-554433',
+        receipt_file_id: randomUUID(),
+        driver_phone: '+2348031234567',
+        vehicle_plate: 'XYZ-987 AB',
+        shipped_by_user_id: f.seller,
+      });
+      const after = await getInspection(deps(), { userId: f.buyer, tradeId: f.tradeId });
+      expect(after.sellerProof.media).toHaveLength(1);
+      expect(after.deliveryEvidence.signals).toHaveLength(1);
+      expect(after.deliveryEvidence.selfArranged).toMatchObject({ vehiclePlate: 'XYZ-987 AB' });
     });
 
     it('says only that the release is paused under a hold, and treats a stranger as not found', async () => {
