@@ -40,7 +40,7 @@ export const samplePayload = (p: TradeNotificationPlan): unknown => {
         ['EXPIRE', 'EXPIRED'],
         ['REFUND_CANCELLATION', 'CANCELLED_REFUNDED'],
       ] as const
-    ).map(([action, to]) => changed(action, 'DRAFT', to, buyer)),
+    ).map(([action, to]) => changed(action, action === 'CANCEL' ? 'PENDING_PAYMENT' : 'DRAFT', to, buyer)),
     { ...base, decision: 'ACCEPTED', requestId: tradeId, respondedByUserId: buyer },
     {
       ...base,

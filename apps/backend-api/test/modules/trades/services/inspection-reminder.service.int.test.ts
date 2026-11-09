@@ -2,6 +2,10 @@
 // T-068's inspection reminder against the real database: once per deadline, only while the buyer can
 // act, and safe to run concurrently. Skipped unless KOMTRU_INFRA_TESTS=1.
 import { describe, expect, it } from 'vitest';
+import {
+  requestInspectionExtension,
+  respondToInspectionExtension,
+} from '../../../../src/modules/trades/services/inspection.service.js';
 import { sweepInspectionReminders } from '../../../../src/modules/trades/services/inspectionReminder.service.js';
 import { infraEnabled } from '../../../support/db-urls.js';
 import { useTestDatabase } from '../../../support/db.js';
@@ -89,18 +93,56 @@ describe.runIf(infraEnabled)('inspection reminders (T-068)', () => {
     expect(await reminders(f.tradeId)).toHaveLength(1);
   });
 
-  it('does not remind a second time after an extension moves the deadline', async () => {
+  it('reminds again, once, when an accepted extension moves the deadline', async () => {
     reset();
     const f = await trade(t, 'INSPECTION', 10);
     await sweepInspectionReminders(deps());
-    await t
-      .owner()
-      // An extension only ever moves a deadline later, and here it lands inside the lead again.
-      .query(`UPDATE trade.trade_deadlines SET due_at = now() + interval '20 hours' WHERE id = $1`, [
-        f.deadlineId,
-      ]);
+    expect(await reminders(f.tradeId)).toHaveLength(1);
+
+    const request = await requestInspectionExtension(deps(), {
+      userId: f.buyer,
+      tradeId: f.tradeId,
+      extraHours: 36,
+    });
+    await respondToInspectionExtension(deps(), {
+      userId: f.seller,
+      tradeId: f.tradeId,
+      requestId: request.id,
+      decision: 'ACCEPT',
+    });
+    expect((await deadlineRow(t, f.deadlineId)).reminder_sent_at).toBeNull();
+
+    // Not yet: the new deadline is 46 hours away.
     await sweepInspectionReminders(deps());
     expect(await reminders(f.tradeId)).toHaveLength(1);
+
+    // Once it is inside the lead, the buyer is warned about the NEW deadline, and only once.
+    world.clock.now = new Date(Date.now() + 30 * H);
+    await sweepInspectionReminders(deps());
+    await sweepInspectionReminders(deps());
+    const sent = await reminders(f.tradeId);
+    expect(sent).toHaveLength(2);
+    expect(new Date(sent[1]!.dueAt as string).getTime()).toBeGreaterThan(
+      new Date(sent[0]!.dueAt as string).getTime(),
+    );
+  });
+
+  it('does not re-arm when the request is declined', async () => {
+    reset();
+    const f = await trade(t, 'INSPECTION', 10);
+    await sweepInspectionReminders(deps());
+    const request = await requestInspectionExtension(deps(), {
+      userId: f.buyer,
+      tradeId: f.tradeId,
+      extraHours: 36,
+    });
+    await respondToInspectionExtension(deps(), {
+      userId: f.seller,
+      tradeId: f.tradeId,
+      requestId: request.id,
+      decision: 'DECLINE',
+    });
+    expect((await deadlineRow(t, f.deadlineId)).reminder_sent_at).not.toBeNull();
   });
 
   it('leaves the trade itself untouched', async () => {

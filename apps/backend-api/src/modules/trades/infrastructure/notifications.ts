@@ -198,11 +198,14 @@ export const TRADE_NOTIFICATION_PLANS: TradeNotificationPlan[] = [
     applies: () => true,
     audience: 'SELLER',
     extra: (p) => ({
-      outcomeLine: decisionLine(
-        p.decision,
-        'The buyer agreed to give you more time.',
-        'The buyer declined your request for more time.',
-      ),
+      outcomeLine:
+        p.decision === 'ACCEPTED' && p.newDueAt
+          ? `The buyer agreed to give you more time. Delivery is now due ${lagos(p.newDueAt)}.`
+          : decisionLine(
+              p.decision,
+              'The buyer agreed to give you more time.',
+              'The buyer declined your request for more time.',
+            ),
     }),
   }),
   plan({
@@ -238,11 +241,14 @@ export const TRADE_NOTIFICATION_PLANS: TradeNotificationPlan[] = [
     applies: () => true,
     audience: 'BUYER',
     extra: (p) => ({
-      outcomeLine: decisionLine(
-        p.decision,
-        'The seller agreed to give you more time to inspect.',
-        'The seller declined your request for more time to inspect.',
-      ),
+      outcomeLine:
+        p.decision === 'ACCEPTED' && p.newDueAt
+          ? `The seller agreed to give you more time to inspect. Your window now closes ${lagos(p.newDueAt)}.`
+          : decisionLine(
+              p.decision,
+              'The seller agreed to give you more time to inspect.',
+              'The seller declined your request for more time to inspect.',
+            ),
     }),
   }),
   plan({
@@ -284,7 +290,13 @@ export const TRADE_NOTIFICATION_PLANS: TradeNotificationPlan[] = [
     subscriber: 'notify.on-trade-cancelled',
     event: tradeStateChangedEvent,
     templateKey: 'trades.cancelled',
-    applies: changedTo('CANCELLED', 'CANCEL'),
+    // Only a cancellation of something the counterparty was shown. A draft, a proposal held for TrustOps
+    // review (M7 R1: the seller sees it only once staff clear it) and an unclaimed invitation were never
+    // in front of them, so "cancelled" would announce a trade they did not know existed. An allow-list,
+    // so a state added later is silent until someone decides.
+    applies: (p) =>
+      changedTo('CANCELLED', 'CANCEL')(p) &&
+      (p.from === 'AWAITING_ACCEPTANCE' || p.from === 'PENDING_PAYMENT'),
     audience: 'OTHER_THAN_ACTOR',
   }),
   plan({

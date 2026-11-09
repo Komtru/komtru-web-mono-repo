@@ -459,6 +459,9 @@ export async function respondToInspectionExtension(
           extensionCount: deadline.extensionCount + 1,
           extendedByActorType: 'SELLER',
           extendedByActorId: input.userId,
+          // A new deadline needs its own warning (T-068): if the reminder for the old one already went
+          // out, leaving this set would let the window auto-complete and release the money unannounced.
+          reminderSentAt: null,
         })
         .where(and(eq(tradeDeadlines.id, deadline.id), eq(tradeDeadlines.status, 'PENDING')))
         .returning({ id: tradeDeadlines.id });

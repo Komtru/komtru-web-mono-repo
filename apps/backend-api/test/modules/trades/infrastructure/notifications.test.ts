@@ -73,6 +73,27 @@ describe('who hears what', () => {
     }
   });
 
+  it('does not announce a cancellation of something the counterparty was never shown', () => {
+    for (const from of ['DRAFT', 'UNDER_PROPOSAL_REVIEW', 'PENDING_COUNTERPARTY']) {
+      expect(who('trades.cancelled', changed('CANCEL', from, 'CANCELLED', seller)), from).toBeNull();
+    }
+    for (const from of ['AWAITING_ACCEPTANCE', 'PENDING_PAYMENT']) {
+      expect(who('trades.cancelled', changed('CANCEL', from, 'CANCELLED', seller)), from).toEqual([buyer]);
+    }
+  });
+
+  it('states the new deadline when an extension is agreed, and does not when it is declined', () => {
+    const base = { tradeId, tradeCode: code };
+    const inspection = plan('trades.inspection_extension.responded');
+    const [agreed] = audienceFor(inspection, { ...base, decision: 'ACCEPTED', newDueAt: now }, parties);
+    expect(agreed!.variables.outcomeLine).toMatch(/closes .*2026/);
+    const [declined] = audienceFor(inspection, { ...base, decision: 'DECLINED' }, parties);
+    expect(declined!.variables.outcomeLine).not.toMatch(/closes/);
+    const delivery = plan('trades.delivery_extension.responded');
+    const [due] = audienceFor(delivery, { ...base, decision: 'ACCEPTED', newDueAt: now }, parties);
+    expect(due!.variables.outcomeLine).toMatch(/due .*2026/);
+  });
+
   it('tells only the initiator that a held proposal was rejected', () => {
     expect(
       who('trades.proposal.rejected', changed('REJECT_REVIEW', 'UNDER_PROPOSAL_REVIEW', 'REJECTED')),
