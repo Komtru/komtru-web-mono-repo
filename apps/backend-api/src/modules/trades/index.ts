@@ -20,6 +20,8 @@ export * from './domain/inspection.js';
 export * from './domain/inspectionEvents.js';
 export * from './infrastructure/notifications.js';
 export * from './services/trade.service.js';
+export * from './services/tradeActivity.service.js';
+export * from './domain/tradeActivity.js';
 export * from './services/proposal.service.js';
 export * from './services/fulfilment.service.js';
 export * from './services/fulfilmentPorts.js';

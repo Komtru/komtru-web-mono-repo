@@ -228,3 +228,65 @@ export const tradeByCodeResponseSchema = z.strictObject({
   counterparty: counterpartyDisplaySchema.nullable(),
 });
 export type TradeByCodeResponse = z.infer<typeof tradeByCodeResponseSchema>;
+
+// ---------------------------------------------------------------------------
+// The trade's activity feed (F-022 UI half): what a party may read of its history
+// ---------------------------------------------------------------------------
+
+/**
+ * What happened, as a closed label. The copy is the client's; the server never sends free text, because the
+ * rows it is built from carry deadlines, risk wording and internal ids that a party must not read.
+ */
+export const TRADE_ACTIVITY_KINDS = [
+  'PROPOSAL_SENT',
+  'PROPOSAL_HELD',
+  'PROPOSAL_NOT_SENT',
+  'INVITATION_CLAIMED',
+  'TERMS_CHANGED',
+  'TERMS_AGREED',
+  'PROPOSAL_DECLINED',
+  'TRADE_CANCELLED',
+  'TRADE_EXPIRED',
+  'FUNDS_PROTECTED',
+  'SHIPPED',
+  'DELIVERY_REPORTED',
+  'DELIVERY_CONFIRMED',
+  'DELIVERY_ASSUMED',
+  'TRADE_COMPLETED',
+  'INSPECTION_ELAPSED',
+  'SETTLED',
+  'REFUNDED',
+  'DISPUTE_OPENED',
+  'DISPUTE_RESOLVED',
+  'DELIVERY_EXTENSION_REQUESTED',
+  'DELIVERY_EXTENSION_ACCEPTED',
+  'DELIVERY_EXTENSION_DECLINED',
+  'DELIVERY_EXTENSION_LAPSED',
+  'INSPECTION_EXTENSION_REQUESTED',
+  'INSPECTION_EXTENSION_ACCEPTED',
+  'INSPECTION_EXTENSION_DECLINED',
+  'INSPECTION_EXTENSION_LAPSED',
+] as const;
+export const tradeActivityKindSchema = z.enum(TRADE_ACTIVITY_KINDS);
+export type TradeActivityKind = z.infer<typeof tradeActivityKindSchema>;
+
+/** Who did it, from the reader's side. Staff, the platform and the ledger are all `KOMTRU`. */
+export const TRADE_ACTIVITY_ACTORS = ['YOU', 'OTHER_PARTY', 'KOMTRU'] as const;
+
+/** `S:<n>` is a state change, `A:<n>` an activity row. Opaque to a client; unique within a trade. */
+export const TRADE_ACTIVITY_ID_PATTERN = /^[SA]:\d{1,18}$/;
+
+export const tradeActivityItemSchema = z.strictObject({
+  id: z.string().regex(TRADE_ACTIVITY_ID_PATTERN),
+  occurredAt: z.iso.datetime(),
+  kind: tradeActivityKindSchema,
+  actor: z.enum(TRADE_ACTIVITY_ACTORS),
+  /** The status the trade was in after this, for a state change; `null` for the rest. */
+  toStatus: tradeStatusSchema.nullable(),
+  /** Written by a party on a decline or a cancellation, and only then. Never a staff or system reason. */
+  reason: z.string().nullable(),
+});
+export type TradeActivityItem = z.infer<typeof tradeActivityItemSchema>;
+
+export const tradeActivityResponseSchema = paginatedSchema(tradeActivityItemSchema);
+export type TradeActivityResponse = z.infer<typeof tradeActivityResponseSchema>;

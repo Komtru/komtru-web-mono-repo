@@ -5,6 +5,7 @@
 //   GET  /trades                the caller's trades, newest-relevant first (cursor-paginated)
 //   GET  /trades/by-code/:code  resolve a trade code for a party or the named invitee, else 404
 //   GET  /trades/:id            the trade as the caller sees it
+//   GET  /trades/:id/activity   the trade's history as a party may read it (cursor-paginated)
 //   POST /trades/:id/send       name the counterparty (username, email or phone) and send
 //   POST /trades/:id/counter    W2/BR1: a counter-proposal, a new terms version and the turn flips
 //   POST /trades/:id/accept     W1/W3: accept the version on screen; moves to PENDING_PAYMENT
@@ -16,6 +17,7 @@
 // response, and each service function is itself a no-op on a repeat by the same person.
 import {
   canonicalTradeCodeSchema,
+  tradeActivityResponseSchema,
   tradeByCodeResponseSchema,
   tradeListResponseSchema,
   tradeListStateSchema,
@@ -35,6 +37,7 @@ import {
 } from '../services/proposal.service.js';
 import { cancelTrade, declineTrade, getTrade } from '../services/trade.service.js';
 import type { TradeDeps } from '../services/ports.js';
+import { listTradeActivity } from '../services/tradeActivity.service.js';
 import { listTrades, resolveTradeByCode, withCounterparty } from '../services/tradeList.service.js';
 import {
   acceptBodySchema,
@@ -131,6 +134,23 @@ export function tradeRoutes(deps: Deps): RouteDefinition[] {
       schema: { params: tradeIdParamSchema, response: tradeViewSchema },
       handler: async (ctx) =>
         withCounterparty(deps(), await getTrade(deps(), { userId: me(ctx.actor), tradeId: ctx.params.id })),
+    }),
+
+    defineRoute({
+      method: 'get',
+      path: '/trades/:id/activity',
+      scope: 'CONSUMER',
+      summary: "A trade's history, as a party may read it: labels and times, never staff detail",
+      paginated: 'cursor',
+      rateLimit: { ...LIST_BUDGET },
+      schema: { params: tradeIdParamSchema, response: tradeActivityResponseSchema },
+      handler: (ctx) =>
+        listTradeActivity(deps(), {
+          userId: me(ctx.actor),
+          tradeId: ctx.params.id,
+          limit: ctx.query.limit ?? 20,
+          cursor: ctx.cursor,
+        }),
     }),
 
     defineRoute({
