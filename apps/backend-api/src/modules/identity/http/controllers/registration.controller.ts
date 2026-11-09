@@ -213,6 +213,12 @@ export async function resendCode(
   );
 }
 
+/** What TOS1 shows a stranger: the published versions, read from config, no user and no database. */
+export const publishedTerms = (deps: RegistrationControllerDeps) => ({
+  termsVersion: deps.terms.termsVersion,
+  privacyVersion: deps.terms.privacyVersion,
+});
+
 export async function getTerms(deps: RegistrationControllerDeps, actor: Actor) {
   const userId = requireUserId(actor, 'Sign in to see which Terms you have accepted');
   const state = await termsStateFor(deps.db, deps, userId);

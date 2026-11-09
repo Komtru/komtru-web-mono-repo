@@ -96,6 +96,7 @@ describe('identity module wiring (T-032)', () => {
         'POST /auth/password/forgot',
         'POST /auth/password/reset',
         'POST /auth/password/change',
+        'GET /auth/terms',
         'GET /me/terms',
         'POST /me/terms/accept',
       ]),

@@ -8,6 +8,7 @@ import { normaliseEmail, normalisePhone } from '../../../../platform/identifiers
 import {
   getTerms,
   postAcceptTerms,
+  publishedTerms,
   registerUser,
   resendCode,
   verifyOtp,
@@ -16,6 +17,7 @@ import {
 import {
   acceptTermsRequestSchema,
   okResponseSchema,
+  publishedTermsResponseSchema,
   registerRequestSchema,
   registerResponseSchema,
   resendOtpRequestSchema,
@@ -134,6 +136,15 @@ export function registrationRoutes(deps: RegistrationControllerDeps): RouteDefin
       },
       schema: { body: verifyOtpRequestSchema, response: verifyOtpResponseSchema },
       handler: (ctx) => verifyOtp(deps, ctx.req, ctx.body),
+    }),
+
+    defineRoute({
+      method: 'get',
+      path: '/auth/terms',
+      scope: 'PUBLIC',
+      summary: 'The Terms and Privacy versions in force, for screen TOS1 before an account exists',
+      schema: { response: publishedTermsResponseSchema },
+      handler: () => publishedTerms(deps),
     }),
 
     defineRoute({
