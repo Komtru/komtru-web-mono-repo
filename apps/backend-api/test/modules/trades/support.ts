@@ -84,7 +84,14 @@ export const insertTrade = async (
  * real `config/fees.yaml` version: a fixture that copies one goes stale the first time a fee
  * changes, and nothing here depends on the value beyond its being text.
  */
-export const testFeeSnapshot = (itemMinor = 45_000_000n, feeMinor = 675_000n, commissionMinor = 0n) => ({
+export const testFeeSnapshot = (
+  itemMinor = 45_000_000n,
+  feeMinor = 675_000n,
+  commissionMinor = 0n,
+  /** Q4's treatment, frozen on the trade. Both branches decide whether a buyer gets the fee back,
+   * so neither may be reachable only through a unit test (T-074). */
+  refundableOnFullRefund = true,
+) => ({
   version: 'test-fee-schedule',
   currency: 'NGN' as const,
   takenAt: new Date().toISOString(),
@@ -101,7 +108,7 @@ export const testFeeSnapshot = (itemMinor = 45_000_000n, feeMinor = 675_000n, co
     buyerProtectionBps: 150,
     buyerProtectionMinMinor: '0',
     buyerProtectionMaxMinor: null,
-    buyerProtectionRefundableOnFullRefund: true,
+    buyerProtectionRefundableOnFullRefund: refundableOnFullRefund,
     commissionBps: 0,
     commissionMinMinor: '0',
     commissionMaxMinor: null,
@@ -113,8 +120,9 @@ export const feeSnapshotColumnValues = (
   itemMinor = 45_000_000n,
   feeMinor = 675_000n,
   commissionMinor = 0n,
+  refundableOnFullRefund = true,
 ) => {
-  const snapshot = testFeeSnapshot(itemMinor, feeMinor, commissionMinor);
+  const snapshot = testFeeSnapshot(itemMinor, feeMinor, commissionMinor, refundableOnFullRefund);
   return {
     fee_schedule_version: snapshot.version,
     item_amount_minor: snapshot.amounts.itemMinor,
