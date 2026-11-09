@@ -3,13 +3,13 @@ import { ProblemError } from '@komtru/api-client';
 import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { TradeScreen } from '../src/trade/TradeScreen';
-import { knownTradeIds } from '../src/trade/known-trades';
 import { expectNoAxeViolations } from './axe';
 import {
-  ME_ID,
   SHELL_RULES,
   address,
   answerWith,
+  counterparty,
+  listItem,
   callsTo,
   id,
   page,
@@ -42,6 +42,7 @@ const withTrade = (view: unknown, more: Record<string, unknown> = {}) =>
     'GET /trades/:id': view,
     'GET /me/addresses': page([address(1)]),
     'GET /config/trade-standards': standardsPage(),
+    'GET /trades': page([]),
     ...more,
   });
 
@@ -54,19 +55,11 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe('opening a trade', () => {
-  it('adds a trade somebody opens to the list on this device', async () => {
-    withTrade(tradeView({ status: 'PENDING_PAYMENT', awaiting: null }));
-    renderWithApi(api.call, <TradeScreen id={id(1)} />);
-    await screen.findByRole('heading', { name: 'Terms agreed' });
-    expect(knownTradeIds(ME_ID)).toEqual([id(1)]);
-  });
-
   it('says a trade cannot be found, with no retry, when the platform says 404', async () => {
     withTrade(problem('NOT_FOUND', 404));
     renderWithApi(api.call, <TradeScreen id={id(1)} />);
     expect(await screen.findByText("We can't find that trade. It may have been withdrawn.")).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'Try again' })).toBeNull();
-    expect(knownTradeIds(ME_ID)).toEqual([]);
   });
 
   it('offers a retry for any other failure', async () => {
@@ -241,6 +234,77 @@ describe('a proposal waiting on the seller (R1)', () => {
   });
 });
 
+describe('who is on the other side', () => {
+  it("shows the counterparty from the trades list: R1's buyer strip", async () => {
+    withTrade(tradeView(), { 'GET /trades': page([listItem(1)]) });
+    renderWithApi(api.call, <TradeScreen id={id(1)} />);
+    expect(await screen.findByText('Amaka B.')).toBeTruthy();
+    expect(screen.getByText('AB')).toBeTruthy();
+  });
+
+  it('falls back to the handle, and draws no strip when the platform has no counterparty to show', async () => {
+    withTrade(tradeView(), {
+      'GET /trades': page([listItem(1, { counterparty: counterparty({ displayName: null }) })]),
+    });
+    const first = renderWithApi(api.call, <TradeScreen id={id(1)} />);
+    expect(await screen.findByText('@amaka')).toBeTruthy();
+    first.unmount();
+
+    withTrade(tradeView(), { 'GET /trades': page([listItem(1, { counterparty: null })]) });
+    renderWithApi(api.call, <TradeScreen id={id(1)} />);
+    await screen.findByText('Apple iPhone 13 Pro');
+    expect(screen.queryByText('Amaka B.')).toBeNull();
+    expect(screen.queryByText('A Komtru member')).toBeNull();
+  });
+});
+
+describe('the proof the pinned standard asks for', () => {
+  const fashionTrade = (over: Record<string, unknown> = {}) =>
+    tradeView({
+      categoryCode: 'fashion',
+      categoryName: 'Fashion & Luxury',
+      standardVersion: 1,
+      terms: { ...tradeView().terms, itemSpec: { brand: 'Zara' } },
+      ...over,
+    });
+
+  it("asks for exactly the pinned standard's photos: electronics two", async () => {
+    withTrade(tradeView());
+    renderWithApi(api.call, <TradeScreen id={id(1)} />);
+    expect(await screen.findByText(/Attach 2 photos or video of the item/)).toBeTruthy();
+  });
+
+  it('asks for none when the pinned standard asks for none, and lets the seller accept', async () => {
+    withTrade(fashionTrade());
+    renderWithApi(api.call, <TradeScreen id={id(1)} />);
+    const accept = await screen.findByRole<HTMLButtonElement>('button', { name: 'Accept trade request' });
+    await waitFor(() => {
+      expect(screen.getByRole<HTMLInputElement>('radio', { name: /Home/ }).checked).toBe(true);
+    });
+    expect(accept.disabled).toBe(false);
+    expect(screen.queryByText('Proof of the item needed')).toBeNull();
+  });
+
+  it('does not guess a category from the item details: a fashion trade whose details look like electronics still follows its own standard', async () => {
+    withTrade(
+      fashionTrade({
+        terms: { ...tradeView().terms, itemSpec: { brand: 'Apple', model: 'iPhone', condition: 'New' } },
+      }),
+    );
+    renderWithApi(api.call, <TradeScreen id={id(1)} />);
+    const accept = await screen.findByRole<HTMLButtonElement>('button', { name: 'Accept trade request' });
+    await waitFor(() => {
+      expect(accept.disabled).toBe(false);
+    });
+  });
+
+  it('asks for one photo when the pinned version is no longer the current one, and the platform decides the rest', async () => {
+    withTrade(fashionTrade({ standardVersion: 99 }));
+    renderWithApi(api.call, <TradeScreen id={id(1)} />);
+    expect(await screen.findByText(/Attach 1 photo or video of the item/)).toBeTruthy();
+  });
+});
+
 describe('a proposal waiting on the buyer (Customer-2)', () => {
   it('asks for a delivery address, not proof, and accepts without any', async () => {
     withTrade(
@@ -285,7 +349,7 @@ describe('waiting on the other party, and the invite', () => {
     });
     const { container } = renderWithApi(api.call, <TradeScreen id={id(1)} />);
     expect(await screen.findByRole('heading', { name: 'Request sent' })).toBeTruthy();
-    expect(screen.getByText('KMT-90428').className).toContain('font-mono');
+    expect(screen.getByText('KMT-9042800-NG').className).toContain('font-mono');
     await expectNoAxeViolations(container, SHELL_RULES);
 
     fireEvent.click(screen.getByRole('button', { name: 'Cancel this request' }));
@@ -295,13 +359,23 @@ describe('waiting on the other party, and the invite', () => {
     expect(callsTo(api.call, 'POST', '/trades/:id/cancel')).toHaveLength(1);
   });
 
+  it('offers the sender the platform link and says the receiver still needs the right account', async () => {
+    const writeText = vi.fn(() => Promise.resolve());
+    vi.stubGlobal('navigator', { clipboard: { writeText } });
+    withTrade(tradeView({ yourRole: 'BUYER', status: 'PENDING_COUNTERPARTY', awaiting: null }));
+    renderWithApi(api.call, <TradeScreen id={id(1)} />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Copy the link' }));
+    expect(writeText).toHaveBeenCalledWith('https://app.komtru.com/trades/KMT-9042800-NG');
+    expect(await screen.findByRole('button', { name: 'Link copied' })).toBeTruthy();
+    expect(screen.getByText(/lets no one in/)).toBeTruthy();
+    vi.unstubAllGlobals();
+  });
+
   it('tells the sender of an invitation that the request waits for the person to join', async () => {
     withTrade(tradeView({ yourRole: 'BUYER', status: 'PENDING_COUNTERPARTY', awaiting: null }));
     renderWithApi(api.call, <TradeScreen id={id(1)} />);
     expect(await screen.findByRole('heading', { name: 'Invitation waiting' })).toBeTruthy();
     expect(screen.getByText(/They're not on Komtru yet/)).toBeTruthy();
-    // Nothing sends a link and nothing tells the sender to pass one on.
-    expect(screen.queryByText(/link/i)).toBeNull();
     expect(screen.queryByText(/Send them/)).toBeNull();
     expect(screen.getByRole('button', { name: 'Withdraw the invitation' })).toBeTruthy();
   });
@@ -451,13 +525,13 @@ describe('held for review (G3) and not sent (IF1)', () => {
         yourRole: 'BUYER',
         status: 'UNDER_PROPOSAL_REVIEW',
         awaiting: null,
-        tradeCode: 'KMT-90138',
+        tradeCode: 'KMT-9013800-NG',
       }),
     );
     const { container } = renderWithApi(api.call, <TradeScreen id={id(1)} />);
     expect(await screen.findByRole('heading', { name: 'Held for review' })).toBeTruthy();
     expect(screen.getByText(/This isn't a judgment about you/)).toBeTruthy();
-    expect(screen.getByText('KMT-90138')).toBeTruthy();
+    expect(screen.getByText('KMT-9013800-NG')).toBeTruthy();
     expect(screen.getByRole('link', { name: 'Back to your trades' }).getAttribute('href')).toBe('/trades');
     // No ID upload: the platform has no route that takes it.
     expect(screen.queryByText(/Upload a government-issued ID/)).toBeNull();
@@ -543,7 +617,7 @@ describe('ended and moved-on trades', () => {
   it('shows a trade past the agreement as a plain summary rather than guessing at its state', async () => {
     withTrade(tradeView({ status: 'FUNDED', awaiting: null }));
     renderWithApi(api.call, <TradeScreen id={id(1)} />);
-    expect(await screen.findByRole('heading', { name: 'KMT-90428' })).toBeTruthy();
+    expect(await screen.findByRole('heading', { name: 'KMT-9042800-NG' })).toBeTruthy();
     expect(screen.getByLabelText('Terms of this trade')).toBeTruthy();
   });
 });

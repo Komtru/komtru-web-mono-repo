@@ -7,11 +7,11 @@ against the real app and a canned stand-in for the backend, signed in through a 
 | -------------- | ------------------------ | ---------------- |
 | I3             | `/trade/new`             | 9.19%            |
 | CTS1           | `/trade/standards`       | 5.93%            |
-| IF1 (see note) | `/trade/[id]` (rejected) | 21.49%           |
-| G3             | `/trade/[id]` (held)     | 25.86%           |
-| Q1             | `/trades`                | 4.71%            |
-| R1             | `/trade/[id]` (seller)   | 10.57%           |
-| Customer-2     | `/trade/[id]` (buyer)    | 12.68%           |
+| IF1 (see note) | `/trade/[id]` (rejected) | 21.13%           |
+| G3             | `/trade/[id]` (held)     | 25.52%           |
+| Q1             | `/trades`                | 5.12%            |
+| R1             | `/trade/[id]` (seller)   | 9.98%            |
+| Customer-2     | `/trade/[id]` (buyer)    | 10.07%           |
 | TC-05          | `/trade/[id]/counter`    | 15.18%           |
 | TC-06          | `/trade/[id]` (agreed)   | 9.38%            |
 

@@ -7,7 +7,6 @@ import { readAppConfig } from '@komtru/app-kit';
 import { useRouter } from 'next/navigation';
 import { useCallback, useState } from 'react';
 import { appSpec, webAppEnv } from '../app-config';
-import { forgetKnownTrades } from '../trade/known-trades';
 import { clearOfflineCache } from './ServiceWorker';
 
 /**
@@ -26,8 +25,7 @@ export function Providers({ children }: { children: React.ReactNode }): React.JS
   const config = readAppConfig(appSpec, webAppEnv());
 
   const onSessionEnded = useCallback(() => {
-    // Everything kept for the person whose session just ended, before the next one can see it.
-    forgetKnownTrades();
+    // The previous person's cached trades must not be handed to the next one from memory.
     queries.clear();
     // Everything this device saved belonged to the person whose session just ended. The Cache API
     // is per origin, not per person, and the phone at a motor park counter is a shared phone — so

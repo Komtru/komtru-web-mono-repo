@@ -3,7 +3,7 @@
 - **Reference:** `docs/design-reference/Komtru — UI Living Master v2.html` line 3775 — IMEI Verification — Mobile Web · Extends Create Trade
 - **Built:** http://localhost:3101/trade/0190b0a0-0000-7000-8000-000000000004
 - **Frame:** mobile, 340px reference frame; compared at 340 × 660
-- **Differing pixels:** 48,222 of 224,400 (21.49%)
+- **Differing pixels:** 47,407 of 224,400 (21.13%)
 - **Side by side:** `IF1.png` (reference · built · heat map) — **heat map:** `IF1.diff.png`
 
 ## Deviations

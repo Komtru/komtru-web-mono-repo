@@ -1,3 +1,5 @@
+import { tradeCodeSchema } from '@komtru/shared-types';
+
 // The app's navigation, as data.
 //
 // One account (design C22, §6.3). v2 draws two views of it behind a Buy/Sell switch, five
@@ -93,18 +95,18 @@ const YEAR_SECONDS = 60 * 60 * 24 * 365;
 export const modeCookie = (mode: Mode, secure: boolean): string =>
   `${MODE_COOKIE}=${mode}; path=/; max-age=${YEAR_SECONDS}; samesite=lax${secure ? '; secure' : ''}`;
 
-const TRADE_CODE = /^KMT-\d+$/i;
-
 /**
- * Where the global search and Trade Code bar sends a query: a Trade Code goes to the trades list
- * filtered by it (the trade workspace has no route yet, T-116), anything else is Discover's results,
- * and an empty query goes nowhere. Only a strict `KMT-<digits>` is ever put in a path or query as is;
- * everything else is encoded as a query value, so no input can name another route or host.
+ * Where the global search and Trade Code bar sends a query: a Trade Code goes to that code's own page,
+ * which opens the trade for a party or the person it invited (and says "no trade found for you" to
+ * anyone else); anything else is Discover's results; an empty query goes nowhere. A code is only put
+ * in the path in its canonical `KMT-<digits>-NG` form, which `tradeCodeSchema` produces from what was
+ * typed, so no input can name another route or host. Everything else is encoded as a query value.
  */
 export function searchDestination(query: string): string | undefined {
   const text = query.trim();
   if (text === '') return undefined;
-  if (TRADE_CODE.test(text)) return `/trades?code=${text.toUpperCase()}`;
+  const code = tradeCodeSchema.safeParse(text);
+  if (code.success) return `/trades/${code.data}`;
   return `/browse?q=${encodeURIComponent(text)}`;
 }
 

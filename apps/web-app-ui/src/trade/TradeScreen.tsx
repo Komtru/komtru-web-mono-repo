@@ -4,10 +4,9 @@ import type { TradeView } from '@komtru/api-client';
 import {
   useAcceptTrade,
   useCancelTrade,
-  useClaimTrade,
   useDeclineTrade,
-  useMe,
   useTrade,
+  useTradeList,
   useTradeStandards,
   tradeKeys,
 } from '@komtru/api-client/react';
@@ -16,6 +15,7 @@ import {
   Button,
   CodeCard,
   ItemCard,
+  PartyStrip,
   LoadFailed,
   LoadingScreen,
   NoteBanner,
@@ -35,19 +35,22 @@ import {
   WarnBanner,
 } from '@komtru/ui-kit';
 import { useQueryClient } from '@tanstack/react-query';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { AddressPicker } from './AddressPicker';
+import { ClaimPanel } from './ClaimPanel';
+import { ShareTrade } from './ShareTrade';
 import {
   addressLine,
   hoursLabel,
   isProblem,
   itemSub,
   itemTitle,
+  initialsOf,
   naira,
+  partyName,
+  pinnedStandard,
   problemMessage,
-  proofRequired,
 } from './format';
-import { rememberTrade } from './known-trades';
 import { ProofUpload } from './ProofUpload';
 
 /**
@@ -60,14 +63,6 @@ import { ProofUpload } from './ProofUpload';
  */
 export function TradeScreen({ id }: { id: string }): React.JSX.Element {
   const trade = useTrade(id);
-  const me = useMe();
-
-  // A trade somebody opens is a trade they are part of, so it joins their list on this device.
-  const found = trade.data !== undefined;
-  const userId = me.data?.id;
-  useEffect(() => {
-    if (found && userId !== undefined) rememberTrade(userId, id);
-  }, [found, userId, id]);
 
   if (trade.isPending) {
     return (
@@ -114,6 +109,23 @@ function TradeState({ trade }: { trade: TradeView }): React.JSX.Element {
 // ---------------------------------------------------------------------------
 // Shared pieces
 // ---------------------------------------------------------------------------
+
+/**
+ * Who is on the other side, from the trades list (the single-trade view carries no counterparty). `null`
+ * when the platform has none to show (not bound yet, or a closed account); `undefined` until the list is
+ * in, or when this trade is not on its first page. Either way the strip is simply not drawn.
+ */
+function useCounterparty(tradeId: string) {
+  const list = useTradeList('ALL');
+  return list.data?.pages.flatMap((page) => page.items).find((item) => item.id === tradeId)?.counterparty;
+}
+
+function PartyHeader({ tradeId }: { tradeId: string }): React.JSX.Element | null {
+  const party = useCounterparty(tradeId);
+  if (party === undefined || party === null) return null;
+  const name = partyName(party);
+  return <PartyStrip name={name} initials={initialsOf(name.replace(/^@/, ''))} />;
+}
 
 function ItemSummary({ trade }: { trade: TradeView }): React.JSX.Element | null {
   if (trade.terms === null) return null;
@@ -219,8 +231,11 @@ function AnswerProposal({ trade }: { trade: TradeView }): React.JSX.Element {
   const [reason, setReason] = useState('');
   const [problem, setProblem] = useState<string | undefined>(undefined);
 
-  // One until the standards have loaded, then what the category asks for.
-  const needed = selling ? proofRequired(trade.terms?.itemSpec, standards.data ?? []) : 0;
+  // What the standard this trade pinned asks for. One while the standards load, and one for a trade
+  // whose pinned version cannot be found (the platform has published a newer one): the platform makes
+  // the final call either way and says what is missing.
+  const pinned = pinnedStandard(trade, standards.data ?? []);
+  const needed = selling ? (pinned?.proofMedia.minPhotos ?? 1) : 0;
   const ready = trade.terms !== null && addressId !== null && proof.length >= needed;
 
   const onAccept = () => {
@@ -267,6 +282,7 @@ function AnswerProposal({ trade }: { trade: TradeView }): React.JSX.Element {
           : 'A seller proposed these terms. Review them, then accept, change them or decline.'}
       </NoteBanner>
       <ItemSummary trade={trade} />
+      <PartyHeader tradeId={trade.id} />
       <SectionLabel>{selling ? "Buyer's proposed terms" : 'Terms of this trade'}</SectionLabel>
       <TermsRows trade={trade} />
       <div className="mt-[16px]">
@@ -362,6 +378,7 @@ function WaitingOnThem({ trade }: { trade: TradeView }): React.JSX.Element {
       </StatusHero>
       <ItemSummary trade={trade} />
       <CodeCard label="Trade Code" code={trade.tradeCode} />
+      <ShareTrade shareUrl={trade.shareUrl} code={trade.tradeCode} />
       {problem !== undefined && <RiskBanner>{problem}</RiskBanner>}
       <ActionStack>
         {BACK_TO_TRADES}
@@ -395,11 +412,6 @@ function WaitingOnThem({ trade }: { trade: TradeView }): React.JSX.Element {
 }
 
 function ClaimInvitation({ trade }: { trade: TradeView }): React.JSX.Element {
-  const claim = useClaimTrade();
-  // Taking your place needs a usable saved address, and a person invited by phone or email has none
-  // yet. The picker is the way to add one, so the screen never ends on "add an address" with nowhere to.
-  const [addressId, setAddressId] = useState<string | null>(null);
-  const [problem, setProblem] = useState<string | undefined>(undefined);
   return (
     <ScreenColumn>
       <ScreenHeader title="You're invited" backHref="/trades" />
@@ -407,27 +419,7 @@ function ClaimInvitation({ trade }: { trade: TradeView }): React.JSX.Element {
         Someone invited you to this trade. Take your place in it to see the terms and answer.
       </NoteBanner>
       <ItemSummary trade={trade} />
-      <AddressPicker
-        label={trade.yourRole === 'SELLER' ? 'Ships from' : 'Delivery address'}
-        value={addressId}
-        onChange={setAddressId}
-      />
-      {problem !== undefined && <RiskBanner>{problem}</RiskBanner>}
-      <ActionStack>
-        <Button
-          type="button"
-          disabled={claim.isPending || addressId === null}
-          onClick={() => {
-            setProblem(undefined);
-            claim.mutate(trade.id, {
-              onError: (error) =>
-                setProblem(problemMessage(error, "We couldn't add you to this trade. Try again.")),
-            });
-          }}
-        >
-          {claim.isPending ? 'Joining…' : 'Take your place'}
-        </Button>
-      </ActionStack>
+      <ClaimPanel tradeId={trade.id} role={trade.yourRole} />
     </ScreenColumn>
   );
 }

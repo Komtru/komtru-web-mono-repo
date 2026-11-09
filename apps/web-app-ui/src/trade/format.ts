@@ -1,7 +1,12 @@
 // What a proposal screen says and how it says it. Pure functions, so the wording rules are tested
 // without a DOM. Money arrives as a digit string of kobo and is only ever formatted here, never summed.
 import { ProblemError, type TradeStandard, type TradeView } from '@komtru/api-client';
-import { formatNaira } from '@komtru/shared-types';
+import {
+  formatNaira,
+  type CounterpartyDisplay,
+  type TradeAttention,
+  type TradeListItem,
+} from '@komtru/shared-types';
 
 export const naira = (minor: string): string => formatNaira(BigInt(minor));
 
@@ -19,6 +24,10 @@ export const initialsOf = (name: string): string =>
     .map((part) => part[0] ?? '')
     .join('')
     .toUpperCase();
+
+/** A person's name as a row or strip shows it: display name, else handle, else nothing guessed. */
+export const partyName = (party: CounterpartyDisplay): string =>
+  party.displayName ?? (party.username === null ? 'A Komtru member' : `@${party.username}`);
 
 export const isProblem = (error: unknown, code: string): error is ProblemError =>
   error instanceof ProblemError && error.code === code;
@@ -105,28 +114,41 @@ export interface TradeState {
   label: string;
   /** The line under the row on the list, after the trade code. */
   sub: string;
-  /** Whether this row is waiting on the person looking at it. */
-  needsYou: boolean;
   /** Finished without being funded: nothing more to do. */
   closed: boolean;
 }
 
+/** Why a trade is waiting on you, in a chip's words. The server decides *whether*; this only words it. */
+const ATTENTION_LABEL: Record<TradeAttention, string> = {
+  RESPOND_TO_PROPOSAL: 'Your answer',
+  PAY: 'Payment due',
+  SHIP: 'Ship it',
+  CONFIRM_DELIVERY: 'Confirm delivery',
+  INSPECT: 'Inspect it',
+  RESPOND_TO_EXTENSION: 'Extension request',
+};
+
 /**
- * Where a proposal stands, in the words the person would use. The status names are the backend's;
- * one this version does not know falls back to a neutral line rather than hiding the trade.
+ * Where a trade stands, in the words the person would use. The status names and `attention` are the
+ * backend's: whether the trade is waiting on you is never decided here, because it depends on state a
+ * row cannot see. A status this version does not know falls back to a neutral line.
  */
-export function describeTrade(
-  trade: Pick<TradeView, 'status' | 'awaiting' | 'tradeCode' | 'yourRole' | 'initiatorRole'>,
-): TradeState {
+export function describeTrade(trade: Pick<TradeListItem, 'status' | 'attention' | 'tradeCode'>): TradeState {
   const code = `Proposal ${trade.tradeCode}`;
-  const mine = trade.yourRole === trade.initiatorRole;
+  if (trade.attention !== null) {
+    return {
+      tone: 'awaiting',
+      label: ATTENTION_LABEL[trade.attention],
+      sub: trade.status === 'AWAITING_ACCEPTANCE' ? `${code} · waiting for you` : `Trade ${trade.tradeCode}`,
+      closed: false,
+    };
+  }
   switch (trade.status) {
     case 'UNDER_PROPOSAL_REVIEW':
       return {
         tone: 'verifying',
         label: 'Verification Needed',
         sub: `${code} · held for review, not yet sent`,
-        needsYou: mine,
         closed: false,
       };
     case 'PENDING_COUNTERPARTY':
@@ -134,78 +156,45 @@ export function describeTrade(
         tone: 'awaiting',
         label: 'Invited',
         sub: `${code} · waiting for them to join Komtru`,
-        needsYou: false,
         closed: false,
       };
     case 'AWAITING_ACCEPTANCE':
-      return trade.awaiting === 'YOU'
-        ? {
-            tone: 'awaiting',
-            label: 'Your answer',
-            sub: `${code} · waiting for you`,
-            needsYou: true,
-            closed: false,
-          }
-        : {
-            tone: 'awaiting',
-            label: 'Sent',
-            sub: `${code} · waiting for their answer`,
-            needsYou: false,
-            closed: false,
-          };
+      return { tone: 'awaiting', label: 'Sent', sub: `${code} · waiting for their answer`, closed: false };
     case 'PENDING_PAYMENT':
       return {
         tone: 'protected',
         label: 'Terms agreed',
         sub: `${code} · agreed, waiting for payment`,
-        needsYou: false,
         closed: false,
       };
     case 'DECLINED':
-      return { tone: 'risk', label: 'Declined', sub: code, needsYou: false, closed: true };
+      return { tone: 'risk', label: 'Declined', sub: code, closed: true };
     case 'REJECTED':
-      return {
-        tone: 'risk',
-        label: 'Not sent',
-        sub: `${code} · did not pass review`,
-        needsYou: false,
-        closed: true,
-      };
+      return { tone: 'risk', label: 'Not sent', sub: `${code} · did not pass review`, closed: true };
     case 'CANCELLED':
-      return { tone: 'risk', label: 'Cancelled', sub: code, needsYou: false, closed: true };
+      return { tone: 'risk', label: 'Cancelled', sub: code, closed: true };
     case 'EXPIRED':
-      return { tone: 'risk', label: 'Expired', sub: code, needsYou: false, closed: true };
+      return { tone: 'risk', label: 'Expired', sub: code, closed: true };
     case 'DRAFT':
-      return {
-        tone: 'awaiting',
-        label: 'Draft',
-        sub: `${code} · not sent yet`,
-        needsYou: mine,
-        closed: false,
-      };
+      return { tone: 'awaiting', label: 'Draft', sub: `${code} · not sent yet`, closed: false };
     default:
-      return {
-        tone: 'protected',
-        label: 'In progress',
-        sub: `Trade ${trade.tradeCode}`,
-        needsYou: false,
-        closed: false,
-      };
+      return { tone: 'protected', label: 'In progress', sub: `Trade ${trade.tradeCode}`, closed: false };
   }
 }
 
 /**
- * How many photos the seller must attach to accept. The trade view does not say which category it is
- * in (reported as an API gap), so the category is recognised by its item details: the standards whose
- * required fields the trade's item spec fills. Where that is still more than one, the strictest wins,
- * so the screen never lets someone try with less than the platform will ask for. Always at least one,
- * because acceptance without any proof is never allowed; the platform makes the final call.
+ * The Trade Standard a trade pinned: the one for exactly its category and version. A trade with no
+ * category has none. When the platform has since published a newer version the pinned one is not in
+ * the current list, and `undefined` says so (the version is only addressable by id, which the trade
+ * view does not carry; reported as an API gap).
  */
-export function proofRequired(spec: unknown, standards: readonly TradeStandard[]): number {
-  const record = asRecord(spec);
-  const matching = standards.filter((standard) =>
-    standard.itemSpecFields.every((field) => !field.required || text(record[field.key]) !== undefined),
+export function pinnedStandard(
+  trade: Pick<TradeView, 'categoryCode' | 'standardVersion'>,
+  standards: readonly TradeStandard[],
+): TradeStandard | undefined {
+  if (trade.categoryCode === null || trade.standardVersion === null) return undefined;
+  return standards.find(
+    (standard) =>
+      standard.categoryCode === trade.categoryCode && standard.versionNumber === trade.standardVersion,
   );
-  const pool = matching.length > 0 ? matching : standards;
-  return Math.max(1, ...pool.map((standard) => standard.proofMedia.minPhotos));
 }

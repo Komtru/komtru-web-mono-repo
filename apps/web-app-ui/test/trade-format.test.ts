@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
-import { ProblemError, type ResponseMeta } from '@komtru/api-client';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { ProblemError, type ResponseMeta, type TradeStandard } from '@komtru/api-client';
+import { describe, expect, it } from 'vitest';
 import {
   addressLine,
   describeTrade,
@@ -10,10 +10,10 @@ import {
   itemTitle,
   naira,
   nairaShort,
+  partyName,
   problemMessage,
-  proofRequired,
+  pinnedStandard,
 } from '../src/trade/format';
-import { forgetKnownTrades, forgetTrade, knownTradeIds, rememberTrade } from '../src/trade/known-trades';
 
 const meta: ResponseMeta = {
   status: 422,
@@ -113,123 +113,72 @@ describe('small formatters', () => {
 });
 
 describe('describeTrade', () => {
-  const base = { tradeCode: 'KMT-90138', yourRole: 'BUYER', initiatorRole: 'BUYER', awaiting: null } as const;
+  const base = { tradeCode: 'KMT-9013800-NG', attention: null } as const;
 
-  it('marks a held proposal as Verification Needed for the person who proposed it, as Q1 draws it', () => {
+  it('marks a held proposal Verification Needed, as Q1 draws it', () => {
     expect(describeTrade({ ...base, status: 'UNDER_PROPOSAL_REVIEW' })).toMatchObject({
       tone: 'verifying',
       label: 'Verification Needed',
-      needsYou: true,
     });
   });
 
-  it('is waiting on you only when the backend says awaiting YOU', () => {
-    expect(describeTrade({ ...base, status: 'AWAITING_ACCEPTANCE', awaiting: 'YOU' }).needsYou).toBe(true);
-    expect(describeTrade({ ...base, status: 'AWAITING_ACCEPTANCE', awaiting: 'COUNTERPARTY' }).needsYou).toBe(
-      false,
-    );
+  it("words the server's attention and never decides it", () => {
+    expect(
+      describeTrade({ ...base, status: 'AWAITING_ACCEPTANCE', attention: 'RESPOND_TO_PROPOSAL' }).label,
+    ).toBe('Your answer');
+    expect(describeTrade({ ...base, status: 'PENDING_PAYMENT', attention: 'PAY' }).label).toBe('Payment due');
+    // A proposal that is the other party's turn is "Sent" whatever the status says about turns.
+    expect(describeTrade({ ...base, status: 'AWAITING_ACCEPTANCE' }).label).toBe('Sent');
   });
 
-  it.each(['DECLINED', 'REJECTED', 'CANCELLED', 'EXPIRED'])('treats %s as closed', (status) => {
+  it.each(['DECLINED', 'REJECTED', 'CANCELLED', 'EXPIRED'] as const)('treats %s as closed', (status) => {
     expect(describeTrade({ ...base, status }).closed).toBe(true);
   });
 
   it('shows a status it has never heard of as in progress rather than hiding the trade', () => {
-    expect(describeTrade({ ...base, status: 'SOMETHING_NEW' })).toMatchObject({
+    expect(describeTrade({ ...base, status: 'SOMETHING_NEW' as never })).toMatchObject({
       label: 'In progress',
       closed: false,
     });
   });
 });
 
-describe('known trades', () => {
-  const ADA = 'user-ada';
-  const BOLA = 'user-bola';
-  const key = (user: string) => `komtru.trades.known.${user}`;
-
-  beforeEach(() => {
-    window.localStorage.clear();
-  });
-
-  it('remembers ids newest first, once each', () => {
-    rememberTrade(ADA, 'a');
-    rememberTrade(ADA, 'b');
-    rememberTrade(ADA, 'a');
-    expect(knownTradeIds(ADA)).toEqual(['a', 'b']);
-  });
-
-  it("keeps each person's list apart, so a second person on the phone sees none of the first's", () => {
-    rememberTrade(ADA, 'a');
-    expect(knownTradeIds(BOLA)).toEqual([]);
-    rememberTrade(BOLA, 'b');
-    expect(knownTradeIds(ADA)).toEqual(['a']);
-  });
-
-  it('keeps the newest hundred and drops the rest', () => {
-    for (let n = 0; n < 105; n += 1) rememberTrade(ADA, `t${String(n)}`);
-    const ids = knownTradeIds(ADA);
-    expect(ids).toHaveLength(100);
-    expect(ids[0]).toBe('t104');
-    expect(ids).not.toContain('t4');
-  });
-
-  it('forgets one id that can never be read again, and only that one', () => {
-    rememberTrade(ADA, 'a');
-    rememberTrade(ADA, 'b');
-    forgetTrade(ADA, 'a');
-    expect(knownTradeIds(ADA)).toEqual(['b']);
-  });
-
-  it("clears every person's list on sign-out, and the unscoped key an earlier build wrote", () => {
-    rememberTrade(ADA, 'a');
-    rememberTrade(BOLA, 'b');
-    window.localStorage.setItem('komtru.trades.known', JSON.stringify(['old']));
-    window.localStorage.setItem('unrelated', 'kept');
-    forgetKnownTrades();
-    expect(window.localStorage.getItem(key(ADA))).toBeNull();
-    expect(window.localStorage.getItem(key(BOLA))).toBeNull();
-    expect(window.localStorage.getItem('komtru.trades.known')).toBeNull();
-    expect(window.localStorage.getItem('unrelated')).toBe('kept');
-  });
-
-  it('reads corrupted or wrongly shaped storage as empty', () => {
-    window.localStorage.setItem(key(ADA), '{not json');
-    expect(knownTradeIds(ADA)).toEqual([]);
-    window.localStorage.setItem(key(ADA), JSON.stringify({ not: 'a list' }));
-    expect(knownTradeIds(ADA)).toEqual([]);
-    window.localStorage.setItem(key(ADA), JSON.stringify(['ok', 7, null]));
-    expect(knownTradeIds(ADA)).toEqual(['ok']);
+describe('partyName', () => {
+  const party = { publicId: 'U', username: null, displayName: null, avatarUrl: null };
+  it('prefers the display name, then the handle, and guesses nothing else', () => {
+    expect(partyName({ ...party, displayName: 'Amaka B.', username: 'amaka' })).toBe('Amaka B.');
+    expect(partyName({ ...party, username: 'amaka' })).toBe('@amaka');
+    expect(partyName(party)).toBe('A Komtru member');
   });
 });
 
-describe('proofRequired', () => {
-  const standard = (categoryCode: string, required: string[], minPhotos: number) =>
+describe('pinnedStandard', () => {
+  const standard = (categoryCode: string, versionNumber: number, minPhotos: number) =>
     ({
       versionId: 'v',
       categoryCode,
       categoryName: categoryCode,
-      versionNumber: 1,
+      versionNumber,
       createdAt: '',
       inspectionWindowHours: 24,
-      itemSpecFields: required.map((key) => ({ key, label: key, required: true })),
+      itemSpecFields: [] as TradeStandard['itemSpecFields'],
       proofMedia: { minPhotos, requireVideo: false },
       imeiVerification: false,
       deliveryDeadlineDays: 7,
-    }) as const;
-  const standards = [
-    standard('electronics', ['brand', 'model'], 3),
-    standard('fashion', ['brand', 'size'], 2),
-  ];
+    }) satisfies TradeStandard;
+  const standards: TradeStandard[] = [standard('electronics', 2, 3), standard('fashion', 1, 0)];
 
-  it("asks what the item's own category asks, recognised by the details it carries", () => {
-    expect(proofRequired({ brand: 'Apple', model: 'iPhone' }, standards)).toBe(3);
-    expect(proofRequired({ brand: 'Zara', size: 'M' }, standards)).toBe(2);
+  it('finds exactly the category and version the trade pinned', () => {
+    expect(
+      pinnedStandard({ categoryCode: 'electronics', standardVersion: 2 }, standards)?.proofMedia.minPhotos,
+    ).toBe(3);
+    expect(
+      pinnedStandard({ categoryCode: 'fashion', standardVersion: 1 }, standards)?.proofMedia.minPhotos,
+    ).toBe(0);
   });
 
-  it('takes the strictest when the details fit more than one category, never less than one', () => {
-    expect(proofRequired({ brand: 'X', model: 'Y', size: 'Z' }, standards)).toBe(3);
-    expect(proofRequired({}, standards)).toBe(3);
-    expect(proofRequired({}, [])).toBe(1);
-    expect(proofRequired({ brand: 'a' }, [standard('x', ['brand'], 0)])).toBe(1);
+  it('finds nothing for a trade with no category, or whose version is no longer current', () => {
+    expect(pinnedStandard({ categoryCode: null, standardVersion: null }, standards)).toBeUndefined();
+    expect(pinnedStandard({ categoryCode: 'electronics', standardVersion: 1 }, standards)).toBeUndefined();
   });
 });

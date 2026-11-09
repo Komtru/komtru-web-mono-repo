@@ -4,7 +4,6 @@ import { QueryClient } from '@tanstack/react-query';
 import { cleanup, render, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { Providers } from '../src/shell/Providers';
-import { knownTradeIds, rememberTrade } from '../src/trade/known-trades';
 
 const router = vi.hoisted(() => ({ push: vi.fn(), replace: vi.fn(), refresh: vi.fn() }));
 vi.mock('next/navigation', () => ({ useRouter: () => router }));
@@ -37,7 +36,6 @@ function makeClient(): QueryClient {
 }
 
 beforeEach(() => {
-  window.localStorage.clear();
   router.replace.mockReset();
   provided.props = undefined;
   clients.length = 0;
@@ -45,9 +43,7 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe('when a session ends', () => {
-  it("forgets every person's trade list on this device and empties the in-memory cache, then goes to sign-in", async () => {
-    rememberTrade('user-ada', 'trade-a');
-    rememberTrade('user-bola', 'trade-b');
+  it("empties the in-memory query cache, so the next person is not handed the last one's trades, then goes to sign-in", async () => {
     render(
       <Providers>
         <p>app</p>
@@ -63,8 +59,6 @@ describe('when a session ends', () => {
     await waitFor(() => {
       expect(router.replace).toHaveBeenCalledWith('/login');
     });
-    expect(knownTradeIds('user-ada')).toEqual([]);
-    expect(knownTradeIds('user-bola')).toEqual([]);
     expect(client?.getQueryData(['trades', 'trade-a'])).toBeUndefined();
   });
 });

@@ -3,10 +3,8 @@ import { ProblemError } from '@komtru/api-client';
 import { cleanup, fireEvent, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { StartTrade } from '../src/trade/StartTrade';
-import { knownTradeIds } from '../src/trade/known-trades';
 import { expectNoAxeViolations } from './axe';
 import {
-  ME_ID,
   SHELL_RULES,
   address,
   answerWith,
@@ -104,7 +102,6 @@ describe('Start Trade (I3)', () => {
     const send = callsTo(api.call, 'POST', '/trades/:id/send')[0];
     expect(send?.params).toEqual({ id: id(1) });
     expect(send?.body).toEqual({ username: 'techedge' });
-    expect(knownTradeIds(ME_ID)).toEqual([id(1)]);
   });
 
   it('shows what the buyer pays from the platform, and never works it out itself', async () => {
@@ -343,7 +340,6 @@ describe('Start Trade (I3)', () => {
       id(12),
     ]);
     expect(callsTo(api.call, 'POST', '/trades/:id/cancel')[0]?.params).toEqual({ id: id(11) });
-    expect(knownTradeIds(ME_ID)).toEqual([id(12)]);
   });
 
   it('changes the draft when the side, the category or the address changes too', async () => {
@@ -373,15 +369,6 @@ describe('Start Trade (I3)', () => {
       expect(callsTo(api.call, 'POST', '/trades')).toHaveLength(2);
     });
     expect(callsTo(api.call, 'POST', '/trades')[1]?.body).toMatchObject({ addressId: id(2) });
-  });
-
-  it('does not put an unsent draft on the list when the send fails', async () => {
-    answerWith(api.call, baseHandlers({ 'POST /trades/:id/send': problem('INTERNAL', 500) }));
-    renderWithApi(api.call, <StartTrade />);
-    await fillBuyer();
-    fireEvent.click(screen.getByRole('button', { name: 'Send Trade request' }));
-    await screen.findByText(/We couldn't send that request/);
-    expect(knownTradeIds(ME_ID)).toEqual([]);
   });
 
   it('shows the shape of the page while the categories load, and offers a retry if they cannot', async () => {

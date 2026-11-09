@@ -8,7 +8,6 @@ import {
   type TradeView,
 } from '@komtru/api-client';
 import {
-  meQueryOptions,
   useApiClient,
   useCancelTrade,
   useCreateTrade,
@@ -33,12 +32,10 @@ import {
   WarnBanner,
 } from '@komtru/ui-kit';
 import { nairaToKobo } from '@komtru/shared-types';
-import { useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'next/navigation';
 import { useEffect, useMemo, useState } from 'react';
 import { AddressPicker } from './AddressPicker';
 import { initialsOf, naira, problemMessage } from './format';
-import { rememberTrade } from './known-trades';
 import { ProofUpload } from './ProofUpload';
 
 export interface StartTradeProps {
@@ -77,7 +74,6 @@ export function StartTrade({ defaultRole = 'BUYER', counterparty = '' }: StartTr
   const create = useCreateTrade();
   const send = useSendTrade();
   const cancel = useCancelTrade();
-  const queryClient = useQueryClient();
 
   const [categoryCode, setCategoryCode] = useState('');
   const [chosenRole, setChosenRole] = useState<TradeRole>(defaultRole);
@@ -201,13 +197,6 @@ export function StartTrade({ defaultRole = 'BUYER', counterparty = '' }: StartTr
             : { phone: party.value }),
         ...(role === 'SELLER' && proof.length > 0 ? { proofFileIds: proof } : {}),
       });
-      // A trade joins this person's list on this device only once it has been sent, never as a draft.
-      await queryClient
-        .ensureQueryData(meQueryOptions(client))
-        .then((me) => {
-          rememberTrade(me.id, sent.id);
-        })
-        .catch(() => undefined);
       router.push(`/trade/${sent.id}`);
     } catch (error) {
       setProblem(problemMessage(error, "We couldn't send that request. Check the details and try again."));

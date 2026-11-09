@@ -22,13 +22,9 @@ export const id = (n: number): string => `0190b0a0-0000-7000-8000-${String(n).pa
 
 type Handler = (input: CallInput) => unknown;
 
-/** The signed-in person. Every screen asks who they are before it touches the per-person device list. */
-export const ME_ID = id(900);
-const ME = { id: ME_ID, publicId: 'U-ME' };
-
 /** Makes a mocked `client.call` answer by "METHOD /path". A handler may be a value, a function or a thrown error. */
 export function answerWith(call: Mock<CallFn>, given: Record<string, unknown>): void {
-  const handlers: Record<string, unknown> = { 'GET /me': ME, ...given };
+  const handlers: Record<string, unknown> = { ...given };
   call.mockImplementation((endpoint, input = {}) => {
     const key = `${endpoint.method.toUpperCase()} ${endpoint.path}`;
     if (!(key in handlers)) return Promise.reject(new Error(`no handler for ${key}`));
@@ -158,7 +154,11 @@ export const miss = (canInvite = true) => ({ found: false, canInvite, maskedHint
 
 export const tradeView = (over: Record<string, unknown> = {}): TradeView => ({
   id: id(1),
-  tradeCode: 'KMT-90428',
+  tradeCode: 'KMT-9042800-NG',
+  shareUrl: 'https://app.komtru.com/trades/KMT-9042800-NG',
+  categoryCode: 'electronics',
+  categoryName: 'Electronics',
+  standardVersion: 1,
   status: 'AWAITING_ACCEPTANCE',
   statusRevision: 2,
   initiatorRole: 'BUYER',
@@ -182,6 +182,35 @@ export const tradeView = (over: Record<string, unknown> = {}): TradeView => ({
   sentAt: '2026-11-09T09:05:00.000Z',
   acceptedAt: null,
   createdAt: '2026-11-09T09:00:00.000Z',
+  ...over,
+});
+
+export const counterparty = (over: Record<string, unknown> = {}) => ({
+  publicId: 'U-AMAKA',
+  username: 'amaka',
+  displayName: 'Amaka B.',
+  avatarUrl: null,
+  ...over,
+});
+
+/** One row of `GET /trades`. */
+export const listItem = (n: number, over: Record<string, unknown> = {}) => ({
+  id: id(n),
+  tradeCode: `KMT-90${String(n).padStart(3, '0')}00-NG`,
+  status: 'AWAITING_ACCEPTANCE',
+  statusRevision: 2,
+  yourRole: 'SELLER',
+  initiatorRole: 'BUYER',
+  awaiting: 'YOU',
+  attention: 'RESPOND_TO_PROPOSAL',
+  counterparty: counterparty(),
+  item: { title: 'Apple iPhone 13 Pro', categoryCode: 'electronics', categoryName: 'Electronics' },
+  currency: 'NGN',
+  itemAmountMinor: '45200000',
+  buyerTotalMinor: null,
+  sentAt: '2026-11-09T09:05:00.000Z',
+  createdAt: '2026-11-09T09:00:00.000Z',
+  updatedAt: '2026-11-09T09:05:00.000Z',
   ...over,
 });
 
