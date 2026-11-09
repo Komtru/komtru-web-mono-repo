@@ -229,6 +229,11 @@
       "tag": "0045_trade_fulfilment",
       "when": 1794248737522,
       "sha256": "2af08e7564d63728f43588e6a9bcb226e3030fcb5076b891ba21c6b1692a0dc7"
+    },
+    {
+      "tag": "0046_trade_inspection",
+      "when": 1794249558354,
+      "sha256": "598f78588dec0853021cf1bf8bd27939406bc3ba31647ba42bb4cf3267b4ae08"
     }
   ]
 }
