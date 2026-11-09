@@ -7,7 +7,11 @@ import { runSeeds } from './seed-runner.js';
 try {
   const config = loadConfig(process.env);
   if (!config.postgres.directUrl) throw new ConfigError(['POSTGRES_DIRECT_URL'], []);
-  await runSeeds({ directUrl: config.postgres.directUrl, ssl: config.postgres.ssl });
+  await runSeeds({
+    directUrl: config.postgres.directUrl,
+    ssl: config.postgres.ssl,
+    caCertPath: config.postgres.caCertPath,
+  });
 } catch (error) {
   process.stderr.write(`${error instanceof ConfigError ? error.message : 'Seeding failed.'}\n`);
   if (!(error instanceof ConfigError) && error instanceof Error) process.stderr.write(`${error.stack}\n`);

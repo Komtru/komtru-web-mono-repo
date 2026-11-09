@@ -4,6 +4,7 @@ import type { Redis } from 'ioredis';
 import pg from 'pg';
 import type { AppConfig } from '../config/env.js';
 import type { HealthCheck } from './health.js';
+import { postgresSslOptions } from './postgres-ssl.js';
 import { createRedis } from './redis/connections.js';
 
 export interface Clients {
@@ -16,7 +17,7 @@ export function createClients(config: AppConfig): Clients {
   const pool = new pg.Pool({
     connectionString: config.postgres.url,
     max: config.postgres.poolMax,
-    ssl: config.postgres.ssl ? { rejectUnauthorized: true } : false,
+    ssl: postgresSslOptions(config.postgres),
     connectionTimeoutMillis: 5000,
     idleTimeoutMillis: 30_000,
   });

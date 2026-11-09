@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url';
 import { drizzle } from 'drizzle-orm/node-postgres';
 import { migrate } from 'drizzle-orm/node-postgres/migrator';
 import pg from 'pg';
+import { postgresSslOptions } from '../platform/postgres-ssl.js';
 import type { Logger } from '../platform/logger.js';
 import { MIGRATIONS_SCHEMA, grantRuntimeAccess, setRuntimePassword, verifyLockdown } from './roles.js';
 
@@ -14,6 +15,8 @@ export interface MigrateOptions {
   directUrl: string;
   appPassword?: string;
   ssl?: boolean;
+  /** Path to a PEM CA bundle, from POSTGRES_CA_CERT. */
+  caCertPath?: string | undefined;
   logger?: Pick<Logger, 'info'>;
 }
 
@@ -21,11 +24,12 @@ export async function runMigrations({
   directUrl,
   appPassword,
   ssl = false,
+  caCertPath,
   logger,
 }: MigrateOptions): Promise<void> {
   const client = new pg.Client({
     connectionString: directUrl,
-    ssl: ssl ? { rejectUnauthorized: true } : false,
+    ssl: postgresSslOptions({ ssl, caCertPath }),
   });
   await client.connect();
   try {
