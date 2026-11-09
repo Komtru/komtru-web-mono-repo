@@ -197,6 +197,18 @@ export const tradeListResponseSchema = paginatedSchema(tradeListItemSchema);
  */
 export const TRADE_ACCESS_KINDS = ['PARTY', 'INVITEE'] as const;
 
+/**
+ * The category a trade was proposed in and the version of its Trade Standard the trade pinned, on every
+ * single-trade view. A client reads the standard (`proofMedia.minPhotos` and the rest) for exactly
+ * `(categoryCode, standardVersion)` instead of inferring a category from the item details. All three are
+ * `null` together on a trade with no category.
+ */
+export const tradeCategoryFieldsSchema = z.object({
+  categoryCode: z.string().nullable(),
+  categoryName: z.string().nullable(),
+  standardVersion: z.number().int().nullable(),
+});
+
 export const tradeByCodeResponseSchema = z.strictObject({
   access: z.enum(TRADE_ACCESS_KINDS),
   trade: z.looseObject({
@@ -205,6 +217,7 @@ export const tradeByCodeResponseSchema = z.strictObject({
     status: tradeStatusSchema,
     statusRevision: z.number(),
     yourRole: tradeRoleSchema,
+    ...tradeCategoryFieldsSchema.shape,
   }),
   /** The OTHER party: for an invitee, whoever invited them. */
   counterparty: counterpartyDisplaySchema.nullable(),

@@ -83,12 +83,13 @@ describe.runIf(infraEnabled)('ship step (T-064)', () => {
 
     it('refuses to ship into a refund in flight: the delivery deadline has elapsed', async () => {
       const trade = await tradeAt(t, 'FUNDED');
+      const elapsedAt = new Date(Date.now() - 1000).toISOString();
       await insertRow(t.owner(), 'trade.trade_deadlines', {
         trade_id: trade.tradeId,
         kind: 'DELIVERY',
         status: 'ELAPSED',
-        due_at: new Date(Date.now() - 1000).toISOString(),
-        original_due_at: new Date(Date.now() - 1000).toISOString(),
+        due_at: elapsedAt,
+        original_due_at: elapsedAt,
         resolved_at: new Date().toISOString(),
       });
       const error = await failure(ship(trade));

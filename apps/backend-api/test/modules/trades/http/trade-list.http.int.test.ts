@@ -24,7 +24,7 @@ import { testPrincipal } from '../../../support/actors.js';
 import { infraEnabled } from '../../../support/db-urls.js';
 import { useTestDatabase } from '../../../support/db.js';
 import { createTestRedis, redisReady, testLogger } from '../../identity/support.js';
-import { person, tradeAt } from '../services/fulfilment-support.js';
+import { person, standard, tradeAt } from '../services/fulfilment-support.js';
 import { driveTo, insertRow, insertTermsVersion, insertTrade } from '../support.js';
 
 describe.runIf(infraEnabled)('the trades list and the lookup by code', () => {
@@ -373,6 +373,32 @@ describe.runIf(infraEnabled)('the trades list and the lookup by code', () => {
         expect(body.trade.fees).not.toBeNull();
         expect(body.trade.shareUrl).toBe(`https://app.komtru.com/trades/${code}`);
       }
+    });
+
+    it('carries the category and the pinned standard version on the trade view', async () => {
+      await t.owner().query(
+        `INSERT INTO config.trade_categories (id, code, name) VALUES ($1, 'PHONES', 'Phones')
+         ON CONFLICT (code) DO NOTHING`,
+        [standard.categoryId],
+      );
+      const f = await tradeAt(t, 'PENDING_PAYMENT');
+      const code = await codeOf(f.tradeId);
+      const party = tradeByCodeResponseSchema.parse(
+        (await appFor(f.buyer).get(`/v1/trades/by-code/${code}`)).body,
+      );
+      expect(party.trade).toMatchObject({
+        categoryCode: 'PHONES',
+        categoryName: 'Phones',
+        standardVersion: 3,
+      });
+      const byId = (await appFor(f.buyer).get(`/v1/trades/${f.tradeId}`)).body;
+      expect(byId).toMatchObject({ categoryCode: 'PHONES', categoryName: 'Phones', standardVersion: 3 });
+
+      // A trade with no category reports all three as null rather than a guess.
+      const bare = await person(t);
+      const none = await insertTrade(t.owner(), { seller: bare, role: 'SELLER' });
+      const noneView = (await appFor(bare).get(`/v1/trades/${none}`)).body;
+      expect(noneView).toMatchObject({ categoryCode: null, categoryName: null, standardVersion: null });
     });
 
     it('opens a preview for the named invitee, with no addresses and no fees, and the id to claim with', async () => {
