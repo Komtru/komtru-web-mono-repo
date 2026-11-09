@@ -471,3 +471,15 @@ VALUE` cannot work here at all (drizzle runs every pending migration in one tran
 - Tickets: none.
 - Next: once the weekly window resets, a full `KOMTRU_INFRA_TESTS=1` run on `main` (still owed from
   the T-052/T-072 merges), then the ledger critical path T-064, T-073, T-074, T-075.
+
+## 2026-11-09 21:13 WAT — run summary
+
+- Usage at start: 5h 12%, week 91%. At end: 5h 12%, week 91%.
+- Capacity: 0. skipped: budget (5h 12%, week 91%). Weekly usage is past the 85% owner reserve;
+  it resets 2026-11-10 14:59 WAT.
+- Features: none started or resumed. Two worktrees exist, `f-017-propose` (UI layer, 6 commits, uncommitted
+  visual-check edits) and `f-022-workspace` (backend realtime and notifications, migration 0047). Both had
+  commits within the last few minutes, so another session is working on them now, and this run left them alone.
+- Next: after the weekly reset, if those sessions are no longer active, review and merge F-017 and F-022
+  (they are in different apps/modules, and only F-022 adds a migration). Then the full `KOMTRU_INFRA_TESTS=1`
+  run on `main` that is still owed.
