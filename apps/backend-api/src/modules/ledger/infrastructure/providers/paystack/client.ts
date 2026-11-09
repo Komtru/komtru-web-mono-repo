@@ -43,6 +43,7 @@ import type {
   TransferRecipientInput,
   TransferRecipientResult,
 } from '../../../domain/providerAdapter.js';
+import { ChargeNotFoundError } from '../../../domain/funding.js';
 import { parsePaystackEvent } from './events.js';
 import { verifyPaystackSignature } from './signature.js';
 
@@ -94,6 +95,11 @@ interface CallSpec {
    * re-enters through code that can check what already happened.
    */
   idempotent?: boolean;
+  /**
+   * Turns one specific refusal into an error of the caller's own, before the generic translation.
+   * Given the HTTP status (200 for an envelope with `status: false`) and the provider's body.
+   */
+  recognise?: (status: number, body: unknown) => Error | undefined;
 }
 
 /**
@@ -126,6 +132,8 @@ async function call(options: PaystackClientOptions, spec: CallSpec): Promise<Pay
     });
     const envelope = response.body;
     if (envelope.status !== true) {
+      const recognised = spec.recognise?.(200, envelope);
+      if (recognised) throw recognised;
       throw new ApiError(
         502,
         'PAYMENT_PROVIDER_UNAVAILABLE',
@@ -135,10 +143,12 @@ async function call(options: PaystackClientOptions, spec: CallSpec): Promise<Pay
     }
     return envelope;
   } catch (error) {
-    if (error instanceof ApiError) throw error;
+    if (error instanceof ApiError || error instanceof ChargeNotFoundError) throw error;
     // Only the provider's own failures are translated. A TypeError from our code here is a bug, and
     // dressing it as a provider outage would hide it behind a retry and point the operator at Paystack.
     if (error instanceof ProviderHttpError) {
+      const recognised = spec.recognise?.(error.status, error.body);
+      if (recognised) throw recognised;
       throw new ApiError(
         502,
         'PAYMENT_PROVIDER_UNAVAILABLE',
@@ -228,6 +238,11 @@ export const initializeCharge = async (
   };
 };
 
+const mentionsNotFound = (body: unknown): boolean => {
+  const message = (body as { message?: unknown } | null)?.message;
+  return typeof message === 'string' && /not\s*found/i.test(message);
+};
+
 export interface VerifiedCharge {
   reference: string;
   status: string;
@@ -268,6 +283,12 @@ export const verifyCharge = async (
       method: 'GET',
       path: `/transaction/verify/${encodeURIComponent(reference)}`,
       idempotent: true,
+      // Paystack answers an unknown reference with a 400 and "Transaction reference not found".
+      // That is an answer about the charge, not a failed call: the attempt records it (AB4).
+      recognise: (status, body) =>
+        (status === 400 || status === 404 || status === 200) && mentionsNotFound(body)
+          ? new ChargeNotFoundError(reference)
+          : undefined,
     },
     verifyTransactionResponse,
   );

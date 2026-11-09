@@ -1,6 +1,29 @@
 // Shared helpers for the ledger schema's integration tests.
 import { randomUUID } from 'node:crypto';
 import type pg from 'pg';
+import type { AccountRef, LedgerAccountType } from '../../../src/modules/ledger/index.js';
+
+/**
+ * A ref for any account type in the chart, with a fresh scope where the type carries one. The
+ * switch has no `default`, so a type added to the chart without a case here fails to compile —
+ * which is what keeps the tests that iterate LEDGER_ACCOUNT_TYPES honest instead of silently
+ * skipping the new one.
+ */
+export const accountRefFor = (type: LedgerAccountType): AccountRef => {
+  switch (type) {
+    case 'USER_ESCROW_LIABILITY':
+    case 'BUYER_PROTECTION_FEE_LIABILITY':
+      return { type, tradeId: randomUUID() };
+    case 'USER_PAYABLE':
+      return { type, ownerUserId: randomUUID() };
+    case 'SETTLEMENT_CLEARING':
+      return { type, payoutId: randomUUID() };
+    case 'PLATFORM_ESCROW_POOL':
+    case 'PLATFORM_FEE_REVENUE':
+    case 'BUYER_PROTECTION_FEE_REVENUE':
+      return { type };
+  }
+};
 
 type Queryable = Pick<pg.Pool, 'query'> | Pick<pg.PoolClient, 'query'>;
 

@@ -6,6 +6,7 @@ import { describe, expect, it } from 'vitest';
 import {
   accountKey,
   accountBalance,
+  LEDGER_ACCOUNT_TYPES,
   claimJournalEntry,
   findEntriesByJournal,
   insertEntries,
@@ -15,7 +16,7 @@ import {
 } from '../../../src/modules/ledger/index.js';
 import { infraEnabled } from '../../support/db-urls.js';
 import { useTestDatabase } from '../../support/db.js';
-import { countRows, insertAccount, postRaw } from './support.js';
+import { accountRefFor, countRows, insertAccount, postRaw } from './support.js';
 
 describe.runIf(infraEnabled)('ledger account resolution', () => {
   const t = useTestDatabase();
@@ -38,27 +39,20 @@ describe.runIf(infraEnabled)('ledger account resolution', () => {
     expect(await countRows(t.app(), 'ledger.ledger_accounts')).toBe(1);
   });
 
-  it('names the account exactly as accountKey() does', async () => {
-    const ref: AccountRef = { type: 'SETTLEMENT_CLEARING', payoutId: randomUUID() };
-    const id = await resolve(ref);
-    const { rows } = await t
-      .app()
-      .query<{ account_key: string }>('SELECT account_key FROM ledger.ledger_accounts WHERE id = $1', [id]);
-    expect(rows[0]?.account_key).toBe(accountKey(ref));
-  });
-
-  it('names every platform account the way the database does', async () => {
-    for (const type of [
-      'PLATFORM_ESCROW_POOL',
-      'PLATFORM_FEE_REVENUE',
-      'BUYER_PROTECTION_FEE_REVENUE',
-    ] as const) {
-      const id = await resolve({ type });
-      const { rows } = await t
+  const keyOf = async (id: string) =>
+    (
+      await t
         .app()
-        .query<{ account_key: string }>('SELECT account_key FROM ledger.ledger_accounts WHERE id = $1', [id]);
-      expect(rows[0]?.account_key).toBe(accountKey({ type }));
-    }
+        .query<{ account_key: string }>('SELECT account_key FROM ledger.ledger_accounts WHERE id = $1', [id])
+    ).rows[0]?.account_key;
+
+  // The one agreement the whole module rests on: accountKey() in TypeScript and the GENERATED
+  // ALWAYS column in Postgres must spell the same account the same way, for every type and every
+  // currency. If they ever diverge, a balance read finds no row and reports a confident zero.
+  it.each([...LEDGER_ACCOUNT_TYPES])('names a %s exactly as accountKey() does', async (type) => {
+    const ref = accountRefFor(type);
+    expect(await keyOf(await resolve(ref))).toBe(accountKey(ref));
+    expect(await keyOf(await resolve(ref, 'USD'))).toBe(accountKey(ref, 'USD'));
   });
 
   it('gives two trades two escrow accounts and one trade one', async () => {

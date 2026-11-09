@@ -7,9 +7,20 @@
 import { createProviderRegistry, type ProviderRegistry } from '../infrastructure/providerRegistry.js';
 import {
   createPaystackAdapter,
+  verifyCharge,
   type PaystackClientOptions,
+  type VerifiedCharge,
 } from '../infrastructure/providers/paystack/client.js';
 
 /** The live registry. One more line per provider, forever. */
 export const paymentProviders = (options: PaystackClientOptions): ProviderRegistry =>
   createProviderRegistry({ PAYSTACK: createPaystackAdapter(options) });
+
+/**
+ * The transaction verify call (m8 §5), for the funding jobs. Not an adapter method — see
+ * `verifyCharge` — so it is wired here, in the one file allowed to import the client.
+ */
+export const chargeVerifier =
+  (options: PaystackClientOptions) =>
+  (reference: string): Promise<VerifiedCharge> =>
+    verifyCharge(options, reference);

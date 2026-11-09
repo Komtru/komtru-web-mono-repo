@@ -1,3 +1,4 @@
+import { ChargeNotFoundError } from '../../../src/modules/ledger/domain/funding.js';
 import { createHmac } from 'node:crypto';
 import type { ServerResponse } from 'node:http';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -243,6 +244,20 @@ describe('the paystack client', () => {
       paidAt: '2026-10-04T11:21:43.000Z',
     });
     expect(stub!.hits[0]!.path).toBe('/transaction/verify/trade%20fund%2F1');
+  });
+
+  it('reports a reference Paystack does not know as ChargeNotFoundError, not as an outage', async () => {
+    const options = await serving((_path, res) =>
+      json(res, 400, { status: false, message: 'Transaction reference not found' }),
+    );
+    await expect(verifyCharge(options, 'fund-x')).rejects.toBeInstanceOf(ChargeNotFoundError);
+  });
+
+  it('still reports any other verify refusal as the provider being unavailable', async () => {
+    const options = await serving((_path, res) => json(res, 400, { status: false, message: 'Invalid key' }));
+    const error = await verifyCharge(options, 'fund-x').catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(ApiError);
+    expect(error).not.toBeInstanceOf(ChargeNotFoundError);
   });
 
   it('treats a 200 carrying a failed envelope as an error, without echoing the key', async () => {
