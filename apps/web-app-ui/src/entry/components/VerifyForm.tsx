@@ -170,12 +170,17 @@ export function VerifyForm(): React.JSX.Element {
   })();
 
   const wrong = shown.kind === 'wrong';
+  // Outside production, when no SMS can be sent, the platform emails the code and says so by
+  // returning the masked inbox as the destination (`auth.service.ts`).
+  const byEmail = sent?.destination?.includes('@') === true;
 
   return (
     <EntryFrame title="Enter code" back={ENTRY.signUp} footer={footer}>
       <form id={FORM} onSubmit={(event) => void verify(event)}>
         <EntryHeading>Enter the 6-digit code</EntryHeading>
-        <Lede>Sent to {sent?.destination ?? 'your phone'} via SMS.</Lede>
+        <Lede>
+          Sent to {sent?.destination ?? 'your phone'} {byEmail ? 'by email' : 'via SMS'}.
+        </Lede>
         {sent?.delivered === false && (
           <Banner tone="warning" title="We couldn't send a code just now">
             Wait a few minutes, then ask for a new one.
@@ -217,8 +222,9 @@ export function VerifyForm(): React.JSX.Element {
           <ResendLine secondsLeft={secondsLeft} sending={sending} onResend={() => void resend()} />
         )}
         <TrustNote icon="info">
-          We text this code every time — Komtru never sends payment links by SMS. Treat any link claiming to
-          be from us with suspicion.
+          {byEmail
+            ? 'We send this code every time — Komtru never sends payment links by email or SMS. Treat any link claiming to be from us with suspicion.'
+            : 'We text this code every time — Komtru never sends payment links by SMS. Treat any link claiming to be from us with suspicion.'}
         </TrustNote>
       </form>
     </EntryFrame>

@@ -17,7 +17,7 @@ const FORM = 'terms-form';
 type Failure =
   | { kind: 'taken' }
   | { kind: 'stale' }
-  | { kind: 'invalid-phone'; message: string }
+  | { kind: 'invalid-contact'; message: string }
   | { kind: 'message'; message: string };
 
 /** Screen TOS1 — consent during sign-up, before the account is created. */
@@ -63,6 +63,7 @@ export function TermsForm(): React.JSX.Element {
         body: {
           channel: 'PHONE',
           phone: draft.phone,
+          email: draft.email,
           fullName: draft.fullName,
           acceptedTermsVersion: versions.termsVersion,
           acceptedPrivacyVersion: versions.privacyVersion,
@@ -149,10 +150,10 @@ function FailureText({ failure }: { failure: Failure }): React.JSX.Element {
       return (
         <ErrorText>The Terms were updated a moment ago. Read them again, then agree to carry on.</ErrorText>
       );
-    case 'invalid-phone':
+    case 'invalid-contact':
       return (
         <ErrorText>
-          {failure.message}. <InlineLink href={ENTRY.signUp}>Change the number</InlineLink>
+          {failure.message}. <InlineLink href={ENTRY.signUp}>Change your details</InlineLink>
         </ErrorText>
       );
     case 'message':
@@ -171,8 +172,9 @@ function failureFor(error: unknown): Failure {
     return error.problem.title === 'The Terms have changed' ? { kind: 'stale' } : { kind: 'taken' };
   }
   if (error.status === 422) {
-    const phone = error.problem.errors?.find((entry) => entry.path === 'phone');
-    if (phone !== undefined) return { kind: 'invalid-phone', message: phone.message.replace(/\.$/, '') };
+    const contact = error.problem.errors?.find((entry) => entry.path === 'phone' || entry.path === 'email');
+    if (contact !== undefined)
+      return { kind: 'invalid-contact', message: contact.message.replace(/\.$/, '') };
     return { kind: 'message', message: error.problem.detail ?? error.problem.title };
   }
   if (error.status === 429) {

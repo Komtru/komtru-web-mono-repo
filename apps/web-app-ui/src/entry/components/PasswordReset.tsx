@@ -230,9 +230,6 @@ export function ResetPasswordForm(): React.JSX.Element {
       <form id="reset-form" onSubmit={(event) => void submit(event)} noValidate>
         <h1 className="sr-only">Set a new password</h1>
         {expired && <ErrorText>This reset has expired. Start again to get a new code.</ErrorText>}
-        {sent?.destination !== null && sent?.destination !== undefined && (
-          <Lede>Enter the code sent to {sent.destination}.</Lede>
-        )}
         {resetToken === null && (
           <>
             <div className="mb-[4px]">

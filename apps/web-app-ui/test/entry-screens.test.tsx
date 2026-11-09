@@ -135,12 +135,27 @@ describe('E2 Sign up', () => {
     expect(router.push).not.toHaveBeenCalled();
   });
 
+  it('requires an email address, because it is where the code goes when no SMS can be sent', () => {
+    show(<SignUpForm />);
+    fireEvent.change(screen.getByLabelText('Phone number'), { target: { value: '0802 341 5567' } });
+    fireEvent.change(screen.getByLabelText('Email address'), { target: { value: 'ada@' } });
+    fireEvent.change(screen.getByLabelText('Full name'), { target: { value: 'Ada Obi' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Continue' }));
+    expect(screen.getByRole('alert').textContent).toMatch(/Enter your email address/);
+    expect(router.push).not.toHaveBeenCalled();
+  });
+
   it('keeps the details for the Terms screen, which opens the account', async () => {
     const { container } = show(<SignUpForm />);
     fireEvent.change(screen.getByLabelText('Phone number'), { target: { value: '0802 341 5567' } });
+    fireEvent.change(screen.getByLabelText('Email address'), { target: { value: 'ada@example.com' } });
     fireEvent.change(screen.getByLabelText('Full name'), { target: { value: 'Ada Obi' } });
     fireEvent.click(screen.getByRole('button', { name: 'Continue' }));
-    expect(signUpDraft.read()).toEqual({ phone: '0802 341 5567', fullName: 'Ada Obi' });
+    expect(signUpDraft.read()).toEqual({
+      phone: '0802 341 5567',
+      email: 'ada@example.com',
+      fullName: 'Ada Obi',
+    });
     expect(router.push).toHaveBeenCalledWith('/signup/terms');
     // Nothing is sent from E2: the account and the code both come from TOS1's one call.
     expect(network.sent).toEqual([]);
@@ -150,7 +165,7 @@ describe('E2 Sign up', () => {
 
 describe('TOS1 Terms', () => {
   beforeEach(() => {
-    signUpDraft.write({ phone: '0802 341 5567', fullName: 'Ada Obi' });
+    signUpDraft.write({ phone: '0802 341 5567', email: 'ada@example.com', fullName: 'Ada Obi' });
   });
 
   /** Waits for the Terms in force to load, ticks both boxes, agrees. */
@@ -194,6 +209,7 @@ describe('TOS1 Terms', () => {
     expect(network.to('/auth/register')[0]?.body).toEqual({
       channel: 'PHONE',
       phone: '0802 341 5567',
+      email: 'ada@example.com',
       fullName: 'Ada Obi',
       acceptedTermsVersion: '2026-09-01',
       acceptedPrivacyVersion: '2026-08-15',
@@ -239,6 +255,12 @@ describe('E3 and E3b Verify', () => {
     expect(screen.getByText('Sent to +23480•••5567 via SMS.')).toBeDefined();
     expect(screen.getByText(/Resend in 0:/)).toBeDefined();
     await expectNoAxeViolations(container);
+  });
+
+  it('says the code went by email when that is where the platform sent it', () => {
+    signUpCode.write({ challengeId, destination: 'a•••@example.com', delivered: true, sentAt: Date.now() });
+    show(<VerifyForm />);
+    expect(screen.getByText('Sent to a•••@example.com by email.')).toBeDefined();
   });
 
   it('shows E3b for a wrong code, with the attempts left', async () => {
