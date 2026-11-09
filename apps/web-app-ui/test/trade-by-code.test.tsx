@@ -46,6 +46,7 @@ const lookup = (access: 'PARTY' | 'INVITEE', over: Record<string, unknown> = {})
     categoryCode: 'electronics',
     categoryName: 'Electronics',
     standardVersion: 1,
+    standardVersionId: id(60),
   },
   counterparty: counterparty(),
   ...over,

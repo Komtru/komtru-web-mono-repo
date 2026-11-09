@@ -7,6 +7,7 @@ import {
   useDeclineTrade,
   useTrade,
   usePinnedStandard,
+  useTradeLive,
   tradeKeys,
 } from '@komtru/api-client/react';
 import {
@@ -32,7 +33,7 @@ import { ShareTrade } from './ShareTrade';
 import { isProblem, proofNeeds, problemMessage } from './format';
 import { BACK_TO_TRADES, ConfirmSheet, ItemSummary, PartyHeader, TermsRows } from './parts';
 import { ProofUpload } from './ProofUpload';
-import { Workspace } from './Workspace';
+import { Workspace } from './workspace/Workspace';
 import { isWorkspaceStatus, type WorkspaceTab } from './workspace-state';
 
 /**
@@ -46,6 +47,9 @@ import { isWorkspaceStatus, type WorkspaceTab } from './workspace-state';
  */
 export function TradeScreen({ id, tab = 'overview' }: { id: string; tab?: WorkspaceTab }): React.JSX.Element {
   const trade = useTrade(id);
+  // Every stage listens, not only the workspace: a proposer waiting on an answer is the person who most needs
+  // to see it arrive (AWAITING_ACCEPTANCE to PENDING_PAYMENT), and a held one is waiting on review.
+  useTradeLive(trade.data === undefined ? [] : [{ id: trade.data.id, code: trade.data.tradeCode }]);
 
   if (trade.isPending) {
     return (
@@ -88,10 +92,6 @@ function TradeState({ trade, tab }: { trade: TradeView; tab: WorkspaceTab }): Re
       return <MovedOn trade={trade} />;
   }
 }
-
-// ---------------------------------------------------------------------------
-// Shared pieces
-// ---------------------------------------------------------------------------
 
 // ---------------------------------------------------------------------------
 // R1 and Customer-2: a proposal waiting on you
@@ -376,11 +376,7 @@ function NotSent({ trade }: { trade: TradeView }): React.JSX.Element {
 }
 
 // ---------------------------------------------------------------------------
-// TC-06: terms agreed
-// ---------------------------------------------------------------------------
-
-// ---------------------------------------------------------------------------
-// The ends that are not an agreement, and everything after it
+// The ends that are not an agreement
 // ---------------------------------------------------------------------------
 
 const CLOSED: Record<string, { title: string; body: string }> = {

@@ -17,6 +17,7 @@ import {
   listItem,
   page,
   renderLive,
+  tradeView,
   workspaceTrade,
   type CallFn,
   type FakeSocket,
@@ -114,7 +115,7 @@ describe('the workspace follows the trade', () => {
     expect(fake.joins()[1]).toEqual({ prefix: 'trade', id: CODE });
   });
 
-  it('ignores a push older than what it last read', async () => {
+  it('reads for every push, however old its time or skewed this device clock, so a change is never hidden', async () => {
     current = workspaceTrade('FUNDED', 'BUYER');
     serve();
     const fake = fakeSocket();
@@ -122,16 +123,13 @@ describe('the workspace follows the trade', () => {
     await screen.findByText('Funds protected');
     await connect(fake);
     await waitFor(() => expect(fake.joins()).toHaveLength(1));
-    await waitFor(() => expect(reads()).toBeGreaterThan(1));
     const before = reads();
-
+    current = workspaceTrade('INSPECTION', 'BUYER');
     act(() => {
       fake.fire('trade:updated', push({ occurredAt: '2020-01-01T00:00:00.000Z' }));
     });
-    await act(async () => {
-      await Promise.resolve();
-    });
-    expect(reads()).toBe(before);
+    expect(await screen.findByText('Inspection active')).toBeTruthy();
+    expect(reads()).toBeGreaterThan(before);
   });
 
   it('keeps working when the room is refused, by reading the trade', async () => {
@@ -168,6 +166,52 @@ describe('the workspace follows the trade', () => {
       fake.fire('trade:updated', push());
     });
     expect(await screen.findByText('Seller dispatched')).toBeTruthy();
+  });
+});
+
+describe('a proposal still being answered follows the trade too', () => {
+  it('shows the person waiting for an answer that the agreement has been made', async () => {
+    let current: unknown = tradeView({
+      status: 'AWAITING_ACCEPTANCE',
+      yourRole: 'BUYER',
+      initiatorRole: 'BUYER',
+      awaiting: 'COUNTERPARTY',
+    });
+    answerWith(api.call, {
+      'GET /trades/:id': () => current,
+      'GET /trades': page([]),
+      'GET /trades/:id/delivery-deadline': deliveryDeadline(),
+      'GET /trades/:id/inspection': inspectionRead(),
+      'GET /trades/:id/activity': page([activityRow(1)]),
+    });
+    const fake = fakeSocket();
+    renderLive(api.call, fake, <TradeScreen id={id(1)} />);
+    expect(await screen.findByText('Request sent')).toBeTruthy();
+    await connect(fake);
+    await waitFor(() => expect(fake.joins()).toEqual([{ prefix: 'trade', id: CODE }]));
+
+    current = workspaceTrade('PENDING_PAYMENT', 'BUYER');
+    act(() => {
+      fake.fire(
+        'trade:updated',
+        push({ status: 'PENDING_PAYMENT', previousStatus: 'AWAITING_ACCEPTANCE', action: 'ACCEPT' }),
+      );
+    });
+    expect(await screen.findByRole('heading', { name: 'Terms agreed' })).toBeTruthy();
+  });
+
+  it('listens while a proposal is held, and does not listen twice once it is a workspace', async () => {
+    answerWith(api.call, {
+      'GET /trades/:id': () => workspaceTrade('FUNDED', 'BUYER'),
+      'GET /trades': page([]),
+      'GET /trades/:id/delivery-deadline': deliveryDeadline(),
+    });
+    const fake = fakeSocket();
+    renderLive(api.call, fake, <TradeScreen id={id(1)} />);
+    await screen.findByText('Funds protected');
+    await connect(fake);
+    await waitFor(() => expect(fake.joins()).toHaveLength(1));
+    expect(fake.listeners('trade:updated')).toBe(1);
   });
 });
 

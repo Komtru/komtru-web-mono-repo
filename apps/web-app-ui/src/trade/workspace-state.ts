@@ -67,22 +67,34 @@ export function workspaceStanding(status: WorkspaceStatus): WorkspaceStanding {
 // The tabs
 // ---------------------------------------------------------------------------
 
-export const WORKSPACE_TABS = ['overview', 'terms', 'activity', 'actions'] as const;
-export type WorkspaceTab = (typeof WORKSPACE_TABS)[number];
+/**
+ * The tabs of a trade, as data. THE EXTENSION SEAM: a later feature that adds a tab (a payment view, a case)
+ * adds one entry here and one component to the registry in `workspace/tabs.tsx`, which is typed to need every
+ * id in this list, so a tab with a title and no content (or the reverse) does not compile. The route
+ * `/trade/[id]/[tab]`, the tab strip and the header title all read this list.
+ */
+export const WORKSPACE_TAB_DEFS = [
+  { id: 'overview', label: 'Overview', title: 'Trade' },
+  { id: 'terms', label: 'Terms', title: 'Agreed Terms' },
+  { id: 'activity', label: 'Activity', title: 'Trade Activity' },
+  { id: 'actions', label: 'Actions', title: 'Trade Actions' },
+] as const;
 
-const TAB_LABEL: Record<WorkspaceTab, string> = {
-  overview: 'Overview',
-  terms: 'Terms',
-  activity: 'Activity',
-  actions: 'Actions',
-};
+export type WorkspaceTab = (typeof WORKSPACE_TAB_DEFS)[number]['id'];
+export const WORKSPACE_TABS: readonly WorkspaceTab[] = WORKSPACE_TAB_DEFS.map((tab) => tab.id);
+
+export const isWorkspaceTab = (value: string): value is WorkspaceTab =>
+  (WORKSPACE_TABS as readonly string[]).includes(value);
+
+export const tabTitle = (tab: WorkspaceTab): string =>
+  WORKSPACE_TAB_DEFS.find((def) => def.id === tab)?.title ?? 'Trade';
 
 /** The route of each tab; the overview is the trade's own address, the rest hang off it. */
 export const tabHref = (tradeId: string, tab: WorkspaceTab): string =>
   tab === 'overview' ? `/trade/${tradeId}` : `/trade/${tradeId}/${tab}`;
 
 export const tabItems = (tradeId: string) =>
-  WORKSPACE_TABS.map((tab) => ({ id: tab, label: TAB_LABEL[tab], href: tabHref(tradeId, tab) }));
+  WORKSPACE_TAB_DEFS.map((tab) => ({ id: tab.id, label: tab.label, href: tabHref(tradeId, tab.id) }));
 
 // ---------------------------------------------------------------------------
 // Actions (CWT-09)
@@ -104,6 +116,15 @@ export interface TradeActionRow {
 }
 
 const PRE_FUNDING: readonly WorkspaceStatus[] = ['PENDING_PAYMENT'];
+/** While the money sits with Komtru. Once it has been released or returned there is nothing left to guard. */
+const FUNDS_HELD: readonly WorkspaceStatus[] = [
+  'FUNDED',
+  'SHIPPED',
+  'UNCONFIRMED_DELIVERY',
+  'INSPECTION',
+  'DISPUTED',
+  'COMPLETED',
+];
 
 /**
  * What the person can do with this trade right now, derived from its status and from THEIR side of it. The
@@ -186,7 +207,7 @@ export function tradeActions(status: WorkspaceStatus, role: TradeRole, tradeId: 
       availability: 'live',
     });
   }
-  if (status !== 'PENDING_PAYMENT' && status !== 'CANCELLED_REFUNDED') {
+  if (FUNDS_HELD.includes(status)) {
     rows.push({
       id: 'release',
       title: 'Release funds · Guarded',
@@ -232,12 +253,15 @@ const ACTIVITY_TITLE: Record<TradeActivityKind, string> = {
   INSPECTION_EXTENSION_LAPSED: 'Request for more inspection time lapsed',
 };
 
-/** The one thing a row adds to its title: why it happened, where the platform records a state's cause. */
-const ACTIVITY_NOTE: Partial<Record<TradeActivityKind, string>> = {
-  FUNDS_PROTECTED: 'Funds are held by Komtru until the trade settles',
-  TRADE_COMPLETED: 'The buyer accepted the item',
-  INSPECTION_ELAPSED: 'No issue was reported, so the trade went on to settlement',
-  DELIVERY_ASSUMED: 'The buyer did not answer in time',
+/**
+ * The one thing a row adds to its title: why it happened. Each note is true only of a particular kind of actor,
+ * so it is attached only to that kind: "the buyer accepted the item" is not said of a step Komtru took.
+ */
+const ACTIVITY_NOTE: Partial<Record<TradeActivityKind, { note: string; by: 'PARTY' | 'KOMTRU' }>> = {
+  FUNDS_PROTECTED: { note: 'Funds are held by Komtru until the trade settles', by: 'KOMTRU' },
+  TRADE_COMPLETED: { note: 'The buyer accepted the item', by: 'PARTY' },
+  INSPECTION_ELAPSED: { note: 'No issue was reported, so the trade went on to settlement', by: 'KOMTRU' },
+  DELIVERY_ASSUMED: { note: 'The buyer did not answer in time', by: 'KOMTRU' },
 };
 
 /** "You", "The seller", "Komtru": who did it, from the reader's side. */
@@ -253,7 +277,7 @@ export function describeActivity(
 ): { title: string; detail: string[] } {
   const detail = [actorLabel(item.actor, yourRole)];
   const note = ACTIVITY_NOTE[item.kind];
-  if (note !== undefined) detail.push(note);
+  if (note !== undefined && (note.by === 'KOMTRU') === (item.actor === 'KOMTRU')) detail.push(note.note);
   if (item.reason !== null) detail.push(`Reason: ${item.reason}`);
   return { title: ACTIVITY_TITLE[item.kind], detail };
 }

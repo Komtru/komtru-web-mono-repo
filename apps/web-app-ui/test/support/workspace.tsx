@@ -109,6 +109,7 @@ export function fakeSocket() {
       for (const handler of [...(handlers.get(event) ?? [])]) (handler as (...a: unknown[]) => void)(...args);
     },
     listening: (event: string) => (handlers.get(event)?.size ?? 0) > 0,
+    listeners: (event: string) => handlers.get(event)?.size ?? 0,
     joins: () =>
       emitWithAck.mock.calls.filter(([event]) => event === 'room:join').map(([, payload]) => payload),
   };

@@ -10,13 +10,13 @@ import { describeTrade, initialsOf, nairaShort, partyName } from './format';
  * Rows come from `GET /trades`, newest-relevant first, a page at a time. Whether a trade needs the
  * person is the server's `attention`, never worked out here: a row cannot see a pending extension
  * request or a deadline, so a client rule would be wrong in ways nobody would notice. The list is
- * kept current by the trades' rooms (a push, or a reconnect, reads it again) and, as the fallback, by window
- * focus.
+ * kept current by the trades' rooms (a push, or a reconnect, reads it again) and, while no socket is
+ * delivering, by the timer in `useTradeLive`. Window focus is not a fallback: the app turns that refetch off.
  */
 export function MyTrades(): React.JSX.Element {
   const list = useTradeList('ALL');
   // A trade list gets a push only for rooms it has joined, so it joins the trades it shows and reads the list
-  // again when any of them moves, and again on every reconnect. Focus still refetches, as the fallback.
+  // again when any of them moves, and again on every reconnect. With no live connection it reads on a timer.
   const shown = (list.data?.pages ?? []).flatMap((page) => page.items);
   useTradeLive(shown.map((trade) => ({ id: trade.id, code: trade.tradeCode })));
 

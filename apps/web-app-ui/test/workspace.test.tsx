@@ -202,10 +202,20 @@ describe('funds protected (CWT-02)', () => {
       },
     });
     show();
-    expect(await screen.findByText(/couldn't load the ship by/i)).toBeTruthy();
+    expect(await screen.findByText(/couldn't load the delivery deadline\./i)).toBeTruthy();
     expect(screen.getByText('Prepare and dispatch')).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
     expect(await screen.findByText('Ship by · 12 Nov · 10:00')).toBeTruthy();
+  });
+
+  it('names the thing it could not load, whichever deadline it was', async () => {
+    serve(workspaceTrade('INSPECTION', 'BUYER'), {
+      'GET /trades/:id/inspection': () => {
+        throw problem('INTERNAL', 500);
+      },
+    });
+    show();
+    expect(await screen.findByText(/couldn't load the inspection deadline\./i)).toBeTruthy();
   });
 
   it('does not read the inspection or the activity for a trade that has only just been paid for', async () => {

@@ -4,6 +4,9 @@ import { describeTrade, whenLabel } from '../src/trade/format';
 import {
   WORKSPACE_STATUSES,
   WORKSPACE_TABS,
+  WORKSPACE_TAB_DEFS,
+  isWorkspaceTab,
+  tabTitle,
   actorLabel,
   describeActivity,
   isWorkspaceStatus,
@@ -149,6 +152,28 @@ describe('what can be done', () => {
     expect(tradeActions('PENDING_PAYMENT', 'BUYER', ID).some((row) => row.id === 'release')).toBe(false);
   });
 
+  it.each([
+    'SETTLED',
+    'RESOLVED_RELEASED',
+    'RESOLVED_REFUNDED',
+    'CANCELLED_REFUNDED',
+    'PENDING_PAYMENT',
+  ] as const)('does not talk about guarding the funds on %s, when none are held', (status) => {
+    for (const role of ROLES) {
+      expect(
+        tradeActions(status, role, ID).some((row) => row.id === 'release'),
+        `${status} ${role}`,
+      ).toBe(false);
+    }
+  });
+
+  it.each(['FUNDED', 'SHIPPED', 'UNCONFIRMED_DELIVERY', 'INSPECTION', 'DISPUTED', 'COMPLETED'] as const)(
+    'does say the funds are guarded while Komtru holds them (%s)',
+    (status) => {
+      expect(tradeActions(status, 'BUYER', ID).some((row) => row.id === 'release')).toBe(true);
+    },
+  );
+
   it('does not offer a withdrawal once the trade has been paid for', () => {
     for (const status of WORKSPACE_STATUSES.filter((s) => s !== 'PENDING_PAYMENT')) {
       for (const role of ROLES) {
@@ -158,6 +183,25 @@ describe('what can be done', () => {
         ).toBe(false);
       }
     }
+  });
+});
+
+describe('the tab list, which later features extend', () => {
+  it('has a unique id, label and title for every tab, starting with the overview', () => {
+    const ids = WORKSPACE_TAB_DEFS.map((tab) => tab.id);
+    expect(new Set(ids).size).toBe(ids.length);
+    expect(ids[0]).toBe('overview');
+    for (const tab of WORKSPACE_TAB_DEFS) {
+      expect(tab.label.length).toBeGreaterThan(0);
+      expect(tab.title.length).toBeGreaterThan(0);
+    }
+  });
+
+  it('recognises exactly the tabs in the list, so a route cannot invent one', () => {
+    for (const tab of WORKSPACE_TABS) expect(isWorkspaceTab(tab)).toBe(true);
+    for (const wrong of ['', 'Terms', 'payments', '../terms', 'counter'])
+      expect(isWorkspaceTab(wrong)).toBe(false);
+    expect(tabTitle('activity')).toBe('Trade Activity');
   });
 });
 
@@ -183,6 +227,22 @@ describe('the activity wording', () => {
     expect(actorLabel('OTHER_PARTY', 'BUYER')).toBe('The seller');
     expect(actorLabel('OTHER_PARTY', 'SELLER')).toBe('The buyer');
     expect(actorLabel('KOMTRU', 'SELLER')).toBe('Komtru');
+  });
+
+  it('says the buyer accepted the item only of a step a party took, never of one Komtru took', () => {
+    const byParty = describeActivity(item({ kind: 'TRADE_COMPLETED', actor: 'OTHER_PARTY' }), 'SELLER');
+    expect(byParty.detail).toContain('The buyer accepted the item');
+    const byKomtru = describeActivity(item({ kind: 'TRADE_COMPLETED', actor: 'KOMTRU' }), 'SELLER');
+    expect(byKomtru.detail.join(' ')).not.toContain('accepted');
+  });
+
+  it('says what only Komtru does only of Komtru', () => {
+    expect(
+      describeActivity(item({ kind: 'DELIVERY_ASSUMED', actor: 'KOMTRU' }), 'BUYER').detail.join(' '),
+    ).toContain('did not answer');
+    expect(
+      describeActivity(item({ kind: 'DELIVERY_ASSUMED', actor: 'OTHER_PARTY' }), 'BUYER').detail.join(' '),
+    ).not.toContain('did not answer');
   });
 
   it('adds the reason a party gave, and only that', () => {
