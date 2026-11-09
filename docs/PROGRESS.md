@@ -5,11 +5,11 @@ after every run. The run-by-run history is [`manager/RUN_LOG.md`](manager/RUN_LO
 behind it is [`BUILD_PLAN.md`](BUILD_PLAN.md).
 
 ```
-MVP   ████████████████··················  51/111  (46%)
-Total ██████████························  51/168  (30%)
+MVP   ████████████████··················  52/112  (46%)
+Total ███████████·······················  52/168  (31%)
 ```
 
-60 MVP tickets left, 57 deferred past it.
+60 MVP tickets left, 56 deferred past it.
 
 ## By epic
 
@@ -19,7 +19,7 @@ Total ██████████······················
 | 01-shared-packages     | 8    | 8     |
 | 02-backend-platform    | 9    | 10    |
 | 03-identity            | 10   | 11    |
-| 04-files-notify-config | 6    | 7     |
+| 04-files-notify-config | 7    | 7     |
 | 05-trust               | 2    | 3     |
 | 06-merchant-search     | 0    | 3     |
 | 07-trades              | 2    | 9     |
@@ -40,6 +40,7 @@ Total ██████████······················
 | Ticket | Title                                                   | MVP |
 | ------ | ------------------------------------------------------- | --- |
 | T-029  | Isolate the integration suite's shared Redis and queues | yes |
+| T-052  | Duplicate identity detection and KYC review queue       | yes |
 | T-072  | Funding a trade                                         | yes |
 
 ## Ready to start (MVP first)
@@ -50,7 +51,6 @@ Total ██████████······················
 | T-052  | Duplicate identity detection and KYC review queue                 | yes |
 | T-072  | Funding a trade                                                   | yes |
 | T-034  | Social login                                                      |     |
-| T-041  | Avatars                                                           |     |
 | T-067  | IMEI verification                                                 |     |
 | T-085  | Logistics schema and Park seed                                    |     |
 | T-100  | Support tickets (M10)                                             |     |
