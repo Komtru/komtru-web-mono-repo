@@ -144,7 +144,8 @@ export function LoginForm({
         <TextField
           label="Phone number"
           type="text"
-          inputMode="tel"
+          // Text, not tel: the field takes an email or a username too, and a phone keypad has no @.
+          inputMode="text"
           autoComplete="username"
           placeholder="080X XXX XXXX"
           helper="Your email or username works too."
@@ -238,7 +239,15 @@ function SecondFactor({
     setBusy(false);
     if (outcome.kind === 'wrong-code') {
       setWrong(true);
-      setProblem("That code doesn't match. Check it and try again.");
+      const left = outcome.attemptsRemaining;
+      setProblem(
+        `That code doesn't match. Check it and try again — ${String(left)} attempt${left === 1 ? '' : 's'} left.`,
+      );
+      return;
+    }
+    if (outcome.kind === 'challenge-spent') {
+      setWrong(true);
+      setProblem('This sign-in has expired. Go back and log in again.');
       return;
     }
     if (outcome.kind === 'limited' || outcome.kind === 'unavailable') {

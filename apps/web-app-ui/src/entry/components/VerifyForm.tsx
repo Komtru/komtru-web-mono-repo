@@ -172,7 +172,7 @@ export function VerifyForm(): React.JSX.Element {
   const wrong = shown.kind === 'wrong';
 
   return (
-    <EntryFrame title="Enter code" back={ENTRY.terms} footer={footer}>
+    <EntryFrame title="Enter code" back={ENTRY.signUp} footer={footer}>
       <form id={FORM} onSubmit={(event) => void verify(event)}>
         <EntryHeading>Enter the 6-digit code</EntryHeading>
         <Lede>Sent to {sent?.destination ?? 'your phone'} via SMS.</Lede>

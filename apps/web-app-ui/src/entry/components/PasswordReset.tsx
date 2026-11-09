@@ -108,9 +108,20 @@ export function ResetPasswordForm(): React.JSX.Element {
   const [passwordProblem, setPasswordProblem] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [sending, setSending] = useState(false);
+  /** The reset can no longer finish — the token is spent or the challenge is gone. Only AC2 helps. */
+  const [expired, setExpired] = useState(false);
   const secondsLeft = useResendCountdown(sent?.sentAt);
   /** Set once the password is saved: forgetting the code then is the flow finishing, not a cold start. */
   const finished = useRef(false);
+
+  const expire = () => {
+    // Forget the dead challenge, but say why before sending the person back: a silent bounce to AC2
+    // reads as the app losing their progress.
+    finished.current = true;
+    resetCode.clear();
+    setExpired(true);
+    setBusy(false);
+  };
 
   useEffect(() => {
     if (sent === null && !finished.current) router.replace(ENTRY.forgot);
@@ -128,12 +139,14 @@ export function ResetPasswordForm(): React.JSX.Element {
       setResetToken(null);
       setProblem(null);
     } catch (error) {
+      if (error instanceof ProblemError && error.status === 422) {
+        expire();
+        return;
+      }
       setProblem(
         error instanceof ProblemError && error.status === 429
           ? 'Too many codes requested. Wait a few minutes before asking for another.'
-          : error instanceof ProblemError && error.status === 422
-            ? 'This reset has expired. Ask for a new code from the start.'
-            : UNAVAILABLE,
+          : UNAVAILABLE,
       );
     } finally {
       setSending(false);
@@ -190,10 +203,8 @@ export function ResetPasswordForm(): React.JSX.Element {
           setPasswordProblem(refused.message);
           return;
         }
-        // Not the password: the token itself is spent or expired, and only a new code helps.
-        setResetToken(null);
-        setCode('');
-        setProblem('This reset has expired. Send a new code to carry on.');
+        // Not the password: the token itself is spent or expired, and the challenge with it.
+        expire();
         return;
       }
       setProblem(error instanceof ProblemError && error.status === 429 ? limitedMessage(error) : UNAVAILABLE);
@@ -205,13 +216,20 @@ export function ResetPasswordForm(): React.JSX.Element {
       title="New Password"
       back={ENTRY.forgot}
       footer={
-        <Button type="submit" form="reset-form" disabled={busy}>
-          {busy ? 'Saving…' : 'Save new password'}
-        </Button>
+        expired ? (
+          <Button asChild>
+            <a href={ENTRY.forgot}>Start again</a>
+          </Button>
+        ) : (
+          <Button type="submit" form="reset-form" disabled={busy}>
+            {busy ? 'Saving…' : 'Save new password'}
+          </Button>
+        )
       }
     >
       <form id="reset-form" onSubmit={(event) => void submit(event)} noValidate>
         <h1 className="sr-only">Set a new password</h1>
+        {expired && <ErrorText>This reset has expired. Start again to get a new code.</ErrorText>}
         {sent?.destination !== null && sent?.destination !== undefined && (
           <Lede>Enter the code sent to {sent.destination}.</Lede>
         )}
@@ -232,6 +250,7 @@ export function ResetPasswordForm(): React.JSX.Element {
           </>
         )}
         {problem !== null && <ErrorText>{problem}</ErrorText>}
+        {passwordProblem !== null && <ErrorText>{passwordProblem}</ErrorText>}
         <TextField
           label="New password"
           type="password"
@@ -242,7 +261,6 @@ export function ResetPasswordForm(): React.JSX.Element {
             setPassword(event.target.value);
           }}
           invalid={passwordProblem !== null}
-          {...(passwordProblem === null ? {} : { helper: passwordProblem })}
         />
         <TextField
           label="Confirm new password"
@@ -285,6 +303,12 @@ export function SetPasswordForm({ next }: { next: string | undefined }): React.J
     } catch (error) {
       setBusy(false);
       if (error instanceof ProblemError && error.status === 422) {
+        // The account already has a password — this screen was revisited after it was set. There is
+        // nothing to do here; changing a password is Account's job, with the current one.
+        if (error.problem.errors?.some((entry) => entry.path === 'currentPassword') === true) {
+          router.replace(next ?? '/');
+          return;
+        }
         setProblem(error.problem.errors?.[0]?.message ?? error.problem.detail ?? error.problem.title);
         return;
       }
@@ -304,6 +328,7 @@ export function SetPasswordForm({ next }: { next: string | undefined }): React.J
       <form id="set-password-form" onSubmit={(event) => void submit(event)} noValidate>
         <EntryHeading>Your number is verified</EntryHeading>
         <Lede>Now choose a password. You&apos;ll use it with your phone number to log in to Komtru.</Lede>
+        {problem !== null && <ErrorText>{problem}</ErrorText>}
         <TextField
           label="New password"
           type="password"
@@ -314,7 +339,6 @@ export function SetPasswordForm({ next }: { next: string | undefined }): React.J
             setPassword(event.target.value);
           }}
           invalid={problem !== null}
-          {...(problem === null ? {} : { helper: problem })}
         />
         <TextField
           label="Confirm new password"

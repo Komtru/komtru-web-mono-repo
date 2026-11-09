@@ -130,7 +130,8 @@ describe('E2 Sign up', () => {
   it('asks for both fields before going on', () => {
     show(<SignUpForm />);
     fireEvent.click(screen.getByRole('button', { name: 'Continue' }));
-    expect(screen.getByText(/Enter your phone number/)).toBeDefined();
+    // Announced, not only drawn under the field.
+    expect(screen.getByRole('alert').textContent).toMatch(/Enter your phone number/);
     expect(router.push).not.toHaveBeenCalled();
   });
 
@@ -152,12 +153,18 @@ describe('TOS1 Terms', () => {
     signUpDraft.write({ phone: '0802 341 5567', fullName: 'Ada Obi' });
   });
 
-  const agree = () => {
+  /** Waits for the Terms in force to load, ticks both boxes, agrees. */
+  const agree = async () => {
+    const button = screen.getByRole('button', { name: 'Agree & create account' });
     for (const box of screen.getAllByRole('checkbox')) fireEvent.click(box);
-    fireEvent.click(screen.getByRole('button', { name: 'Agree & create account' }));
+    await waitFor(() => {
+      expect(button.hasAttribute('disabled')).toBe(false);
+    });
+    fireEvent.click(button);
   };
 
   it('starts unticked and waits for both acknowledgements', async () => {
+    network.on('GET /auth/terms', 200, { termsVersion: '2026-08-01', privacyVersion: '2026-08-01' });
     const { container } = show(<TermsForm />);
     const button = screen.getByRole('button', { name: 'Agree & create account' });
     expect(button.hasAttribute('disabled')).toBe(true);
@@ -180,7 +187,7 @@ describe('TOS1 Terms', () => {
         delivered: true,
       });
     show(<TermsForm />);
-    agree();
+    await agree();
     await waitFor(() => {
       expect(router.push).toHaveBeenCalledWith('/verify');
     });
@@ -199,9 +206,20 @@ describe('TOS1 Terms', () => {
       .on('GET /auth/terms', 200, { termsVersion: '2026-08-01', privacyVersion: '2026-08-01' })
       .on('POST /auth/register', 409, problem(409, 'CONFLICT', 'That contact is already in use'));
     show(<TermsForm />);
-    agree();
+    await agree();
     expect(await screen.findByText(/already has a Komtru account/)).toBeDefined();
     expect(router.push).not.toHaveBeenCalled();
+  });
+
+  it('does not open a second account when the person comes back from the code screen', async () => {
+    network.on('GET /auth/terms', 200, { termsVersion: '2026-08-01', privacyVersion: '2026-08-01' });
+    signUpCode.write({ challengeId, destination: '+23480•••5567', delivered: true, sentAt: Date.now() });
+    show(<TermsForm />);
+    await agree();
+    await waitFor(() => {
+      expect(router.push).toHaveBeenCalledWith('/verify');
+    });
+    expect(network.to('/auth/register')).toEqual([]);
   });
 
   it('starts again at the number when nothing was remembered', () => {

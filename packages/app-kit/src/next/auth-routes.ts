@@ -157,7 +157,8 @@ const mfaChallengeRequestSchema = z.object({
 });
 
 const verifyRequestSchema = z.object({
-  challengeId: z.string().min(1).max(64),
+  /** The backend's own shape (`verifyOtpRequestSchema`), so a mangled id is a 422 here, not a 502 later. */
+  challengeId: z.uuid(),
   code: z.string().min(1).max(16),
   deviceFingerprint: z.unknown().optional(),
 });

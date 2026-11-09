@@ -173,7 +173,7 @@ export async function proveFactor(
   factor: Factor,
   code: string,
   fetchImpl: typeof fetch = fetch,
-): Promise<SignInOutcome | { kind: 'wrong-code' }> {
+): Promise<SignInOutcome | { kind: 'wrong-code'; attemptsRemaining: number } | { kind: 'challenge-spent' }> {
   const result = await post(
     PATHS.mfa,
     { mfaToken: challenge.mfaToken, factorId: factor.id, code: code.trim() },
@@ -181,7 +181,14 @@ export async function proveFactor(
   );
   // A wrong second factor is 401 like a wrong password; here the password is already proved, so it
   // can only mean the code. An expired challenge says the same, and the screen sends them back.
-  if (result?.status === 401) return { kind: 'wrong-code' };
+  // `attemptsRemaining` rides only on a wrong code with tries left (`password.controller.ts`). A bare
+  // 401 is the challenge used up or expired, and no code typed here will ever work again.
+  if (result?.status === 401) {
+    const left = result.body.attemptsRemaining;
+    return typeof left === 'number' && left > 0
+      ? { kind: 'wrong-code', attemptsRemaining: left }
+      : { kind: 'challenge-spent' };
+  }
   return signInOutcome(result);
 }
 

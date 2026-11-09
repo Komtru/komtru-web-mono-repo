@@ -4,6 +4,7 @@ import { useApiClient } from '@komtru/app-kit/react';
 import { getPublishedTerms, ProblemError, register } from '@komtru/api-client';
 import { Button } from '@komtru/ui-kit';
 import { useRouter } from 'next/navigation';
+import { useQuery } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
 import { useDraft } from './useDraft';
 import { signUpCode, signUpDraft } from '../drafts';
@@ -28,6 +29,16 @@ export function TermsForm(): React.JSX.Element {
   const [profile, setProfile] = useState(false);
   const [busy, setBusy] = useState(false);
   const [failure, setFailure] = useState<Failure | null>(null);
+  /**
+   * The versions in force, read when the screen opens. What is sent is exactly what was read, so the
+   * consent recorded is consent to the copy on screen; if the platform has moved on by the time the
+   * person agrees, it refuses, and the screen reads again and asks again.
+   */
+  const published = useQuery({
+    queryKey: ['auth', 'terms'],
+    queryFn: () => client.call(getPublishedTerms, {}),
+    staleTime: 0,
+  });
 
   // A reload in a tab with nothing remembered, or a link straight here: start at the number.
   useEffect(() => {
@@ -37,19 +48,24 @@ export function TermsForm(): React.JSX.Element {
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();
     if (!terms || !profile || draft === null || draft === undefined || busy) return;
+    const versions = published.data;
+    if (versions === undefined) return;
+    // The account already exists and a code is out for this number — coming back here from E3 must
+    // not open a second account and send a second SMS. E2 forgets the code when the number changes.
+    if (signUpCode.read() !== null) {
+      router.push(ENTRY.verify);
+      return;
+    }
     setBusy(true);
     setFailure(null);
     try {
-      // Read at the moment of agreeing: the platform refuses any version but the one in force, and
-      // the one in force is the platform's to say, not something compiled into this page.
-      const published = await client.call(getPublishedTerms, {});
       const created = await client.call(register, {
         body: {
           channel: 'PHONE',
           phone: draft.phone,
           fullName: draft.fullName,
-          acceptedTermsVersion: published.termsVersion,
-          acceptedPrivacyVersion: published.privacyVersion,
+          acceptedTermsVersion: versions.termsVersion,
+          acceptedPrivacyVersion: versions.privacyVersion,
         },
       });
       signUpCode.write({
@@ -60,7 +76,12 @@ export function TermsForm(): React.JSX.Element {
       });
       router.push(ENTRY.verify);
     } catch (error) {
-      setFailure(failureFor(error));
+      const next = failureFor(error);
+      if (next.kind === 'stale') {
+        setTerms(false);
+        void published.refetch();
+      }
+      setFailure(next);
       setBusy(false);
     }
   };
@@ -70,9 +91,19 @@ export function TermsForm(): React.JSX.Element {
       title="Terms & Privacy"
       back={ENTRY.signUp}
       footer={
-        <Button type="submit" form={FORM} disabled={!terms || !profile || busy}>
-          {busy ? 'Creating account…' : 'Agree & create account'}
-        </Button>
+        published.isError ? (
+          <Button type="button" onClick={() => void published.refetch()}>
+            Try again
+          </Button>
+        ) : (
+          <Button
+            type="submit"
+            form={FORM}
+            disabled={!terms || !profile || busy || published.data === undefined}
+          >
+            {busy ? 'Creating account…' : 'Agree & create account'}
+          </Button>
+        )
       }
     >
       <form id={FORM} onSubmit={(event) => void submit(event)}>
@@ -98,6 +129,7 @@ export function TermsForm(): React.JSX.Element {
         <AckCheckbox checked={profile} onChange={setProfile}>
           I understand my Trust Profile is visible to people I trade with.
         </AckCheckbox>
+        {published.isError && <ErrorText>{UNAVAILABLE}</ErrorText>}
         {failure !== null && <FailureText failure={failure} />}
       </form>
     </EntryFrame>

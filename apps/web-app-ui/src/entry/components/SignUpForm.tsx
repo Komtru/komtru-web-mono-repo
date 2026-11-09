@@ -3,9 +3,9 @@
 import { Button, TextField } from '@komtru/ui-kit';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
-import { signUpDraft } from '../drafts';
+import { signUpCode, signUpDraft } from '../drafts';
 import { ENTRY } from '../flow';
-import { EntryFrame, EntryHeading, Lede, TrustNote } from './EntryFrame';
+import { EntryFrame, EntryHeading, ErrorText, Lede, TrustNote } from './EntryFrame';
 import { useDraft } from './useDraft';
 
 const FORM = 'signup-form';
@@ -35,6 +35,9 @@ export function SignUpForm(): React.JSX.Element {
     event.preventDefault();
     setTried(true);
     if (phoneMissing || nameMissing) return;
+    // A different number is a different sign-up: the code already sent was for the old one, and
+    // TOS1 must open a fresh account rather than send the person to verify a number they changed.
+    if (draft !== null && draft !== undefined && draft.phone !== phone.trim()) signUpCode.clear();
     signUpDraft.write({ phone: phone.trim(), fullName: fullName.trim() });
     router.push(ENTRY.terms);
   };
@@ -79,6 +82,9 @@ export function SignUpForm(): React.JSX.Element {
           invalid={tried && nameMissing}
           {...(tried && nameMissing ? { helper: 'Enter your name as it appears on your ID' } : {})}
         />
+        {tried && (phoneMissing || nameMissing) && (
+          <ErrorText>{phoneMissing ? 'Enter your phone number' : 'Enter your name'} to carry on.</ErrorText>
+        )}
         <TrustNote>
           Your Trust Profile starts at zero — it&apos;s built entirely from what you do on Komtru, never
           bought or carried over from anywhere else.

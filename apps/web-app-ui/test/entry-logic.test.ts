@@ -120,6 +120,14 @@ describe('the second factor', () => {
     const { fetch } = answering(json({ code: 'INVALID_CREDENTIALS', attemptsRemaining: 3 }, 401));
     expect(await proveFactor(challenge, challenge.factors[1]!, '123456', fetch)).toEqual({
       kind: 'wrong-code',
+      attemptsRemaining: 3,
+    });
+  });
+
+  it('reads a bare rejection as the sign-in used up, so the screen stops asking for codes', async () => {
+    const { fetch } = answering(json({ code: 'INVALID_CREDENTIALS' }, 401));
+    expect(await proveFactor(challenge, challenge.factors[1]!, '123456', fetch)).toEqual({
+      kind: 'challenge-spent',
     });
   });
 
