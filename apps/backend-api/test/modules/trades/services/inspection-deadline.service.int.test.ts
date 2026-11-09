@@ -1,4 +1,4 @@
-/* eslint-disable @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-return, @typescript-eslint/no-unsafe-argument -- raw `pg` rows are untyped in assertions */
+/* eslint-disable @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-argument -- raw `pg` rows are untyped in assertions */
 // T-065's clocks against the real database: the inspection window elapsing (AR1), the unconfirmed-
 // delivery grace (M7 section 6) and the ledger's answer (SETTLED). The sweeps are the job bodies, so
 // idempotency, hold handling and the dispute seam are tested on them directly.

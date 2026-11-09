@@ -42,6 +42,14 @@ describe('the trades module surface', () => {
       'sweepDeliveryDeadlines',
       'tradeRefundRequestedEvent',
       'tradeDeliveryOverdueEvent',
+      'decideInspectionElapsed',
+      'decideGraceElapsed',
+      'confirmAndRelease',
+      'sweepInspectionDeadlines',
+      'sweepGraceDeadlines',
+      'settleTrade',
+      'tradeCompletedEvent',
+      'noDisputes',
     ]) {
       expect(trades).toHaveProperty(name);
     }
@@ -57,6 +65,8 @@ describe('the trades module surface', () => {
       'tradeDeadlines',
       'escrowActionRequests',
       'tradeHolds',
+      'inspectionExtensionRequests',
+      'inspectionAcknowledgements',
     ]) {
       expect(trades).toHaveProperty(table);
     }

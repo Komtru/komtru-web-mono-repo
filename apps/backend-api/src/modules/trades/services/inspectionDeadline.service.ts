@@ -185,7 +185,7 @@ export async function processGraceDeadline(
 // The sweeps (job bodies)
 // ---------------------------------------------------------------------------
 
-export type SweepResult<O extends string> = { examined: number } & Partial<Record<O, number>>;
+export type SweepSummary<O extends string> = { examined: number } & Partial<Record<O, number>>;
 
 /**
  * Every pending deadline of `kind` whose time has come, each in its own transaction so one bad trade
@@ -197,7 +197,7 @@ async function sweep<O extends string>(
   kind: 'INSPECTION' | 'UNCONFIRMED_DELIVERY_GRACE',
   options: { limit?: number },
   process: (tx: Tx, id: string, now: Date) => Promise<O>,
-): Promise<SweepResult<O>> {
+): Promise<SweepSummary<O>> {
   const now = deps.now();
   const due = await deps.db
     .select({ id: tradeDeadlines.id })
@@ -212,7 +212,7 @@ async function sweep<O extends string>(
     .orderBy(tradeDeadlines.dueAt)
     .limit(options.limit ?? 200);
 
-  const result = { examined: due.length } as SweepResult<O>;
+  const result = { examined: due.length } as SweepSummary<O>;
   let failure: Error | undefined;
   for (const { id } of due) {
     try {

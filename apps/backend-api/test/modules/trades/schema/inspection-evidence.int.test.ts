@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unsafe-member-access -- raw `pg` rows are untyped in assertions */
 // Migration 0046: the inspection extension requests (BEI1) and the Z5 acknowledgement.
 // Skipped unless KOMTRU_INFRA_TESTS=1.
 import { describe, expect, it } from 'vitest';

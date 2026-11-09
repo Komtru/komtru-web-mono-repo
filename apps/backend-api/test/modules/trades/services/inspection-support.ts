@@ -1,4 +1,4 @@
-/* eslint-disable @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-return -- raw `pg` rows are untyped in assertions */
+/* eslint-disable @typescript-eslint/no-unsafe-return -- raw `pg` rows are untyped in assertions */
 // Fixtures shared by T-065's integration tests: a trade at INSPECTION or UNCONFIRMED_DELIVERY with the
 // deadline row T-064 would have opened, and an InspectionDeps whose dispute seam is a switch.
 import { randomUUID } from 'node:crypto';

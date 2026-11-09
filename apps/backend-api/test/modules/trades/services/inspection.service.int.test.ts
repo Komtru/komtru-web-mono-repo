@@ -1,4 +1,4 @@
-/* eslint-disable @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-return, @typescript-eslint/no-unsafe-argument -- raw `pg` rows are untyped in assertions */
+/* eslint-disable @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-argument -- raw `pg` rows are untyped in assertions */
 // T-065's inspection against the real database: the Z4 comparison, the buyer's one request for more
 // time (BEI1) and the seller's answer (BEI2), and confirm-and-release with acknowledgement (Z5).
 // Skipped unless KOMTRU_INFRA_TESTS=1.

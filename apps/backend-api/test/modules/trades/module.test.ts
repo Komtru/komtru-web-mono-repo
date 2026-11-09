@@ -22,10 +22,29 @@ describe('the trades module', () => {
     expect(new Set(labels).size).toBe(labels.length);
   });
 
-  it('schedules the delivery-deadline sweep every five minutes, for the worker', () => {
-    const [job, ...rest] = module().schedules ?? [];
-    expect(rest).toEqual([]);
-    expect(job).toMatchObject({ name: 'trades.delivery-deadlines', cron: '*/5 * * * *' });
+  it('mounts the inspection routes too', () => {
+    const labels = (module().routes ?? []).map(routeLabel);
+    expect(labels).toContain('GET /trades/:id/inspection');
+    expect(labels).toContain('POST /trades/:id/accept-inspection');
+    expect(new Set(labels).size).toBe(labels.length);
+  });
+
+  it('schedules the delivery, inspection and grace sweeps every five minutes, for the worker', () => {
+    const jobs = module().schedules ?? [];
+    expect(jobs.map((job) => job.name).sort()).toEqual([
+      'trades.delivery-deadlines',
+      'trades.grace-deadlines',
+      'trades.inspection-deadlines',
+    ]);
+    for (const job of jobs) expect(job.cron).toBe('*/5 * * * *');
+  });
+
+  it('subscribes to the ledger releasing escrow, to settle the trade', async () => {
+    const subscribe = vi.fn();
+    await module().start?.({ events: { subscribe }, logger: testLogger } as never);
+    const subscription = subscribe.mock.calls.find(([s]) => s.name === 'trades.on-escrow-released')![0];
+    expect(subscription.event.eventType).toBe('ledger.payment.escrow_released');
+    expect(subscription.event.version).toBe(1);
   });
 
   it('subscribes to state changes to open the delivery deadline on funding', async () => {

@@ -18,9 +18,15 @@ import type { Logger } from '../../platform/logger.js';
 import { createConfigAccessor } from '../config/index.js';
 import { tradeStateChangedEvent } from './domain/events.js';
 import { fulfilmentRoutes } from './http/fulfilment.routes.js';
+import { inspectionRoutes } from './http/inspection.routes.js';
 import { tradeRoutes } from './http/trade.routes.js';
 import { deliveryDeadlineJob } from './jobs/deliveryDeadline.job.js';
+import { graceDeadlineJob } from './jobs/graceDeadline.job.js';
+import { inspectionDeadlineJob } from './jobs/inspectionDeadline.job.js';
+import { ledgerEscrowReleasedEvent } from './domain/ledgerEvents.js';
 import { openDeliveryDeadline } from './services/deadline.service.js';
+import { settleTrade } from './services/inspectionDeadline.service.js';
+import { noDisputes, type InspectionDeps } from './services/inspectionPorts.js';
 import { noLogisticsCompanies, noParkCoverage, type FulfilmentDeps } from './services/fulfilmentPorts.js';
 import {
   postgresGrantProofAccess,
@@ -79,14 +85,28 @@ export function buildFulfilmentDeps(deps: TradeDeps): FulfilmentDeps {
   };
 }
 
+/** Inspection's ports. The one seam is the dispute check (T-080), which answers no until that exists. */
+export function buildInspectionDeps(deps: TradeDeps): InspectionDeps {
+  return { db: deps.db, disputes: noDisputes, now: () => new Date() };
+}
+
 export function createTradesModule(options: TradesModuleOptions): KomtruModule {
   const deps = buildTradeDeps(options);
   const fulfilment = buildFulfilmentDeps(deps);
+  const inspection = buildInspectionDeps(deps);
 
   return defineModule({
     name: 'trades',
-    routes: [...tradeRoutes(() => deps), ...fulfilmentRoutes(() => fulfilment)],
-    schedules: [deliveryDeadlineJob(() => fulfilment)],
+    routes: [
+      ...tradeRoutes(() => deps),
+      ...fulfilmentRoutes(() => fulfilment),
+      ...inspectionRoutes(() => inspection),
+    ],
+    schedules: [
+      deliveryDeadlineJob(() => fulfilment),
+      inspectionDeadlineJob(() => inspection),
+      graceDeadlineJob(() => inspection),
+    ],
 
     start: (ctx: ModuleContext) => {
       // Both subscribers act only on invitations whose context is a trade; identity publishes the
@@ -129,6 +149,22 @@ export function createTradesModule(options: TradesModuleOptions): KomtruModule {
         handler: async ({ payload }, tx) => {
           if (payload.to !== 'FUNDED') return;
           await openDeliveryDeadline(fulfilment, tx, payload.tradeId);
+        },
+      });
+      // The ledger has released the escrow: COMPLETED -> SETTLED. It runs in the event's own
+      // transaction, so the transition and the claim on the event commit together. A trade that is
+      // not COMPLETED (a dispute-split release is T-080's) is reported, not retried: a retry cannot fix it.
+      ctx.events.subscribe({
+        name: 'trades.on-escrow-released',
+        event: ledgerEscrowReleasedEvent,
+        handler: async ({ payload }, tx) => {
+          const outcome = await settleTrade(tx, {
+            tradeId: payload.tradeId,
+            journalEntryId: payload.journalEntryId,
+          });
+          if (outcome === 'IGNORED' || outcome === 'UNKNOWN_TRADE') {
+            ctx.logger.warn({ tradeId: payload.tradeId, outcome }, 'trades: escrow release not applied');
+          }
         },
       });
       return Promise.resolve();
