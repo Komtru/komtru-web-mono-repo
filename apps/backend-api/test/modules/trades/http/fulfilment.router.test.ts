@@ -19,6 +19,9 @@ const shipped = {
   status: 'SHIPPED',
   statusRevision: 7,
   yourRole: 'SELLER',
+  categoryCode: 'PHONES',
+  categoryName: 'Phones',
+  standardVersion: 3,
   shipment: { method: 'SELF_ARRANGED', waybillNumber: 'WB-123456', vehiclePlate: 'ABC-123 DE' },
 };
 
