@@ -200,13 +200,18 @@ export const TRADE_ACCESS_KINDS = ['PARTY', 'INVITEE'] as const;
 /**
  * The category a trade was proposed in and the version of its Trade Standard the trade pinned, on every
  * single-trade view. A client reads the standard (`proofMedia.minPhotos` and the rest) for exactly
- * `(categoryCode, standardVersion)` instead of inferring a category from the item details. All three are
+ * `(categoryCode, standardVersion)` instead of inferring a category from the item details. All four are
  * `null` together on a trade with no category.
  */
 export const tradeCategoryFieldsSchema = z.object({
   categoryCode: z.string().nullable(),
   categoryName: z.string().nullable(),
   standardVersion: z.number().int().nullable(),
+  /**
+   * The id of that exact version (`GET /config/trade-standards/versions/:id`). The number alone cannot
+   * be resolved once a newer version is published; the id always can. Null with the other three.
+   */
+  standardVersionId: z.uuid().nullable(),
 });
 
 export const tradeByCodeResponseSchema = z.strictObject({

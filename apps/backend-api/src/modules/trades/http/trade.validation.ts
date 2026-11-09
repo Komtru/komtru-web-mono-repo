@@ -1,6 +1,6 @@
 // Request and response shapes for T-061's `/trades` routes. Money is a digit string in kobo on the
 // wire (a JSON number loses kobo past 2^53) and a bigint inside.
-import { koboJsonSchema, tradeCategoryFieldsSchema } from '@komtru/shared-types';
+import { counterpartyDisplaySchema, koboJsonSchema, tradeCategoryFieldsSchema } from '@komtru/shared-types';
 import { z } from 'zod';
 
 export const tradeIdParamSchema = z.object({ id: z.uuid() });
@@ -78,6 +78,12 @@ export const tradeViewSchema = z.looseObject({
   statusRevision: z.number(),
   yourRole: roleSchema,
   ...tradeCategoryFieldsSchema.shape,
+  /**
+   * The other party, as the list shows them; null until bound and for an erased or closed account. Present on
+   * the proposal routes (`GET /trades/:id` and the actions on a proposal); the fulfilment and inspection
+   * actions return the view without it.
+   */
+  counterparty: counterpartyDisplaySchema.nullable().optional(),
 });
 
 export const previewResponseSchema = z.looseObject({

@@ -35,7 +35,7 @@ import {
 } from '../services/proposal.service.js';
 import { cancelTrade, declineTrade, getTrade } from '../services/trade.service.js';
 import type { TradeDeps } from '../services/ports.js';
-import { listTrades, resolveTradeByCode } from '../services/tradeList.service.js';
+import { listTrades, resolveTradeByCode, withCounterparty } from '../services/tradeList.service.js';
 import {
   acceptBodySchema,
   cancelBodySchema,
@@ -92,7 +92,8 @@ export function tradeRoutes(deps: Deps): RouteDefinition[] {
       retryable: true,
       rateLimit: { ...ACTION_BUDGET },
       schema: { body: createTradeBodySchema, response: tradeViewSchema },
-      handler: (ctx) => createProposal(deps(), { userId: me(ctx.actor), ...ctx.body }),
+      handler: async (ctx) =>
+        withCounterparty(deps(), await createProposal(deps(), { userId: me(ctx.actor), ...ctx.body })),
     }),
 
     defineRoute({
@@ -128,7 +129,8 @@ export function tradeRoutes(deps: Deps): RouteDefinition[] {
       scope: 'CONSUMER',
       summary: 'A trade, as its parties see it',
       schema: { params: tradeIdParamSchema, response: tradeViewSchema },
-      handler: (ctx) => getTrade(deps(), { userId: me(ctx.actor), tradeId: ctx.params.id }),
+      handler: async (ctx) =>
+        withCounterparty(deps(), await getTrade(deps(), { userId: me(ctx.actor), tradeId: ctx.params.id })),
     }),
 
     defineRoute({
@@ -139,20 +141,23 @@ export function tradeRoutes(deps: Deps): RouteDefinition[] {
       retryable: true,
       rateLimit: { ...ACTION_BUDGET },
       schema: { params: tradeIdParamSchema, body: sendTradeBodySchema, response: tradeViewSchema },
-      handler: (ctx) => {
+      handler: async (ctx) => {
         const { username, email, phone, proofFileIds } = ctx.body;
         const counterparty = username
           ? { channel: 'USERNAME' as const, value: username }
           : email
             ? { channel: 'EMAIL' as const, value: email }
             : { channel: 'PHONE' as const, value: phone ?? '' };
-        return sendProposal(deps(), {
-          userId: me(ctx.actor),
-          tradeId: ctx.params.id,
-          counterparty,
-          ip: ipOf(ctx.req),
-          ...(proofFileIds ? { proofFileIds } : {}),
-        });
+        return withCounterparty(
+          deps(),
+          await sendProposal(deps(), {
+            userId: me(ctx.actor),
+            tradeId: ctx.params.id,
+            counterparty,
+            ip: ipOf(ctx.req),
+            ...(proofFileIds ? { proofFileIds } : {}),
+          }),
+        );
       },
     }),
 
@@ -164,12 +169,15 @@ export function tradeRoutes(deps: Deps): RouteDefinition[] {
       retryable: true,
       rateLimit: { ...ACTION_BUDGET },
       schema: { params: tradeIdParamSchema, body: counterBodySchema, response: tradeViewSchema },
-      handler: (ctx) =>
-        counterPropose(deps(), {
-          userId: me(ctx.actor),
-          tradeId: ctx.params.id,
-          ...stripUndefined(ctx.body),
-        }),
+      handler: async (ctx) =>
+        withCounterparty(
+          deps(),
+          await counterPropose(deps(), {
+            userId: me(ctx.actor),
+            tradeId: ctx.params.id,
+            ...stripUndefined(ctx.body),
+          }),
+        ),
     }),
 
     defineRoute({
@@ -180,12 +188,15 @@ export function tradeRoutes(deps: Deps): RouteDefinition[] {
       retryable: true,
       rateLimit: { ...ACTION_BUDGET },
       schema: { params: tradeIdParamSchema, body: acceptBodySchema, response: tradeViewSchema },
-      handler: (ctx) =>
-        acceptProposal(deps(), {
-          userId: me(ctx.actor),
-          tradeId: ctx.params.id,
-          ...stripUndefined(ctx.body),
-        }),
+      handler: async (ctx) =>
+        withCounterparty(
+          deps(),
+          await acceptProposal(deps(), {
+            userId: me(ctx.actor),
+            tradeId: ctx.params.id,
+            ...stripUndefined(ctx.body),
+          }),
+        ),
     }),
 
     defineRoute({
@@ -196,8 +207,15 @@ export function tradeRoutes(deps: Deps): RouteDefinition[] {
       retryable: true,
       rateLimit: { ...ACTION_BUDGET },
       schema: { params: tradeIdParamSchema, body: declineBodySchema, response: tradeViewSchema },
-      handler: (ctx) =>
-        declineTrade(deps(), { userId: me(ctx.actor), tradeId: ctx.params.id, reason: ctx.body.reason }),
+      handler: async (ctx) =>
+        withCounterparty(
+          deps(),
+          await declineTrade(deps(), {
+            userId: me(ctx.actor),
+            tradeId: ctx.params.id,
+            reason: ctx.body.reason,
+          }),
+        ),
     }),
 
     defineRoute({
@@ -208,12 +226,15 @@ export function tradeRoutes(deps: Deps): RouteDefinition[] {
       retryable: true,
       rateLimit: { ...ACTION_BUDGET },
       schema: { params: tradeIdParamSchema, body: cancelBodySchema, response: tradeViewSchema },
-      handler: (ctx) =>
-        cancelTrade(deps(), {
-          userId: me(ctx.actor),
-          tradeId: ctx.params.id,
-          ...(ctx.body.reason ? { reason: ctx.body.reason } : {}),
-        }),
+      handler: async (ctx) =>
+        withCounterparty(
+          deps(),
+          await cancelTrade(deps(), {
+            userId: me(ctx.actor),
+            tradeId: ctx.params.id,
+            ...(ctx.body.reason ? { reason: ctx.body.reason } : {}),
+          }),
+        ),
     }),
 
     defineRoute({
@@ -224,7 +245,11 @@ export function tradeRoutes(deps: Deps): RouteDefinition[] {
       retryable: true,
       rateLimit: { ...ACTION_BUDGET },
       schema: { params: tradeIdParamSchema, response: tradeViewSchema },
-      handler: (ctx) => claimTradeInvitation(deps(), { userId: me(ctx.actor), tradeId: ctx.params.id }),
+      handler: async (ctx) =>
+        withCounterparty(
+          deps(),
+          await claimTradeInvitation(deps(), { userId: me(ctx.actor), tradeId: ctx.params.id }),
+        ),
     }),
   ];
 }
