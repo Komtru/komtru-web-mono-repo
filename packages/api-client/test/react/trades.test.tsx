@@ -4,12 +4,22 @@ import { cleanup, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createApiClient } from '../../src/client.js';
 import { ApiClientProvider } from '../../src/react/client-context.js';
-import { tradeKeys, useDeclineTrade, useTrade, useTradeStandards } from '../../src/react/trades.js';
+import {
+  tradeKeys,
+  useDeclineTrade,
+  useTrade,
+  useTradeList,
+  useTradeStandards,
+} from '../../src/react/trades.js';
 
 const ID = '0190b0a0-0000-7000-8000-000000000001';
 const trade = (status: string) => ({
   id: ID,
-  tradeCode: 'KMT-90428',
+  tradeCode: 'KMT-9042800-NG',
+  shareUrl: 'https://app.komtru.com/trades/KMT-9042800-NG',
+  categoryCode: null,
+  categoryName: null,
+  standardVersion: null,
   status,
   statusRevision: 3,
   initiatorRole: 'SELLER',
@@ -105,5 +115,110 @@ describe('the trade hooks', () => {
     }
     render(<Probe />, { wrapper: Wrapper });
     expect(await screen.findByText('Electronics')).toBeTruthy();
+  });
+});
+
+describe('useTradeList', () => {
+  const row = (n: number) => ({
+    id: `0190b0a0-0000-7000-8000-${String(n).padStart(12, '0')}`,
+    tradeCode: 'KMT-9042800-NG',
+    status: 'PENDING_PAYMENT',
+    statusRevision: 1,
+    yourRole: 'BUYER',
+    initiatorRole: 'BUYER',
+    awaiting: null,
+    attention: 'PAY',
+    counterparty: null,
+    item: { title: null, categoryCode: null, categoryName: null },
+    currency: 'NGN',
+    itemAmountMinor: '100',
+    buyerTotalMinor: '110',
+    sentAt: null,
+    createdAt: '2026-11-09T09:00:00.000Z',
+    updatedAt: '2026-11-09T09:00:00.000Z',
+  });
+
+  it('sends the cursor back exactly as it came, page after page', async () => {
+    const urls: string[] = [];
+    const { wrapper: Wrapper } = setup((url) => {
+      urls.push(url.replace('https://api.test/v1', ''));
+      return url.includes('cursor=')
+        ? { items: [row(2)], nextCursor: null }
+        : { items: [row(1)], nextCursor: 'a b+c/d==' };
+    });
+    function Probe() {
+      const list = useTradeList('OPEN');
+      return (
+        <>
+          <p>{String(list.data?.pages.flatMap((page) => page.items).length ?? 0)}</p>
+          <button type="button" onClick={() => void list.fetchNextPage()}>
+            more
+          </button>
+        </>
+      );
+    }
+    render(<Probe />, { wrapper: Wrapper });
+    await screen.findByText('1');
+    screen.getByRole('button', { name: 'more' }).click();
+    await screen.findByText('2');
+    expect(urls[0]).toBe('/trades?state=OPEN&limit=20');
+    expect(urls[1]).toBe('/trades?state=OPEN&limit=20&cursor=a+b%2Bc%2Fd%3D%3D');
+  });
+
+  it('starts again from page one when a cursor is refused with 422, and never resends that cursor', async () => {
+    const urls: string[] = [];
+    let first = true;
+    const requests: string[] = [];
+    const fetch = vi.fn((input: URL | RequestInfo) => {
+      const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
+      requests.push(url);
+      urls.push(url);
+      if (url.includes('cursor=')) {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              type: 'about:blank',
+              title: 'Invalid cursor',
+              status: 422,
+              code: 'VALIDATION_FAILED',
+            }),
+            {
+              status: 422,
+              headers: { 'content-type': 'application/problem+json' },
+            },
+          ),
+        );
+      }
+      const body = first ? { items: [row(1)], nextCursor: 'stale' } : { items: [row(3)], nextCursor: null };
+      first = false;
+      return Promise.resolve(json(body));
+    });
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const client = createApiClient({ baseUrl: 'https://api.test/v1', fetch });
+    function Probe() {
+      const list = useTradeList('ALL');
+      return (
+        <>
+          <p>
+            {list.data?.pages.flatMap((page) => page.items.map((item) => item.id.slice(-2))).join(',') ??
+              'none'}
+          </p>
+          <button type="button" onClick={() => void list.fetchNextPage()}>
+            more
+          </button>
+        </>
+      );
+    }
+    render(
+      <QueryClientProvider client={queryClient}>
+        <ApiClientProvider client={client}>
+          <Probe />
+        </ApiClientProvider>
+      </QueryClientProvider>,
+    );
+    await screen.findByText('01');
+    screen.getByRole('button', { name: 'more' }).click();
+    await screen.findByText('03');
+    expect(requests.filter((url) => url.includes('cursor=stale'))).toHaveLength(1);
   });
 });

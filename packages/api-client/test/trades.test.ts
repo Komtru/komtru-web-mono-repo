@@ -11,6 +11,8 @@ import {
   createTrade,
   declineTrade,
   getTrade,
+  getTradeByCode,
+  listTrades,
   previewTrade,
   sendTrade,
   tradeViewSchema,
@@ -22,7 +24,11 @@ const json = (body: unknown, status = 200) =>
 
 const trade = {
   id: id(1),
-  tradeCode: 'KMT-90428',
+  tradeCode: 'KMT-9042800-NG',
+  shareUrl: 'https://app.komtru.com/trades/KMT-9042800-NG',
+  categoryCode: 'electronics',
+  categoryName: 'Electronics',
+  standardVersion: 2,
   status: 'AWAITING_ACCEPTANCE',
   statusRevision: 2,
   initiatorRole: 'BUYER',
@@ -195,5 +201,65 @@ describe('uploadFile', () => {
       uploadFile(client, photo(10), { category: 'OTHER', visibility: 'PRIVATE_CASE', fetchImpl: dropped }),
     ).rejects.toBeInstanceOf(UploadError);
     expect(calls.every((c) => !c.url.endsWith('/finalize'))).toBe(true);
+  });
+});
+
+describe('the trade list and the lookup by code', () => {
+  it('lists with the state and cursor passed through untouched', async () => {
+    const { calls, client } = recording(() => json({ items: [], nextCursor: null }));
+    await client.call(listTrades, { query: { state: 'OPEN', limit: 20, cursor: 'opaque+/cursor==' } });
+    expect(calls[0]?.url).toBe(
+      'https://api.test/v1/trades?state=OPEN&limit=20&cursor=opaque%2B%2Fcursor%3D%3D',
+    );
+    expect(listTrades).toMatchObject({ method: 'get', paginated: 'cursor' });
+  });
+
+  it('reads a list row with a null counterparty and null handle and avatar', async () => {
+    const row = {
+      id: id(1),
+      tradeCode: 'KMT-9042800-NG',
+      status: 'AWAITING_ACCEPTANCE',
+      statusRevision: 2,
+      yourRole: 'SELLER',
+      initiatorRole: 'BUYER',
+      awaiting: 'YOU',
+      attention: 'RESPOND_TO_PROPOSAL',
+      counterparty: { publicId: 'U-1', username: null, displayName: 'Amaka B.', avatarUrl: null },
+      item: { title: 'iPhone 13', categoryCode: 'electronics', categoryName: 'Electronics' },
+      currency: 'NGN',
+      itemAmountMinor: '45200000',
+      buyerTotalMinor: null,
+      sentAt: null,
+      createdAt: '2026-11-09T09:00:00.000Z',
+      updatedAt: '2026-11-09T09:00:00.000Z',
+    };
+    const { client } = recording(() =>
+      json({ items: [row, { ...row, id: id(2), counterparty: null }], nextCursor: 'c1' }),
+    );
+    const page = await client.call(listTrades, { query: {} });
+    expect(page.items.map((item) => item.counterparty?.displayName ?? null)).toEqual(['Amaka B.', null]);
+    expect(page.nextCursor).toBe('c1');
+  });
+
+  it('puts the canonical code in the path and reads a party and an invitee answer', async () => {
+    const answer = (access: string) => ({
+      access,
+      trade: {
+        id: id(1),
+        tradeCode: 'KMT-9042800-NG',
+        status: 'PENDING_COUNTERPARTY',
+        statusRevision: 1,
+        yourRole: 'SELLER',
+        categoryCode: null,
+        categoryName: null,
+        standardVersion: null,
+      },
+      counterparty: null,
+    });
+    const { calls, client } = recording(() => json(answer('INVITEE')));
+    const result = await client.call(getTradeByCode, { params: { code: 'KMT-9042800-NG' } });
+    expect(calls[0]?.url).toBe('https://api.test/v1/trades/by-code/KMT-9042800-NG');
+    expect(result.access).toBe('INVITEE');
+    expect(getTradeByCode.retryable).toBeUndefined();
   });
 });

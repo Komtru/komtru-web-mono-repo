@@ -3,7 +3,7 @@
 // The proposal screens' queries and mutations (T-061). Every mutation answers with the trade as it now
 // stands, so it is written into the cache under the trade's own key: the screen that sent the answer
 // and the one it navigates to read the same copy, with no refetch in between.
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { ApiClient } from '../client.js';
 import type { EndpointInput } from '../contracts.js';
 import {
@@ -14,11 +14,14 @@ import {
   createTrade,
   declineTrade,
   getTrade,
+  listTrades,
   previewTrade,
   sendTrade,
   type TradeView,
 } from '../trades.js';
-import { getMe, type Me } from '../me.js';
+import { ProblemError } from '../problems.js';
+import { nextPageParam } from '../pagination.js';
+import type { TradeListState } from '@komtru/shared-types';
 import { listTradeStandards, type TradeStandard } from '../standards.js';
 import { useApiClient } from './client-context.js';
 
@@ -26,6 +29,7 @@ export const tradeKeys = {
   all: ['trades'] as const,
   one: (id: string) => ['trades', id] as const,
   standards: ['trade-standards'] as const,
+  list: (state: TradeListState) => ['trades', 'list', state] as const,
 };
 
 export const tradeQueryOptions = (client: ApiClient, id: string) => ({
@@ -75,6 +79,8 @@ function useTradeMutation<TVariables>(
     mutationFn: (variables: TVariables) => call(client, variables),
     onSuccess: (trade) => {
       queryClient.setQueryData(tradeKeys.one(trade.id), trade);
+      // The trade moved, so every cached list of trades is out of date.
+      void queryClient.invalidateQueries({ queryKey: ['trades', 'list'] });
     },
   });
 }
@@ -112,14 +118,33 @@ export const useCancelTrade = () =>
 export const useClaimTrade = () =>
   useTradeMutation((client, id: string) => client.call(claimTrade, { params: { id } }));
 
-export const meQueryOptions = (client: ApiClient) => ({
-  queryKey: ['me'] as const,
-  queryFn: ({ signal }: { signal: AbortSignal }): Promise<Me> => client.call(getMe, {}, { signal }),
-  staleTime: 5 * 60 * 1000,
-});
+const LIST_PAGE = 20;
 
-/** The signed-in person's identity. Per-person device storage is keyed by `data.id`. */
-export function useMe() {
+/**
+ * The caller's trades, a page at a time. The cursor goes back to the server exactly as it came. A 422 on
+ * a cursor means it no longer fits the filter, so the list is reset to page one once; the same cursor is
+ * never sent twice.
+ */
+export function useTradeList(state: TradeListState = 'ALL') {
   const client = useApiClient();
-  return useQuery(meQueryOptions(client));
+  const queryClient = useQueryClient();
+  return useInfiniteQuery({
+    queryKey: tradeKeys.list(state),
+    initialPageParam: undefined as string | undefined,
+    getNextPageParam: nextPageParam,
+    queryFn: async ({ pageParam, signal }) => {
+      try {
+        return await client.call(
+          listTrades,
+          { query: { state, limit: LIST_PAGE, ...(pageParam === undefined ? {} : { cursor: pageParam }) } },
+          { signal },
+        );
+      } catch (error) {
+        if (pageParam !== undefined && error instanceof ProblemError && error.status === 422) {
+          void queryClient.resetQueries({ queryKey: tradeKeys.list(state) });
+        }
+        throw error;
+      }
+    },
+  });
 }

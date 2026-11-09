@@ -3,7 +3,14 @@
 //
 // Money is a digit string of kobo on the wire, both ways. A screen formats it with `formatNaira` and
 // never adds, subtracts or multiplies it: the fee lines and totals come from the trade's own snapshot.
-import { koboJsonSchema } from '@komtru/shared-types';
+import {
+  canonicalTradeCodeSchema,
+  cursorPageRequestSchema,
+  koboJsonSchema,
+  tradeByCodeResponseSchema,
+  tradeListResponseSchema,
+  tradeListStateSchema,
+} from '@komtru/shared-types';
 import { z } from 'zod';
 import { defineEndpoint } from './contracts.js';
 
@@ -57,6 +64,12 @@ const terms = z.looseObject({
 export const tradeViewSchema = z.looseObject({
   id: z.uuid(),
   tradeCode: z.string(),
+  /** `https://app.komtru.com/trades/<code>`: only the code in a link. Opening it needs the right account. */
+  shareUrl: z.string(),
+  /** The category and the Trade Standard version the trade pinned; all three are null together. */
+  categoryCode: z.string().nullable(),
+  categoryName: z.string().nullable(),
+  standardVersion: z.number().nullable(),
   status: z.string(),
   statusRevision: z.number(),
   initiatorRole: tradeRoleSchema,
@@ -229,4 +242,30 @@ export const claimTrade = defineEndpoint({
   scope: 'CONSUMER',
   retryable: true,
   schema: { params: tradeParams, response: tradeViewSchema },
+});
+
+/**
+ * The caller's trades, newest-relevant first. `cursor` is passed back exactly as received; a 422 means
+ * the filter changed or the cursor was mangled, and the answer is to start again from page one.
+ */
+export const listTrades = defineEndpoint({
+  method: 'get',
+  path: '/trades',
+  scope: 'CONSUMER',
+  paginated: 'cursor',
+  schema: {
+    query: cursorPageRequestSchema.extend({ state: tradeListStateSchema.optional() }),
+    response: tradeListResponseSchema,
+  },
+});
+
+/**
+ * Opens a trade from its code for a party or the named invitee. Anyone else gets the same 404 as a code
+ * that does not exist. Ten tries a minute, so it is never retried automatically.
+ */
+export const getTradeByCode = defineEndpoint({
+  method: 'get',
+  path: '/trades/by-code/:code',
+  scope: 'CONSUMER',
+  schema: { params: z.object({ code: canonicalTradeCodeSchema }), response: tradeByCodeResponseSchema },
 });
