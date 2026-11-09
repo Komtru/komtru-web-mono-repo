@@ -11,29 +11,16 @@ import { createHmacHasher } from '../../src/platform/crypto/hmac.js';
 import type { AppConfig } from '../../src/config/env.js';
 import { bindStore } from '../../src/modules/trust/infrastructure/postgres/bind-store.js';
 import { createFakeKycClient } from '../../src/modules/trust/infrastructure/providers/fake-kyc.client.js';
-import { createFakeSocialClient } from '../../src/modules/trust/infrastructure/providers/fake-social.client.js';
-import { runExpireStale } from '../../src/modules/trust/jobs/expire-stale.job.js';
 import { runIdentityCheck } from '../../src/modules/trust/jobs/run-identity-check.job.js';
 import { runLivenessCheck } from '../../src/modules/trust/jobs/run-liveness-check.job.js';
-import { runBankMatchCheck } from '../../src/modules/trust/jobs/run-bank-match.job.js';
 import { runBusinessCheck } from '../../src/modules/trust/jobs/run-business-check.job.js';
-import { runSocialProofCheck } from '../../src/modules/trust/jobs/run-social-proof-check.job.js';
 import type { TrustJobDeps } from '../../src/modules/trust/jobs/deps.js';
 import { submitBusinessCheck } from '../../src/modules/trust/services/business.service.js';
-import {
-  readBankNameMatch,
-  submitBankMatchCheck,
-} from '../../src/modules/trust/services/bankMatch.service.js';
+
 import { submitAddressCheck } from '../../src/modules/trust/services/address.service.js';
-import {
-  claimSocialHandle,
-  listSocialProof,
-  requestSocialProofCheck,
-} from '../../src/modules/trust/services/socialProof.service.js';
 import {
   submitIdentifierCheck,
   submitLivenessCheck,
-  readVerificationStatus,
 } from '../../src/modules/trust/services/verification.service.js';
 import type { VerificationDeps } from '../../src/modules/trust/services/verification.service.js';
 import { infraEnabled } from '../support/db-urls.js';
@@ -56,7 +43,6 @@ import {
 
 /** Ends in 4, so the fake passes it. The whole point is that this string never reaches a column. */
 const RAW_NIN = '22222222224';
-const RAW_BVN = '33333333334';
 const FIRST_NAME = 'Ngozi';
 const LAST_NAME = 'Adeyemi';
 
@@ -164,10 +150,6 @@ describe.runIf(infraEnabled)('trust against a real database', () => {
 
   /** The fake's scripted pass: an RC ending in 7 is active with the submitter as an officer. */
   const RC_NUMBER = '1487327';
-  const RC_BUSINESS_NAME = `FAKE ENTERPRISES ${RC_NUMBER} LIMITED`;
-  /** Ends in 7: the fake resolves it to the expected name exactly. */
-  const RAW_ACCOUNT = '0123456787';
-  const BANK_CODE = '058';
 
   /** A user at level 2, which §4 requires before any of this. */
   const identityVerifiedUser = async (suffix = '1', nin = RAW_NIN): Promise<string> => {
@@ -183,16 +165,6 @@ describe.runIf(infraEnabled)('trust against a real database', () => {
       rcNumber,
     });
     await runBusinessCheck(jobDeps(), { requestId: submitted.requestId, sealed: submitted.job.sealed });
-    return submitted.requestId;
-  };
-
-  const runBankMatch = async (userId: string, accountNumber = RAW_ACCOUNT): Promise<string> => {
-    const submitted = await submitBankMatchCheck(serviceDeps(), {
-      userId,
-      accountNumber,
-      bankCode: BANK_CODE,
-    });
-    await runBankMatchCheck(jobDeps(), { requestId: submitted.requestId, sealed: submitted.job.sealed });
     return submitted.requestId;
   };
 

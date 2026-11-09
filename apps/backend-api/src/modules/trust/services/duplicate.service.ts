@@ -176,7 +176,7 @@ export async function resolveDuplicateFlag(db: Db, input: ResolveFlagInput): Pro
       payload: {
         flagId: flag.id,
         identifierType: flag.identifierType,
-        status: status as FlagResolution,
+        status,
         firstUserId: flag.firstUserId,
         conflictingUserId: flag.conflictingUserId,
         resolvedByUserId: input.actor.userId,
