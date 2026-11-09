@@ -1,6 +1,6 @@
 'use client';
 
-import { useTradeList } from '@komtru/api-client/react';
+import { useTradeList, useTradeLive } from '@komtru/api-client/react';
 import { Button, EmptyState, LoadFailed, ScreenColumn, Skeleton, TradeRow } from '@komtru/ui-kit';
 import { describeTrade, initialsOf, nairaShort, partyName } from './format';
 
@@ -10,10 +10,15 @@ import { describeTrade, initialsOf, nairaShort, partyName } from './format';
  * Rows come from `GET /trades`, newest-relevant first, a page at a time. Whether a trade needs the
  * person is the server's `attention`, never worked out here: a row cannot see a pending extension
  * request or a deadline, so a client rule would be wrong in ways nobody would notice. The list is
- * refetched when the window regains focus, which is how it learns a trade moved.
+ * kept current by the trades' rooms (a push, or a reconnect, reads it again) and, as the fallback, by window
+ * focus.
  */
 export function MyTrades(): React.JSX.Element {
   const list = useTradeList('ALL');
+  // A trade list gets a push only for rooms it has joined, so it joins the trades it shows and reads the list
+  // again when any of them moves, and again on every reconnect. Focus still refetches, as the fallback.
+  const shown = (list.data?.pages ?? []).flatMap((page) => page.items);
+  useTradeLive(shown.map((trade) => ({ id: trade.id, code: trade.tradeCode })));
 
   if (list.isPending) {
     return (

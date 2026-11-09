@@ -82,31 +82,35 @@ export function useTradeLive(trades: readonly LiveTrade[]): TradeLive {
     if (!socket) return undefined;
     let active = true;
 
-    const join = (trade: LiveTrade) => {
-      const done = (joined: boolean) => {
-        if (!active) return;
-        setRefused((current) =>
-          joined
-            ? current.filter((code) => code !== trade.code)
-            : current.includes(trade.code)
-              ? current
-              : [...current, trade.code],
+    // Asks for one room and says whether it was joined. A refused or failed join is not an error for the
+    // screen: it still works by reading the trade, which is why the answer only feeds `refused`.
+    const join = async (trade: LiveTrade): Promise<void> => {
+      let joined = false;
+      try {
+        joined = isJoined(
+          await socket.emitWithAck('room:join', { prefix: TRADE_ROOM_PREFIX, id: trade.code }),
         );
-        // Whatever happened before this join, or while the socket was down, is only behind the API.
-        refetchTrade(queryClient, trade.id);
-      };
-      socket
-        .emitWithAck('room:join', { prefix: TRADE_ROOM_PREFIX, id: trade.code })
-        .then((ack) => {
-          done(isJoined(ack));
-        })
-        // The emit itself failed (the socket dropped mid-ask). Not joined, so read it now; the next connect rejoins.
-        .catch(() => {
-          done(false);
-        });
+      } catch {
+        // The emit itself failed (the socket dropped mid-ask). Not joined; the next connect rejoins.
+      }
+      if (!active) return;
+      setRefused((current) =>
+        joined
+          ? current.filter((code) => code !== trade.code)
+          : current.includes(trade.code)
+            ? current
+            : [...current, trade.code],
+      );
     };
     const joinAll = () => {
-      for (const trade of latest.current) join(trade);
+      const open = latest.current;
+      // Once every room is answered, read everything again, once: whatever happened before the join, or while
+      // the socket was down, is only behind the API. One read per trade and one of the lists, however many rooms.
+      void Promise.all(open.map(join)).then(() => {
+        if (!active) return;
+        for (const trade of open) void queryClient.invalidateQueries({ queryKey: tradeKeys.one(trade.id) });
+        void queryClient.invalidateQueries({ queryKey: ['trades', 'list'] });
+      });
     };
 
     const onUpdate = (payload: unknown) => {

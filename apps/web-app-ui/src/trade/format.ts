@@ -1,6 +1,7 @@
 // What a proposal screen says and how it says it. Pure functions, so the wording rules are tested
 // without a DOM. Money arrives as a digit string of kobo and is only ever formatted here, never summed.
 import { ProblemError } from '@komtru/api-client';
+import { isWorkspaceStatus, workspaceStanding } from './workspace-state';
 import {
   formatNaira,
   type CounterpartyDisplay,
@@ -177,8 +178,19 @@ export function describeTrade(trade: Pick<TradeListItem, 'status' | 'attention' 
       return { tone: 'risk', label: 'Expired', sub: code, closed: true };
     case 'DRAFT':
       return { tone: 'awaiting', label: 'Draft', sub: `${code} · not sent yet`, closed: false };
-    default:
+    default: {
+      // From the agreement onward the workspace words it: one place says what each status is called.
+      if (isWorkspaceStatus(trade.status)) {
+        const standing = workspaceStanding(trade.status);
+        return {
+          tone: standing.chip.tone,
+          label: standing.chip.label,
+          sub: `Trade ${trade.tradeCode}`,
+          closed: standing.closed,
+        };
+      }
       return { tone: 'protected', label: 'In progress', sub: `Trade ${trade.tradeCode}`, closed: false };
+    }
   }
 }
 
@@ -195,4 +207,24 @@ export function proofNeeds(proofMedia: { minPhotos: number; requireVideo: boolea
     photos: Math.max(proofMedia.minPhotos, proofMedia.requireVideo ? 0 : 1),
     video: proofMedia.requireVideo,
   };
+}
+
+/**
+ * A moment as the reference writes it ("30 Sep · 13:24"), in Lagos time: every trade here is Nigerian and a
+ * deadline that reads differently on two phones is a dispute waiting to happen. A value that is not a date
+ * is shown as nothing rather than "Invalid Date".
+ */
+export function whenLabel(iso: string): string {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return '';
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'Africa/Lagos',
+    day: 'numeric',
+    month: 'short',
+    hour: '2-digit',
+    minute: '2-digit',
+    hourCycle: 'h23',
+  }).formatToParts(date);
+  const part = (type: string): string => parts.find((p) => p.type === type)?.value ?? '';
+  return `${part('day')} ${part('month')} · ${part('hour')}:${part('minute')}`;
 }

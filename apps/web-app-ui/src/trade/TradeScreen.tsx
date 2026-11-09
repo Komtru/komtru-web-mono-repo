@@ -13,24 +13,15 @@ import {
   ActionStack,
   Button,
   CodeCard,
-  ItemCard,
-  PartyStrip,
   LoadFailed,
   LoadingScreen,
   NoteBanner,
-  ReadyBanner,
   RiskBanner,
   ScreenColumn,
   ScreenHeader,
   SectionLabel,
-  Sheet,
   StatusHero,
-  type StatusHeroTone,
-  TermList,
-  TermRow,
   TextField,
-  type VersionStep,
-  VersionTimeline,
   WarnBanner,
 } from '@komtru/ui-kit';
 import { useQueryClient } from '@tanstack/react-query';
@@ -38,19 +29,11 @@ import { useState } from 'react';
 import { AddressPicker } from './AddressPicker';
 import { ClaimPanel } from './ClaimPanel';
 import { ShareTrade } from './ShareTrade';
-import {
-  addressLine,
-  hoursLabel,
-  isProblem,
-  itemSub,
-  itemTitle,
-  initialsOf,
-  naira,
-  partyName,
-  proofNeeds,
-  problemMessage,
-} from './format';
+import { isProblem, proofNeeds, problemMessage } from './format';
+import { BACK_TO_TRADES, ConfirmSheet, ItemSummary, PartyHeader, TermsRows } from './parts';
 import { ProofUpload } from './ProofUpload';
+import { Workspace } from './Workspace';
+import { isWorkspaceStatus, type WorkspaceTab } from './workspace-state';
 
 /**
  * One trade, as the person looking at it should see it right now.
@@ -58,9 +41,10 @@ import { ProofUpload } from './ProofUpload';
  * The backend decides what is true (the status, whose turn it is); this decides what to draw. A
  * proposal moves through a handful of states and each has one screen: the one it shows the person who
  * has to act, the one for the person who is waiting, the held and closed ends, and the agreement.
- * Anything past the agreement belongs to the trade workspace and is shown as a plain summary here.
+ * From the agreement onward the trade is the workspace (`Workspace`), behind this same route: one screen decides
+ * what a trade looks like, whichever stage it is at, so the proposal and the workspace cannot drift apart.
  */
-export function TradeScreen({ id }: { id: string }): React.JSX.Element {
+export function TradeScreen({ id, tab = 'overview' }: { id: string; tab?: WorkspaceTab }): React.JSX.Element {
   const trade = useTrade(id);
 
   if (trade.isPending) {
@@ -80,11 +64,13 @@ export function TradeScreen({ id }: { id: string }): React.JSX.Element {
       />
     );
   }
-  return <TradeState trade={trade.data} />;
+  return <TradeState trade={trade.data} tab={tab} />;
 }
 
-function TradeState({ trade }: { trade: TradeView }): React.JSX.Element {
+function TradeState({ trade, tab }: { trade: TradeView; tab: WorkspaceTab }): React.JSX.Element {
   const mine = trade.yourRole === trade.initiatorRole;
+  // From the agreement onward the trade is the workspace; everything before it is a proposal, drawn below.
+  if (isWorkspaceStatus(trade.status)) return <Workspace trade={trade} status={trade.status} tab={tab} />;
   switch (trade.status) {
     case 'UNDER_PROPOSAL_REVIEW':
       return <HeldForReview trade={trade} />;
@@ -94,8 +80,6 @@ function TradeState({ trade }: { trade: TradeView }): React.JSX.Element {
       return mine ? <WaitingOnThem trade={trade} /> : <ClaimInvitation trade={trade} />;
     case 'AWAITING_ACCEPTANCE':
       return trade.awaiting === 'YOU' ? <AnswerProposal trade={trade} /> : <WaitingOnThem trade={trade} />;
-    case 'PENDING_PAYMENT':
-      return <TermsAgreed trade={trade} />;
     case 'DECLINED':
     case 'CANCELLED':
     case 'EXPIRED':
@@ -108,105 +92,6 @@ function TradeState({ trade }: { trade: TradeView }): React.JSX.Element {
 // ---------------------------------------------------------------------------
 // Shared pieces
 // ---------------------------------------------------------------------------
-
-/**
- * Who is on the other side, from the trade itself. The platform sends nothing for a proposal still waiting
- * for an invitee, or for an erased or closed account, and then no strip is drawn.
- */
-function PartyHeader({ trade }: { trade: TradeView }): React.JSX.Element | null {
-  const party = trade.counterparty;
-  if (party === undefined || party === null) return null;
-  const name = partyName(party);
-  return <PartyStrip name={name} initials={initialsOf(name.replace(/^@/, ''))} />;
-}
-
-function ItemSummary({ trade }: { trade: TradeView }): React.JSX.Element | null {
-  if (trade.terms === null) return null;
-  const sub = itemSub(trade.terms.itemSpec);
-  return (
-    <ItemCard
-      title={itemTitle(trade.terms.itemSpec)}
-      {...(sub === undefined ? {} : { sub })}
-      price={naira(trade.terms.itemAmountMinor)}
-    />
-  );
-}
-
-function TermsRows({ trade }: { trade: TradeView }): React.JSX.Element | null {
-  const { terms } = trade;
-  if (terms === null) return null;
-  const delivery = terms.deliveryAddress === null ? undefined : addressLine(terms.deliveryAddress);
-  const shipsFrom = terms.shipsFromAddress === null ? undefined : addressLine(terms.shipsFromAddress);
-  return (
-    <TermList aria-label="Terms of this trade">
-      <TermRow label="Price" checked>
-        {naira(terms.itemAmountMinor)}
-      </TermRow>
-      <TermRow label="Inspection" checked>
-        {hoursLabel(terms.inspectionWindowHours)}
-        <span className="font-semibold text-info-on-soft"> · Trade Standard</span>
-      </TermRow>
-      {delivery !== undefined && (
-        <TermRow label="Delivery to" checked>
-          {delivery}
-        </TermRow>
-      )}
-      {shipsFrom !== undefined && (
-        <TermRow label="Ships from" checked>
-          {shipsFrom}
-        </TermRow>
-      )}
-      <TermRow label="Version" checked>
-        {String(terms.versionNumber)}
-      </TermRow>
-    </TermList>
-  );
-}
-
-const BACK_TO_TRADES = (
-  <Button asChild variant="secondary">
-    <a href="/trades">Back to your trades</a>
-  </Button>
-);
-
-/** The confirmation every withdrawal goes through: a decision that cannot be undone asks once. */
-function ConfirmSheet({
-  open,
-  title,
-  confirm,
-  pending,
-  onConfirm,
-  onClose,
-  children,
-}: {
-  open: boolean;
-  title: string;
-  confirm: string;
-  pending: boolean;
-  onConfirm: () => void;
-  onClose: () => void;
-  children: React.ReactNode;
-}): React.JSX.Element {
-  return (
-    <Sheet
-      open={open}
-      onClose={onClose}
-      title={title}
-      footer={
-        <>
-          <Button type="button" variant="danger" onClick={onConfirm} disabled={pending}>
-            {pending ? 'Working…' : confirm}
-          </Button>
-          <Button type="button" variant="secondary" onClick={onClose}>
-            Keep it
-          </Button>
-        </>
-      }
-    >
-      {children}
-    </Sheet>
-  );
-}
 
 // ---------------------------------------------------------------------------
 // R1 and Customer-2: a proposal waiting on you
@@ -493,71 +378,6 @@ function NotSent({ trade }: { trade: TradeView }): React.JSX.Element {
 // ---------------------------------------------------------------------------
 // TC-06: terms agreed
 // ---------------------------------------------------------------------------
-
-/**
- * The versions this agreement went through. The platform returns only the current terms, so only the
- * current version is described (who proposed it is the API's own `proposedByRole`); the ones before
- * it are listed as superseded without saying who wrote them, because that is not something the
- * screen is told.
- */
-function versionSteps(trade: TradeView): VersionStep[] {
-  const current = trade.terms?.versionNumber ?? 1;
-  const proposer = trade.terms?.proposedByRole === 'SELLER' ? 'seller' : 'buyer';
-  return Array.from({ length: current }, (_, index) => {
-    const n = index + 1;
-    return n === current
-      ? {
-          id: String(n),
-          title: `Version ${String(n)} · Accepted`,
-          detail: `Proposed by the ${proposer}. Current agreed version`,
-          state: 'done' as const,
-        }
-      : { id: String(n), title: `Version ${String(n)}`, detail: 'Superseded', state: 'done' as const };
-  });
-}
-
-function TermsAgreed({ trade }: { trade: TradeView }): React.JSX.Element {
-  const buyer = trade.yourRole === 'BUYER';
-  const tone: StatusHeroTone = 'success';
-  return (
-    <ScreenColumn>
-      <StatusHero tone={tone} title="Terms agreed">
-        Both parties accepted this version, so the trade has been created.
-      </StatusHero>
-      <ReadyBanner title="Agreement recorded">
-        Version {String(trade.terms?.versionNumber ?? 1)} · accepted by buyer and seller. Payment hasn&apos;t
-        been made.
-      </ReadyBanner>
-      <ItemSummary trade={trade} />
-      {trade.fees !== null && (
-        <TermList aria-label="What this comes to">
-          <TermRow label="Item price">{naira(trade.fees.itemAmountMinor)}</TermRow>
-          {buyer ? (
-            <>
-              <TermRow label="Buyer protection fee">{naira(trade.fees.buyerProtectionFeeMinor)}</TermRow>
-              <TermRow label="You pay">
-                <b className="text-midnight-text">{naira(trade.fees.buyerTotalMinor)}</b>
-              </TermRow>
-            </>
-          ) : (
-            <TermRow label="You receive">
-              <b className="text-midnight-text">{naira(trade.fees.sellerProceedsMinor)}</b>
-            </TermRow>
-          )}
-        </TermList>
-      )}
-      <SectionLabel>Agreement history</SectionLabel>
-      <VersionTimeline aria-label="Versions of this agreement" steps={versionSteps(trade)} />
-      <p className="mt-[12px] text-[11.5px] leading-[1.6] text-trust-gray">
-        {buyer
-          ? "The next step is for you to fund the trade. Payment isn't available in the app yet, so there's nothing to do here until it is."
-          : "The next step is for the buyer to fund the trade. You'll be told when they have."}
-      </p>
-      <CodeCard label="Trade Code" code={trade.tradeCode} className="mt-[16px]" />
-      <ActionStack>{BACK_TO_TRADES}</ActionStack>
-    </ScreenColumn>
-  );
-}
 
 // ---------------------------------------------------------------------------
 // The ends that are not an agreement, and everything after it
