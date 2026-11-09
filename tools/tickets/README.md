@@ -10,3 +10,11 @@ Run it after changing any ticket's `**Status:**`, `**Depends on:**` or title. It
 - rewrites everything in `docs/TICKETS.md` from "## Critical path" down, keeping the hand-written header.
 
 To mark a ticket done, add `- **Status:** Done (YYYY-MM-DD). Plan: <plan path>.` under its heading, then run the command.
+
+## Progress
+
+`pnpm progress` reports **features** first (`docs/tickets/FEATURE_MAP.md`): MVP and total bars, where only
+`- **Status:** Done` counts. `--list` lists the remaining MVP features and the `Backend done, UI outstanding`
+group, `--tickets` adds the per-ticket layer view, and `--write` regenerates `docs/PROGRESS.md`
+(`pnpm progress:write`). The ticket view reads `docs/MVP.md`'s `## Included — N tickets` listings and fails
+if they disagree with the stated counts. It is tested by `scripts/test/progress-tickets.test.ts`.
