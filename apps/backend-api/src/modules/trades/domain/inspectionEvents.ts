@@ -47,3 +47,19 @@ export const tradeInspectionExtensionRespondedEvent = defineEvent(
     newDueAt: z.iso.datetime().optional(),
   }),
 );
+
+/**
+ * The inspection window closes soon and the buyer has not acted (T-068, the workspace's "inspection
+ * reminder"). Published at most once per deadline by `trades.inspection-reminders`. `dueAt` is the
+ * deadline in force when the reminder was claimed.
+ */
+export const tradeInspectionReminderDueEvent = defineEvent(
+  'trades.inspection.reminder_due',
+  1,
+  z.object({
+    tradeId: uuidSchema,
+    tradeCode: tradeCodeSchema,
+    deadlineId: uuidSchema,
+    dueAt: z.iso.datetime(),
+  }),
+);

@@ -18,6 +18,7 @@ export * from './domain/deadline.js';
 export * from './domain/fulfilmentEvents.js';
 export * from './domain/inspection.js';
 export * from './domain/inspectionEvents.js';
+export * from './infrastructure/notifications.js';
 export * from './services/trade.service.js';
 export * from './services/proposal.service.js';
 export * from './services/fulfilment.service.js';

@@ -89,7 +89,9 @@ export function createNotifyModule(options: NotifyModuleOptions = {}): KomtruMod
             const queued = await dispatchForEvent({ config, logger: ctx.logger }, tx, {
               envelope,
               templateKey: binding.templateKey,
-              recipients: binding.recipients(envelope.payload),
+              recipients: binding.audience
+                ? await binding.audience(envelope.payload, tx)
+                : binding.recipients(envelope.payload),
             });
             // Returned, not awaited here: the bus runs this once the rows above are committed.
             // Enqueueing inside the transaction raced it — the send job would find no row, throw

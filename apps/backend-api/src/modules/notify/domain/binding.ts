@@ -18,6 +18,8 @@ import {
   otpPurposeLabel,
 } from '../../identity/index.js';
 import { identitySessionReuseDetectedEvent } from '@komtru/shared-types';
+import { TRADE_NOTIFICATION_PLANS, resolveTradeAudience } from '../../trades/index.js';
+import type { Tx } from '../../../platform/events/publish.js';
 
 export interface NotificationRecipient {
   userId: string;
@@ -41,6 +43,12 @@ export interface NotificationBinding<S extends z.ZodType = z.ZodType> {
   templateKey: string;
   /** Usually one recipient; a trade event tells both parties, so it is a list. */
   recipients: (payload: z.output<S>) => NotificationRecipient[];
+  /**
+   * For an event whose payload names a thing but not its people (a trade event carries a trade id, not
+   * its buyer and seller). When present it is used INSTEAD of `recipients`, inside the subscriber's
+   * transaction so the read agrees with the event. `recipients` is then unused and returns nobody.
+   */
+  audience?: (payload: z.output<S>, tx: Tx) => Promise<NotificationRecipient[]>;
 }
 
 export const defineBinding = <S extends z.ZodType>(binding: NotificationBinding<S>): NotificationBinding =>
@@ -169,4 +177,15 @@ export const BINDINGS: NotificationBinding[] = [
       },
     ],
   }),
+
+  // T-068: every trade event the workspace surfaces. Who hears what is the trades module's plan.
+  ...TRADE_NOTIFICATION_PLANS.map((plan) =>
+    defineBinding({
+      subscriber: plan.subscriber,
+      event: plan.event,
+      templateKey: plan.templateKey,
+      recipients: () => [],
+      audience: (payload, tx) => resolveTradeAudience(tx, plan, payload),
+    }),
+  ),
 ];

@@ -82,7 +82,9 @@ describe("notify's identity bindings", () => {
       },
     };
 
-    for (const binding of BINDINGS) {
+    // Trade bindings resolve their audience from the database; their variables are checked against the
+    // catalogue in trade-bindings.test.ts.
+    for (const binding of BINDINGS.filter((b) => b.audience === undefined)) {
       const declared = new Set(
         CATALOGUE.templates.filter((t) => t.templateKey === binding.templateKey).flatMap((t) => t.variables),
       );
