@@ -144,7 +144,7 @@ describe('bindings that look their audience up', () => {
 
   it('never also name recipients from the payload', () => {
     for (const binding of BINDINGS.filter((b) => b.audience !== undefined)) {
-      expect(binding.recipients({} as never), binding.subscriber).toEqual([]);
+      expect(binding.recipients({}), binding.subscriber).toEqual([]);
     }
   });
 
