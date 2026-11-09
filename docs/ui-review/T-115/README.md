@@ -1,30 +1,33 @@
 # F-017 — Propose a trade, invite the other party (T-115)
 
-Shot with `pnpm visual-check` against the **v2 master** (`KOMTRU_VISUAL_CHECK_REFERENCE=v2`, see below),
+Shot with `pnpm visual-check` against the **v2 master** (the harness default; see below),
 against the real app and a canned stand-in for the backend, signed in through a sealed session cookie.
 
-| Screen     | Route                    | Differing pixels |
-| ---------- | ------------------------ | ---------------- |
-| I3         | `/trade/new`             | 9.26%            |
-| CTS1       | `/trade/standards`       | 5.99%            |
-| IF1        | `/trade/[id]` (rejected) | 20.96%           |
-| G3         | `/trade/[id]` (held)     | 26.25%           |
-| Q1         | `/trades`                | 4.79%            |
-| R1         | `/trade/[id]` (seller)   | 10.47%           |
-| Customer-2 | `/trade/[id]` (buyer)    | 10.13%           |
-| TC-05      | `/trade/[id]/counter`    | 14.76%           |
-| TC-06      | `/trade/[id]` (agreed)   | 9.46%            |
+| Screen         | Route                    | Differing pixels |
+| -------------- | ------------------------ | ---------------- |
+| I3             | `/trade/new`             | 9.19%            |
+| CTS1           | `/trade/standards`       | 5.93%            |
+| IF1 (see note) | `/trade/[id]` (rejected) | 21.49%           |
+| G3             | `/trade/[id]` (held)     | 25.86%           |
+| Q1             | `/trades`                | 4.71%            |
+| R1             | `/trade/[id]` (seller)   | 10.57%           |
+| Customer-2     | `/trade/[id]` (buyer)    | 12.68%           |
+| TC-05          | `/trade/[id]/counter`    | 15.18%           |
+| TC-06          | `/trade/[id]` (agreed)   | 9.38%            |
 
-Every figure includes the app shell's brand row and tab bar, which the reference does not draw on these
-screens (see each file). The two highest, G3 and IF1, are the two where the built screen shows less than the
-drawing because what it would show is post-MVP.
+Shot with `--content main`, which starts the built shot at the screen's own content instead of the page top,
+so the app shell's brand row no longer shifts every line (the earlier figures compared text 54px apart). The
+percentages are small because most of each frame is white either way; read the heat maps, whose red is now
+real differences in what a screen says. G3 and IF1 are highest because the built screens show less than the
+drawings: what they would show is post-MVP. **IF1 is not IF1**: it is the layout reused for a rejected
+proposal, because IMEI is F-020; see `IF1.md`.
 
 ## The harness reads the v1 reference unless told otherwise
 
 `tools/visual-check` read `SCREEN_INDEX-v1.md` and `Komtru — UI Screens Living Master File.html` only. The
 usage string saying `SCREEN_INDEX-v1.md` was not stale, it was accurate: v2 line numbers (G3 at 3840, TC-05
 at 10315) read against the v1 HTML point at unrelated screens, and G3, TC-05 and TC-06 do not exist in v1.
-`KOMTRU_VISUAL_CHECK_REFERENCE=v2` now switches both the index and the HTML. The v2 master also declares
+v2 is now the harness's default (`KOMTRU_VISUAL_CHECK_REFERENCE=v1` selects the old files), and `--content <selector>` starts the built shot at an element, so shell chrome the reference does not draw does not offset the comparison. The v2 master also declares
 `.mweb-frame` as `min(340px,100%)`, which the frame reader rejected; it now reads that as 340px and skips a
 bare `100%`.
 
