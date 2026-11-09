@@ -7,11 +7,11 @@ behind it is [`BUILD_PLAN.md`](BUILD_PLAN.md). The unit of work is the feature, 
 thing in an app.
 
 ```
-MVP   █████████·························  14/52   (27%)
-Total ██████····························  14/80   (18%)
+MVP   ██████████························  15/52   (29%)
+Total ██████····························  15/80   (19%)
 ```
 
-38 MVP features left, 28 deferred past it.
+37 MVP features left, 28 deferred past it.
 
 ## Backend done, UI outstanding
 
@@ -19,7 +19,6 @@ The engine exists and only the UI is missing, so these are the highest-value wor
 
 | Feature | Title                                                  | Journey                  | MVP |
 | ------- | ------------------------------------------------------ | ------------------------ | --- |
-| F-022   | Follow a trade in one role-aware workspace             | The trade workspace      | yes |
 | F-024   | Fund escrow                                            | Fund & protect           | yes |
 | F-026   | Accept, prove, prepare and ship an item                | Fulfil & dispatch        | yes |
 | F-027   | Confirm delivery, inspect, complete and release        | Deliver & inspect        | yes |
@@ -35,7 +34,7 @@ The engine exists and only the UI is missing, so these are the highest-value wor
 | Arrive & verify                         | 2    | 4     | 2        | 3         |
 | Home & discover                         | 0    | 2     | 0        | 2         |
 | Propose & agree                         | 1    | 5     | 1        | 3         |
-| The trade workspace                     | 0    | 2     | 0        | 2         |
+| The trade workspace                     | 1    | 2     | 1        | 2         |
 | Fund & protect                          | 0    | 2     | 0        | 1         |
 | Fulfil & dispatch                       | 0    | 1     | 0        | 1         |
 | Deliver & inspect                       | 0    | 3     | 0        | 3         |
@@ -51,22 +50,25 @@ The engine exists and only the UI is missing, so these are the highest-value wor
 
 ## Ready features (every dependency done), MVP first
 
-| Feature | Title                                             | Journey                                 | MVP |
-| ------- | ------------------------------------------------- | --------------------------------------- | --- |
-| F-005   | Deterministic integration test suite              | Platform (not a user journey)           | yes |
-| F-013   | First-time onboarding walkthrough                 | Arrive & verify                         | yes |
-| F-018   | Create a trade: buyer starts, seller completes    | Propose & agree                         | yes |
-| F-030   | Cancel a trade and get a refund                   | Issues & resolution                     | yes |
-| F-037   | Get paid out                                      | Complete & grow                         | yes |
-| F-075   | Hosting and real deploy jobs                      | Launch & assurance (not a user journey) | yes |
-| F-078   | Definition-of-done audit and first push           | Launch & assurance (not a user journey) | yes |
-| F-014   | Sign in with Google, Apple or Facebook            | Arrive & verify                         |     |
-| F-020   | Verify a phone IMEI before proposing              | Propose & agree                         |     |
-| F-047   | Message the other party                           | Account, trust & support                |     |
-| F-048   | Raise and resolve a support ticket                | Account, trust & support                |     |
-| F-052   | Fraud signals and restrictions                    | TrustOps console                        |     |
-| F-054   | Directory, roles, approvals and impersonation     | TrustOps console                        |     |
-| F-065   | Logistics companies, teams and the partner portal | Logistics partner                       |     |
+| Feature | Title                                                | Journey                                 | MVP |
+| ------- | ---------------------------------------------------- | --------------------------------------- | --- |
+| F-005   | Deterministic integration test suite                 | Platform (not a user journey)           | yes |
+| F-013   | First-time onboarding walkthrough                    | Arrive & verify                         | yes |
+| F-018   | Create a trade: buyer starts, seller completes       | Propose & agree                         | yes |
+| F-023   | Terms, agreement and payment detail in the workspace | The trade workspace                     | yes |
+| F-028   | Delivery and evidence in the workspace               | Deliver & inspect                       | yes |
+| F-029   | Capture and compare proof media                      | Deliver & inspect                       | yes |
+| F-030   | Cancel a trade and get a refund                      | Issues & resolution                     | yes |
+| F-037   | Get paid out                                         | Complete & grow                         | yes |
+| F-075   | Hosting and real deploy jobs                         | Launch & assurance (not a user journey) | yes |
+| F-078   | Definition-of-done audit and first push              | Launch & assurance (not a user journey) | yes |
+| F-014   | Sign in with Google, Apple or Facebook               | Arrive & verify                         |     |
+| F-020   | Verify a phone IMEI before proposing                 | Propose & agree                         |     |
+| F-047   | Message the other party                              | Account, trust & support                |     |
+| F-048   | Raise and resolve a support ticket                   | Account, trust & support                |     |
+| F-052   | Fraud signals and restrictions                       | TrustOps console                        |     |
+| F-054   | Directory, roles, approvals and impersonation        | TrustOps console                        |     |
+| F-065   | Logistics companies, teams and the partner portal    | Logistics partner                       |     |
 
 ## Remaining MVP features
 
@@ -110,11 +112,11 @@ The same work counted per ticket. Useful for the detail in `docs/tickets/`, not 
 it counts backend and frontend layers separately, which is how the build drifted.
 
 ```
-MVP   ███████████████████···············  60/109  (55%)
-Total ████████████······················  60/168  (36%)
+MVP   ███████████████████···············  61/109  (56%)
+Total ████████████······················  61/168  (36%)
 ```
 
-49 MVP tickets left, 59 deferred past it.
+48 MVP tickets left, 59 deferred past it.
 
 ### Tickets in progress
 
@@ -124,23 +126,26 @@ Total ████████████···················
 
 ### Tickets ready to start (MVP first)
 
-| Ticket | Title                                                             | MVP |
-| ------ | ----------------------------------------------------------------- | --- |
-| T-029  | Isolate the integration suite's shared Redis and queues           | yes |
-| T-073  | Payout accounts, preferences and payouts                          | yes |
-| T-075  | Refunds                                                           | yes |
-| T-112  | First-time onboarding                                             | yes |
-| T-116  | Buyer trade core and canonical trade detail                       | yes |
-| T-144  | Identity review                                                   | yes |
-| T-034  | Social login                                                      |     |
-| T-067  | IMEI verification                                                 |     |
-| T-085  | Logistics schema and Park seed                                    |     |
-| T-100  | Support tickets (M10)                                             |     |
-| T-101  | Risk and fraud (M13)                                              |     |
-| T-103  | Administration: impersonation and admin action log (M14, adapted) |     |
-| T-108  | Trade messaging                                                   |     |
-| T-155  | Location catalog management                                       |     |
-| T-219  | TrustOps: people development                                      |     |
+| Ticket | Title                                                                     | MVP |
+| ------ | ------------------------------------------------------------------------- | --- |
+| T-029  | Isolate the integration suite's shared Redis and queues                   | yes |
+| T-073  | Payout accounts, preferences and payouts                                  | yes |
+| T-075  | Refunds                                                                   | yes |
+| T-112  | First-time onboarding                                                     | yes |
+| T-117  | Escrow funding                                                            | yes |
+| T-144  | Identity review                                                           | yes |
+| T-194  | Trade workspace supporting screens: funding, terms, agreement and payment | yes |
+| T-195  | Trade workspace supporting screens: delivery and evidence                 | yes |
+| T-197  | Proof media: capture, check and compare                                   | yes |
+| T-034  | Social login                                                              |     |
+| T-067  | IMEI verification                                                         |     |
+| T-085  | Logistics schema and Park seed                                            |     |
+| T-100  | Support tickets (M10)                                                     |     |
+| T-101  | Risk and fraud (M13)                                                      |     |
+| T-103  | Administration: impersonation and admin action log (M14, adapted)         |     |
+| T-108  | Trade messaging                                                           |     |
+| T-155  | Location catalog management                                               |     |
+| T-219  | TrustOps: people development                                              |     |
 
 ### Tickets blocked on an owner decision
 
@@ -169,7 +174,6 @@ Total ████████████···················
 | T-112  | First-time onboarding                                                     | yes |
 | T-113  | Home and discovery                                                        | yes |
 | T-114  | Seller profile and Trust Passport                                         | yes |
-| T-116  | Buyer trade core and canonical trade detail                               | yes |
 | T-117  | Escrow funding                                                            | yes |
 | T-118  | Delivery, pickup PIN and inspection                                       | yes |
 | T-119  | Cancellation and refunds                                                  | yes |
