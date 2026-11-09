@@ -35,7 +35,7 @@ describe.runIf(infraEnabled)('ledger schema', () => {
     ]);
   });
 
-  // 0043 rebuilds the type rather than extending it, because a value ALTER TYPE adds cannot be used
+  // 0044 rebuilds the type rather than extending it, because a value ALTER TYPE adds cannot be used
   // in the transaction that adds it and the migrator runs the whole pending set in one. If the
   // rebuild ever left the old type behind, this is where it would show.
   it('leaves exactly one ledger_account_type behind after the rebuild', async () => {

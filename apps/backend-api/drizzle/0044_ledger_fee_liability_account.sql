@@ -21,10 +21,10 @@ ALTER TABLE "ledger"."ledger_accounts" DROP CONSTRAINT "ledger_accounts_scope";-
 -- The CHECK first and the generated column second: both depend on account_type, and Postgres
 -- refuses to retype a column that either one still references.
 ALTER TABLE "ledger"."ledger_accounts" DROP COLUMN "account_key";--> statement-breakpoint
-ALTER TYPE "ledger"."ledger_account_type" RENAME TO "ledger_account_type_pre_0043";--> statement-breakpoint
+ALTER TYPE "ledger"."ledger_account_type" RENAME TO "ledger_account_type_pre_0044";--> statement-breakpoint
 CREATE TYPE "ledger"."ledger_account_type" AS ENUM('PLATFORM_ESCROW_POOL', 'USER_ESCROW_LIABILITY', 'BUYER_PROTECTION_FEE_LIABILITY', 'USER_PAYABLE', 'PLATFORM_FEE_REVENUE', 'BUYER_PROTECTION_FEE_REVENUE', 'SETTLEMENT_CLEARING');--> statement-breakpoint
 ALTER TABLE "ledger"."ledger_accounts" ALTER COLUMN "account_type" TYPE "ledger"."ledger_account_type" USING "account_type"::text::"ledger"."ledger_account_type";--> statement-breakpoint
-DROP TYPE "ledger"."ledger_account_type_pre_0043";--> statement-breakpoint
+DROP TYPE "ledger"."ledger_account_type_pre_0044";--> statement-breakpoint
 ALTER TABLE "ledger"."ledger_accounts" ADD COLUMN "account_key" text GENERATED ALWAYS AS ("currency" || ':' || (CASE "account_type"
     WHEN 'PLATFORM_ESCROW_POOL' THEN 'PLATFORM_ESCROW_POOL'
     WHEN 'USER_ESCROW_LIABILITY' THEN 'USER_ESCROW_LIABILITY'

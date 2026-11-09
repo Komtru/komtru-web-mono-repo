@@ -5,11 +5,13 @@
 // KYC adapter is constructed (design §4.4, T-028). Nothing in `services/` or `http/` can follow that
 // path, which is what keeps every provider call inside a job.
 import type { TrustConfig } from '../../config/env.js';
+import type { Db } from '../../db/index.js';
 import { createEncryption, type Encryption } from '../../platform/crypto/encryption.js';
 import { createHmacHasher, type HmacHasher } from '../../platform/crypto/hmac.js';
 import type { Logger } from '../../platform/logger.js';
 import { defineModule, type KomtruModule, type ModuleContext } from '../../platform/module.js';
 import type { QueueFactory } from '../../platform/queue/factory.js';
+import { identityAccountAnonymisedEvent } from '../identity/index.js';
 import type { SocketGateway } from '../socket/index.js';
 import {
   TRUST_QUEUES,
@@ -20,8 +22,10 @@ import {
   type LivenessCheckJob,
   type SocialProofCheckJob,
 } from './domain/queues.js';
+import { trustAdminRoutes } from './http/admin.routes.js';
 import { trustRoutes } from './http/routes.js';
 import { bindStore } from './infrastructure/postgres/bind-store.js';
+import { scrubErasedAccountFlags } from './infrastructure/postgres/erasure.js';
 import type { TrustStore } from './infrastructure/postgres/store.js';
 import type { TrustJobDeps } from './jobs/deps.js';
 import { kycProvider, socialProofAdapter } from './jobs/providers.js';
@@ -58,6 +62,7 @@ const JOB_ATTEMPTS = 3;
 const JOB_BACKOFF_MS = 5_000;
 
 interface TrustRuntime {
+  db: Db;
   store: TrustStore;
   queues: QueueFactory;
   config: TrustConfig;
@@ -94,14 +99,18 @@ export function createTrustModule(options: TrustModuleOptions): KomtruModule {
   return defineModule({
     name: 'trust',
 
-    routes: trustRoutes({
-      store: () => need().store,
-      hasher: () => need().hasher,
-      encryption: () => need().encryption,
-      requestTtlMinutes: () => need().config.requestTtlMinutes,
-      logger: () => need().logger,
-      queues: () => need().queues,
-    }),
+    routes: [
+      ...trustRoutes({
+        store: () => need().store,
+        hasher: () => need().hasher,
+        encryption: () => need().encryption,
+        requestTtlMinutes: () => need().config.requestTtlMinutes,
+        logger: () => need().logger,
+        queues: () => need().queues,
+      }),
+      // M6 §11's admin half (T-052): the KYC queue, the duplicate flags and the override.
+      ...trustAdminRoutes({ db: () => need().db }),
+    ],
 
     queues: [
       {
@@ -174,6 +183,7 @@ export function createTrustModule(options: TrustModuleOptions): KomtruModule {
       const store = bindStore(ctx.db);
 
       runtime = {
+        db: ctx.db,
         store,
         queues: ctx.queues,
         config,
@@ -197,6 +207,15 @@ export function createTrustModule(options: TrustModuleOptions): KomtruModule {
           logger: ctx.logger,
         },
       };
+
+      // M1 §15: an erased account leaves no digest of its identifier behind in a duplicate flag.
+      ctx.events.subscribe({
+        name: 'trust.on-account-anonymised',
+        event: identityAccountAnonymisedEvent,
+        handler: async (envelope, tx) => {
+          await scrubErasedAccountFlags(tx, envelope.payload.userId);
+        },
+      });
       return Promise.resolve();
     },
 

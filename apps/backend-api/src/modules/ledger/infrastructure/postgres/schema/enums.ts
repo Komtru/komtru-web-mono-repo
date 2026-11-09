@@ -5,7 +5,7 @@
 // cash between the buyer and the agent and Komtru records nothing about it (design C23).
 //
 // Adding a value here is not free: `account_key` is GENERATED ALWAYS from a CASE over this enum, so
-// a new value means dropping and re-adding that column — see migration 0043 and T-070's status note.
+// a new value means dropping and re-adding that column — see migration 0044 and T-070's status note.
 import { ledger } from './columns.js';
 
 export const ledgerAccountType = ledger.enum('ledger_account_type', [

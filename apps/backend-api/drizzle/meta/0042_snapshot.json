@@ -1,5 +1,5 @@
 {
-  "id": "98bc8211-787a-40ef-ba63-8f255bf5755f",
+  "id": "f8feecb4-773d-4ce6-a963-769648a916d8",
   "prevId": "c73ea97d-2735-46ad-ab5c-7cc9f95bfa22",
   "version": "7",
   "dialect": "postgresql",
@@ -6195,428 +6195,6 @@
       },
       "isRLSEnabled": false
     },
-    "ledger.payment_attempts": {
-      "name": "payment_attempts",
-      "schema": "ledger",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true,
-          "default": "gen_random_uuid()"
-        },
-        "trade_id": {
-          "name": "trade_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "buyer_user_id": {
-          "name": "buyer_user_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "provider": {
-          "name": "provider",
-          "type": "payment_provider",
-          "typeSchema": "ledger",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "reference": {
-          "name": "reference",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "provider_reference": {
-          "name": "provider_reference",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "currency": {
-          "name": "currency",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'NGN'"
-        },
-        "fee_schedule_version": {
-          "name": "fee_schedule_version",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "item_amount_minor": {
-          "name": "item_amount_minor",
-          "type": "bigint",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "buyer_protection_fee_minor": {
-          "name": "buyer_protection_fee_minor",
-          "type": "bigint",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "amount_minor": {
-          "name": "amount_minor",
-          "type": "bigint",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "status": {
-          "name": "status",
-          "type": "payment_attempt_status",
-          "typeSchema": "ledger",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'INITIATED'"
-        },
-        "last_provider_status": {
-          "name": "last_provider_status",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "last_verified_at": {
-          "name": "last_verified_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "provider_seen_at": {
-          "name": "provider_seen_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "last_verify_error": {
-          "name": "last_verify_error",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "last_verify_error_at": {
-          "name": "last_verify_error_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "verified_amount_minor": {
-          "name": "verified_amount_minor",
-          "type": "bigint",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "verified_currency": {
-          "name": "verified_currency",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "journal_entry_id": {
-          "name": "journal_entry_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "failure_reason": {
-          "name": "failure_reason",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "review_published_at": {
-          "name": "review_published_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "initiated_at": {
-          "name": "initiated_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "pending_at": {
-          "name": "pending_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "confirmed_at": {
-          "name": "confirmed_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "closed_at": {
-          "name": "closed_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "updated_at": {
-          "name": "updated_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {
-        "payment_attempts_trade_idx": {
-          "name": "payment_attempts_trade_idx",
-          "columns": [
-            {
-              "expression": "trade_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "initiated_at",
-              "isExpression": false,
-              "asc": false,
-              "nulls": "first"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "payment_attempts_provider_ref": {
-          "name": "payment_attempts_provider_ref",
-          "columns": [
-            {
-              "expression": "provider",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "provider_reference",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": true,
-          "where": "\"ledger\".\"payment_attempts\".\"provider_reference\" IS NOT NULL",
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "payment_attempts_one_open": {
-          "name": "payment_attempts_one_open",
-          "columns": [
-            {
-              "expression": "trade_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": true,
-          "where": "\"ledger\".\"payment_attempts\".\"status\" IN ('INITIATED', 'PENDING')",
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "payment_attempts_one_success": {
-          "name": "payment_attempts_one_success",
-          "columns": [
-            {
-              "expression": "trade_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": true,
-          "where": "\"ledger\".\"payment_attempts\".\"status\" = 'SUCCEEDED'",
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "payment_attempts_journal_entry_id_ledger_journal_entries_id_fk": {
-          "name": "payment_attempts_journal_entry_id_ledger_journal_entries_id_fk",
-          "tableFrom": "payment_attempts",
-          "tableTo": "ledger_journal_entries",
-          "schemaTo": "ledger",
-          "columnsFrom": ["journal_entry_id"],
-          "columnsTo": ["id"],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {
-        "payment_attempts_reference_unique": {
-          "name": "payment_attempts_reference_unique",
-          "nullsNotDistinct": false,
-          "columns": ["reference"]
-        }
-      },
-      "policies": {},
-      "checkConstraints": {
-        "payment_attempts_currency": {
-          "name": "payment_attempts_currency",
-          "value": "\"ledger\".\"payment_attempts\".\"currency\" ~ '^[A-Z]{3}$'"
-        },
-        "payment_attempts_amounts": {
-          "name": "payment_attempts_amounts",
-          "value": "\"ledger\".\"payment_attempts\".\"item_amount_minor\" > 0 AND \"ledger\".\"payment_attempts\".\"buyer_protection_fee_minor\" >= 0\n          AND \"ledger\".\"payment_attempts\".\"amount_minor\" = \"ledger\".\"payment_attempts\".\"item_amount_minor\" + \"ledger\".\"payment_attempts\".\"buyer_protection_fee_minor\""
-        },
-        "payment_attempts_reference_shape": {
-          "name": "payment_attempts_reference_shape",
-          "value": "\"ledger\".\"payment_attempts\".\"reference\" = 'fund-' || \"ledger\".\"payment_attempts\".\"id\"::text"
-        },
-        "payment_attempts_succeeded_posted": {
-          "name": "payment_attempts_succeeded_posted",
-          "value": "(\"ledger\".\"payment_attempts\".\"status\" = 'SUCCEEDED') = (\"ledger\".\"payment_attempts\".\"journal_entry_id\" IS NOT NULL AND \"ledger\".\"payment_attempts\".\"confirmed_at\" IS NOT NULL)"
-        },
-        "payment_attempts_closed": {
-          "name": "payment_attempts_closed",
-          "value": "(\"ledger\".\"payment_attempts\".\"status\" IN ('FAILED', 'ABANDONED', 'NEEDS_REVIEW')) = (\"ledger\".\"payment_attempts\".\"closed_at\" IS NOT NULL)"
-        }
-      },
-      "isRLSEnabled": false
-    },
-    "ledger.payment_provider_webhooks": {
-      "name": "payment_provider_webhooks",
-      "schema": "ledger",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "bigserial",
-          "primaryKey": true,
-          "notNull": true
-        },
-        "provider": {
-          "name": "provider",
-          "type": "payment_provider",
-          "typeSchema": "ledger",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "provider_event_id": {
-          "name": "provider_event_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "event_type": {
-          "name": "event_type",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "payload": {
-          "name": "payload",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "signature_valid": {
-          "name": "signature_valid",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "received_at": {
-          "name": "received_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "processed_at": {
-          "name": "processed_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "processing_error": {
-          "name": "processing_error",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "duplicate_count": {
-          "name": "duplicate_count",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "default": 0
-        },
-        "sweep_count": {
-          "name": "sweep_count",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "default": 0
-        }
-      },
-      "indexes": {
-        "payment_provider_webhooks_dedup": {
-          "name": "payment_provider_webhooks_dedup",
-          "columns": [
-            {
-              "expression": "provider",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "provider_event_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": true,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "payment_provider_webhooks_unprocessed_idx": {
-          "name": "payment_provider_webhooks_unprocessed_idx",
-          "columns": [
-            {
-              "expression": "received_at",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "where": "\"ledger\".\"payment_provider_webhooks\".\"processed_at\" IS NULL",
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {},
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {
-        "payment_provider_webhooks_signed": {
-          "name": "payment_provider_webhooks_signed",
-          "value": "\"ledger\".\"payment_provider_webhooks\".\"signature_valid\""
-        }
-      },
-      "isRLSEnabled": false
-    },
     "notify.notification_event_mappings": {
       "name": "notification_event_mappings",
       "schema": "notify",
@@ -9271,6 +8849,153 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
+    "trust.duplicate_identity_flags": {
+      "name": "duplicate_identity_flags",
+      "schema": "trust",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "identifier_type": {
+          "name": "identifier_type",
+          "type": "verification_type",
+          "typeSchema": "trust",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "identifier_hash": {
+          "name": "identifier_hash",
+          "type": "bytea",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "first_user_id": {
+          "name": "first_user_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "conflicting_user_id": {
+          "name": "conflicting_user_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "request_id": {
+          "name": "request_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "status": {
+          "name": "status",
+          "type": "duplicate_flag_status",
+          "typeSchema": "trust",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'OPEN'"
+        },
+        "detected_at": {
+          "name": "detected_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "reviewed_by": {
+          "name": "reviewed_by",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "reviewed_at": {
+          "name": "reviewed_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "resolution_notes": {
+          "name": "resolution_notes",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {
+        "duplicate_identity_flags_request_unique": {
+          "name": "duplicate_identity_flags_request_unique",
+          "columns": [
+            {
+              "expression": "request_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "duplicate_identity_flags_status_idx": {
+          "name": "duplicate_identity_flags_status_idx",
+          "columns": [
+            {
+              "expression": "status",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "where": "\"trust\".\"duplicate_identity_flags\".\"status\" IN ('OPEN', 'ESCALATED')",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "duplicate_identity_flags_hash_idx": {
+          "name": "duplicate_identity_flags_hash_idx",
+          "columns": [
+            {
+              "expression": "identifier_hash",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "duplicate_identity_flags_request_id_verification_requests_id_fk": {
+          "name": "duplicate_identity_flags_request_id_verification_requests_id_fk",
+          "tableFrom": "duplicate_identity_flags",
+          "tableTo": "verification_requests",
+          "schemaTo": "trust",
+          "columnsFrom": ["request_id"],
+          "columnsTo": ["id"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "duplicate_flags_distinct_users": {
+          "name": "duplicate_flags_distinct_users",
+          "value": "\"trust\".\"duplicate_identity_flags\".\"first_user_id\" <> \"trust\".\"duplicate_identity_flags\".\"conflicting_user_id\""
+        }
+      },
+      "isRLSEnabled": false
+    },
     "trust.bvn_verifications": {
       "name": "bvn_verifications",
       "schema": "trust",
@@ -10376,11 +10101,6 @@
       "schema": "ledger",
       "values": ["PAYSTACK", "FLUTTERWAVE"]
     },
-    "ledger.payment_attempt_status": {
-      "name": "payment_attempt_status",
-      "schema": "ledger",
-      "values": ["INITIATED", "PENDING", "SUCCEEDED", "FAILED", "ABANDONED", "NEEDS_REVIEW"]
-    },
     "notify.notification_category": {
       "name": "notification_category",
       "schema": "notify",
@@ -10539,6 +10259,11 @@
       "name": "bank_match_result",
       "schema": "trust",
       "values": ["EXACT", "FUZZY_MATCH", "MISMATCH"]
+    },
+    "trust.duplicate_flag_status": {
+      "name": "duplicate_flag_status",
+      "schema": "trust",
+      "values": ["OPEN", "CONFIRMED_DUPLICATE", "CLEARED_FALSE_POSITIVE", "ESCALATED"]
     },
     "trust.kyc_provider": {
       "name": "kyc_provider",

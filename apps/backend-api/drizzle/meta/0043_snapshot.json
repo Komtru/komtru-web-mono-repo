@@ -1,6 +1,6 @@
 {
-  "id": "0b617153-c3bf-47a8-8872-00a1ba900665",
-  "prevId": "98bc8211-787a-40ef-ba63-8f255bf5755f",
+  "id": "4a9746c3-b499-4827-a609-3ac0e635213c",
+  "prevId": "f8feecb4-773d-4ce6-a963-769648a916d8",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -5870,7 +5870,7 @@
           "primaryKey": false,
           "notNull": true,
           "generated": {
-            "as": "\"currency\" || ':' || (CASE \"account_type\"\n    WHEN 'PLATFORM_ESCROW_POOL' THEN 'PLATFORM_ESCROW_POOL'\n    WHEN 'USER_ESCROW_LIABILITY' THEN 'USER_ESCROW_LIABILITY'\n    WHEN 'BUYER_PROTECTION_FEE_LIABILITY' THEN 'BUYER_PROTECTION_FEE_LIABILITY'\n    WHEN 'USER_PAYABLE' THEN 'USER_PAYABLE'\n    WHEN 'PLATFORM_FEE_REVENUE' THEN 'PLATFORM_FEE_REVENUE'\n    WHEN 'BUYER_PROTECTION_FEE_REVENUE' THEN 'BUYER_PROTECTION_FEE_REVENUE'\n    WHEN 'SETTLEMENT_CLEARING' THEN 'SETTLEMENT_CLEARING'\n  END) || ':' || COALESCE(\"owner_user_id\"::text, \"trade_id\"::text, \"payout_id\"::text, '-')",
+            "as": "\"currency\" || ':' || (CASE \"account_type\"\n    WHEN 'PLATFORM_ESCROW_POOL' THEN 'PLATFORM_ESCROW_POOL'\n    WHEN 'USER_ESCROW_LIABILITY' THEN 'USER_ESCROW_LIABILITY'\n    WHEN 'USER_PAYABLE' THEN 'USER_PAYABLE'\n    WHEN 'PLATFORM_FEE_REVENUE' THEN 'PLATFORM_FEE_REVENUE'\n    WHEN 'BUYER_PROTECTION_FEE_REVENUE' THEN 'BUYER_PROTECTION_FEE_REVENUE'\n    WHEN 'SETTLEMENT_CLEARING' THEN 'SETTLEMENT_CLEARING'\n  END) || ':' || COALESCE(\"owner_user_id\"::text, \"trade_id\"::text, \"payout_id\"::text, '-')",
             "type": "stored"
           }
         },
@@ -5925,7 +5925,7 @@
         },
         "ledger_accounts_scope": {
           "name": "ledger_accounts_scope",
-          "value": "CASE \"ledger\".\"ledger_accounts\".\"account_type\"\n            WHEN 'USER_ESCROW_LIABILITY' THEN \"ledger\".\"ledger_accounts\".\"trade_id\" IS NOT NULL AND \"ledger\".\"ledger_accounts\".\"owner_user_id\" IS NULL AND \"ledger\".\"ledger_accounts\".\"payout_id\" IS NULL\n            WHEN 'BUYER_PROTECTION_FEE_LIABILITY' THEN \"ledger\".\"ledger_accounts\".\"trade_id\" IS NOT NULL AND \"ledger\".\"ledger_accounts\".\"owner_user_id\" IS NULL AND \"ledger\".\"ledger_accounts\".\"payout_id\" IS NULL\n            WHEN 'USER_PAYABLE' THEN \"ledger\".\"ledger_accounts\".\"owner_user_id\" IS NOT NULL AND \"ledger\".\"ledger_accounts\".\"trade_id\" IS NULL AND \"ledger\".\"ledger_accounts\".\"payout_id\" IS NULL\n            WHEN 'SETTLEMENT_CLEARING' THEN \"ledger\".\"ledger_accounts\".\"payout_id\" IS NOT NULL AND \"ledger\".\"ledger_accounts\".\"owner_user_id\" IS NULL AND \"ledger\".\"ledger_accounts\".\"trade_id\" IS NULL\n            ELSE \"ledger\".\"ledger_accounts\".\"owner_user_id\" IS NULL AND \"ledger\".\"ledger_accounts\".\"trade_id\" IS NULL AND \"ledger\".\"ledger_accounts\".\"payout_id\" IS NULL\n          END"
+          "value": "CASE \"ledger\".\"ledger_accounts\".\"account_type\"\n            WHEN 'USER_ESCROW_LIABILITY' THEN \"ledger\".\"ledger_accounts\".\"trade_id\" IS NOT NULL AND \"ledger\".\"ledger_accounts\".\"owner_user_id\" IS NULL AND \"ledger\".\"ledger_accounts\".\"payout_id\" IS NULL\n            WHEN 'USER_PAYABLE' THEN \"ledger\".\"ledger_accounts\".\"owner_user_id\" IS NOT NULL AND \"ledger\".\"ledger_accounts\".\"trade_id\" IS NULL AND \"ledger\".\"ledger_accounts\".\"payout_id\" IS NULL\n            WHEN 'SETTLEMENT_CLEARING' THEN \"ledger\".\"ledger_accounts\".\"payout_id\" IS NOT NULL AND \"ledger\".\"ledger_accounts\".\"owner_user_id\" IS NULL AND \"ledger\".\"ledger_accounts\".\"trade_id\" IS NULL\n            ELSE \"ledger\".\"ledger_accounts\".\"owner_user_id\" IS NULL AND \"ledger\".\"ledger_accounts\".\"trade_id\" IS NULL AND \"ledger\".\"ledger_accounts\".\"payout_id\" IS NULL\n          END"
         }
       },
       "isRLSEnabled": false
@@ -9271,6 +9271,153 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
+    "trust.duplicate_identity_flags": {
+      "name": "duplicate_identity_flags",
+      "schema": "trust",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "identifier_type": {
+          "name": "identifier_type",
+          "type": "verification_type",
+          "typeSchema": "trust",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "identifier_hash": {
+          "name": "identifier_hash",
+          "type": "bytea",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "first_user_id": {
+          "name": "first_user_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "conflicting_user_id": {
+          "name": "conflicting_user_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "request_id": {
+          "name": "request_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "status": {
+          "name": "status",
+          "type": "duplicate_flag_status",
+          "typeSchema": "trust",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'OPEN'"
+        },
+        "detected_at": {
+          "name": "detected_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "reviewed_by": {
+          "name": "reviewed_by",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "reviewed_at": {
+          "name": "reviewed_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "resolution_notes": {
+          "name": "resolution_notes",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {
+        "duplicate_identity_flags_request_unique": {
+          "name": "duplicate_identity_flags_request_unique",
+          "columns": [
+            {
+              "expression": "request_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "duplicate_identity_flags_status_idx": {
+          "name": "duplicate_identity_flags_status_idx",
+          "columns": [
+            {
+              "expression": "status",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "where": "\"trust\".\"duplicate_identity_flags\".\"status\" IN ('OPEN', 'ESCALATED')",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "duplicate_identity_flags_hash_idx": {
+          "name": "duplicate_identity_flags_hash_idx",
+          "columns": [
+            {
+              "expression": "identifier_hash",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "duplicate_identity_flags_request_id_verification_requests_id_fk": {
+          "name": "duplicate_identity_flags_request_id_verification_requests_id_fk",
+          "tableFrom": "duplicate_identity_flags",
+          "tableTo": "verification_requests",
+          "schemaTo": "trust",
+          "columnsFrom": ["request_id"],
+          "columnsTo": ["id"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "duplicate_flags_distinct_users": {
+          "name": "duplicate_flags_distinct_users",
+          "value": "\"trust\".\"duplicate_identity_flags\".\"first_user_id\" <> \"trust\".\"duplicate_identity_flags\".\"conflicting_user_id\""
+        }
+      },
+      "isRLSEnabled": false
+    },
     "trust.bvn_verifications": {
       "name": "bvn_verifications",
       "schema": "trust",
@@ -10360,7 +10507,6 @@
       "values": [
         "PLATFORM_ESCROW_POOL",
         "USER_ESCROW_LIABILITY",
-        "BUYER_PROTECTION_FEE_LIABILITY",
         "USER_PAYABLE",
         "PLATFORM_FEE_REVENUE",
         "BUYER_PROTECTION_FEE_REVENUE",
@@ -10540,6 +10686,11 @@
       "name": "bank_match_result",
       "schema": "trust",
       "values": ["EXACT", "FUZZY_MATCH", "MISMATCH"]
+    },
+    "trust.duplicate_flag_status": {
+      "name": "duplicate_flag_status",
+      "schema": "trust",
+      "values": ["OPEN", "CONFIRMED_DUPLICATE", "CLEARED_FALSE_POSITIVE", "ESCALATED"]
     },
     "trust.kyc_provider": {
       "name": "kyc_provider",
