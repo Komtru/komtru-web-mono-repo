@@ -6,7 +6,7 @@ A buyer and a seller agree a trade, the buyer funds escrow, goods move by self-a
 delivery, the buyer inspects, money is released or the trade is disputed — and a certified
 merchant can run a storefront with listings and search on top of that.
 
-**71 tickets to MVP** (the original 55, T-190 and the 15 it adds), on top of the 31 already done. 64 are deferred to after it, of 166 in all.
+**51 features to MVP**, of 79 in all, tracked in [`tickets/FEATURE_MAP.md`](tickets/FEATURE_MAP.md); 13 are done. As tickets the same cut is 77 listed tickets on top of the work already done, of 168 in all. The headline is the feature count: 13/51 (25%), not the ticket count it replaced.
 
 > The full ticket list is [`TICKETS.md`](TICKETS.md); it is not reorganised by this document.
 > This is the cut through it, and the record of why each line sits where it does.
@@ -25,7 +25,171 @@ things in particular have to be changed deliberately rather than waited out:
   logistics packages and the Park network console. Its definition of "end to end" spans two
   apps the MVP does not build.
 
+## The MVP cut in features — 51 features
+
+This is the cut as the project now measures it. Each feature carries its backend and its frontend, and is done only when a user can do the thing in an app. The definitions live in [`tickets/FEATURE_MAP.md`](tickets/FEATURE_MAP.md); the tickets each one absorbs are listed alongside, and the ticket listing further down is the same cut as tickets, kept so the history stays traceable.
+
+**Why the headline moved from 58/109 (53%) to 13/51 (25%).** The measure changed, not the work. The old figure counted tickets, and 51 of the 58 finished tickets are backend layers while the consumer app cannot yet list a trade. The new figure counts usable features, and a feature whose engine is built but whose screens are not (the six marked _Backend done, UI outstanding_) is not done. No work was lost: every finished ticket is still counted, inside the feature it belongs to.
+
+### Platform (not a user journey) (10)
+
+Infrastructure every journey stands on. F-005 (test isolation) is the one open item; it is cross-cutting, so it never runs beside other work.
+
+| Feature | Title                                                                  | Status      | Absorbs                                                |
+| ------- | ---------------------------------------------------------------------- | ----------- | ------------------------------------------------------ |
+| F-001   | Repo, toolchain and continuous integration                             | Done        | T-001, T-002, T-003, T-004, T-006                      |
+| F-002   | Shared design system, ui-kit and app foundations                       | Done        | T-010, T-011, T-012, T-013, T-014, T-015, T-016, T-017 |
+| F-003   | Backend skeleton, database, migrations, jobs and events                | Done        | T-020, T-021, T-022, T-023, T-024                      |
+| F-004   | Backend cross-cutting: HTTP contract, crypto and the provider boundary | Done        | T-025, T-026, T-028                                    |
+| F-005   | Deterministic integration test suite                                   | Not started | T-029                                                  |
+| F-006   | Platform configuration and the fee schedule                            | Done        | T-047, T-048                                           |
+| F-007   | Notification delivery and the realtime transport                       | Done        | T-045, T-027                                           |
+| F-008   | Media and evidence storage                                             | Done        | T-040, T-041                                           |
+| F-009   | Double-entry ledger core and the payment provider adapter              | Done        | T-070, T-071                                           |
+| F-010   | Screen index remap to UI Living Master v2                              | Done        | T-190                                                  |
+
+### Arrive & verify (3)
+
+Getting in. Social sign-in (F-014) stays out: email, phone and handle login only, as the dependency edits below record.
+
+| Feature | Title                                                  | Status      | Absorbs                                  |
+| ------- | ------------------------------------------------------ | ----------- | ---------------------------------------- |
+| F-011   | Sign up, verify a phone, sign in and secure the device | Done        | T-030, T-031, T-032, T-033, T-036, T-111 |
+| F-012   | App shell, navigation and the Buy/Sell mode switch     | Done        | T-110, T-191, T-222                      |
+| F-013   | First-time onboarding walkthrough                      | Not started | T-112                                    |
+
+### Home & discover (2)
+
+Search and the seller's Trust Passport. The Trust Passport pulls in reputation (T-102), which is why that ticket is in: both it and account settings depend on it.
+
+| Feature | Title                                             | Status      | Absorbs      |
+| ------- | ------------------------------------------------- | ----------- | ------------ |
+| F-015   | Home, search, categories and find-a-trade-by-code | Not started | T-113, T-057 |
+| F-016   | View a seller's profile and Trust Passport        | Not started | T-114, T-102 |
+
+### Propose & agree (3)
+
+The core buyer and seller journey. IMEI check (F-020) and the automated risk hold (F-021) are deferred; phones are a large share of this market, so F-020 is the first thing to add back.
+
+| Feature | Title                                                            | Status      | Absorbs                                  |
+| ------- | ---------------------------------------------------------------- | ----------- | ---------------------------------------- |
+| F-017   | Propose a trade, invite the other party and order multiple items | Not started | T-060, T-061, T-035, T-049, T-063, T-115 |
+| F-018   | Create a trade: buyer starts, seller completes                   | Not started | T-192                                    |
+| F-019   | Create a trade: seller starts, buyer completes                   | Not started | T-193                                    |
+
+### The trade workspace (2)
+
+One role-aware workspace every later trade journey renders inside.
+
+| Feature | Title                                                | Status      | Absorbs      |
+| ------- | ---------------------------------------------------- | ----------- | ------------ |
+| F-022   | Follow a trade in one role-aware workspace           | Not started | T-116, T-068 |
+| F-023   | Terms, agreement and payment detail in the workspace | Not started | T-194        |
+
+### Fund & protect (1)
+
+The escrow path. The Wallet (F-025) is deferred either way (Q3).
+
+| Feature | Title       | Status                       | Absorbs      |
+| ------- | ----------- | ---------------------------- | ------------ |
+| F-024   | Fund escrow | Backend done, UI outstanding | T-072, T-117 |
+
+### Fulfil & dispatch (1)
+
+The seller marks a trade shipped and supplies their own tracking; no ship-to-company.
+
+| Feature | Title                                   | Status                       | Absorbs      |
+| ------- | --------------------------------------- | ---------------------------- | ------------ |
+| F-026   | Accept, prove, prepare and ship an item | Backend done, UI outstanding | T-064, T-123 |
+
+### Deliver & inspect (3)
+
+Self-arranged delivery and inspection only: no hub custody and no Park pickup PIN.
+
+| Feature | Title                                           | Status                       | Absorbs             |
+| ------- | ----------------------------------------------- | ---------------------------- | ------------------- |
+| F-027   | Confirm delivery, inspect, complete and release | Backend done, UI outstanding | T-065, T-074, T-118 |
+| F-028   | Delivery and evidence in the workspace          | Not started                  | T-195               |
+| F-029   | Capture and compare proof media                 | Not started                  | T-197               |
+
+### Issues & resolution (6)
+
+Buyers and sellers must be able to open and follow a dispute, not only TrustOps (owner ruling, 2026-11-06). Return custody at a hub (F-036) stays deferred with Park, so returns are self-arranged.
+
+| Feature | Title                                                           | Status      | Absorbs                    |
+| ------- | --------------------------------------------------------------- | ----------- | -------------------------- |
+| F-030   | Cancel a trade and get a refund                                 | Not started | T-066, T-075, T-119        |
+| F-031   | Lifecycle exceptions: expiry, withdrawal and inspection updates | Not started | T-198                      |
+| F-032   | Report an issue and open a dispute                              | Not started | T-080, T-081, T-120, T-196 |
+| F-033   | Resolution execution: the return track                          | Not started | T-199                      |
+| F-034   | Resolution execution: replacement and mutual settlement         | Not started | T-200                      |
+| F-035   | Decide a dispute in TrustOps                                    | Not started | T-143                      |
+
+### Complete & grow (1)
+
+Payouts only. Reviews and seller insights are after the first merchants are live.
+
+| Feature | Title        | Status      | Absorbs      |
+| ------- | ------------ | ----------- | ------------ |
+| F-037   | Get paid out | Not started | T-073, T-124 |
+
+### Sell on Komtru (3)
+
+The merchant storefront. Business verification and certification are in because a merchant cannot be certified without them. Customers, tax and badges (F-043) are storefront polish.
+
+| Feature | Title                                                 | Status      | Absorbs                    |
+| ------- | ----------------------------------------------------- | ----------- | -------------------------- |
+| F-040   | Apply for merchant certification and have it reviewed | Not started | T-055, T-051, T-121, T-154 |
+| F-041   | List items and manage stock                           | Not started | T-056, T-122               |
+| F-042   | Shop settings and catalogue import                    | Not started | T-202                      |
+
+### Account, trust & support (3)
+
+Addresses, identity verification and account lifecycle are in; messaging and help are deferred.
+
+| Feature | Title                                                  | Status                       | Absorbs             |
+| ------- | ------------------------------------------------------ | ---------------------------- | ------------------- |
+| F-044   | Account basics, addresses, documents and system states | Backend done, UI outstanding | T-042, T-046, T-204 |
+| F-045   | Verify yourself, and close or recover an account       | Backend done, UI outstanding | T-039, T-050, T-205 |
+| F-046   | Trust history, account and notification settings       | Not started                  | T-126               |
+
+### TrustOps console (3)
+
+The MVP console is the work queue, identity review and, with disputes and merchant review, nothing more.
+
+| Feature | Title                                  | Status                       | Absorbs             |
+| ------- | -------------------------------------- | ---------------------------- | ------------------- |
+| F-049   | Staff sign-in, console shell and roles | Done                         | T-037, T-038, T-140 |
+| F-050   | Work queue and the universal case      | Done                         | T-107, T-141        |
+| F-051   | Review identity and KYC                | Backend done, UI outstanding | T-052, T-144        |
+
+### Desktop & tablet journeys (6)
+
+The desktop and tablet layouts of MVP journeys. Messaging, help, operations control, governance, treasury, field audits and people development are deferred.
+
+| Feature | Title                                            | Status      | Absorbs |
+| ------- | ------------------------------------------------ | ----------- | ------- |
+| F-067   | Desktop: arrive, home and discover               | Not started | T-207   |
+| F-068   | Desktop: propose, agree and fund                 | Not started | T-208   |
+| F-069   | Desktop: fulfil, deliver, inspect and complete   | Not started | T-209   |
+| F-070   | Desktop and tablet: issues and resolution        | Not started | T-221   |
+| F-072   | Tablet: arrive, home, discover, propose and fund | Not started | T-212   |
+| F-073   | Tablet: fulfil, deliver, inspect and payouts     | Not started | T-213   |
+
+### Launch & assurance (not a user journey) (4)
+
+Hosting, end-to-end paths, security review and the first push. F-079 (load and resilience) is deliberately after the MVP ships.
+
+| Feature | Title                                   | Status      | Absorbs |
+| ------- | --------------------------------------- | ----------- | ------- |
+| F-075   | Hosting and real deploy jobs            | Not started | T-005   |
+| F-076   | End-to-end critical paths               | Not started | T-180   |
+| F-077   | Security review                         | Not started | T-182   |
+| F-078   | Definition-of-done audit and first push | Not started | T-183   |
+
 ## Included — 77 tickets
+
+The same cut as tickets, the secondary mapping. `tools/tickets/progress.py` reads this listing for the ticket-layer view (`pnpm progress --tickets`) and fails if it disagrees with the counts stated here.
 
 ### Identity and platform (13)
 
@@ -98,7 +262,7 @@ ticket depends on it. It adds 30 tickets, 15 of them MVP, listed here:
 - **T-222** re-base `TabBar` to v2 mobile styling: the indigo-soft active pill, 20px icons and 10px labels
   (found in the T-191 review).
 
-### Disputes for buyers and sellers (6, added 2026-11-06 by the owner)
+### Disputes for buyers and sellers (5, added 2026-11-06 by the owner)
 
 The owner ruled that buyers and sellers must be able to open and follow a dispute in the MVP,
 not only TrustOps. Return custody at a hub (T-201) stays deferred with Park, so returns are
