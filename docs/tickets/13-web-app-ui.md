@@ -39,6 +39,13 @@ One app for every consumer with no buyer or seller views (design C22, §6.3), pl
 - **Owner decision (2026-11-09):** build T-111 without social sign-in rather than wait for T-034. The
   social buttons and the OAuth callback screen belong to T-034, which adds them to E1, E2 and E4 when
   it lands.
+- **Follow-on (2026-11-09):** E2 now also asks for an email address, required, stored as the account's
+  unverified second channel. Outside production, when no SMS can really go out — `NOTIFY_SMS_DRY_RUN`
+  or no Termii credentials — a registration or phone-reset code is emailed as well as queued for SMS,
+  and E3 names the inbox it went to. The challenge stays a phone challenge, so entering the code
+  still proves the phone. Production is unchanged: a missing SMS provider still dead-letters rather
+  than verify a number from an inbox. `nextStep` now puts the second channel's verification after the
+  password and username, so a phone sign-up that gave an email is still asked to set a password.
 
 ### T-112 — First-time onboarding
 
