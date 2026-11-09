@@ -295,6 +295,13 @@
       "when": 1794044252601,
       "tag": "0041_cases_append_only",
       "breakpoints": true
+    },
+    {
+      "idx": 42,
+      "version": "7",
+      "when": 1794225090431,
+      "tag": "0042_trust_duplicate_flags",
+      "breakpoints": true
     }
   ]
 }

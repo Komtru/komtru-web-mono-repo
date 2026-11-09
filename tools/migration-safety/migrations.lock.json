@@ -209,6 +209,11 @@
       "tag": "0041_cases_append_only",
       "when": 1794044252601,
       "sha256": "803b7a473c7bc819bbd0997a031d303690ec457e0d855d7c9dc438b4bd0b4f4b"
+    },
+    {
+      "tag": "0042_trust_duplicate_flags",
+      "when": 1794225090431,
+      "sha256": "f99e31aef29ad08a82216bb1df722b8d0ca125dde88a2b574a9baca04644d38a"
     }
   ]
 }
