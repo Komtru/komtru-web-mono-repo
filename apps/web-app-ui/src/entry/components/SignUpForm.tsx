@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { signUpDraft } from '../drafts';
 import { ENTRY } from '../flow';
-import { EntryFrame, EntryHeading, InlineLink, Lede, TrustNote } from './EntryFrame';
+import { EntryFrame, EntryHeading, Lede, TrustNote } from './EntryFrame';
 import { useDraft } from './useDraft';
 
 const FORM = 'signup-form';
@@ -44,14 +44,9 @@ export function SignUpForm(): React.JSX.Element {
       title="Create account"
       back={ENTRY.welcome}
       footer={
-        <>
-          <Button type="submit" form={FORM}>
-            Continue
-          </Button>
-          <p className="m-0 text-center text-[11.5px] text-slate">
-            Already on Komtru? <InlineLink href={ENTRY.login}>Log in</InlineLink>
-          </p>
-        </>
+        <Button type="submit" form={FORM}>
+          Continue
+        </Button>
       }
     >
       <form id={FORM} onSubmit={submit} noValidate>

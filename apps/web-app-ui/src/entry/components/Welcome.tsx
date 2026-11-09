@@ -19,7 +19,8 @@ export function Welcome(): React.JSX.Element {
     >
       <div className="px-[20px] pt-[40px] pb-[24px] text-center">
         <div className="mb-[28px] flex items-center justify-center">
-          <KomtruLogo size={20} />
+          {/* `.welcome-hero .w-logo`: the lockup at 18px with an 8px gap, larger than the app bar's. */}
+          <KomtruLogo size={20} style={{ fontSize: '18px', gap: '8px' }} />
         </div>
         <svg viewBox="0 0 300 120" fill="none" aria-hidden className="my-[24px] h-[120px] w-full">
           <g className="stroke-border-hairline" strokeWidth="1.2">

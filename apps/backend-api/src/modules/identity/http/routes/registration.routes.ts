@@ -144,7 +144,7 @@ export function registrationRoutes(deps: RegistrationControllerDeps): RouteDefin
       scope: 'PUBLIC',
       summary: 'The Terms and Privacy versions in force, for screen TOS1 before an account exists',
       schema: { response: publishedTermsResponseSchema },
-      handler: () => publishedTerms(deps),
+      handler: () => Promise.resolve(publishedTerms(deps)),
     }),
 
     defineRoute({
