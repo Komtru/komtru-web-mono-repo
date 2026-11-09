@@ -373,14 +373,14 @@ describe('when nothing is pushing the trade to this device', () => {
     await settle();
     reads.mockClear();
   };
-  const tick = async () => {
+  const tick = () => {
     vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
   };
 
   it('reads on a timer before the socket has connected, which is also what happens with no socket URL', async () => {
     const fake = fakeSocket();
     // Fake timers are installed before mounting so the interval is the fake one.
-    await tick();
+    tick();
     server = { [A.id]: 'FUNDED' };
     mount(fake, [A]);
     await act(async () => {
@@ -390,12 +390,13 @@ describe('when nothing is pushing the trade to this device', () => {
     server[A.id] = 'SHIPPED';
     await act(async () => {
       vi.advanceTimersByTime(FALLBACK_POLL_MS + 10);
+      await Promise.resolve();
     });
     await waitFor(() => expect(reads).toHaveBeenCalledWith(A.id));
   });
 
   it('reads on a timer for a room the gateway refused', async () => {
-    await tick();
+    tick();
     const fake = fakeSocket();
     server = { [A.id]: 'FUNDED' };
     fake.answerJoins(() => ({ joined: false, reason: 'FORBIDDEN' }));
@@ -414,6 +415,7 @@ describe('when nothing is pushing the trade to this device', () => {
     reads.mockClear();
     await act(async () => {
       vi.advanceTimersByTime(FALLBACK_POLL_MS + 10);
+      await Promise.resolve();
     });
     await act(async () => {
       for (let i = 0; i < 5; i += 1) await Promise.resolve();
@@ -422,18 +424,19 @@ describe('when nothing is pushing the trade to this device', () => {
   });
 
   it('does not poll while connected and joined: the push channel is doing the work', async () => {
-    await tick();
+    tick();
     const fake = fakeSocket();
     await pollRead(fake, true);
     await act(async () => {
       vi.advanceTimersByTime(FALLBACK_POLL_MS * 3);
+      await Promise.resolve();
     });
     await settle();
     expect(reads).not.toHaveBeenCalled();
   });
 
   it('starts polling again when the connection drops, and stops when it comes back', async () => {
-    await tick();
+    tick();
     const fake = fakeSocket();
     await pollRead(fake, true);
     act(() => {
@@ -441,6 +444,7 @@ describe('when nothing is pushing the trade to this device', () => {
     });
     await act(async () => {
       vi.advanceTimersByTime(FALLBACK_POLL_MS + 10);
+      await Promise.resolve();
     });
     await waitFor(() => expect(reads).toHaveBeenCalled());
     act(() => {
@@ -451,6 +455,7 @@ describe('when nothing is pushing the trade to this device', () => {
     reads.mockClear();
     await act(async () => {
       vi.advanceTimersByTime(FALLBACK_POLL_MS * 3);
+      await Promise.resolve();
     });
     await settle();
     expect(reads).not.toHaveBeenCalled();

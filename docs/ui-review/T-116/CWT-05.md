@@ -3,7 +3,7 @@
 - **Reference:** `docs/design-reference/Komtru — UI Living Master v2.html` line 10731 — Canonical Mobile Architecture — Trade Workspace · Tabbed
 - **Built:** http://localhost:3102/trade/0190b0a0-0000-7000-8000-000000000005
 - **Frame:** mobile, 340px reference frame; compared at 340 × 660
-- **Differing pixels:** 24,198 of 224,400 (10.78%)
+- **Differing pixels:** 24,195 of 224,400 (10.78%)
 - **Side by side:** `CWT-05.png` (reference · built · heat map) — **heat map:** `CWT-05.diff.png`
 
 ## Deviations

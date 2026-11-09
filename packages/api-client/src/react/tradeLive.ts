@@ -13,12 +13,7 @@
 //     flight, so a redelivered or out-of-order push costs at most one extra GET and can never hide a change.
 //   * Where there is no live connection (no socket URL, not connected yet, dropped, or a room refused), the
 //     trade is read on a timer instead, so a screen never depends on a push it will not get.
-import {
-  TRADE_ROOM_PREFIX,
-  TRADE_UPDATED_EVENT,
-  tradeUpdateSchema,
-  type TradeUpdate,
-} from '@komtru/shared-types';
+import { TRADE_ROOM_PREFIX, TRADE_UPDATED_EVENT, tradeUpdateSchema } from '@komtru/shared-types';
 import { useQueryClient, type QueryClient } from '@tanstack/react-query';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { tradeKeys } from './trades.js';
