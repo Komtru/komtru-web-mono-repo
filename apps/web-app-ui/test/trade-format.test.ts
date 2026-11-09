@@ -9,6 +9,7 @@ import {
   itemSub,
   itemTitle,
   naira,
+  nairaShort,
   problemMessage,
 } from '../src/trade/format';
 import { forgetKnownTrades, knownTradeIds, rememberTrade } from '../src/trade/known-trades';
@@ -37,6 +38,13 @@ describe('naira', () => {
   it('formats kobo exactly, with kobo shown, and never touches a float', () => {
     expect(naira('45200000')).toBe('₦452,000.00');
     expect(naira('9007199254740993')).toBe('₦90,071,992,547,409.93');
+  });
+});
+
+describe('nairaShort', () => {
+  it('drops the kobo when there are none, as the trades list writes an amount, and keeps them when there are', () => {
+    expect(nairaShort('145000000')).toBe('₦1,450,000');
+    expect(nairaShort('145000050')).toBe('₦1,450,000.50');
   });
 });
 
@@ -90,10 +98,10 @@ describe('small formatters', () => {
     expect(addressLine(null)).toBe('No address on this version');
   });
 
-  it('says whole days as days', () => {
-    expect(hoursLabel(48)).toBe('2 days');
-    expect(hoursLabel(24)).toBe('1 day');
-    expect(hoursLabel(36)).toBe('36 hours');
+  it('states a window in hours, as the standards are set', () => {
+    expect(hoursLabel(48)).toBe('48 hours');
+    expect(hoursLabel(24)).toBe('24 hours');
+    expect(hoursLabel(1)).toBe('1 hour');
   });
 });
 
@@ -103,7 +111,7 @@ describe('describeTrade', () => {
   it('marks a held proposal as Verification Needed for the person who proposed it, as Q1 draws it', () => {
     expect(describeTrade({ ...base, status: 'UNDER_PROPOSAL_REVIEW' })).toMatchObject({
       tone: 'verifying',
-      label: 'Verification needed',
+      label: 'Verification Needed',
       needsYou: true,
     });
   });

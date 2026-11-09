@@ -27,7 +27,7 @@ describe('Trade Standards (CTS1)', () => {
 
     const electronicsTerms = await screen.findByLabelText('Electronics terms');
     expect(within(electronicsTerms).getByText('Inspection window').nextElementSibling?.textContent).toBe(
-      '2 days',
+      '48 hours',
     );
     expect(within(electronicsTerms).getByText('Item details').nextElementSibling?.textContent).toBe(
       'Brand, Model, Condition, Serial number',
@@ -40,7 +40,9 @@ describe('Trade Standards (CTS1)', () => {
     );
 
     const fashionTerms = screen.getByLabelText('Fashion & Luxury terms');
-    expect(within(fashionTerms).getByText('Inspection window').nextElementSibling?.textContent).toBe('1 day');
+    expect(within(fashionTerms).getByText('Inspection window').nextElementSibling?.textContent).toBe(
+      '24 hours',
+    );
     expect(within(fashionTerms).getByText('Seller proof').nextElementSibling?.textContent).toBe(
       'None required',
     );

@@ -43,7 +43,7 @@ describe('Your Trades (Q1)', () => {
     expect(api.call).not.toHaveBeenCalled();
   });
 
-  it('counts what needs attention and marks a held proposal Verification needed', async () => {
+  it('counts what needs attention and marks a held proposal Verification Needed', async () => {
     for (const trade of [held, waiting, toAnswer]) rememberTrade(trade.id);
     answerWith(api.call, byId([held, waiting, toAnswer]));
     const { container } = renderWithApi(api.call, <MyTrades />);
@@ -54,8 +54,8 @@ describe('Your Trades (Q1)', () => {
       .filter((link) => /^\/trade\/[0-9a-f-]{36}$/.test(link.getAttribute('href') ?? ''));
     expect(rows).toHaveLength(3);
     const heldRow = rows.find((row) => row.getAttribute('href') === `/trade/${id(1)}`) as HTMLElement;
-    expect(within(heldRow).getByText('₦1,450,000.00')).toBeTruthy();
-    expect(within(heldRow).getByText('Verification needed').className).toContain('bg-info-soft');
+    expect(within(heldRow).getByText('₦1,450,000')).toBeTruthy();
+    expect(within(heldRow).getByText('Verification Needed').className).toContain('bg-info-soft');
     expect(within(heldRow).getByText(/Proposal KMT-90138 · held for review, not yet sent/)).toBeTruthy();
     // Q1 draws the row that needs the person with an indigo border; one that is only waiting has none.
     expect(heldRow.className).toContain('border-trust-indigo');
@@ -72,7 +72,7 @@ describe('Your Trades (Q1)', () => {
         params?.id === id(1) ? held : new Error('offline'),
     });
     renderWithApi(api.call, <MyTrades />);
-    expect(await screen.findByText('Verification needed')).toBeTruthy();
+    expect(await screen.findByText('Verification Needed')).toBeTruthy();
     expect(await screen.findByText("1 trade couldn't be loaded. Reload to try again.")).toBeTruthy();
   });
 

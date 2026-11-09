@@ -77,7 +77,7 @@ describe('a proposal waiting on the seller (R1)', () => {
     expect(await screen.findByText('Apple iPhone 13 Pro')).toBeTruthy();
     expect(screen.getAllByText('₦452,000.00').length).toBeGreaterThan(0);
     const terms = screen.getByLabelText('Terms of this trade');
-    expect(within(terms).getByText('Inspection').nextElementSibling?.textContent).toContain('2 days');
+    expect(within(terms).getByText('Inspection').nextElementSibling?.textContent).toContain('48 hours');
     expect(within(terms).getByText('Delivery to').nextElementSibling?.textContent).toBe(
       '5 Adeola Odeku, Victoria Island',
     );

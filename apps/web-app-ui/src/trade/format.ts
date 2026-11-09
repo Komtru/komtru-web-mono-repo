@@ -5,6 +5,12 @@ import { formatNaira } from '@komtru/shared-types';
 
 export const naira = (minor: string): string => formatNaira(BigInt(minor));
 
+/** A list row's amount, as Q1 writes it: whole naira unless there are kobo to show. */
+export const nairaShort = (minor: string): string => {
+  const kobo = BigInt(minor);
+  return formatNaira(kobo, { showKobo: kobo % 100n !== 0n });
+};
+
 export const initialsOf = (name: string): string =>
   name
     .split(/\s+/)
@@ -86,8 +92,8 @@ export function addressLine(snapshot: unknown): string {
   return parts.length > 0 ? parts.join(', ') : 'No address on this version';
 }
 
-export const hoursLabel = (hours: number): string =>
-  hours % 24 === 0 ? `${String(hours / 24)} day${hours === 24 ? '' : 's'}` : `${String(hours)} hours`;
+/** Hours, as the reference writes a window ("48 hours"): a standard is stated in the unit it is set in. */
+export const hoursLabel = (hours: number): string => `${String(hours)} hour${hours === 1 ? '' : 's'}`;
 
 export type RowTone = 'protected' | 'awaiting' | 'risk' | 'resolved' | 'verified' | 'verifying';
 
@@ -115,7 +121,7 @@ export function describeTrade(
     case 'UNDER_PROPOSAL_REVIEW':
       return {
         tone: 'verifying',
-        label: 'Verification needed',
+        label: 'Verification Needed',
         sub: `${code} · held for review, not yet sent`,
         needsYou: mine,
         closed: false,

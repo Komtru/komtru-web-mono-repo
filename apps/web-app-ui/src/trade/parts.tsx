@@ -16,6 +16,15 @@ const INFO = (
   </svg>
 );
 
+/** CTS1's own mark: two nodes on a rail, for rules that apply without anyone setting them. */
+export const RULES = (
+  <svg viewBox="0 0 24 24" fill="none" strokeWidth="2" strokeLinecap="round" aria-hidden>
+    <circle cx="6" cy="12" r="2" />
+    <circle cx="18" cy="12" r="2" />
+    <path d="M8 12h8" />
+  </svg>
+);
+
 const LOCK = (
   <svg viewBox="0 0 24 24" fill="none" strokeWidth="2" strokeLinecap="round" aria-hidden>
     <rect x="5" y="11" width="14" height="9" rx="1.5" />
@@ -29,8 +38,16 @@ const TICK = (
   </svg>
 );
 
-export const NoteBanner = ({ children, title }: { children: React.ReactNode; title?: string }) => (
-  <Banner tone="info" icon={INFO} {...(title === undefined ? {} : { title })}>
+export const NoteBanner = ({
+  children,
+  title,
+  icon = INFO,
+}: {
+  children: React.ReactNode;
+  title?: string;
+  icon?: React.ReactNode;
+}) => (
+  <Banner tone="info" icon={icon} {...(title === undefined ? {} : { title })}>
     {children}
   </Banner>
 );

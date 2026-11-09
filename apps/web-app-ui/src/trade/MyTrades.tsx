@@ -5,7 +5,7 @@ import { getTrade, type TradeView } from '@komtru/api-client';
 import { tradeKeys } from '@komtru/api-client/react';
 import { Button, EmptyState, Skeleton, TradeRow } from '@komtru/ui-kit';
 import { useQueries } from '@tanstack/react-query';
-import { describeTrade, itemTitle, naira } from './format';
+import { describeTrade, itemTitle, nairaShort } from './format';
 import { useKnownTradeIds } from './known-trades';
 import { Column } from './parts';
 
@@ -82,7 +82,7 @@ export function MyTrades({ code }: { code?: string }): React.JSX.Element {
         {states.map(({ trade, state }) => (
           <li key={trade.id}>
             <TradeRow
-              amount={trade.terms === null ? '—' : naira(trade.terms.itemAmountMinor)}
+              amount={trade.terms === null ? '—' : nairaShort(trade.terms.itemAmountMinor)}
               status={{ tone: state.tone, label: state.label }}
               sub={`${trade.terms === null ? '' : `${itemTitle(trade.terms.itemSpec, 'Trade')} · `}${state.sub}`}
               href={`/trade/${trade.id}`}
