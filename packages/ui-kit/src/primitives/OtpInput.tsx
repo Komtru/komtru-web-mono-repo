@@ -1,6 +1,6 @@
 'use client';
 
-import { useRef } from 'react';
+import { useEffect, useRef } from 'react';
 import { cx } from './cx.js';
 
 export interface OtpInputProps {
@@ -37,8 +37,19 @@ export function OtpInput({
   className,
 }: OtpInputProps): React.JSX.Element {
   const cells = useRef<(HTMLInputElement | null)[]>([]);
+  /**
+   * The last value this control reported, which every edit builds on. Not `value`: that is what the
+   * parent last rendered, and a second keystroke can land before the parent re-renders — building
+   * on the prop then drops every digit but the last one typed.
+   */
+  const latest = useRef(value);
+  useEffect(() => {
+    // The parent's own changes (a reset after a wrong code) win once they land.
+    latest.current = value;
+  }, [value]);
 
   const commit = (next: string) => {
+    latest.current = next;
     onChange?.(next);
     if (next.length === length) onComplete?.(next);
   };
@@ -49,16 +60,24 @@ export function OtpInput({
    * the digit actually landed, which is what the caret follows.
    */
   const writeAt = (index: number, digit: string): number => {
-    const chars = [...value];
+    const chars = [...latest.current];
     const target = Math.min(index, chars.length);
     chars[target] = digit;
     commit(chars.join('').slice(0, length));
     return target;
   };
 
+  /** Several digits at once — a paste, or a code autofill put in one cell. Fills on from `index`. */
+  const fillFrom = (index: number, digits: string) => {
+    const kept = latest.current.slice(0, Math.min(index, latest.current.length));
+    const next = (kept + digits).slice(0, length);
+    commit(next);
+    focusCell(next.length);
+  };
+
   const clearAt = (index: number) => {
-    if (index < 0 || index >= value.length) return;
-    const chars = [...value];
+    if (index < 0 || index >= latest.current.length) return;
+    const chars = [...latest.current];
     chars.splice(index, 1);
     commit(chars.join(''));
   };
@@ -84,12 +103,19 @@ export function OtpInput({
             }}
             inputMode="numeric"
             autoComplete="one-time-code"
-            maxLength={1}
+            // No `maxLength`: iOS one-time-code autofill and Android keyboards' code suggestion put
+            // the whole code into one cell, and a one-character limit truncates it to its first digit.
             aria-label={`Digit ${index + 1} of ${length}`}
             value={digit}
             onChange={(event) => {
-              const typed = event.target.value.replace(/\D/g, '').slice(-1);
-              if (typed === '') return;
+              const digits = event.target.value.replace(/\D/g, '');
+              if (digits === '') return;
+              if (digits.length > 2) {
+                fillFrom(index, digits);
+                return;
+              }
+              // Two characters is a digit typed into a filled cell: keep the one that is new.
+              const typed = digits.length === 2 && digits[0] === digit ? digits[1]! : digits.slice(-1);
               focusCell(writeAt(index, typed) + 1);
             }}
             onKeyDown={(event) => {
@@ -113,8 +139,8 @@ export function OtpInput({
               event.preventDefault();
               const pasted = event.clipboardData.getData('text').replace(/\D/g, '').slice(0, length);
               if (pasted === '') return;
-              commit(pasted);
-              focusCell(pasted.length);
+              // A pasted code is the whole code, wherever the caret was.
+              fillFrom(0, pasted);
             }}
             className={cx(
               CELL,
