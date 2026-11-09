@@ -1,4 +1,4 @@
-import { HUB_APPLICATION_PATHS, PASSPORT_ROUTE_PREFIX } from './hosts';
+import { PASSPORT_ROUTE_PREFIX } from './hosts';
 
 /**
  * Paths this app serves to anyone, session or not.
@@ -10,32 +10,19 @@ import { HUB_APPLICATION_PATHS, PASSPORT_ROUTE_PREFIX } from './hosts';
 export const PUBLIC_PATHS = [
   PASSPORT_ROUTE_PREFIX,
   '/offline',
-  // The URL a person types. `/` only redirects to the app's home, which is gated like every other
-  // screen, so opening it exposes nothing — and gating the redirect itself is how a bare origin
-  // ends up at a sign-in route that does not exist yet.
+  // The URL a person types, and screen E1: a stranger sees Welcome there, and someone with a
+  // session is sent on to their mode's landing screen, which is gated like every other.
   '/',
 ] as const;
 
 /**
- * Paths that need a session and cannot have one yet.
+ * The way in (T-111): every screen someone reaches before they have a session.
  *
- * **T-111 deletes this list.** Entry and authentication is the next ticket: until it lands there is
- * no sign-in screen to send anyone to, and a gate with no gate-keeper behind it would make every
- * screen in the app a redirect to a 404. Everything here is a destination the scaffold has to be
- * able to draw — the five tabs, the Account sections and the Park Hub application.
+ * Prefixes by whole segment, so `/signup` opens `/signup/terms` and `/reset-password` opens
+ * `/reset-password/new`, while `/terms` does not open `/terms-updated` — that one interrupts a
+ * signed-in person and is gated. Setting the first password after signup is `/set-password`, not
+ * `/signup/password`, for the same reason: it runs on the session the verified code opened.
  *
- * It is a list rather than a flag so that removing it is one deletion and the test below says what
- * changes when it goes: paths outside it are already gated, which is what proves the wiring works.
+ * The sign-in screen itself is `appSpec.signInPath`, which the gate always leaves open.
  */
-export const PRE_AUTH_PUBLIC_PATHS = [
-  '/home',
-  '/trades',
-  '/messages',
-  '/browse',
-  '/shop',
-  '/orders',
-  '/listings',
-  '/alerts',
-  '/account',
-  ...HUB_APPLICATION_PATHS,
-] as const;
+export const ENTRY_PATHS = ['/signup', '/verify', '/reset-password', '/terms'] as const;
