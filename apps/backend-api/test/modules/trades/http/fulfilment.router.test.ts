@@ -22,6 +22,7 @@ const shipped = {
   categoryCode: 'PHONES',
   categoryName: 'Phones',
   standardVersion: 3,
+  standardVersionId: '0190b0a0-0000-7000-8000-0000000000bb',
   shipment: { method: 'SELF_ARRANGED', waybillNumber: 'WB-123456', vehiclePlate: 'ABC-123 DE' },
 };
 

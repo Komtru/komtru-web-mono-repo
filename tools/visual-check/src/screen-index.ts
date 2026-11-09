@@ -1,4 +1,8 @@
-// T-190: the harness still drives the v1 reference (REFERENCE_FILE), so it reads the v1 index until a v2 mode exists.
+// The harness draws against the UI Living Master v2 and its `SCREEN_INDEX.md` by default: v2 is the
+// reference every screen is built from, its screens (G3, TC-05, TC-06 and the rest) do not exist in v1,
+// and a v2 line number read against the v1 HTML points at an unrelated screen.
+// `KOMTRU_VISUAL_CHECK_REFERENCE=v1` selects the v1 file and `SCREEN_INDEX-v1.md`, which the harness's
+// own tests and the older screens' reviews were written against.
 // `SCREEN_INDEX.md` is the only map from a screen id to its place in the reference HTML, and
 // `scripts/test/screen-index.test.ts` keeps it true against the HTML itself. This module reads it
 // the same way, so the harness and that test cannot disagree about what a row means.
@@ -9,9 +13,14 @@ import { REFERENCE_FILE } from '@komtru/ui-kit/extract-tokens';
 /** The design reference, resolved from this package rather than the caller's working directory. */
 export const REFERENCE_DIR = new URL('../../../docs/design-reference/', import.meta.url);
 
-export const REFERENCE_HTML_PATH = new URL(REFERENCE_FILE, REFERENCE_DIR);
+const V2 = process.env.KOMTRU_VISUAL_CHECK_REFERENCE !== 'v1';
 
-export const SCREEN_INDEX_PATH = new URL('SCREEN_INDEX-v1.md', REFERENCE_DIR);
+/** The reference file the harness is drawing against, by name. */
+export const REFERENCE_NAME = V2 ? 'Komtru — UI Living Master v2.html' : REFERENCE_FILE;
+
+export const REFERENCE_HTML_PATH = new URL(REFERENCE_NAME, REFERENCE_DIR);
+
+export const SCREEN_INDEX_PATH = new URL(V2 ? 'SCREEN_INDEX.md' : 'SCREEN_INDEX-v1.md', REFERENCE_DIR);
 
 /** One row of the index: a screen, where it lives in the HTML, and who builds it. */
 export interface ScreenRow {

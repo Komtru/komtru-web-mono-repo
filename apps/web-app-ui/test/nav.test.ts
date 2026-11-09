@@ -126,10 +126,14 @@ describe('which tab a URL is under', () => {
 });
 
 describe('the global search and Trade Code bar', () => {
-  it('sends a Trade Code to the trades list until the workspace route exists', () => {
-    expect(searchDestination('KMT-88213')).toBe('/trades?code=KMT-88213');
-    expect(searchDestination('  kmt-88213 ')).toBe('/trades?code=KMT-88213');
-    expect(searchDestination('kmt-9')).toBe('/trades?code=KMT-9');
+  it("sends a Trade Code to that code's page, in its canonical form", () => {
+    expect(searchDestination('KMT-88213')).toBe('/trades/KMT-88213-NG');
+    expect(searchDestination('  kmt-88213 ')).toBe('/trades/KMT-88213-NG');
+    expect(searchDestination('KMT-7398512-ng')).toBe('/trades/KMT-7398512-NG');
+  });
+
+  it('treats a string too short to be a code as a search', () => {
+    expect(searchDestination('kmt-9')).toBe('/browse?q=kmt-9');
   });
 
   it('sends anything else to Discover’s results, encoded', () => {

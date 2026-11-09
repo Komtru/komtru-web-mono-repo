@@ -63,6 +63,13 @@ async function clipOf(page: Page): Promise<{ x: number; y: number; width: number
 export interface ShootOptions {
   /** Off only in the test that proves the injected faces change what is rendered. */
   injectFonts?: boolean;
+  /**
+   * A CSS selector for the built screen's own content. The shot then starts at that element's top
+   * edge instead of the page's, so chrome the reference does not draw (an app shell's brand row, the
+   * v2 screens' mobile top bar sits inside it) does not shift every line of text and turn the heat
+   * map into offset noise. The size is still the reference frame's.
+   */
+  contentSelector?: string;
 }
 
 /**
@@ -132,7 +139,28 @@ export async function shootBuilt(
     // reaches network idle, and waiting for it would report a working app as unreachable.
     await page.waitForLoadState('networkidle', { timeout: 5_000 }).catch(() => undefined);
     await settle(page, options.injectFonts ?? true);
-    return { png: await page.screenshot(), ...size };
+    if (options.contentSelector === undefined) return { png: await page.screenshot(), ...size };
+    const locator = page.locator(options.contentSelector).first();
+    const box = await locator.boundingBox();
+    if (box === null) throw new Error(`Nothing on ${url} matches --content ${options.contentSelector}`);
+    // A shot that starts below the top needs that much more page under it. A short screen would leave
+    // the clip hanging off the bottom of the document, so the viewport grows to hold it.
+    const needed = Math.ceil(box.y) + size.height;
+    if (needed > size.height) {
+      await page.setViewportSize({ width: size.width, height: needed });
+      await settle(page, false);
+    }
+    // Not the box's own width: the compared size is the reference's, and the content may be narrower.
+    const png = await page.screenshot({
+      fullPage: true,
+      clip: {
+        x: 0,
+        y: Math.max(0, Math.floor((await locator.boundingBox())?.y ?? box.y)),
+        width: size.width,
+        height: size.height,
+      },
+    });
+    return { png, ...size };
   } finally {
     await page.close();
   }

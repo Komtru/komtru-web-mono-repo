@@ -9,7 +9,7 @@
 import { and, eq, isNull } from 'drizzle-orm';
 import { ApiError } from '../../../platform/errors.js';
 import type { Tx } from '../../../platform/events/publish.js';
-import { tradeCategories } from '../../config/index.js';
+import { tradeCategories, tradeStandards } from '../../config/index.js';
 import { cancelInvitation, userAddresses } from '../../identity/index.js';
 import { addressRequiredError, notYourTurnError, tradeNotFoundError } from '../domain/errors.js';
 import type { TradeInitiatorRole } from '../domain/eligibility.js';
@@ -179,6 +179,8 @@ export type TradeView = {
   categoryCode: string | null;
   categoryName: string | null;
   standardVersion: number | null;
+  /** The id of that exact standard version, so a client can read what the trade froze however many newer ones exist. */
+  standardVersionId: string | null;
   status: TradeStatus;
   statusRevision: number;
   initiatorRole: TradeInitiatorRole;
@@ -231,6 +233,19 @@ export async function buildView(
         .from(tradeCategories)
         .where(eq(tradeCategories.id, trade.categoryId))
     : [];
+  const [pinned] =
+    trade.categoryId && trade.tradeStandardVersion !== null
+      ? await tx
+          .select({ id: tradeStandards.id })
+          .from(tradeStandards)
+          .where(
+            and(
+              eq(tradeStandards.categoryId, trade.categoryId),
+              eq(tradeStandards.versionNumber, trade.tradeStandardVersion),
+            ),
+          )
+      : [];
+  const pinnedId = category && pinned ? pinned.id : null;
   const open = trade.status === 'AWAITING_ACCEPTANCE';
   return {
     id: trade.id,
@@ -239,6 +254,7 @@ export async function buildView(
     categoryCode: category?.code ?? null,
     categoryName: category?.name ?? null,
     standardVersion: category ? trade.tradeStandardVersion : null,
+    standardVersionId: pinnedId,
     status: trade.status,
     statusRevision: trade.statusRevision,
     initiatorRole: trade.initiatorRole,

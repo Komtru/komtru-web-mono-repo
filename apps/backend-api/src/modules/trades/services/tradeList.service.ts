@@ -250,3 +250,25 @@ export function previewForInvitee(view: TradeView): TradeView {
     fees: null,
   };
 }
+
+/**
+ * The trade as `GET /trades/:id` and every proposal action return it, with the other party attached.
+ *
+ * The same display the list and the code lookup show, from the same place, so the same privacy rules
+ * apply: no handle for someone who hid theirs, nothing for an erased or closed account, and nothing until
+ * the other side is bound (a proposal still waiting for an invitee to sign up). A screen reads it from
+ * the trade, so it is right for every trade the person has and not only the most recent page of a list.
+ */
+export async function withCounterparty<V extends { id: string; yourRole: TradeInitiatorRole }>(
+  deps: ListDeps,
+  view: V,
+): Promise<V & { counterparty: CounterpartyDisplay | null }> {
+  return deps.db.transaction(async (tx) => {
+    const [row] = await tx
+      .select({ buyerUserId: trades.buyerUserId, sellerUserId: trades.sellerUserId })
+      .from(trades)
+      .where(eq(trades.id, view.id));
+    const other = view.yourRole === 'BUYER' ? row?.sellerUserId : row?.buyerUserId;
+    return { ...view, counterparty: other ? await displayOf(deps, tx, other) : null };
+  });
+}

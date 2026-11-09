@@ -171,7 +171,7 @@ describe('the top bar tools (v2: DX-03, TX-02)', () => {
     expect(search.getAttribute('placeholder')).toBe('Search trades or sellers — or enter a Trade Code');
     fireEvent.change(search, { target: { value: 'KMT-88213' } });
     fireEvent.submit(screen.getByRole('search'));
-    expect(router.push).toHaveBeenCalledWith('/trades?code=KMT-88213');
+    expect(router.push).toHaveBeenCalledWith('/trades/KMT-88213-NG');
 
     fireEvent.change(search, { target: { value: 'iphone' } });
     fireEvent.submit(screen.getByRole('search'));

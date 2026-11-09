@@ -502,4 +502,112 @@ describe.runIf(infraEnabled)('the trades list and the lookup by code', () => {
       expect(statuses.slice(10)).toEqual([429, 429]);
     });
   });
+
+  // ------------------------------------------------------------------------------------------
+  describe('the single-trade view', () => {
+    const addStandard = (versionNumber: number, minPhotos: number) =>
+      t.owner().query<{ id: string }>(
+        `INSERT INTO config.trade_standards
+           (category_id, version_number, inspection_window_hours, item_spec_fields, proof_media,
+            imei_verification, delivery_deadline_days, reason)
+         VALUES ($1, $2, 72, '[]'::jsonb, $3::jsonb, false, 7, 'test')
+         RETURNING id`,
+        [standard.categoryId, versionNumber, JSON.stringify({ minPhotos, requireVideo: false })],
+      );
+
+    const seedCategory = () =>
+      t.owner().query(
+        `INSERT INTO config.trade_categories (id, code, name) VALUES ($1, 'PHONES', 'Phones')
+         ON CONFLICT (code) DO NOTHING`,
+        [standard.categoryId],
+      );
+
+    it('carries the id of the exact standard version the trade froze, and keeps it after a newer one is published', async () => {
+      await seedCategory();
+      const [{ id: pinnedId }] = (await addStandard(3, 4)).rows as [{ id: string }];
+      const f = await tradeAt(t, 'PENDING_PAYMENT');
+      const before = (await appFor(f.buyer).get(`/v1/trades/${f.tradeId}`)).body;
+      expect(before).toMatchObject({ standardVersion: 3, standardVersionId: pinnedId });
+
+      // The category's standard is republished with a looser proof rule. The trade froze version 3.
+      const [{ id: newerId }] = (await addStandard(4, 1)).rows as [{ id: string }];
+      expect(newerId).not.toBe(pinnedId);
+      const after = (await appFor(f.buyer).get(`/v1/trades/${f.tradeId}`)).body;
+      expect(after).toMatchObject({ standardVersion: 3, standardVersionId: pinnedId });
+      expect((await appFor(f.seller).get(`/v1/trades/${f.tradeId}`)).body.standardVersionId).toBe(pinnedId);
+
+      // And the by-code view of the same trade says the same.
+      const code = await codeOf(f.tradeId);
+      const byCode = tradeByCodeResponseSchema.parse(
+        (await appFor(f.buyer).get(`/v1/trades/by-code/${code}`)).body,
+      );
+      expect(byCode.trade.standardVersionId).toBe(pinnedId);
+    });
+
+    it('has no standard version id for a trade with no category', async () => {
+      const bare = await person(t);
+      const none = await insertTrade(t.owner(), { seller: bare, role: 'SELLER' });
+      expect((await appFor(bare).get(`/v1/trades/${none}`)).body).toMatchObject({
+        categoryCode: null,
+        standardVersion: null,
+        standardVersionId: null,
+      });
+    });
+
+    it('carries the other party, as the list shows them, to each side', async () => {
+      const f = await tradeAt(t, 'PENDING_PAYMENT');
+      await t
+        .owner()
+        .query(
+          `UPDATE identity.users SET username = 'ada_seller', username_skeleton = 'adaseller' WHERE id = $1`,
+          [f.seller],
+        );
+      avatars.set(f.seller, 'https://cdn.example/ada.jpg');
+      const buyerView = (await appFor(f.buyer).get(`/v1/trades/${f.tradeId}`)).body;
+      expect(buyerView.counterparty).toMatchObject({
+        username: 'ada_seller',
+        avatarUrl: 'https://cdn.example/ada.jpg',
+      });
+      // The seller sees the buyer, not themselves.
+      const sellerView = (await appFor(f.seller).get(`/v1/trades/${f.tradeId}`)).body;
+      expect(sellerView.counterparty.publicId).not.toBe(buyerView.counterparty.publicId);
+      // The same display the list gives for the same trade.
+      const [row] = tradeListResponseSchema.parse((await appFor(f.buyer).get('/v1/trades')).body).items;
+      expect(buyerView.counterparty).toEqual(row!.counterparty);
+      avatars.delete(f.seller);
+    });
+
+    it('withholds a handle that was hidden from discovery, and never volunteers contact details', async () => {
+      const f = await tradeAt(t, 'PENDING_PAYMENT');
+      await t.owner().query(
+        `UPDATE identity.users SET username = 'hidden_seller', username_skeleton = 'hiddenseller',
+                discoverable_by_username = false WHERE id = $1`,
+        [f.seller],
+      );
+      const res = await appFor(f.buyer).get(`/v1/trades/${f.tradeId}`);
+      expect(res.body.counterparty.username).toBeNull();
+      expect(Object.keys(res.body.counterparty as Record<string, unknown>).sort()).toEqual([
+        'avatarUrl',
+        'displayName',
+        'publicId',
+        'username',
+      ]);
+      expect(JSON.stringify(res.body.counterparty)).not.toMatch(/@|\+234|email|phone/i);
+    });
+
+    it('has no counterparty for an erased account, nor until the other side is bound', async () => {
+      const f = await tradeAt(t, 'PENDING_PAYMENT');
+      await t
+        .owner()
+        .query(
+          `UPDATE identity.users SET status = 'ANONYMISED', username = NULL, username_skeleton = NULL WHERE id = $1`,
+          [f.seller],
+        );
+      expect((await appFor(f.buyer).get(`/v1/trades/${f.tradeId}`)).body.counterparty).toBeNull();
+
+      const inviter = await person(t);
+      const { tradeId } = await invitedTrade(inviter, null, 'PENDING');
+      expect((await appFor(inviter).get(`/v1/trades/${tradeId}`)).body.counterparty).toBeNull();
+    });
+  });
 });

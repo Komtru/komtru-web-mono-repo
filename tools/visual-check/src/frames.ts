@@ -108,11 +108,20 @@ export function frameWidths(html: string): Record<string, number> {
       .filter((rule) => rule.selectors.includes(selector))
       .flatMap((rule) => parseCssDeclarations(rule.body).get(property) ?? []);
 
-    const pixels = [...new Set(values)].map((value) => {
-      const match = /^(\d+)px$/.exec(value.trim());
-      if (match === null) throw new Error(`${selector} declares ${property}: ${value}, not a pixel width`);
-      return Number(match[1]);
-    });
+    // The v2 master also declares `width:min(340px,100%)` and a bare `width:100%` for narrow windows.
+    // The first states the same pixel width; the second states no width at all, so it is skipped
+    // rather than treated as a disagreement. Anything else still throws.
+    const pixels = [
+      ...new Set(
+        values.flatMap((value) => {
+          const text = value.trim();
+          const match = /^(\d+)px$/.exec(text) ?? /^min\((\d+)px,\s*100%\)$/.exec(text);
+          if (match !== null) return [Number(match[1])];
+          if (/^100%(\s*!important)?$/.test(text)) return [];
+          throw new Error(`${selector} declares ${property}: ${value}, not a pixel width`);
+        }),
+      ),
+    ];
 
     const [width] = pixels;
     if (width === undefined) throw new Error(`The reference no longer declares ${property} for ${selector}`);
