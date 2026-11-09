@@ -71,6 +71,8 @@ describe('checkProviderImageUrl', () => {
     ['https://172.16.0.1/a.jpg', 'private range'],
     ['https://169.254.169.254/latest/meta-data', 'link-local metadata address'],
     ['https://[::1]/a.jpg', 'ipv6 loopback'],
+    ['https://2130706433/a.jpg', 'decimal spelling of 127.0.0.1'],
+    ['https://0x7f.1/a.jpg', 'hex spelling of 127.0.0.1'],
     ['https://db.internal/a.jpg', 'internal suffix'],
     ['https://example.com:8443/a.jpg', 'non-standard port'],
     ['file:///etc/passwd', 'non-http scheme'],
@@ -80,27 +82,35 @@ describe('checkProviderImageUrl', () => {
   });
 });
 
+const bytes = (head: number[], length = 32): Uint8Array => {
+  const out = new Uint8Array(length);
+  out.set(head);
+  return out;
+};
+const JPEG = [0xff, 0xd8, 0xff, 0xe0];
+const PNG = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
+const WEBP = [0x52, 0x49, 0x46, 0x46, 0, 0, 0, 0, 0x57, 0x45, 0x42, 0x50];
+
 describe('checkProviderImage', () => {
-  it('accepts jpeg, png and webp within the cap, ignoring content-type parameters', () => {
-    expect(checkProviderImage({ contentType: 'image/jpeg', byteLength: 1000 })).toEqual({
-      ok: true,
-      contentType: 'image/jpeg',
-    });
-    expect(checkProviderImage({ contentType: 'image/PNG; charset=binary', byteLength: 1 })).toEqual({
-      ok: true,
-      contentType: 'image/png',
-    });
-    expect(checkProviderImage({ contentType: 'image/webp', byteLength: PROVIDER_IMAGE_MAX_BYTES }).ok).toBe(
-      true,
+  it('names the type from the magic bytes', () => {
+    expect(checkProviderImage(bytes(JPEG))).toEqual({ ok: true, contentType: 'image/jpeg' });
+    expect(checkProviderImage(bytes(PNG))).toEqual({ ok: true, contentType: 'image/png' });
+    expect(checkProviderImage(bytes(WEBP))).toEqual({ ok: true, contentType: 'image/webp' });
+  });
+
+  it('refuses SVG, HTML, GIF and RIFF that is not WebP, whatever a header said', () => {
+    const text = (s: string) => new TextEncoder().encode(s);
+    expect(checkProviderImage(text('<svg xmlns="http://www.w3.org/2000/svg"></svg>')).ok).toBe(false);
+    expect(checkProviderImage(text('<html><script>alert(1)</script></html>')).ok).toBe(false);
+    expect(checkProviderImage(text('GIF89a......')).ok).toBe(false);
+    expect(checkProviderImage(bytes([0x52, 0x49, 0x46, 0x46, 0, 0, 0, 0, 0x57, 0x41, 0x56, 0x45])).ok).toBe(
+      false,
     );
   });
 
-  it('refuses other types, empty bodies and oversized ones', () => {
-    expect(checkProviderImage({ contentType: 'image/svg+xml', byteLength: 10 }).ok).toBe(false);
-    expect(checkProviderImage({ contentType: 'text/html', byteLength: 10 }).ok).toBe(false);
-    expect(checkProviderImage({ contentType: 'image/jpeg', byteLength: 0 }).ok).toBe(false);
-    expect(
-      checkProviderImage({ contentType: 'image/jpeg', byteLength: PROVIDER_IMAGE_MAX_BYTES + 1 }).ok,
-    ).toBe(false);
+  it('refuses an empty body and one over the cap', () => {
+    expect(checkProviderImage(new Uint8Array(0)).ok).toBe(false);
+    expect(checkProviderImage(bytes(JPEG, PROVIDER_IMAGE_MAX_BYTES)).ok).toBe(true);
+    expect(checkProviderImage(bytes(JPEG, PROVIDER_IMAGE_MAX_BYTES + 1)).ok).toBe(false);
   });
 });

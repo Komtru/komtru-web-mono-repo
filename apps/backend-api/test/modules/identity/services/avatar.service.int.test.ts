@@ -195,6 +195,75 @@ describe.runIf(infraEnabled)('avatars (T-041)', () => {
     });
   });
 
+  describe('races', () => {
+    const tombstonedIds = () => tombstoned.map((x) => x.fileId).sort();
+
+    it('two simultaneous sets leave one avatar and one tombstone per replaced file', async () => {
+      const { userId } = await seedUser(t.owner());
+      await setAvatar(deps(), { userId, fileId: addFile(f(1), userId), request: REQUEST });
+      addFile(f(2), userId);
+      addFile(f(3), userId);
+
+      const results = await Promise.allSettled([
+        setAvatar(deps(), { userId, fileId: f(2), request: REQUEST }),
+        setAvatar(deps(), { userId, fileId: f(3), request: REQUEST }),
+      ]);
+
+      expect(results.every((r) => r.status === 'fulfilled')).toBe(true);
+      const final = await profileAvatar(userId);
+      expect([f(2), f(3)]).toContain(final);
+      const loser = final === f(2) ? f(3) : f(2);
+      // f(1) was replaced by whichever applied first; that one was replaced by the other.
+      expect(tombstonedIds()).toEqual([f(1), loser].sort());
+      expect(tombstonedIds()).not.toContain(final);
+      const events = await t
+        .owner()
+        .query(`SELECT 1 FROM platform.outbox WHERE event_type = 'identity.profile.avatar_changed'`);
+      expect(events.rowCount).toBe(3);
+    });
+
+    it('a remove racing a set ends consistent: the survivor is never tombstoned, the rest are, once each', async () => {
+      for (let round = 0; round < 5; round += 1) {
+        tombstoned.length = 0;
+        const { userId } = await seedUser(t.owner());
+        const a = f(10 + round * 2);
+        const b = f(11 + round * 2);
+        await setAvatar(deps(), { userId, fileId: addFile(a, userId), request: REQUEST });
+        addFile(b, userId);
+
+        await Promise.all([
+          setAvatar(deps(), { userId, fileId: b, request: REQUEST }),
+          removeAvatar(deps(), { userId, request: REQUEST }),
+        ]);
+
+        const final = await profileAvatar(userId);
+        expect([null, b]).toContain(final);
+        const expected = final === null ? [a, b] : [a];
+        expect(tombstonedIds()).toEqual(expected.sort());
+      }
+    });
+
+    it('re-checks the file under the lock: a file tombstoned after the first check never sticks', async () => {
+      const { userId } = await seedUser(t.owner());
+      addFile(f(1), userId);
+      let reads = 0;
+      const flipping = deps({
+        findFile: (id) => {
+          reads += 1;
+          // The first read (the pre-check) sees a live file; every later one sees it tombstoned.
+          const found = files.get(id);
+          return Promise.resolve(found && reads > 1 ? { ...found, status: 'TOMBSTONED' } : found);
+        },
+      });
+
+      expect((await failure(setAvatar(flipping, { userId, fileId: f(1), request: REQUEST }))).status).toBe(
+        410,
+      );
+      // The whole transaction rolled back, so there is not even a profile row.
+      expect(await profileAvatar(userId)).toBeUndefined();
+    });
+  });
+
   describe('removeAvatar', () => {
     it('clears the reference, tombstones the file and answers a null url', async () => {
       const { userId } = await seedUser(t.owner());
@@ -202,6 +271,12 @@ describe.runIf(infraEnabled)('avatars (T-041)', () => {
 
       expect(await removeAvatar(deps(), { userId, request: REQUEST })).toEqual({ avatarUrl: null });
       expect(await profileAvatar(userId)).toBeNull();
+      const audit = await t
+        .owner()
+        .query<{ metadata: Record<string, unknown> }>(
+          `SELECT metadata FROM identity.identity_audit_log WHERE action = 'AVATAR_REMOVED'`,
+        );
+      expect(audit.rows[0]?.metadata).not.toHaveProperty('source');
       expect(tombstoned).toEqual([{ fileId: f(1), reason: 'Avatar removed by the user' }]);
       const events = await t
         .owner()
@@ -253,13 +328,29 @@ describe.runIf(infraEnabled)('avatars (T-041)', () => {
       expect(urls.get(b.userId)).toContain(f(2));
       expect(urls.get(c.userId)).toBeNull();
       expect(signed.sort()).toEqual([f(1), f(2)]);
+    });
+
+    it('does equivalent signing work for an empty list and for users with no avatar (T-035 rule)', async () => {
+      const none = await seedUser(t.owner());
+      signed.length = 0;
       await expect(resolveAvatarUrls(deps(), [], viewer)).resolves.toEqual(new Map());
+      const emptyCalls = signed.length;
+      signed.length = 0;
+      await resolveAvatarUrls(deps(), [none.userId], viewer);
+      expect(emptyCalls).toBe(1);
+      expect(signed.length).toBe(emptyCalls);
+      expect(signed[0]).toBe('00000000-0000-0000-0000-000000000000');
     });
   });
 
   describe('importProviderAvatar (called by social login, T-034)', () => {
     const GOOGLE = 'https://lh3.googleusercontent.com/a/abc=s96-c';
-    const image = { bytes: new Uint8Array([1, 2, 3]), contentType: 'image/jpeg' };
+    const jpeg = (length = 16) => {
+      const bytes = new Uint8Array(length);
+      bytes.set([0xff, 0xd8, 0xff, 0xe0]);
+      return bytes;
+    };
+    const image = { bytes: jpeg() };
 
     const importPorts = (userId: string) => {
       const fetchImage = vi.fn((url: URL) => {
@@ -320,10 +411,10 @@ describe.runIf(infraEnabled)('avatars (T-041)', () => {
     it('skips, and ingests nothing, when the image is the wrong type or too big', async () => {
       const { userId } = await seedUser(t.owner());
       const { ingest } = importPorts(userId);
-      const svg = vi.fn(() => Promise.resolve({ bytes: new Uint8Array([1]), contentType: 'image/svg+xml' }));
-      const big = vi.fn(() =>
-        Promise.resolve({ bytes: new Uint8Array(5 * 1024 * 1024 + 1), contentType: 'image/png' }),
+      const svg = vi.fn(() =>
+        Promise.resolve({ bytes: new TextEncoder().encode('<svg xmlns="http://www.w3.org/2000/svg"/>') }),
       );
+      const big = vi.fn(() => Promise.resolve({ bytes: jpeg(5 * 1024 * 1024 + 1) }));
 
       for (const fetchImage of [svg, big]) {
         const outcome = await importProviderAvatar(deps({ fetchImage, ingest }), {
@@ -377,6 +468,48 @@ describe.runIf(infraEnabled)('avatars (T-041)', () => {
       expect(outcome.status).toBe('SKIPPED');
       expect(fetchImage).not.toHaveBeenCalled();
       expect(await profileAvatar(userId)).toBe(f(1));
+    });
+
+    it('tombstones the ingested file when it cannot be made the avatar', async () => {
+      const { userId } = await seedUser(t.owner());
+      const ingest = vi.fn(() =>
+        Promise.resolve({ fileId: addFile(f(60), userId, { category: 'KYC_DOCUMENT' }) }),
+      );
+      const { fetchImage } = importPorts(userId);
+
+      const outcome = await importProviderAvatar(deps({ fetchImage, ingest }), {
+        userId,
+        provider: 'GOOGLE',
+        url: GOOGLE,
+        request: REQUEST,
+      });
+
+      expect(outcome.status).toBe('SKIPPED');
+      expect(tombstoned.map((x) => x.fileId)).toEqual([f(60)]);
+    });
+
+    it('decides onlyIfNone under the lock: an upload that lands during the download is kept', async () => {
+      const { userId } = await seedUser(t.owner());
+      addFile(f(1), userId);
+      const fetchImage = vi.fn(async () => {
+        // The user uploads their own photo while the provider's picture is still downloading.
+        await setAvatar(deps(), { userId, fileId: f(1), request: REQUEST });
+        return image;
+      });
+      const ingest = vi.fn(() => Promise.resolve({ fileId: addFile(f(70), userId) }));
+
+      const outcome = await importProviderAvatar(deps({ fetchImage, ingest }), {
+        userId,
+        provider: 'GOOGLE',
+        url: GOOGLE,
+        onlyIfNone: true,
+        request: REQUEST,
+      });
+
+      expect(outcome.status).toBe('SKIPPED');
+      expect(await profileAvatar(userId)).toBe(f(1));
+      // The user's own file is untouched; only the unused import is retired.
+      expect(tombstoned.map((x) => x.fileId)).toEqual([f(70)]);
     });
 
     it('skips when the deployment has not wired the import ports', async () => {

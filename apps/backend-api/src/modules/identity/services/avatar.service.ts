@@ -1,8 +1,9 @@
 // T-041. The signed-in user's avatar (M1 D7).
 //
 // `user_profiles.avatar_file_id` is a soft reference to an M20 PROFILE_PHOTO file and NOTHING else is
-// stored: the URL is signed by the files module at the moment somebody looks, so it is always
-// short-lived and always the current avatar. A raw provider URL is never written anywhere; a Google or
+// stored: the URL is produced by the files module at the moment somebody looks, so it always reflects
+// the current avatar and a removed one stops resolving. PROFILE_PHOTO is PUBLIC, so the delivery URL
+// is signed but does NOT expire (M20 `signFor`); it is not a capability that lapses. A raw provider URL is never written anywhere; a Google or
 // Apple picture is fetched server-side and goes through the same files flow as any upload (M1 section
 // 7.4), because a provider can change or revoke its URL without telling us.
 //
@@ -10,7 +11,7 @@
 // the files module arrives as a PORT, wired once in `modules/index.ts` - the same arrangement T-039 uses
 // for `tombstoneUserFiles`.
 import type { SessionScope } from '@komtru/shared-types';
-import { eq, inArray } from 'drizzle-orm';
+import { and, eq, inArray } from 'drizzle-orm';
 import type { Db } from '../../../db/index.js';
 import { ApiError } from '../../../platform/errors.js';
 import { publish, type Tx } from '../../../platform/events/publish.js';
@@ -33,24 +34,35 @@ export interface AvatarViewer {
   roles: readonly string[];
 }
 
+/** The provider's declared content type is deliberately not carried: the bytes are sniffed. */
 export interface ProviderImage {
   bytes: Uint8Array;
-  contentType: string;
 }
 
 export interface AvatarPorts {
   /** M20's record for a file, or undefined. The registry wires the files barrel's `findFile`. */
   findFile: (fileId: string) => Promise<AvatarFileView | undefined>;
-  /** M20's `retrieveFile(...).url`. Throws the files module's own errors for a missing or removed file. */
+  /**
+   * M20's `retrieveFile(...).url`. Throws the files module's own errors for a missing or removed file.
+   * NOT local arithmetic: `retrieveFile` reads the file record and its storage account first, so each
+   * call costs database round trips (this matters to `resolveAvatarUrls`, see there).
+   */
   signUrl: (fileId: string, viewer: AvatarViewer) => Promise<string>;
   /** M20's `requestTombstone`. */
   tombstone: (fileId: string, reason: string) => Promise<void>;
   /**
    * Provider import, both optional so a deployment without social login wires neither.
    *
-   * `fetchImage` is an OUTBOUND request on a URL the provider chose: it receives a URL that already
-   * passed `checkProviderImageUrl`, and must itself refuse redirects and any hostname that resolves to a
-   * private address, enforce the 5 MiB cap while reading, and time out.
+   * `fetchImage` is an OUTBOUND request on a URL the provider chose. It receives a URL that already
+   * passed `checkProviderImageUrl` (a cheap filter, not the defence) and MUST ITSELF:
+   *   1. follow no redirects (a redirect is a new, unchecked URL);
+   *   2. refuse any connection whose resolved address is private, loopback or link-local, checking the
+   *      address it actually connects to (DNS-pinned), not a separate earlier lookup;
+   *   3. stop reading, and reject, once more than `PROVIDER_IMAGE_MAX_BYTES` have arrived, whatever
+   *      Content-Length claims or omits;
+   *   4. time out as a whole, including a body that trickles.
+   * `test/support/fetch-image-contract.ts` is that contract as an executable suite; every
+   * implementation (T-034's) must pass it.
    */
   fetchImage?: (url: URL) => Promise<ProviderImage>;
   /** Uploads the bytes as a PROFILE_PHOTO owned by `userId`; resolves once the file is READY. */
@@ -97,33 +109,14 @@ const REFUSALS: Record<AvatarFileRefusal, () => ApiError> = {
 
 type Source = 'UPLOAD' | 'GOOGLE' | 'APPLE';
 
-/**
- * Swaps the profile's `avatar_file_id` under a row lock and returns the file it replaced. Creates the
- * profile row if the account has none yet, so the call never depends on registration having made one.
- */
-async function swap(tx: Tx, userId: string, next: string | null): Promise<string | null> {
-  await tx.insert(userProfiles).values({ userId }).onConflictDoNothing();
-  const [current] = await tx
-    .select({ avatarFileId: userProfiles.avatarFileId })
-    .from(userProfiles)
-    .where(eq(userProfiles.userId, userId))
-    .for('update');
-  const previous = current?.avatarFileId ?? null;
-  if (previous === next) return previous;
-  await tx
-    .update(userProfiles)
-    .set({ avatarFileId: next, updatedAt: new Date() })
-    .where(eq(userProfiles.userId, userId));
-  return previous;
-}
-
 const record = async (
   tx: Tx,
   input: {
     userId: string;
     fileId: string | null;
     previousFileId: string | null;
-    source: Source;
+    /** Absent on a removal: there is no origin to record. */
+    source?: Source;
     request: AvatarRequestContext;
   },
 ): Promise<void> => {
@@ -136,7 +129,11 @@ const record = async (
     ip: input.request.ip,
     userAgent: input.request.userAgent,
     sessionId: input.request.sessionId,
-    metadata: { fileId: input.fileId, previousFileId: input.previousFileId, source: input.source },
+    metadata: {
+      fileId: input.fileId,
+      previousFileId: input.previousFileId,
+      ...(input.source ? { source: input.source } : {}),
+    },
   });
   await publish(tx, identityProfileAvatarChangedEvent, {
     payload: { userId: input.userId, fileId: input.fileId, previousFileId: input.previousFileId },
@@ -168,28 +165,78 @@ export interface SetAvatarInput {
   source?: Source;
 }
 
-/** `POST /me/avatar`. Also the last step of a provider import, so both go through one set of rules. */
-export async function setAvatar(deps: AvatarDeps, input: SetAvatarInput): Promise<AvatarResult> {
-  const file = await deps.ports.findFile(input.fileId);
-  const check = checkAvatarFile(file, input.userId);
-  if (!check.ok) throw REFUSALS[check.reason]();
+type Applied = { applied: true; previous: string | null } | { applied: false; reason: 'HAS_AVATAR' };
 
-  const previous = await deps.db.transaction(async (tx) => {
-    const replaced = await swap(tx, input.userId, input.fileId);
+/**
+ * The swap, with every check that must hold AT COMMIT inside the locked transaction.
+ *
+ * The file is re-read after the row lock is taken: the check before the transaction is what keeps a
+ * bad request from locking anything, but a file tombstoned in between (the user's erasure, a staff
+ * action) must not become the avatar. The files table is not under our lock, so a tombstone landing
+ * after this re-read and before the commit is caught by the post-commit check in `setAvatar`.
+ */
+async function applyAvatar(
+  deps: AvatarDeps,
+  input: SetAvatarInput,
+  options: { onlyIfNone: boolean },
+): Promise<Applied> {
+  return deps.db.transaction(async (tx): Promise<Applied> => {
+    await tx.insert(userProfiles).values({ userId: input.userId }).onConflictDoNothing();
+    const [current] = await tx
+      .select({ avatarFileId: userProfiles.avatarFileId })
+      .from(userProfiles)
+      .where(eq(userProfiles.userId, input.userId))
+      .for('update');
+    const previous = current?.avatarFileId ?? null;
+
+    // Decided under the lock, so a user upload that landed a moment ago is seen and kept.
+    if (options.onlyIfNone && previous) return { applied: false, reason: 'HAS_AVATAR' };
+
+    const recheck = checkAvatarFile(await deps.ports.findFile(input.fileId), input.userId);
+    if (!recheck.ok) throw REFUSALS[recheck.reason]();
+
     // Setting the file already set changes nothing, so it writes nothing: a retried tap is one event.
-    if (replaced !== input.fileId) {
+    if (previous !== input.fileId) {
+      await tx
+        .update(userProfiles)
+        .set({ avatarFileId: input.fileId, updatedAt: new Date() })
+        .where(eq(userProfiles.userId, input.userId));
       await record(tx, {
         userId: input.userId,
         fileId: input.fileId,
-        previousFileId: replaced,
+        previousFileId: previous,
         source: input.source ?? 'UPLOAD',
         request: input.request,
       });
     }
-    return replaced;
+    return { applied: true, previous };
   });
+}
 
-  if (previous !== input.fileId) await retire(deps, previous, 'Avatar replaced');
+/** `POST /me/avatar`. Also the last step of a provider import, so both go through one set of rules. */
+export async function setAvatar(deps: AvatarDeps, input: SetAvatarInput): Promise<AvatarResult> {
+  const check = checkAvatarFile(await deps.ports.findFile(input.fileId), input.userId);
+  if (!check.ok) throw REFUSALS[check.reason]();
+
+  const result = await applyAvatar(deps, input, { onlyIfNone: false });
+  return finishSet(deps, input, result);
+}
+
+async function finishSet(deps: AvatarDeps, input: SetAvatarInput, result: Applied): Promise<AvatarResult> {
+  if (!result.applied) throw new Error('identity: an unconditional avatar swap was not applied');
+
+  if (result.previous !== input.fileId) await retire(deps, result.previous, 'Avatar replaced');
+
+  // A tombstone that landed after the in-transaction re-read: undo, but only if the profile still
+  // points at this file (a newer set must not be undone by a stale one).
+  const after = checkAvatarFile(await deps.ports.findFile(input.fileId), input.userId);
+  if (!after.ok) {
+    await deps.db
+      .update(userProfiles)
+      .set({ avatarFileId: null, updatedAt: new Date() })
+      .where(and(eq(userProfiles.userId, input.userId), eq(userProfiles.avatarFileId, input.fileId)));
+    throw REFUSALS[after.reason]();
+  }
 
   return { avatarUrl: await sign(deps, input.fileId, selfViewer(input.userId)) };
 }
@@ -202,6 +249,7 @@ export interface RemoveAvatarInput {
 /** `DELETE /me/avatar`. No avatar is not an error: the end state is what was asked for. */
 export async function removeAvatar(deps: AvatarDeps, input: RemoveAvatarInput): Promise<AvatarResult> {
   const previous = await deps.db.transaction(async (tx) => {
+    // The row lock is taken HERE, once; the update below runs under it.
     const [profile] = await tx
       .select({ avatarFileId: userProfiles.avatarFileId })
       .from(userProfiles)
@@ -209,12 +257,14 @@ export async function removeAvatar(deps: AvatarDeps, input: RemoveAvatarInput): 
       .for('update');
     const replaced = profile?.avatarFileId ?? null;
     if (!replaced) return null;
-    await swap(tx, input.userId, null);
+    await tx
+      .update(userProfiles)
+      .set({ avatarFileId: null, updatedAt: new Date() })
+      .where(eq(userProfiles.userId, input.userId));
     await record(tx, {
       userId: input.userId,
       fileId: null,
       previousFileId: replaced,
-      source: 'UPLOAD',
       request: input.request,
     });
     return replaced;
@@ -251,27 +301,50 @@ export async function resolveAvatarUrl(
   return fileId ? sign(deps, fileId, viewer) : null;
 }
 
+/** A file id no real file has (the nil uuid): the decoy lookup's target. */
+const DECOY_FILE_ID = '00000000-0000-0000-0000-000000000000';
+
 /**
- * Avatar URLs for a batch of users, keyed by user id; the function a PartyCard builder's `enrich`
- * calls (T-035). The profile query is issued even for an empty list, for the reason `PartyPorts.enrich`
- * gives: a found lookup must not cost a different number of round trips than a miss.
+ * Avatar URLs for a batch of users, keyed by user id; what a PartyCard's `enrich` calls (T-035).
+ * `reader` lets the caller run the profile query on its own transaction.
+ *
+ * T-035's RULE: `enrich` is called with `[]` on a miss and must do equivalent work, or a found lookup
+ * becomes distinguishable from a miss by timing (M1 section 8.3 control 4). Two things keep that true:
+ *  - the profile query is issued for an empty list too;
+ *  - signing is NOT local (M20's `retrieveFile` reads the file record and its storage account), so a
+ *    batch in which nothing needs signing - always the case for `[]`, and for a user with no avatar -
+ *    makes ONE decoy `signUrl` against the nil uuid and discards the result, in place of the real one.
+ *    A real signing costs a couple of round trips more than the decoy's single lookup: the residual
+ *    difference is only visible between "has an avatar" and "does not", never between a hit and a miss
+ *    of the same kind, and it is reported to the owner as an open item.
  */
 export async function resolveAvatarUrls(
   deps: AvatarDeps,
   userIds: readonly string[],
-  viewer: AvatarViewer,
+  viewer: AvatarViewer | ((ownerUserId: string) => AvatarViewer),
+  reader: Pick<Db, 'select'> = deps.db,
 ): Promise<Map<string, string | null>> {
-  const rows = await deps.db
+  const rows = await reader
     .select({ userId: userProfiles.userId, avatarFileId: userProfiles.avatarFileId })
     .from(userProfiles)
     .where(inArray(userProfiles.userId, [...userIds]));
   const byUser = new Map(rows.map((row) => [row.userId, row.avatarFileId]));
+  const viewerFor = (ownerUserId: string): AvatarViewer =>
+    typeof viewer === 'function' ? viewer(ownerUserId) : viewer;
+
   const out = new Map<string, string | null>();
+  let signings = 0;
   await Promise.all(
     userIds.map(async (userId) => {
-      out.set(userId, await resolveAvatarUrl(deps, byUser.get(userId) ?? null, viewer));
+      const fileId = byUser.get(userId) ?? null;
+      if (fileId) signings += 1;
+      out.set(userId, await resolveAvatarUrl(deps, fileId, viewerFor(userId)));
     }),
   );
+
+  if (signings === 0) {
+    await deps.ports.signUrl(DECOY_FILE_ID, viewerFor(userIds[0] ?? DECOY_FILE_ID)).catch(() => undefined);
+  }
   return out;
 }
 
@@ -311,8 +384,11 @@ export async function importProviderAvatar(
   const url = checkProviderImageUrl(input.url);
   if (!url.ok) return { status: 'SKIPPED', reason: `unsafe url: ${url.reason}` };
 
+  let ingested: string | null = null;
   try {
     if (input.onlyIfNone) {
+      // A cheap early exit to spare the download. The decision that counts is made again under the
+      // row lock in `applyAvatar`, where a concurrent upload cannot slip past it.
       const [profile] = await deps.db
         .select({ avatarFileId: userProfiles.avatarFileId })
         .from(userProfiles)
@@ -321,25 +397,33 @@ export async function importProviderAvatar(
     }
 
     const image = await fetchImage(url.url);
-    const verdict = checkProviderImage({
-      contentType: image.contentType,
-      byteLength: image.bytes.byteLength,
-    });
+    const verdict = checkProviderImage(image.bytes);
     if (!verdict.ok) return { status: 'SKIPPED', reason: verdict.reason };
 
-    const { fileId } = await ingest({
+    ({ fileId: ingested } = await ingest({
       userId: input.userId,
       contentType: verdict.contentType,
       bytes: image.bytes,
-    });
-    const result = await setAvatar(deps, {
+    }));
+
+    const set: SetAvatarInput = {
       userId: input.userId,
-      fileId,
+      fileId: ingested,
       request: input.request,
       source: input.provider,
-    });
+    };
+    const check = checkAvatarFile(await deps.ports.findFile(ingested), input.userId);
+    if (!check.ok) throw REFUSALS[check.reason]();
+    const applied = await applyAvatar(deps, set, { onlyIfNone: input.onlyIfNone ?? false });
+    if (!applied.applied) {
+      await retire(deps, ingested, 'Provider avatar not used: the user chose one first');
+      return { status: 'SKIPPED', reason: 'the user already has an avatar' };
+    }
+    const result = await finishSet(deps, set, applied);
     return { status: 'IMPORTED', avatarUrl: result.avatarUrl };
   } catch (error) {
+    // Ingested but never made the avatar: nobody references it, so do not leave it in storage.
+    await retire(deps, ingested, 'Provider avatar could not be applied');
     deps.logger.warn(
       { err: error, userId: input.userId, provider: input.provider },
       'identity: provider avatar import failed',

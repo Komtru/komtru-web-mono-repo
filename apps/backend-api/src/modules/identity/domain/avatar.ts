@@ -40,21 +40,12 @@ export type ProviderImageType = (typeof PROVIDER_IMAGE_TYPES)[number];
 
 export type ProviderUrlCheck = { ok: true; url: URL } | { ok: false; reason: string };
 
-const PRIVATE_V4 = [
-  /^0\./,
-  /^10\./,
-  /^127\./,
-  /^169\.254\./,
-  /^172\.(1[6-9]|2\d|3[01])\./,
-  /^192\.168\./,
-  /^100\.(6[4-9]|[7-9]\d|1[01]\d|12[0-7])\./,
-  /^(22[4-9]|2[3-5]\d)\./,
-];
-
 /**
- * An https URL on a public host. Literal IPs are refused outright (a provider's picture lives on a
- * named CDN host), as are the usual internal names. A hostname that RESOLVES to a private address
- * cannot be caught here: the `fetchImage` port must also refuse private resolutions and redirects.
+ * An https URL on a named public host. Literal IPs are refused outright (a provider's picture lives
+ * on a named CDN host, and the URL parser has already normalised decimal, hex and octal spellings to
+ * dotted form), as are the usual internal names. This is a cheap first filter, NOT the SSRF defence:
+ * a hostname that RESOLVES to a private address cannot be caught here, which is why the `fetchImage`
+ * port carries its own contract (see `AvatarPorts.fetchImage`).
  */
 export const checkProviderImageUrl = (raw: string): ProviderUrlCheck => {
   let url: URL;
@@ -69,7 +60,7 @@ export const checkProviderImageUrl = (raw: string): ProviderUrlCheck => {
 
   const host = url.hostname.toLowerCase().replace(/\.$/, '');
   if (host.startsWith('[') || host.includes(':')) return { ok: false, reason: 'ip literal' };
-  if (/^\d+(\.\d+){3}$/.test(host) || PRIVATE_V4.some((re) => re.test(host))) {
+  if (/^\d+(\.\d+){3}$/.test(host)) {
     return { ok: false, reason: 'ip literal' };
   }
   if (
@@ -86,14 +77,29 @@ export const checkProviderImageUrl = (raw: string): ProviderUrlCheck => {
 
 export type ProviderImageCheck = { ok: true; contentType: ProviderImageType } | { ok: false; reason: string };
 
-export const checkProviderImage = (input: {
-  contentType: string;
-  byteLength: number;
-}): ProviderImageCheck => {
-  const contentType = (input.contentType.split(';')[0] ?? '').trim().toLowerCase();
-  const accepted = PROVIDER_IMAGE_TYPES.find((type) => type === contentType);
-  if (!accepted) return { ok: false, reason: `${contentType || 'unknown'} is not an accepted image type` };
-  if (input.byteLength <= 0) return { ok: false, reason: 'empty image' };
-  if (input.byteLength > PROVIDER_IMAGE_MAX_BYTES) return { ok: false, reason: 'image too large' };
-  return { ok: true, contentType: accepted };
+const startsWith = (bytes: Uint8Array, signature: readonly number[], offset = 0): boolean =>
+  bytes.length >= offset + signature.length && signature.every((byte, i) => bytes[offset + i] === byte);
+
+/** What the bytes ARE, by signature. A header is the provider's claim; the bytes are the evidence. */
+export const sniffImageType = (bytes: Uint8Array): ProviderImageType | undefined => {
+  if (startsWith(bytes, [0xff, 0xd8, 0xff])) return 'image/jpeg';
+  if (startsWith(bytes, [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])) return 'image/png';
+  // RIFF....WEBP
+  if (startsWith(bytes, [0x52, 0x49, 0x46, 0x46]) && startsWith(bytes, [0x57, 0x45, 0x42, 0x50], 8)) {
+    return 'image/webp';
+  }
+  return undefined;
+};
+
+/**
+ * PROFILE_PHOTO is PUBLIC, so whatever is stored is served to anyone: the type comes from magic bytes
+ * and the declared content type is ignored entirely (an SVG or HTML body labelled image/png is
+ * refused, and so is a PNG labelled text/html: the stored type is the sniffed one either way).
+ */
+export const checkProviderImage = (bytes: Uint8Array): ProviderImageCheck => {
+  if (bytes.byteLength <= 0) return { ok: false, reason: 'empty image' };
+  if (bytes.byteLength > PROVIDER_IMAGE_MAX_BYTES) return { ok: false, reason: 'image too large' };
+  const contentType = sniffImageType(bytes);
+  if (!contentType) return { ok: false, reason: 'not a JPEG, PNG or WebP image' };
+  return { ok: true, contentType };
 };
