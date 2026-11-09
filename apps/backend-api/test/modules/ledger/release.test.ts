@@ -10,6 +10,8 @@ import {
   escrowRefundLines,
   feeRefundLines,
   feeTreatmentForSplit,
+  planSettlement,
+  refundableOnFullRefundOf,
   releaseAmounts,
   releaseIdempotencyKey,
   releaseJournalLines,
@@ -350,5 +352,95 @@ describe('the journal for a dispute split (T-080)', () => {
   it('refuses a seller payable scoped to nobody', () => {
     expect(() => releaseJournalLines({ tradeId: TRADE, sellerUserId: '' }, amounts())).toThrow();
     expect(() => releaseJournalLines({ tradeId: randomUUID(), sellerUserId: 'nope' }, amounts())).toThrow();
+  });
+});
+
+describe("Q4's treatment out of the stored snapshot", () => {
+  const stored = (refundable: boolean) => ({
+    version: 'test-fee-schedule',
+    currency: 'NGN',
+    takenAt: new Date().toISOString(),
+    sellerKind: 'CASUAL',
+    amounts: {
+      itemMinor: ITEM.toString(),
+      buyerProtectionFeeMinor: FEE.toString(),
+      buyerTotalMinor: (ITEM + FEE).toString(),
+      commissionMinor: COMMISSION.toString(),
+      sellerProceedsMinor: (ITEM - COMMISSION).toString(),
+      platformRevenueMinor: (FEE + COMMISSION).toString(),
+    },
+    terms: {
+      buyerProtectionBps: 100,
+      buyerProtectionMinMinor: '0',
+      buyerProtectionMaxMinor: null,
+      buyerProtectionRefundableOnFullRefund: refundable,
+      commissionBps: 20,
+      commissionMinMinor: '0',
+      commissionMaxMinor: null,
+    },
+  });
+
+  it('reads the frozen flag, either way', () => {
+    expect(refundableOnFullRefundOf(stored(true))).toBe(true);
+    expect(refundableOnFullRefundOf(stored(false))).toBe(false);
+  });
+
+  it('refuses a snapshot it cannot read rather than defaulting to keeping the money', () => {
+    expect(() => refundableOnFullRefundOf(null)).toThrow(ReleaseSnapshotError);
+    expect(() => refundableOnFullRefundOf({ terms: {} })).toThrow(ReleaseSnapshotError);
+    const bent = stored(true);
+    bent.amounts.buyerTotalMinor = '1';
+    expect(() => refundableOnFullRefundOf(bent)).toThrow(ReleaseSnapshotError);
+  });
+});
+
+describe('planning a settlement', () => {
+  it('reports exactly what it posts, for a normal release', () => {
+    const planned = planSettlement(parties, amounts(), { kind: 'RELEASE' });
+    expect(planned.shares).toEqual({
+      sellerProceedsMinor: ITEM - COMMISSION,
+      commissionMinor: COMMISSION,
+      refundToBuyerMinor: 0n,
+      feeTreatment: 'RECOGNISE',
+    });
+    expect(planned.lines).toEqual(releaseJournalLines(parties, amounts()));
+  });
+
+  it('reports exactly what it posts, for a split', () => {
+    const split = {
+      releaseToSellerMinor: 20_000_000n,
+      commissionMinor: COMMISSION,
+      refundToBuyerMinor: ITEM - 20_000_000n - COMMISSION,
+    };
+    const planned = planSettlement(parties, amounts(), { kind: 'DISPUTE_SPLIT', split });
+
+    expect(planned.shares).toEqual({
+      sellerProceedsMinor: split.releaseToSellerMinor,
+      commissionMinor: split.commissionMinor,
+      refundToBuyerMinor: split.refundToBuyerMinor,
+      feeTreatment: 'RECOGNISE',
+    });
+    const credited = planned.lines
+      .filter((l) => l.direction === 'CREDIT')
+      .reduce((sum, l) => sum + l.amountMinor, 0n);
+    expect(credited).toBe(ITEM + FEE);
+  });
+
+  it('settles the fee treatment once, so the event and the journal cannot disagree', () => {
+    const planned = planSettlement(parties, amounts(), {
+      kind: 'DISPUTE_SPLIT',
+      split: { releaseToSellerMinor: 0n, commissionMinor: 0n, refundToBuyerMinor: ITEM },
+    });
+    expect(planned.shares.feeTreatment).toBe('REFUND');
+    expect(asJournal(planned.lines).slice(-1)).toEqual([`CREDIT PLATFORM_ESCROW_POOL ${FEE}`]);
+  });
+
+  it('throws before producing anything when the split does not sum', () => {
+    expect(() =>
+      planSettlement(parties, amounts(), {
+        kind: 'DISPUTE_SPLIT',
+        split: { releaseToSellerMinor: 1n, commissionMinor: 0n, refundToBuyerMinor: 1n },
+      }),
+    ).toThrow(ReleaseSplitError);
   });
 });

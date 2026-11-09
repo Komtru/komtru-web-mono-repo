@@ -64,6 +64,47 @@ export const paymentEscrowFundedEvent = defineEvent(
 );
 
 /**
+ * How a settlement divided the escrowed item (T-074). `RELEASED` is the whole item on
+ * `trade.completed`; `DISPUTE_SPLIT` is T-080's resolution with amounts, where part goes back to
+ * the buyer. One event rather than two, because a consumer that only cares that the trade's escrow
+ * is settled should not have to learn both names.
+ */
+export const ESCROW_RELEASE_OUTCOMES = ['RELEASED', 'DISPUTE_SPLIT'] as const;
+export type EscrowReleaseOutcome = (typeof ESCROW_RELEASE_OUTCOMES)[number];
+
+/** What became of the buyer protection fee: earned, or handed back with the refunded item. */
+export const FEE_TREATMENTS = ['RECOGNISE', 'REFUND'] as const;
+
+/**
+ * A trade's escrow is settled (M8 §9, design §6.4): the release journal has posted, in the same
+ * transaction as this event. M7 consumes it to move the trade `COMPLETED → SETTLED`; T-073 pays the
+ * seller out of the payable it credited; Reputation keys on the completed trade. The ledger never
+ * transitions a trade itself.
+ */
+export const paymentEscrowReleasedEvent = defineEvent(
+  'ledger.payment.escrow_released',
+  1,
+  z.object({
+    tradeId: z.uuid(),
+    journalEntryId: z.uuid(),
+    sellerUserId: z.uuid(),
+    currency: z.string(),
+    outcome: z.enum(ESCROW_RELEASE_OUTCOMES),
+    /** What left the trade's escrow liability: the item, never the buyer total (T-072). */
+    itemAmountMinor: amountMinorSchema,
+    /** What was credited to the seller's payable — on a split, the share actually released. */
+    sellerProceedsMinor: amountMinorSchema,
+    /** The platform's cut of the released share, recognised as revenue in the same journal. */
+    commissionMinor: amountMinorSchema,
+    /** Zero on a normal release; the share returned to the escrow pool on a split. */
+    refundToBuyerMinor: amountMinorSchema,
+    buyerProtectionFeeMinor: amountMinorSchema,
+    buyerProtectionFeeTreatment: z.enum(FEE_TREATMENTS),
+    releasedAt: z.iso.datetime(),
+  }),
+);
+
+/**
  * A verified charge the ledger would not post: an under- or over-payment, another currency, a
  * reversal, money on a trade no longer awaiting it, or money on an attempt already closed. Nothing
  * was posted; ops decides (T-076 consumes it). Published in the transaction that recorded it.

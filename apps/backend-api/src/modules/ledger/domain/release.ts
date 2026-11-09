@@ -13,7 +13,7 @@
 // leave the fee liability standing for ever, and the balance invariant would NOT catch it: the
 // posting still balances line for line. Only the escrow balance check in the service catches that,
 // which is why the service reads the balance rather than trusting this file.
-import { uuidSchema, type Kobo } from '@komtru/shared-types';
+import { feeSnapshotSchema, uuidSchema, type Kobo } from '@komtru/shared-types';
 import { DEFAULT_CURRENCY, normaliseAccountRef, type AccountRef } from './accounts.js';
 import type { JournalLineInput } from './journal.js';
 
@@ -262,4 +262,71 @@ export function disputeSplitJournalLines(
       ? feeRefundLines(parties.tradeId, at.buyerProtectionFeeMinor)
       : feeRecognitionLines(parties.tradeId, at.buyerProtectionFeeMinor)),
   ];
+}
+
+/**
+ * Q4's treatment as the trade froze it, out of the stored snapshot. Parsed rather than read: the
+ * JSONB is the only place `refundable_on_full_refund` survives, this module must never go back to
+ * the live fee file for it, and a hand-edited or half-migrated row has to fail loudly here rather
+ * than default quietly to "keep the money".
+ */
+export function refundableOnFullRefundOf(feeSnapshot: unknown): boolean {
+  const parsed = feeSnapshotSchema.safeParse(feeSnapshot);
+  if (!parsed.success) {
+    throw new ReleaseSnapshotError('the stored fee snapshot is not a readable fee snapshot');
+  }
+  return parsed.data.terms.buyerProtectionRefundableOnFullRefund;
+}
+
+/** Which way a trade's escrow is being settled. T-080 supplies the split; `trade.completed` does not. */
+export type Settlement = { kind: 'RELEASE' } | { kind: 'DISPUTE_SPLIT'; split: DisputeSplit };
+
+/** What each party got, as the event reports it. */
+export interface SettlementShares {
+  /** Credited to the seller's payable: on a split, the share actually released. */
+  sellerProceedsMinor: Kobo;
+  commissionMinor: Kobo;
+  /** Returned to the escrow pool. Zero on a normal release. */
+  refundToBuyerMinor: Kobo;
+  feeTreatment: FeeTreatment;
+}
+
+export interface PlannedSettlement {
+  lines: JournalLineInput[];
+  shares: SettlementShares;
+}
+
+/**
+ * The lines to post and the shares to announce, from one decision. They are built together on
+ * purpose: an event that says one thing while the journal says another is the hardest kind of
+ * money bug to find, because both halves look right on their own.
+ */
+export function planSettlement(
+  parties: ReleaseParties,
+  amounts: ReleaseAmounts,
+  settlement: Settlement,
+): PlannedSettlement {
+  const at = checkAmounts(amounts);
+  if (settlement.kind === 'RELEASE') {
+    return {
+      lines: releaseJournalLines(parties, at),
+      shares: {
+        sellerProceedsMinor: at.sellerProceedsMinor,
+        commissionMinor: at.commissionMinor,
+        refundToBuyerMinor: 0n,
+        feeTreatment: 'RECOGNISE',
+      },
+    };
+  }
+  const { split } = settlement;
+  const feeTreatment = split.feeTreatment ?? feeTreatmentForSplit(at, split.refundToBuyerMinor);
+  return {
+    lines: disputeSplitJournalLines(parties, at, { ...split, feeTreatment }),
+    shares: {
+      sellerProceedsMinor: split.releaseToSellerMinor,
+      commissionMinor: split.commissionMinor,
+      refundToBuyerMinor: split.refundToBuyerMinor,
+      feeTreatment,
+    },
+  };
 }

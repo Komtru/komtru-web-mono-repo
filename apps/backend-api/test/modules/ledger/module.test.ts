@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { describe, expect, it, vi } from 'vitest';
 import type { Redis } from 'ioredis';
 import { loadConfig } from '../../../src/config/env.js';
@@ -56,7 +57,7 @@ describe('the ledger module', () => {
     expect(registry.get('ledger.refresh-bank-list')?.cron).toMatch(/^\S+ \S+ \* \* \*$/);
   });
 
-  it('says so at boot when Paystack is unconfigured', async () => {
+  const startedContext = () => {
     const config = loadConfig({
       NODE_ENV: 'test',
       LOG_LEVEL: 'silent',
@@ -65,14 +66,52 @@ describe('the ledger module', () => {
       ...testRedisEnv(),
     });
     const warn = vi.fn();
+    const subscribe = vi.fn();
     const logger = { warn, info: vi.fn(), error: vi.fn() } as unknown as ModuleContext['logger'];
-    const ctx = { config, logger, redis: {} as Redis } as ModuleContext;
+    const ctx = {
+      config,
+      logger,
+      redis: {} as Redis,
+      events: { subscribe } as unknown as ModuleContext['events'],
+    } as ModuleContext;
+    return { ctx, warn, subscribe };
+  };
+
+  it('says so at boot when Paystack is unconfigured', async () => {
+    const { ctx, warn } = startedContext();
 
     await ledgerModule.start?.(ctx);
     await ledgerModule.stop?.();
 
     // Otherwise an unset key and an attack look identical in the logs: every signature returns false.
     expect(warn).toHaveBeenCalledWith(expect.stringContaining('PAYSTACK_SECRET_KEY'));
+  });
+
+  it('answers a completed trade, and only a completed one, with a release (T-074)', async () => {
+    const { ctx, subscribe } = startedContext();
+    await ledgerModule.start?.(ctx);
+    await ledgerModule.stop?.();
+
+    expect(subscribe).toHaveBeenCalledTimes(1);
+    const subscription = subscribe.mock.calls[0]?.[0] as {
+      name: string;
+      event: { eventType: string };
+      handler: (envelope: unknown, tx: unknown) => Promise<void>;
+    };
+    expect(subscription.name).toBe('ledger.on-trade-completed');
+    expect(subscription.event.eventType).toBe('trades.trade.state_changed');
+
+    // Every other transition publishes the same event. Settling on one of those would release the
+    // escrow of a trade that has not completed, so the filter is tested, not just written.
+    const envelope = (to: string) => ({
+      eventId: randomUUID(),
+      payload: { tradeId: randomUUID(), to },
+    });
+    // No database is reached, because the handler returns before touching `tx`.
+    for (const to of ['FUNDED', 'SHIPPED', 'INSPECTION', 'DISPUTED', 'SETTLED']) {
+      await expect(subscription.handler(envelope(to), undefined)).resolves.toBeUndefined();
+    }
+    await expect(subscription.handler(envelope('COMPLETED'), undefined)).rejects.toThrow();
   });
 
   it('refuses to run a job before the module started, rather than failing on undefined', async () => {

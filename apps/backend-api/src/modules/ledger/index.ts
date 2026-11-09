@@ -10,9 +10,11 @@ import type { Db } from '../../db/index.js';
 import type { QueueFactory } from '../../platform/queue/factory.js';
 import type { Logger } from '../../platform/logger.js';
 import { defineModule, type ModuleContext } from '../../platform/module.js';
+import { tradeStateChangedEvent } from '../trades/index.js';
 import { createRedisBankListCache, type BankListCache } from './infrastructure/bankListCache.js';
 import type { ProviderRegistry } from './infrastructure/providerRegistry.js';
 import { paymentRoutes } from './http/routes.js';
+import { releaseEscrow } from './services/release.service.js';
 import { webhookRoutes } from './http/webhookRoutes.js';
 import type { VerifiedChargeView } from './domain/funding.js';
 import {
@@ -41,6 +43,7 @@ export * from './domain/accounts.js';
 export * from './domain/journal.js';
 export * from './domain/events.js';
 export * from './domain/funding.js';
+export * from './domain/release.js';
 export * from './infrastructure/postgres/schema/index.js';
 export {
   findAccountId,
@@ -65,6 +68,18 @@ export {
   type TrialBalanceRow,
 } from './infrastructure/postgres/balancesRepository.js';
 export { postJournal, type PostedJournal } from './services/journal.service.js';
+export {
+  releaseEscrow,
+  RELEASABLE_STATUSES,
+  type ReleaseDeps,
+  type ReleaseInput,
+  type ReleaseResult,
+} from './services/release.service.js';
+export {
+  activeTradeHolds,
+  lockTradeForRelease,
+  type TradeForRelease,
+} from './infrastructure/postgres/tradeRelease.js';
 
 // The provider layer (T-071).
 export type {
@@ -228,6 +243,30 @@ export const ledgerModule = defineModule({
   ],
   start: (ctx: ModuleContext) => {
     deps = buildDeps(ctx);
+
+    // `trade.completed` in M7's vocabulary is one `state_changed` event among fifteen, so the
+    // filter is the subscription (trades/domain/events.ts). The handler runs inside the bus's own
+    // claim transaction, which is exactly what `releaseEscrow` wants: the journal, the trade's
+    // FOR SHARE lock and the escrow_released event all commit together or not at all.
+    ctx.events.subscribe({
+      name: 'ledger.on-trade-completed',
+      event: tradeStateChangedEvent,
+      handler: async ({ payload, eventId, correlationId }, tx) => {
+        if (payload.to !== 'COMPLETED') return;
+        const result = await releaseEscrow(
+          tx,
+          { logger: ctx.logger },
+          { tradeId: payload.tradeId, causationId: eventId, ...(correlationId ? { correlationId } : {}) },
+        );
+        // A hold, a replay and a trade the ledger holds nothing for are all reported by
+        // `releaseEscrow` rather than thrown, so the event is not redelivered eight times over
+        // something a retry cannot fix. Whoever lifts a hold calls `releaseEscrow` again.
+        ctx.logger.info(
+          { tradeId: payload.tradeId, outcome: result.outcome },
+          'ledger: settled a completed trade',
+        );
+      },
+    });
     return Promise.resolve();
   },
   stop: () => {

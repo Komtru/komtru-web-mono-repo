@@ -45,6 +45,21 @@ describe.runIf(infraEnabled)('ledger balances', () => {
     });
   });
 
+  it('names the trade on an unposted fee-liability account, not just on the escrow one', async () => {
+    // Both liabilities are scoped by trade (T-072). A zero balance that forgot which trade it was
+    // about would be read as "this fee belongs to no trade" by T-074's release and T-076's sweep.
+    for (const type of ['USER_ESCROW_LIABILITY', 'BUYER_PROTECTION_FEE_LIABILITY'] as const) {
+      expect(await accountBalance(t.db(), { type, tradeId: trade })).toMatchObject({
+        accountId: null,
+        accountKey: `NGN:${type}:${trade}`,
+        tradeId: trade,
+        ownerUserId: null,
+        payoutId: null,
+        balanceMinor: 0n,
+      });
+    }
+  });
+
   it('reports an asset balance as debits minus credits', async () => {
     await post({
       idempotencyKey: `charge:${randomUUID()}`,
