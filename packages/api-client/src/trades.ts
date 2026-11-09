@@ -8,6 +8,7 @@ import {
   counterpartyDisplaySchema,
   cursorPageRequestSchema,
   koboJsonSchema,
+  tradeActivityResponseSchema,
   tradeByCodeResponseSchema,
   tradeListResponseSchema,
   tradeListStateSchema,
@@ -273,4 +274,66 @@ export const getTradeByCode = defineEndpoint({
   path: '/trades/by-code/:code',
   scope: 'CONSUMER',
   schema: { params: z.object({ code: canonicalTradeCodeSchema }), response: tradeByCodeResponseSchema },
+});
+
+/**
+ * A trade's history as a party may read it: labels, who, and when, never free text. Cursor-paginated, newest
+ * first. A 422 means the cursor was mangled or belongs to another trade: start again from page one.
+ */
+export const listTradeActivity = defineEndpoint({
+  method: 'get',
+  path: '/trades/:id/activity',
+  scope: 'CONSUMER',
+  paginated: 'cursor',
+  schema: { params: tradeParams, query: cursorPageRequestSchema, response: tradeActivityResponseSchema },
+});
+
+/** The delivery deadline and any request for more time on it, for either party (DE1 to DE3). */
+export const getDeliveryDeadline = defineEndpoint({
+  method: 'get',
+  path: '/trades/:id/delivery-deadline',
+  scope: 'CONSUMER',
+  schema: {
+    params: tradeParams,
+    response: z.looseObject({
+      deadline: z
+        .looseObject({ id: z.uuid(), status: z.string(), dueAt: z.string(), extensionCount: z.number() })
+        .nullable(),
+      extensionRequest: z
+        .looseObject({
+          id: z.uuid(),
+          status: z.string(),
+          currentDueAt: z.string(),
+          requestedDueAt: z.string(),
+        })
+        .nullable(),
+    }),
+  },
+});
+
+/** The inspection window, whether more time can be asked for or answered, and the delivery evidence (Z4). */
+export const getInspection = defineEndpoint({
+  method: 'get',
+  path: '/trades/:id/inspection',
+  scope: 'CONSUMER',
+  schema: {
+    params: tradeParams,
+    response: z.looseObject({
+      status: z.string(),
+      yourRole: tradeRoleSchema,
+      window: z.looseObject({
+        hours: z.number(),
+        startedAt: z.string().nullable(),
+        deadlineAt: z.string().nullable(),
+        extended: z.boolean(),
+        autoReleasePaused: z.boolean(),
+      }),
+      extensionRequest: z.looseObject({ id: z.uuid(), status: z.string() }).nullable(),
+      canRequestMoreTime: z.boolean(),
+      canRespondToRequest: z.boolean(),
+      deliveryEvidence: z.looseObject({
+        selfArranged: z.looseObject({ waybillNumber: z.string(), shippedAt: z.string() }).nullable(),
+      }),
+    }),
+  },
 });

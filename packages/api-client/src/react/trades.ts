@@ -13,7 +13,10 @@ import {
   counterTrade,
   createTrade,
   declineTrade,
+  getDeliveryDeadline,
+  getInspection,
   getTrade,
+  listTradeActivity,
   listTrades,
   previewTrade,
   sendTrade,
@@ -30,6 +33,10 @@ export const tradeKeys = {
   one: (id: string) => ['trades', id] as const,
   standards: ['trade-standards'] as const,
   list: (state: TradeListState) => ['trades', 'list', state] as const,
+  /** Everything read about one trade sits under `one(id)`, so one invalidation refetches all of it. */
+  activity: (id: string) => ['trades', id, 'activity'] as const,
+  deliveryDeadline: (id: string) => ['trades', id, 'delivery-deadline'] as const,
+  inspection: (id: string) => ['trades', id, 'inspection'] as const,
 };
 
 export const tradeQueryOptions = (client: ApiClient, id: string) => ({
@@ -162,5 +169,58 @@ export function usePinnedStandard(versionId: string | null | undefined) {
       client.call(getTradeStandardVersion, { params: { id: versionId ?? '' } }, { signal }),
     enabled: versionId !== null && versionId !== undefined,
     staleTime: Infinity,
+  });
+}
+
+const ACTIVITY_PAGE = 20;
+
+/**
+ * A trade's history, newest first, a page at a time. Like the list, the cursor goes back exactly as it came,
+ * and a 422 on one resets the feed to its first page once instead of resending it.
+ */
+export function useTradeActivity(id: string) {
+  const client = useApiClient();
+  const queryClient = useQueryClient();
+  return useInfiniteQuery({
+    queryKey: tradeKeys.activity(id),
+    initialPageParam: undefined as string | undefined,
+    getNextPageParam: nextPageParam,
+    queryFn: async ({ pageParam, signal }) => {
+      try {
+        return await client.call(
+          listTradeActivity,
+          {
+            params: { id },
+            query: { limit: ACTIVITY_PAGE, ...(pageParam === undefined ? {} : { cursor: pageParam }) },
+          },
+          { signal },
+        );
+      } catch (error) {
+        if (pageParam !== undefined && error instanceof ProblemError && error.status === 422) {
+          void queryClient.resetQueries({ queryKey: tradeKeys.activity(id) });
+        }
+        throw error;
+      }
+    },
+  });
+}
+
+/** The delivery deadline, once the trade is funded and until it is delivered. Idle otherwise. */
+export function useDeliveryDeadline(id: string, enabled: boolean) {
+  const client = useApiClient();
+  return useQuery({
+    queryKey: tradeKeys.deliveryDeadline(id),
+    queryFn: ({ signal }) => client.call(getDeliveryDeadline, { params: { id } }, { signal }),
+    enabled,
+  });
+}
+
+/** The inspection window and the delivery evidence. Idle until the trade is somewhere it applies. */
+export function useInspection(id: string, enabled: boolean) {
+  const client = useApiClient();
+  return useQuery({
+    queryKey: tradeKeys.inspection(id),
+    queryFn: ({ signal }) => client.call(getInspection, { params: { id } }, { signal }),
+    enabled,
   });
 }

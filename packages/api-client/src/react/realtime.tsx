@@ -78,22 +78,32 @@ export function SocketProvider({
   const resyncKeys = useRef(resyncQueryKeys);
   resyncKeys.current = resyncQueryKeys;
 
+  // The token the connection was made with. A token that changes afterwards is forwarded to the gateway as
+  // `auth:token`, which keeps its authorisation current without dropping the socket (and every room joined on
+  // it) on each refresh.
+  const tokenRef = useRef(token);
+  tokenRef.current = token;
+  const connectedWith = useRef<string | null>(null);
+
   const target = url ?? process.env.NEXT_PUBLIC_SOCKET_URL;
+  const live = target !== undefined && target !== '' && token !== '';
 
   useEffect(() => {
-    if (!target) return undefined;
+    if (!live || !target) return undefined;
     let connection: RealtimeConnection | undefined;
     let cancelled = false;
 
     void (async () => {
-      const live = await connect(target, token);
+      const connectedToken = tokenRef.current;
+      const opened = await connect(target, connectedToken);
       // Unmounted while the socket.io module was still loading: close it rather than leaking it.
       if (cancelled) {
-        live.disconnect();
+        opened.disconnect();
         return;
       }
+      connectedWith.current = connectedToken;
       connection = attachRealtime({
-        socket: live,
+        socket: opened,
         onConnectedChange: setConnected,
         onResync: () => {
           // A live event is "something changed, go check" — never the only copy of the truth.
@@ -106,19 +116,26 @@ export function SocketProvider({
           for (const queryKey of keys) void queryClient.invalidateQueries({ queryKey });
         },
       });
-      setSocket(live);
+      setSocket(opened);
     })();
 
     return () => {
       cancelled = true;
       connection?.close();
+      connectedWith.current = null;
       setSocket(null);
       setConnected(false);
     };
-    // Only the URL and the token belong in here. `connect` and `queryClient` are stable for a
-    // mounted app, and re-running on them would tear the connection down on every render of a
-    // parent that passes an inline factory.
-  }, [target, token]);
+    // Only whether there is somewhere and someone to connect as belongs in here. `connect`, `queryClient` and
+    // the token's later values are not: re-running on them would tear the connection down on every render of
+    // a parent that passes an inline factory, or on every token refresh.
+  }, [target, live]);
+
+  useEffect(() => {
+    if (socket === null || connectedWith.current === token) return;
+    connectedWith.current = token;
+    socket.emit('auth:token', { token });
+  }, [socket, token]);
 
   const value = useMemo<SocketContextValue>(() => ({ socket, connected }), [socket, connected]);
   return <SocketContext.Provider value={value}>{children}</SocketContext.Provider>;

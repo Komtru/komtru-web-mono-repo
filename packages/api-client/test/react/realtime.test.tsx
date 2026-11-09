@@ -4,6 +4,7 @@ import { act, cleanup, render, screen, waitFor } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { SocketLike } from '../../src/realtime/connection.js';
+import { fakeSocket as fakeRoomSocket } from '../support/fake-socket.js';
 import { RealtimeProvider, useNotifications, useSocket, useSocketEvent } from '../../src/react/realtime.js';
 
 type Handler = (...args: never[]) => void;
@@ -29,7 +30,13 @@ const fakeSocket = () => {
     });
   };
 
-  const socket: SocketLike = { ...bind(socketHandlers), disconnect: vi.fn(), io: bind(managerHandlers) };
+  const socket: SocketLike = {
+    ...bind(socketHandlers),
+    disconnect: vi.fn(),
+    emit: vi.fn(),
+    emitWithAck: vi.fn(() => Promise.resolve({ joined: true })),
+    io: bind(managerHandlers),
+  };
 
   return {
     socket,
@@ -181,5 +188,47 @@ describe('useSocketEvent', () => {
     emit('parcel.scanned', { id: 'p2' });
 
     expect(received).toEqual([{ id: 'p1' }]);
+  });
+});
+
+describe('a token that changes while connected', () => {
+  it('is forwarded to the gateway as auth:token without reconnecting', async () => {
+    const { socket } = fakeRoomSocket();
+    const connect = vi.fn(() => socket);
+    const queryClient = new QueryClient();
+    const tree = (token: string) => (
+      <QueryClientProvider client={queryClient}>
+        <RealtimeProvider token={token} url="http://socket.test" connect={connect}>
+          <ConnectionBadge />
+        </RealtimeProvider>
+      </QueryClientProvider>
+    );
+    const view = render(tree('first'));
+    await waitFor(() => expect(screen.getByTestId('has-socket').textContent).toBe('yes'));
+    expect(socket.emit).not.toHaveBeenCalled();
+
+    view.rerender(tree('second'));
+    expect(socket.emit).toHaveBeenCalledWith('auth:token', { token: 'second' });
+    expect(connect).toHaveBeenCalledTimes(1);
+    expect(socket.disconnect).not.toHaveBeenCalled();
+  });
+
+  it('does not connect at all until there is a token, and then connects as that person', async () => {
+    const { socket } = fakeRoomSocket();
+    const connect = vi.fn(() => socket);
+    const queryClient = new QueryClient();
+    const tree = (token: string) => (
+      <QueryClientProvider client={queryClient}>
+        <RealtimeProvider token={token} url="http://socket.test" connect={connect}>
+          <ConnectionBadge />
+        </RealtimeProvider>
+      </QueryClientProvider>
+    );
+    const view = render(tree(''));
+    await Promise.resolve();
+    expect(connect).not.toHaveBeenCalled();
+
+    view.rerender(tree('minted'));
+    await waitFor(() => expect(connect).toHaveBeenCalledWith('http://socket.test', 'minted'));
   });
 });

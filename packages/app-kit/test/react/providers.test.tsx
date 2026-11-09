@@ -8,7 +8,8 @@ import {
 } from '@komtru/api-client';
 import { useApiClient as useQueryHooksClient } from '@komtru/api-client/react';
 import { QueryClient } from '@tanstack/react-query';
-import { cleanup, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, render, screen, waitFor } from '@testing-library/react';
+import { useEffect } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   createKomtruQueryClient,
@@ -43,7 +44,8 @@ const fakeSocket = () => {
   const self = emitter();
   const manager = emitter();
   const disconnect = vi.fn();
-  return { ...self, io: manager, disconnect, manager } as unknown as SocketLike & {
+  const emitWithAck = vi.fn(() => Promise.resolve({ joined: true }));
+  return { ...self, io: manager, disconnect, emitWithAck, manager } as unknown as SocketLike & {
     emit: (event: string, payload?: unknown) => void;
     manager: ReturnType<typeof emitter>;
     disconnect: ReturnType<typeof vi.fn>;
@@ -159,6 +161,75 @@ describe('KomtruProviders', () => {
     renderWith({ socketToken: 'socket-1', connect }, <span>page</span>);
     await waitFor(() => expect(connect).toHaveBeenCalledTimes(1));
     expect(connect.mock.calls[0]).toEqual(['https://api.komtru.com', 'socket-1']);
+  });
+
+  describe('following the session', () => {
+    it('connects as the access token the client holds once there is one, and not before', async () => {
+      const socket = fakeSocket();
+      const connect = vi.fn().mockResolvedValue(socket);
+      let client: ReturnType<typeof useApiClient> | undefined;
+      function Probe() {
+        client = useApiClient();
+        return null;
+      }
+      renderWith({ socketFollowsSession: true, connect }, <Probe />);
+      await Promise.resolve();
+      expect(connect).not.toHaveBeenCalled();
+
+      // The first request refreshed a session: now there is somebody to connect as.
+      act(() => {
+        client!.tokens!.set(session);
+      });
+      await waitFor(() => expect(connect).toHaveBeenCalledTimes(1));
+      expect(connect.mock.calls[0]).toEqual(['https://api.komtru.com', 'at-1']);
+
+      // A later refresh is sent to the gateway on the same connection.
+      const forwarded = vi.spyOn(socket, 'emit');
+      act(() => {
+        client!.tokens!.set({ ...session, accessToken: 'at-2' });
+      });
+      await waitFor(() => expect(forwarded).toHaveBeenCalledWith('auth:token', { token: 'at-2' }));
+      expect(connect).toHaveBeenCalledTimes(1);
+    });
+
+    it('does not remount the app when the first token arrives', async () => {
+      const mounts = vi.fn();
+      let client: ReturnType<typeof useApiClient> | undefined;
+      function Probe() {
+        client = useApiClient();
+        useEffect(() => {
+          mounts();
+        }, []);
+        return null;
+      }
+      renderWith({ socketFollowsSession: true, connect: () => Promise.resolve(fakeSocket()) }, <Probe />);
+      act(() => {
+        client!.tokens!.set(session);
+      });
+      await waitFor(() => expect(client!.tokens!.read().accessToken).toBe('at-1'));
+      expect(mounts).toHaveBeenCalledTimes(1);
+    });
+
+    it('does nothing without a socket URL, and a given socket token wins over the session', async () => {
+      const connect = vi.fn().mockResolvedValue(fakeSocket());
+      render(
+        <KomtruProviders
+          config={{ apiUrl: config.apiUrl, socketUrl: undefined }}
+          session={session}
+          socketFollowsSession
+          connect={connect}
+        >
+          <span>page</span>
+        </KomtruProviders>,
+      );
+      await Promise.resolve();
+      expect(connect).not.toHaveBeenCalled();
+      cleanup();
+
+      renderWith({ session, socketToken: 'given', socketFollowsSession: true, connect }, <span>page</span>);
+      await waitFor(() => expect(connect).toHaveBeenCalledTimes(1));
+      expect(connect.mock.calls[0]).toEqual(['https://api.komtru.com', 'given']);
+    });
   });
 
   it('invalidates the keys it was given when the socket reconnects', async () => {
