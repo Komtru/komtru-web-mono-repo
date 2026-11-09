@@ -316,7 +316,7 @@
     {
       "table": "ledger.ledger_accounts",
       "name": "ledger_accounts_scope",
-      "definition": "CHECK (\nCASE account_type\n    WHEN 'USER_ESCROW_LIABILITY'::ledger.ledger_account_type THEN ((trade_id IS NOT NULL) AND (owner_user_id IS NULL) AND (payout_id IS NULL))\n    WHEN 'USER_PAYABLE'::ledger.ledger_account_type THEN ((owner_user_id IS NOT NULL) AND (trade_id IS NULL) AND (payout_id IS NULL))\n    WHEN 'SETTLEMENT_CLEARING'::ledger.ledger_account_type THEN ((payout_id IS NOT NULL) AND (owner_user_id IS NULL) AND (trade_id IS NULL))\n    ELSE ((owner_user_id IS NULL) AND (trade_id IS NULL) AND (payout_id IS NULL))\nEND)"
+      "definition": "CHECK (\nCASE account_type\n    WHEN 'USER_ESCROW_LIABILITY'::ledger.ledger_account_type THEN ((trade_id IS NOT NULL) AND (owner_user_id IS NULL) AND (payout_id IS NULL))\n    WHEN 'BUYER_PROTECTION_FEE_LIABILITY'::ledger.ledger_account_type THEN ((trade_id IS NOT NULL) AND (owner_user_id IS NULL) AND (payout_id IS NULL))\n    WHEN 'USER_PAYABLE'::ledger.ledger_account_type THEN ((owner_user_id IS NOT NULL) AND (trade_id IS NULL) AND (payout_id IS NULL))\n    WHEN 'SETTLEMENT_CLEARING'::ledger.ledger_account_type THEN ((payout_id IS NOT NULL) AND (owner_user_id IS NULL) AND (trade_id IS NULL))\n    ELSE ((owner_user_id IS NULL) AND (trade_id IS NULL) AND (payout_id IS NULL))\nEND)"
     },
     {
       "table": "ledger.ledger_entries",

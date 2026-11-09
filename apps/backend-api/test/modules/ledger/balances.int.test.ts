@@ -12,11 +12,10 @@ import {
   postJournal,
   trialBalance,
   type AccountRef,
-  type LedgerAccountType,
 } from '../../../src/modules/ledger/index.js';
 import { infraEnabled } from '../../support/db-urls.js';
 import { useTestDatabase } from '../../support/db.js';
-import { insertAccount, postRaw } from './support.js';
+import { accountRefFor, insertAccount, postRaw } from './support.js';
 
 describe.runIf(infraEnabled)('ledger balances', () => {
   const t = useTestDatabase();
@@ -28,20 +27,6 @@ describe.runIf(infraEnabled)('ledger balances', () => {
   const POOL: AccountRef = { type: 'PLATFORM_ESCROW_POOL' };
   const ESCROW: AccountRef = { type: 'USER_ESCROW_LIABILITY', tradeId: trade };
   const PAYABLE: AccountRef = { type: 'USER_PAYABLE', ownerUserId: seller };
-
-  /** A scope-carrying ref for any account type, so every type can be exercised the same way. */
-  const refFor = (type: LedgerAccountType): AccountRef => {
-    switch (type) {
-      case 'USER_ESCROW_LIABILITY':
-        return { type, tradeId: randomUUID() };
-      case 'USER_PAYABLE':
-        return { type, ownerUserId: randomUUID() };
-      case 'SETTLEMENT_CLEARING':
-        return { type, payoutId: randomUUID() };
-      default:
-        return { type };
-    }
-  };
 
   const post = (input: Parameters<typeof postJournal>[1]) =>
     t.db().transaction((tx) => postJournal(tx, input));
@@ -99,7 +84,7 @@ describe.runIf(infraEnabled)('ledger balances', () => {
   });
 
   it.each(LEDGER_ACCOUNT_TYPES)('signs %s in its own normal direction', async (type) => {
-    const ref = refFor(type);
+    const ref = accountRefFor(type);
     // The counterparty must not be the account under test, or the two lines would cancel out.
     const other: AccountRef =
       type === 'PLATFORM_ESCROW_POOL' ? { type: 'PLATFORM_FEE_REVENUE' } : { type: 'PLATFORM_ESCROW_POOL' };

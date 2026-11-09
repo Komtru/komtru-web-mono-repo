@@ -619,7 +619,7 @@ describe.runIf(infraEnabled)('funding a trade (T-072)', () => {
   });
 
   describe('settling a verified charge', () => {
-    it('posts pool debit against the trade’s escrow liability for item and fee, and announces it', async () => {
+    it('posts pool debit against the trade’s escrow for the item and its fee liability for the fee, and announces it', async () => {
       const attempt = await start();
       const outcome = await settleCharge(
         { db: t.db(), logger },
@@ -646,14 +646,21 @@ describe.runIf(infraEnabled)('funding a trade (T-072)', () => {
           amount_minor: ITEM.toString(),
         },
         {
-          account_key: `NGN:USER_ESCROW_LIABILITY:${tradeId}`,
+          account_key: `NGN:BUYER_PROTECTION_FEE_LIABILITY:${tradeId}`,
           direction: 'CREDIT',
           amount_minor: FEE.toString(),
         },
       ]);
+      // The whole point of the second account: the trade's escrow liability is exactly what the
+      // buyer could get back on the item, and the unearned fee is a balance of its own until
+      // T-074 recognises it as revenue at release.
       expect((await accountBalance(t.db(), { type: 'USER_ESCROW_LIABILITY', tradeId })).balanceMinor).toBe(
-        TOTAL,
+        ITEM,
       );
+      expect(
+        (await accountBalance(t.db(), { type: 'BUYER_PROTECTION_FEE_LIABILITY', tradeId })).balanceMinor,
+      ).toBe(FEE);
+      expect((await accountBalance(t.db(), { type: 'PLATFORM_ESCROW_POOL' })).balanceMinor).toBe(TOTAL);
       expect(await outbox('ledger.payment.escrow_funded')).toBe(1);
       expect(await outbox('ledger.journal.posted')).toBe(1);
     });

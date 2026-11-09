@@ -214,6 +214,11 @@
       "tag": "0042_ledger_payments",
       "when": 1794241874487,
       "sha256": "ca9ec66c8a4adb370845400fa2eee1fc032fa820b18b512fd802ba91fc184c71"
+    },
+    {
+      "tag": "0043_ledger_fee_liability_account",
+      "when": 1794242200637,
+      "sha256": "613a7388b07f22e8f83a8b39b529dd80c045b20e490fa4232311285a11024d43"
     }
   ]
 }

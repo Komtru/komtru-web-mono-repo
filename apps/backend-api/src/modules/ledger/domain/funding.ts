@@ -109,23 +109,33 @@ export function fundingAmounts(snapshot: TradeFundingSnapshot): FundingAmounts {
 }
 
 /**
- * Debit the escrow pool the total; credit the trade's escrow liability the item amount and, as a
- * separate line, the buyer protection fee. The fee is still owed at funding — Q4 refunds it on a full
- * refund and T-074 recognises it as revenue only at release — so it is a liability, not revenue.
+ * Debit the escrow pool the total the buyer paid; credit the trade's escrow liability the item
+ * amount and the trade's buyer protection fee liability the fee. The fee is still owed at funding —
+ * T-074 recognises it as revenue only at release, and T-075's `refundable_on_full_refund` policy
+ * decides whether a refund gives it back — so it is a liability, not revenue.
  *
- * Which liability account holds the fee is an owner decision pending (T-072 plan, decision 1). The
- * chart has no fee-liability type, so the default is the trade's own escrow liability. A zero fee
- * has no line: a ledger line is strictly positive.
+ * Two accounts rather than two lines on one (T-072 plan, decision 1, settled by the owner): the
+ * trade's escrow liability balance is then exactly what the buyer could get back on the item, so
+ * the refundable figure is a ledger read rather than a subtraction against the T-047 fee snapshot
+ * that every later ticket would have to repeat identically. A zero fee has no line: a ledger line
+ * is strictly positive.
  */
 export function fundingJournalLines(tradeId: string, amounts: FundingAmounts): JournalLineInput[] {
   const checked = checkAmounts(amounts);
-  const escrow = { type: 'USER_ESCROW_LIABILITY' as const, tradeId };
   const lines: JournalLineInput[] = [
     { account: { type: 'PLATFORM_ESCROW_POOL' }, direction: 'DEBIT', amountMinor: checked.totalMinor },
-    { account: escrow, direction: 'CREDIT', amountMinor: checked.itemAmountMinor },
+    {
+      account: { type: 'USER_ESCROW_LIABILITY', tradeId },
+      direction: 'CREDIT',
+      amountMinor: checked.itemAmountMinor,
+    },
   ];
   if (checked.buyerProtectionFeeMinor > 0n) {
-    lines.push({ account: escrow, direction: 'CREDIT', amountMinor: checked.buyerProtectionFeeMinor });
+    lines.push({
+      account: { type: 'BUYER_PROTECTION_FEE_LIABILITY', tradeId },
+      direction: 'CREDIT',
+      amountMinor: checked.buyerProtectionFeeMinor,
+    });
   }
   return lines;
 }

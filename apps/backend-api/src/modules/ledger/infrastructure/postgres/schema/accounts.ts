@@ -12,6 +12,7 @@ import { ledgerAccountType } from './enums.js';
 const ACCOUNT_KEY = sql`"currency" || ':' || (CASE "account_type"
     WHEN 'PLATFORM_ESCROW_POOL' THEN 'PLATFORM_ESCROW_POOL'
     WHEN 'USER_ESCROW_LIABILITY' THEN 'USER_ESCROW_LIABILITY'
+    WHEN 'BUYER_PROTECTION_FEE_LIABILITY' THEN 'BUYER_PROTECTION_FEE_LIABILITY'
     WHEN 'USER_PAYABLE' THEN 'USER_PAYABLE'
     WHEN 'PLATFORM_FEE_REVENUE' THEN 'PLATFORM_FEE_REVENUE'
     WHEN 'BUYER_PROTECTION_FEE_REVENUE' THEN 'BUYER_PROTECTION_FEE_REVENUE'
@@ -26,7 +27,7 @@ export const ledgerAccounts = ledger.table(
     currency: text('currency').notNull().default('NGN'),
     /** Soft ref to identity.users(id): the user a payable belongs to. */
     ownerUserId: uuid('owner_user_id'),
-    /** Soft ref to trade.trades(id): the trade an escrow liability belongs to. */
+    /** Soft ref to trade.trades(id): the trade an escrow or fee liability belongs to. */
     tradeId: uuid('trade_id'),
     /** Soft ref to the payout a settlement clearing account belongs to (T-073). */
     payoutId: uuid('payout_id'),
@@ -45,6 +46,7 @@ export const ledgerAccounts = ledger.table(
       'ledger_accounts_scope',
       sql`CASE ${table.accountType}
             WHEN 'USER_ESCROW_LIABILITY' THEN ${table.tradeId} IS NOT NULL AND ${table.ownerUserId} IS NULL AND ${table.payoutId} IS NULL
+            WHEN 'BUYER_PROTECTION_FEE_LIABILITY' THEN ${table.tradeId} IS NOT NULL AND ${table.ownerUserId} IS NULL AND ${table.payoutId} IS NULL
             WHEN 'USER_PAYABLE' THEN ${table.ownerUserId} IS NOT NULL AND ${table.tradeId} IS NULL AND ${table.payoutId} IS NULL
             WHEN 'SETTLEMENT_CLEARING' THEN ${table.payoutId} IS NOT NULL AND ${table.ownerUserId} IS NULL AND ${table.tradeId} IS NULL
             ELSE ${table.ownerUserId} IS NULL AND ${table.tradeId} IS NULL AND ${table.payoutId} IS NULL

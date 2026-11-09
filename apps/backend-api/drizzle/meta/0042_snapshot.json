@@ -97,11 +97,7 @@
       "compositePrimaryKeys": {
         "idempotency_keys_scope_key_actor_pk": {
           "name": "idempotency_keys_scope_key_actor_pk",
-          "columns": [
-            "scope",
-            "key",
-            "actor"
-          ]
+          "columns": ["scope", "key", "actor"]
         }
       },
       "uniqueConstraints": {},
@@ -241,9 +237,7 @@
         "outbox_event_id_unique": {
           "name": "outbox_event_id_unique",
           "nullsNotDistinct": false,
-          "columns": [
-            "event_id"
-          ]
+          "columns": ["event_id"]
         }
       },
       "policies": {},
@@ -295,10 +289,7 @@
       "compositePrimaryKeys": {
         "processed_events_event_id_subscriber_pk": {
           "name": "processed_events_event_id_subscriber_pk",
-          "columns": [
-            "event_id",
-            "subscriber"
-          ]
+          "columns": ["event_id", "subscriber"]
         }
       },
       "uniqueConstraints": {},
@@ -653,12 +644,8 @@
           "tableFrom": "case_decisions",
           "tableTo": "cases",
           "schemaTo": "cases",
-          "columnsFrom": [
-            "case_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["case_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         }
@@ -786,12 +773,8 @@
           "tableFrom": "case_evidence_requests",
           "tableTo": "cases",
           "schemaTo": "cases",
-          "columnsFrom": [
-            "case_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["case_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         }
@@ -889,12 +872,8 @@
           "tableFrom": "case_trail",
           "tableTo": "cases",
           "schemaTo": "cases",
-          "columnsFrom": [
-            "case_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["case_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         }
@@ -1109,10 +1088,7 @@
       "compositePrimaryKeys": {
         "platform_settings_namespace_key_pk": {
           "name": "platform_settings_namespace_key_pk",
-          "columns": [
-            "namespace",
-            "key"
-          ]
+          "columns": ["namespace", "key"]
         }
       },
       "uniqueConstraints": {},
@@ -1310,12 +1286,8 @@
           "tableFrom": "trade_standards",
           "tableTo": "trade_categories",
           "schemaTo": "config",
-          "columnsFrom": [
-            "category_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["category_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         }
@@ -1459,23 +1431,17 @@
         "storage_accounts_label_unique": {
           "name": "storage_accounts_label_unique",
           "nullsNotDistinct": false,
-          "columns": [
-            "label"
-          ]
+          "columns": ["label"]
         },
         "storage_accounts_cloud_name_unique": {
           "name": "storage_accounts_cloud_name_unique",
           "nullsNotDistinct": false,
-          "columns": [
-            "cloud_name"
-          ]
+          "columns": ["cloud_name"]
         },
         "storage_accounts_credential_env_prefix_unique": {
           "name": "storage_accounts_credential_env_prefix_unique",
           "nullsNotDistinct": false,
-          "columns": [
-            "credential_env_prefix"
-          ]
+          "columns": ["credential_env_prefix"]
         }
       },
       "policies": {},
@@ -1519,12 +1485,8 @@
           "tableFrom": "storage_pool_rotation",
           "tableTo": "storage_accounts",
           "schemaTo": "files",
-          "columnsFrom": [
-            "last_account_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["last_account_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         }
@@ -1652,12 +1614,8 @@
           "tableFrom": "file_access_grants",
           "tableTo": "file_records",
           "schemaTo": "files",
-          "columnsFrom": [
-            "file_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["file_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -1750,12 +1708,8 @@
           "tableFrom": "file_access_log",
           "tableTo": "file_records",
           "schemaTo": "files",
-          "columnsFrom": [
-            "file_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["file_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -1972,12 +1926,8 @@
           "tableFrom": "file_records",
           "tableTo": "storage_accounts",
           "schemaTo": "files",
-          "columnsFrom": [
-            "storage_account_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["storage_account_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         }
@@ -2121,12 +2071,8 @@
           "tableFrom": "cities",
           "tableTo": "states",
           "schemaTo": "geo",
-          "columnsFrom": [
-            "state_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["state_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         }
@@ -2300,12 +2246,8 @@
           "tableFrom": "city_requests",
           "tableTo": "states",
           "schemaTo": "geo",
-          "columnsFrom": [
-            "state_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["state_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         },
@@ -2314,12 +2256,8 @@
           "tableFrom": "city_requests",
           "tableTo": "cities",
           "schemaTo": "geo",
-          "columnsFrom": [
-            "resolved_city_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["resolved_city_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         }
@@ -2560,12 +2498,8 @@
           "tableFrom": "user_addresses",
           "tableTo": "users",
           "schemaTo": "identity",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["user_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         }
@@ -2911,12 +2845,8 @@
           "tableFrom": "user_emails",
           "tableTo": "users",
           "schemaTo": "identity",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["user_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -3065,12 +2995,8 @@
           "tableFrom": "user_phones",
           "tableTo": "users",
           "schemaTo": "identity",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["user_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -3259,12 +3185,8 @@
           "tableFrom": "social_identities",
           "tableTo": "users",
           "schemaTo": "identity",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["user_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -3353,12 +3275,8 @@
           "tableFrom": "user_credentials",
           "tableTo": "users",
           "schemaTo": "identity",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["user_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -3443,12 +3361,8 @@
           "tableFrom": "user_profiles",
           "tableTo": "users",
           "schemaTo": "identity",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["user_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -3750,23 +3664,17 @@
         "users_public_id_unique": {
           "name": "users_public_id_unique",
           "nullsNotDistinct": false,
-          "columns": [
-            "public_id"
-          ]
+          "columns": ["public_id"]
         },
         "users_username_unique": {
           "name": "users_username_unique",
           "nullsNotDistinct": false,
-          "columns": [
-            "username"
-          ]
+          "columns": ["username"]
         },
         "users_username_skeleton_unique": {
           "name": "users_username_skeleton_unique",
           "nullsNotDistinct": false,
-          "columns": [
-            "username_skeleton"
-          ]
+          "columns": ["username_skeleton"]
         }
       },
       "policies": {},
@@ -3897,12 +3805,8 @@
           "tableFrom": "admin_action_approvals",
           "tableTo": "users",
           "schemaTo": "identity",
-          "columnsFrom": [
-            "subject_user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["subject_user_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -3911,12 +3815,8 @@
           "tableFrom": "admin_action_approvals",
           "tableTo": "users",
           "schemaTo": "identity",
-          "columnsFrom": [
-            "requested_by"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["requested_by"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         },
@@ -3925,12 +3825,8 @@
           "tableFrom": "admin_action_approvals",
           "tableTo": "users",
           "schemaTo": "identity",
-          "columnsFrom": [
-            "approved_by"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["approved_by"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         }
@@ -4069,12 +3965,8 @@
           "tableFrom": "admin_role_assignments",
           "tableTo": "users",
           "schemaTo": "identity",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["user_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -4083,12 +3975,8 @@
           "tableFrom": "admin_role_assignments",
           "tableTo": "roles",
           "schemaTo": "identity",
-          "columnsFrom": [
-            "role_code"
-          ],
-          "columnsTo": [
-            "code"
-          ],
+          "columnsFrom": ["role_code"],
+          "columnsTo": ["code"],
           "onDelete": "no action",
           "onUpdate": "no action"
         },
@@ -4097,12 +3985,8 @@
           "tableFrom": "admin_role_assignments",
           "tableTo": "users",
           "schemaTo": "identity",
-          "columnsFrom": [
-            "granted_by"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["granted_by"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         },
@@ -4111,12 +3995,8 @@
           "tableFrom": "admin_role_assignments",
           "tableTo": "users",
           "schemaTo": "identity",
-          "columnsFrom": [
-            "approved_by"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["approved_by"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         },
@@ -4125,12 +4005,8 @@
           "tableFrom": "admin_role_assignments",
           "tableTo": "users",
           "schemaTo": "identity",
-          "columnsFrom": [
-            "revoked_by"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["revoked_by"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         }
@@ -4229,12 +4105,8 @@
           "tableFrom": "role_permissions",
           "tableTo": "roles",
           "schemaTo": "identity",
-          "columnsFrom": [
-            "role_code"
-          ],
-          "columnsTo": [
-            "code"
-          ],
+          "columnsFrom": ["role_code"],
+          "columnsTo": ["code"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -4243,12 +4115,8 @@
           "tableFrom": "role_permissions",
           "tableTo": "permissions",
           "schemaTo": "identity",
-          "columnsFrom": [
-            "permission_code"
-          ],
-          "columnsTo": [
-            "code"
-          ],
+          "columnsFrom": ["permission_code"],
+          "columnsTo": ["code"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -4256,10 +4124,7 @@
       "compositePrimaryKeys": {
         "role_permissions_role_code_permission_code_pk": {
           "name": "role_permissions_role_code_permission_code_pk",
-          "columns": [
-            "role_code",
-            "permission_code"
-          ]
+          "columns": ["role_code", "permission_code"]
         }
       },
       "uniqueConstraints": {},
@@ -4419,12 +4284,8 @@
           "tableFrom": "user_capabilities",
           "tableTo": "users",
           "schemaTo": "identity",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["user_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -4433,12 +4294,8 @@
           "tableFrom": "user_capabilities",
           "tableTo": "users",
           "schemaTo": "identity",
-          "columnsFrom": [
-            "granted_by"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["granted_by"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         }
@@ -4600,12 +4457,8 @@
           "tableFrom": "account_recovery_requests",
           "tableTo": "users",
           "schemaTo": "identity",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["user_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -4614,12 +4467,8 @@
           "tableFrom": "account_recovery_requests",
           "tableTo": "users",
           "schemaTo": "identity",
-          "columnsFrom": [
-            "reviewed_by"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["reviewed_by"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         },
@@ -4628,12 +4477,8 @@
           "tableFrom": "account_recovery_requests",
           "tableTo": "devices",
           "schemaTo": "identity",
-          "columnsFrom": [
-            "requested_device_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["requested_device_id"],
+          "columnsTo": ["id"],
           "onDelete": "set null",
           "onUpdate": "no action"
         }
@@ -4781,12 +4626,8 @@
           "tableFrom": "devices",
           "tableTo": "users",
           "schemaTo": "identity",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["user_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -4920,12 +4761,8 @@
           "tableFrom": "mfa_factors",
           "tableTo": "users",
           "schemaTo": "identity",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["user_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -4934,12 +4771,8 @@
           "tableFrom": "mfa_factors",
           "tableTo": "user_phones",
           "schemaTo": "identity",
-          "columnsFrom": [
-            "phone_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["phone_id"],
+          "columnsTo": ["id"],
           "onDelete": "set null",
           "onUpdate": "no action"
         }
@@ -5078,12 +4911,8 @@
           "tableFrom": "otp_challenges",
           "tableTo": "users",
           "schemaTo": "identity",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["user_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -5183,12 +5012,8 @@
           "tableFrom": "passkey_credentials",
           "tableTo": "users",
           "schemaTo": "identity",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["user_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -5198,9 +5023,7 @@
         "passkey_credentials_credential_id_unique": {
           "name": "passkey_credentials_credential_id_unique",
           "nullsNotDistinct": false,
-          "columns": [
-            "credential_id"
-          ]
+          "columns": ["credential_id"]
         }
       },
       "policies": {},
@@ -5374,12 +5197,8 @@
           "tableFrom": "sessions",
           "tableTo": "users",
           "schemaTo": "identity",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["user_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -5388,12 +5207,8 @@
           "tableFrom": "sessions",
           "tableTo": "devices",
           "schemaTo": "identity",
-          "columnsFrom": [
-            "device_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["device_id"],
+          "columnsTo": ["id"],
           "onDelete": "set null",
           "onUpdate": "no action"
         },
@@ -5402,12 +5217,8 @@
           "tableFrom": "sessions",
           "tableTo": "sessions",
           "schemaTo": "identity",
-          "columnsFrom": [
-            "parent_session_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["parent_session_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         }
@@ -5569,12 +5380,8 @@
           "tableFrom": "username_history",
           "tableTo": "users",
           "schemaTo": "identity",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["user_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -5583,12 +5390,8 @@
           "tableFrom": "username_history",
           "tableTo": "users",
           "schemaTo": "identity",
-          "columnsFrom": [
-            "changed_by"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["changed_by"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         }
@@ -5738,12 +5541,8 @@
           "tableFrom": "party_invitations",
           "tableTo": "users",
           "schemaTo": "identity",
-          "columnsFrom": [
-            "inviter_user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["inviter_user_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -5752,12 +5551,8 @@
           "tableFrom": "party_invitations",
           "tableTo": "users",
           "schemaTo": "identity",
-          "columnsFrom": [
-            "claimed_by_user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["claimed_by_user_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         }
@@ -5767,9 +5562,7 @@
         "party_invitations_token_hash_unique": {
           "name": "party_invitations_token_hash_unique",
           "nullsNotDistinct": false,
-          "columns": [
-            "token_hash"
-          ]
+          "columns": ["token_hash"]
         }
       },
       "policies": {},
@@ -5970,12 +5763,8 @@
           "tableFrom": "staff_invitations",
           "tableTo": "users",
           "schemaTo": "identity",
-          "columnsFrom": [
-            "invited_by"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["invited_by"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         },
@@ -5984,12 +5773,8 @@
           "tableFrom": "staff_invitations",
           "tableTo": "roles",
           "schemaTo": "identity",
-          "columnsFrom": [
-            "role_code"
-          ],
-          "columnsTo": [
-            "code"
-          ],
+          "columnsFrom": ["role_code"],
+          "columnsTo": ["code"],
           "onDelete": "no action",
           "onUpdate": "no action"
         },
@@ -5998,12 +5783,8 @@
           "tableFrom": "staff_invitations",
           "tableTo": "users",
           "schemaTo": "identity",
-          "columnsFrom": [
-            "bound_user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["bound_user_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         },
@@ -6012,12 +5793,8 @@
           "tableFrom": "staff_invitations",
           "tableTo": "users",
           "schemaTo": "identity",
-          "columnsFrom": [
-            "claimed_by_user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["claimed_by_user_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         },
@@ -6026,12 +5803,8 @@
           "tableFrom": "staff_invitations",
           "tableTo": "users",
           "schemaTo": "identity",
-          "columnsFrom": [
-            "cancelled_by"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["cancelled_by"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         }
@@ -6041,9 +5814,7 @@
         "staff_invitations_token_hash_unique": {
           "name": "staff_invitations_token_hash_unique",
           "nullsNotDistinct": false,
-          "columns": [
-            "token_hash"
-          ]
+          "columns": ["token_hash"]
         }
       },
       "policies": {},
@@ -6253,12 +6024,8 @@
           "tableFrom": "ledger_entries",
           "tableTo": "ledger_journal_entries",
           "schemaTo": "ledger",
-          "columnsFrom": [
-            "journal_entry_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["journal_entry_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         },
@@ -6267,12 +6034,8 @@
           "tableFrom": "ledger_entries",
           "tableTo": "ledger_accounts",
           "schemaTo": "ledger",
-          "columnsFrom": [
-            "account_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["account_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         }
@@ -6408,9 +6171,7 @@
         "ledger_journal_entries_idempotency_key_unique": {
           "name": "ledger_journal_entries_idempotency_key_unique",
           "nullsNotDistinct": false,
-          "columns": [
-            "idempotency_key"
-          ]
+          "columns": ["idempotency_key"]
         }
       },
       "policies": {},
@@ -6691,12 +6452,8 @@
           "tableFrom": "payment_attempts",
           "tableTo": "ledger_journal_entries",
           "schemaTo": "ledger",
-          "columnsFrom": [
-            "journal_entry_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["journal_entry_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         }
@@ -6706,9 +6463,7 @@
         "payment_attempts_reference_unique": {
           "name": "payment_attempts_reference_unique",
           "nullsNotDistinct": false,
-          "columns": [
-            "reference"
-          ]
+          "columns": ["reference"]
         }
       },
       "policies": {},
@@ -7155,12 +6910,8 @@
           "tableFrom": "notification_delivery_attempts",
           "tableTo": "notifications",
           "schemaTo": "notify",
-          "columnsFrom": [
-            "notification_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["notification_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -7440,11 +7191,7 @@
       "compositePrimaryKeys": {
         "notification_preferences_user_id_category_channel_pk": {
           "name": "notification_preferences_user_id_category_channel_pk",
-          "columns": [
-            "user_id",
-            "category",
-            "channel"
-          ]
+          "columns": ["user_id", "category", "channel"]
         }
       },
       "uniqueConstraints": {},
@@ -7488,11 +7235,7 @@
       "compositePrimaryKeys": {
         "notification_rate_limits_user_id_channel_window_started_at_pk": {
           "name": "notification_rate_limits_user_id_channel_window_started_at_pk",
-          "columns": [
-            "user_id",
-            "channel",
-            "window_started_at"
-          ]
+          "columns": ["user_id", "channel", "window_started_at"]
         }
       },
       "uniqueConstraints": {},
@@ -7612,12 +7355,8 @@
           "tableFrom": "trade_activity",
           "tableTo": "trades",
           "schemaTo": "trade",
-          "columnsFrom": [
-            "trade_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["trade_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -7727,12 +7466,8 @@
           "tableFrom": "trade_state_changes",
           "tableTo": "trades",
           "schemaTo": "trade",
-          "columnsFrom": [
-            "trade_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["trade_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -7864,12 +7599,8 @@
           "tableFrom": "escrow_action_requests",
           "tableTo": "trades",
           "schemaTo": "trade",
-          "columnsFrom": [
-            "trade_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["trade_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -8000,12 +7731,8 @@
           "tableFrom": "trade_holds",
           "tableTo": "trades",
           "schemaTo": "trade",
-          "columnsFrom": [
-            "trade_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["trade_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -8123,12 +7850,8 @@
           "tableFrom": "delivery_signals",
           "tableTo": "trades",
           "schemaTo": "trade",
-          "columnsFrom": [
-            "trade_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["trade_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -8269,12 +7992,8 @@
           "tableFrom": "trade_deadlines",
           "tableTo": "trades",
           "schemaTo": "trade",
-          "columnsFrom": [
-            "trade_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["trade_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -8693,9 +8412,7 @@
         "trades_trade_code_unique": {
           "name": "trades_trade_code_unique",
           "nullsNotDistinct": false,
-          "columns": [
-            "trade_code"
-          ]
+          "columns": ["trade_code"]
         }
       },
       "policies": {},
@@ -8907,12 +8624,8 @@
           "tableFrom": "trade_terms_versions",
           "tableTo": "trades",
           "schemaTo": "trade",
-          "columnsFrom": [
-            "trade_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["trade_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -9029,12 +8742,8 @@
           "tableFrom": "trade_proof_media",
           "tableTo": "trades",
           "schemaTo": "trade",
-          "columnsFrom": [
-            "trade_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["trade_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -9182,12 +8891,8 @@
           "tableFrom": "bank_account_name_matches",
           "tableTo": "verification_requests",
           "schemaTo": "trust",
-          "columnsFrom": [
-            "request_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["request_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -9332,12 +9037,8 @@
           "tableFrom": "business_verifications",
           "tableTo": "verification_requests",
           "schemaTo": "trust",
-          "columnsFrom": [
-            "request_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["request_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -9439,12 +9140,8 @@
           "tableFrom": "address_checks",
           "tableTo": "verification_requests",
           "schemaTo": "trust",
-          "columnsFrom": [
-            "request_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["request_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -9562,12 +9259,8 @@
           "tableFrom": "verification_documents",
           "tableTo": "verification_requests",
           "schemaTo": "trust",
-          "columnsFrom": [
-            "request_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["request_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -9703,12 +9396,8 @@
           "tableFrom": "bvn_verifications",
           "tableTo": "verification_requests",
           "schemaTo": "trust",
-          "columnsFrom": [
-            "request_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["request_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -9844,12 +9533,8 @@
           "tableFrom": "nin_verifications",
           "tableTo": "verification_requests",
           "schemaTo": "trust",
-          "columnsFrom": [
-            "request_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["request_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -10143,12 +9828,8 @@
           "tableFrom": "liveness_checks",
           "tableTo": "verification_requests",
           "schemaTo": "trust",
-          "columnsFrom": [
-            "request_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["request_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -10387,12 +10068,8 @@
           "tableFrom": "kyc_provider_calls",
           "tableTo": "verification_requests",
           "schemaTo": "trust",
-          "columnsFrom": [
-            "request_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["request_id"],
+          "columnsTo": ["id"],
           "onDelete": "set null",
           "onUpdate": "no action"
         }
@@ -10500,12 +10177,8 @@
           "tableFrom": "verification_level_changes",
           "tableTo": "verification_requests",
           "schemaTo": "trust",
-          "columnsFrom": [
-            "triggering_request_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["triggering_request_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         }
@@ -10521,24 +10194,12 @@
     "cases.case_priority": {
       "name": "case_priority",
       "schema": "cases",
-      "values": [
-        "LOW",
-        "NORMAL",
-        "HIGH",
-        "URGENT"
-      ]
+      "values": ["LOW", "NORMAL", "HIGH", "URGENT"]
     },
     "cases.case_state": {
       "name": "case_state",
       "schema": "cases",
-      "values": [
-        "OPEN",
-        "INVESTIGATING",
-        "AWAITING_EVIDENCE",
-        "ESCALATED",
-        "DECIDED",
-        "CLOSED"
-      ]
+      "values": ["OPEN", "INVESTIGATING", "AWAITING_EVIDENCE", "ESCALATED", "DECIDED", "CLOSED"]
     },
     "cases.case_type": {
       "name": "case_type",
@@ -10558,11 +10219,7 @@
     "cases.evidence_request_status": {
       "name": "evidence_request_status",
       "schema": "cases",
-      "values": [
-        "OPEN",
-        "FULFILLED",
-        "CANCELLED"
-      ]
+      "values": ["OPEN", "FULFILLED", "CANCELLED"]
     },
     "cases.case_trail_type": {
       "name": "case_trail_type",
@@ -10598,117 +10255,62 @@
     "files.file_status": {
       "name": "file_status",
       "schema": "files",
-      "values": [
-        "ACTIVE",
-        "TOMBSTONED"
-      ]
+      "values": ["ACTIVE", "TOMBSTONED"]
     },
     "files.file_upload_state": {
       "name": "file_upload_state",
       "schema": "files",
-      "values": [
-        "PENDING",
-        "RECONCILING",
-        "READY",
-        "REJECTED"
-      ]
+      "values": ["PENDING", "RECONCILING", "READY", "REJECTED"]
     },
     "files.file_visibility": {
       "name": "file_visibility",
       "schema": "files",
-      "values": [
-        "PUBLIC",
-        "PRIVATE_OWNER",
-        "PRIVATE_CASE",
-        "INTERNAL_ONLY"
-      ]
+      "values": ["PUBLIC", "PRIVATE_OWNER", "PRIVATE_CASE", "INTERNAL_ONLY"]
     },
     "files.storage_account_status": {
       "name": "storage_account_status",
       "schema": "files",
-      "values": [
-        "ACTIVE",
-        "NEAR_QUOTA",
-        "DISABLED"
-      ]
+      "values": ["ACTIVE", "NEAR_QUOTA", "DISABLED"]
     },
     "files.storage_pool": {
       "name": "storage_pool",
       "schema": "files",
-      "values": [
-        "PROFILE",
-        "CHAT_ATTACHMENT",
-        "TRADE_ASSET"
-      ]
+      "values": ["PROFILE", "CHAT_ATTACHMENT", "TRADE_ASSET"]
     },
     "identity.capability_status": {
       "name": "capability_status",
       "schema": "identity",
-      "values": [
-        "PENDING",
-        "ACTIVE",
-        "SUSPENDED",
-        "REVOKED"
-      ]
+      "values": ["PENDING", "ACTIVE", "SUSPENDED", "REVOKED"]
     },
     "identity.capability_type": {
       "name": "capability_type",
       "schema": "identity",
-      "values": [
-        "MERCHANT",
-        "MERCHANT_MEMBER",
-        "STAFF"
-      ]
+      "values": ["MERCHANT", "MERCHANT_MEMBER", "STAFF"]
     },
     "identity.device_status": {
       "name": "device_status",
       "schema": "identity",
-      "values": [
-        "ACTIVE",
-        "TRUSTED",
-        "BLOCKED",
-        "RETIRED"
-      ]
+      "values": ["ACTIVE", "TRUSTED", "BLOCKED", "RETIRED"]
     },
     "identity.invitation_status": {
       "name": "invitation_status",
       "schema": "identity",
-      "values": [
-        "PENDING",
-        "CLAIMED",
-        "EXPIRED",
-        "CANCELLED"
-      ]
+      "values": ["PENDING", "CLAIMED", "EXPIRED", "CANCELLED"]
     },
     "identity.mfa_factor_status": {
       "name": "mfa_factor_status",
       "schema": "identity",
-      "values": [
-        "PENDING",
-        "ACTIVE",
-        "REVOKED"
-      ]
+      "values": ["PENDING", "ACTIVE", "REVOKED"]
     },
     "identity.mfa_factor_type": {
       "name": "mfa_factor_type",
       "schema": "identity",
-      "values": [
-        "TOTP",
-        "SMS_OTP",
-        "EMAIL_OTP",
-        "PASSKEY",
-        "RECOVERY_CODE"
-      ]
+      "values": ["TOTP", "SMS_OTP", "EMAIL_OTP", "PASSKEY", "RECOVERY_CODE"]
     },
     "identity.otp_channel": {
       "name": "otp_channel",
       "schema": "identity",
-      "values": [
-        "SMS",
-        "EMAIL",
-        "WHATSAPP",
-        "VOICE"
-      ]
+      "values": ["SMS", "EMAIL", "WHATSAPP", "VOICE"]
     },
     "identity.otp_purpose": {
       "name": "otp_purpose",
@@ -10727,20 +10329,12 @@
     "identity.session_scope": {
       "name": "session_scope",
       "schema": "identity",
-      "values": [
-        "CONSUMER",
-        "STAFF",
-        "LOGISTICS"
-      ]
+      "values": ["CONSUMER", "STAFF", "LOGISTICS"]
     },
     "identity.social_provider": {
       "name": "social_provider",
       "schema": "identity",
-      "values": [
-        "GOOGLE",
-        "APPLE",
-        "FACEBOOK"
-      ]
+      "values": ["GOOGLE", "APPLE", "FACEBOOK"]
     },
     "identity.user_status": {
       "name": "user_status",
@@ -10758,13 +10352,7 @@
     "identity.verification_level": {
       "name": "verification_level",
       "schema": "identity",
-      "values": [
-        "UNVERIFIED",
-        "CONTACT_VERIFIED",
-        "IDENTITY_VERIFIED",
-        "BUSINESS_VERIFIED",
-        "ENHANCED"
-      ]
+      "values": ["UNVERIFIED", "CONTACT_VERIFIED", "IDENTITY_VERIFIED", "BUSINESS_VERIFIED", "ENHANCED"]
     },
     "ledger.ledger_account_type": {
       "name": "ledger_account_type",
@@ -10781,68 +10369,32 @@
     "ledger.ledger_entry_direction": {
       "name": "ledger_entry_direction",
       "schema": "ledger",
-      "values": [
-        "DEBIT",
-        "CREDIT"
-      ]
+      "values": ["DEBIT", "CREDIT"]
     },
     "ledger.payment_provider": {
       "name": "payment_provider",
       "schema": "ledger",
-      "values": [
-        "PAYSTACK",
-        "FLUTTERWAVE"
-      ]
+      "values": ["PAYSTACK", "FLUTTERWAVE"]
     },
     "ledger.payment_attempt_status": {
       "name": "payment_attempt_status",
       "schema": "ledger",
-      "values": [
-        "INITIATED",
-        "PENDING",
-        "SUCCEEDED",
-        "FAILED",
-        "ABANDONED",
-        "NEEDS_REVIEW"
-      ]
+      "values": ["INITIATED", "PENDING", "SUCCEEDED", "FAILED", "ABANDONED", "NEEDS_REVIEW"]
     },
     "notify.notification_category": {
       "name": "notification_category",
       "schema": "notify",
-      "values": [
-        "SECURITY",
-        "TRADE",
-        "PAYMENT",
-        "DISPUTE",
-        "TICKET",
-        "MARKETING",
-        "ACCOUNT"
-      ]
+      "values": ["SECURITY", "TRADE", "PAYMENT", "DISPUTE", "TICKET", "MARKETING", "ACCOUNT"]
     },
     "notify.notification_channel": {
       "name": "notification_channel",
       "schema": "notify",
-      "values": [
-        "PUSH",
-        "EMAIL",
-        "SMS",
-        "WHATSAPP",
-        "VOICE",
-        "IN_APP"
-      ]
+      "values": ["PUSH", "EMAIL", "SMS", "WHATSAPP", "VOICE", "IN_APP"]
     },
     "notify.notification_status": {
       "name": "notification_status",
       "schema": "notify",
-      "values": [
-        "QUEUED",
-        "SENDING",
-        "SENT",
-        "DELIVERED",
-        "FAILED",
-        "DEAD_LETTERED",
-        "SUPPRESSED"
-      ]
+      "values": ["QUEUED", "SENDING", "SENT", "DELIVERED", "FAILED", "DEAD_LETTERED", "SUPPRESSED"]
     },
     "trade.cancellation_reason": {
       "name": "cancellation_reason",
@@ -10861,33 +10413,17 @@
     "trade.delivery_signal_source": {
       "name": "delivery_signal_source",
       "schema": "trade",
-      "values": [
-        "BUYER_CONFIRMATION",
-        "SELLER_SELF_REPORT",
-        "PARTNER_PORTAL",
-        "PARK_CUSTODY",
-        "COURIER_API"
-      ]
+      "values": ["BUYER_CONFIRMATION", "SELLER_SELF_REPORT", "PARTNER_PORTAL", "PARK_CUSTODY", "COURIER_API"]
     },
     "trade.escrow_action_status": {
       "name": "escrow_action_status",
       "schema": "trade",
-      "values": [
-        "REQUESTED",
-        "ACKNOWLEDGED",
-        "COMPLETED",
-        "FAILED"
-      ]
+      "values": ["REQUESTED", "ACKNOWLEDGED", "COMPLETED", "FAILED"]
     },
     "trade.escrow_action_type": {
       "name": "escrow_action_type",
       "schema": "trade",
-      "values": [
-        "FUND",
-        "RELEASE",
-        "REFUND",
-        "PARTIAL_REFUND"
-      ]
+      "values": ["FUND", "RELEASE", "REFUND", "PARTIAL_REFUND"]
     },
     "trade.trade_action": {
       "name": "trade_action",
@@ -10940,14 +10476,7 @@
     "trade.trade_actor_type": {
       "name": "trade_actor_type",
       "schema": "trade",
-      "values": [
-        "BUYER",
-        "SELLER",
-        "SYSTEM",
-        "STAFF",
-        "LEDGER",
-        "LOGISTICS"
-      ]
+      "values": ["BUYER", "SELLER", "SYSTEM", "STAFF", "LEDGER", "LOGISTICS"]
     },
     "trade.trade_deadline_kind": {
       "name": "trade_deadline_kind",
@@ -10964,29 +10493,17 @@
     "trade.trade_deadline_status": {
       "name": "trade_deadline_status",
       "schema": "trade",
-      "values": [
-        "PENDING",
-        "MET",
-        "ELAPSED",
-        "CANCELLED"
-      ]
+      "values": ["PENDING", "MET", "ELAPSED", "CANCELLED"]
     },
     "trade.trade_hold_source": {
       "name": "trade_hold_source",
       "schema": "trade",
-      "values": [
-        "PARK_EXCEPTION",
-        "RISK",
-        "ADMIN"
-      ]
+      "values": ["PARK_EXCEPTION", "RISK", "ADMIN"]
     },
     "trade.trade_initiator_role": {
       "name": "trade_initiator_role",
       "schema": "trade",
-      "values": [
-        "BUYER",
-        "SELLER"
-      ]
+      "values": ["BUYER", "SELLER"]
     },
     "trade.trade_status": {
       "name": "trade_status",
@@ -11016,58 +10533,32 @@
     "trust.address_method": {
       "name": "address_method",
       "schema": "trust",
-      "values": [
-        "UTILITY_BILL",
-        "BANK_STATEMENT",
-        "PROVIDER_LOOKUP"
-      ]
+      "values": ["UTILITY_BILL", "BANK_STATEMENT", "PROVIDER_LOOKUP"]
     },
     "trust.bank_match_result": {
       "name": "bank_match_result",
       "schema": "trust",
-      "values": [
-        "EXACT",
-        "FUZZY_MATCH",
-        "MISMATCH"
-      ]
+      "values": ["EXACT", "FUZZY_MATCH", "MISMATCH"]
     },
     "trust.kyc_provider": {
       "name": "kyc_provider",
       "schema": "trust",
-      "values": [
-        "SMILE_IDENTITY",
-        "YOUVERIFY",
-        "PREMBLY",
-        "DOJAH",
-        "VERIFYME",
-        "MANUAL",
-        "FAKE"
-      ]
+      "values": ["SMILE_IDENTITY", "YOUVERIFY", "PREMBLY", "DOJAH", "VERIFYME", "MANUAL", "FAKE"]
     },
     "trust.level_change_actor_type": {
       "name": "level_change_actor_type",
       "schema": "trust",
-      "values": [
-        "PROVIDER_AUTO",
-        "KYC_ANALYST",
-        "SYSTEM"
-      ]
+      "values": ["PROVIDER_AUTO", "KYC_ANALYST", "SYSTEM"]
     },
     "trust.level_change_direction": {
       "name": "level_change_direction",
       "schema": "trust",
-      "values": [
-        "GRANT",
-        "REVOKE"
-      ]
+      "values": ["GRANT", "REVOKE"]
     },
     "trust.social_proof_platform": {
       "name": "social_proof_platform",
       "schema": "trust",
-      "values": [
-        "INSTAGRAM",
-        "X"
-      ]
+      "values": ["INSTAGRAM", "X"]
     },
     "trust.verification_document_type": {
       "name": "verification_document_type",

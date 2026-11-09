@@ -39,6 +39,17 @@ describe('ledger account identity', () => {
     );
   });
 
+  // The fee liability is scoped by trade, like the escrow liability it sits beside, so the two
+  // halves of one buyer's money are two accounts under the same trade id and never one balance.
+  it('names the buyer protection fee liability by the trade it belongs to', () => {
+    expect(accountKey({ type: 'BUYER_PROTECTION_FEE_LIABILITY', tradeId: TRADE })).toBe(
+      `NGN:BUYER_PROTECTION_FEE_LIABILITY:${TRADE}`,
+    );
+    expect(accountKey({ type: 'BUYER_PROTECTION_FEE_LIABILITY', tradeId: TRADE })).not.toBe(
+      accountKey({ type: 'USER_ESCROW_LIABILITY', tradeId: TRADE }),
+    );
+  });
+
   it('names a platform account with no scope at all', () => {
     expect(accountKey({ type: 'PLATFORM_ESCROW_POOL' })).toBe('NGN:PLATFORM_ESCROW_POOL:-');
     expect(accountKey({ type: 'BUYER_PROTECTION_FEE_REVENUE' })).toBe('NGN:BUYER_PROTECTION_FEE_REVENUE:-');
@@ -58,6 +69,17 @@ describe('ledger account identity', () => {
     );
   });
 
+  it('refuses to name a fee liability with no trade, or with another scope', () => {
+    expect(accountRefSchema.safeParse({ type: 'BUYER_PROTECTION_FEE_LIABILITY' }).success).toBe(false);
+    expect(
+      accountRefSchema.safeParse({ type: 'BUYER_PROTECTION_FEE_LIABILITY', ownerUserId: OWNER }).success,
+    ).toBe(false);
+    expect(
+      accountRefSchema.safeParse({ type: 'BUYER_PROTECTION_FEE_LIABILITY', tradeId: TRADE, payoutId: PAYOUT })
+        .success,
+    ).toBe(false);
+  });
+
   it('refuses a scope that is not a uuid', () => {
     expect(accountRefSchema.safeParse({ type: 'USER_PAYABLE', ownerUserId: 'bob' }).success).toBe(false);
     expect(() => accountKey({ type: 'USER_PAYABLE', ownerUserId: 'bob' })).toThrow();
@@ -74,10 +96,11 @@ describe('ledger account identity', () => {
     expect(() => accountKey({ type: 'PLATFORM_ESCROW_POOL' }, 'ngn')).toThrow();
   });
 
-  it('lists the six account types M8 §4 and T-070 define', () => {
+  it('lists the seven account types M8 §4, T-070 and T-072 define', () => {
     expect(LEDGER_ACCOUNT_TYPES).toEqual([
       'PLATFORM_ESCROW_POOL',
       'USER_ESCROW_LIABILITY',
+      'BUYER_PROTECTION_FEE_LIABILITY',
       'USER_PAYABLE',
       'PLATFORM_FEE_REVENUE',
       'BUYER_PROTECTION_FEE_REVENUE',
@@ -96,6 +119,14 @@ describe('ledger account nature', () => {
     expect(normalBalance('USER_PAYABLE')).toBe('CREDIT');
     expect(normalBalance('PLATFORM_FEE_REVENUE')).toBe('CREDIT');
     expect(normalBalance('BUYER_PROTECTION_FEE_REVENUE')).toBe('CREDIT');
+    expect(normalBalance('BUYER_PROTECTION_FEE_LIABILITY')).toBe('CREDIT');
+  });
+
+  // Nothing is left to a default: a type missing from the credit set would silently read as an
+  // asset, which is a number with the right magnitude and the wrong sign.
+  it('classifies every type in the chart, with exactly one asset', () => {
+    const debit = LEDGER_ACCOUNT_TYPES.filter((type) => normalBalance(type) === 'DEBIT');
+    expect(debit).toEqual(['PLATFORM_ESCROW_POOL']);
   });
 
   // M8 §5's table calls this an asset; M8 §4's postings credit it on payout initiation and debit it

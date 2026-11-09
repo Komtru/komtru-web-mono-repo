@@ -96,7 +96,7 @@ describe('the funding amounts', () => {
 });
 
 describe('the funding posting', () => {
-  it('debits the pool the total and holds item and fee as the trade’s liability', () => {
+  it('debits the pool the total, holds the item as escrow and the fee apart', () => {
     const lines = fundingJournalLines(TRADE, fundingAmounts(snapshot()));
 
     expect(lines).toEqual([
@@ -107,12 +107,25 @@ describe('the funding posting', () => {
         amountMinor: 45_000_000n,
       },
       {
-        account: { type: 'USER_ESCROW_LIABILITY', tradeId: TRADE },
+        account: { type: 'BUYER_PROTECTION_FEE_LIABILITY', tradeId: TRADE },
         direction: 'CREDIT',
         amountMinor: 675_000n,
       },
     ]);
     expect(() => assertBalanced(lines)).not.toThrow();
+  });
+
+  // The reason the fee has its own account: what the buyer could get back is a balance, not a
+  // subtraction a later ticket has to remember to make against the T-047 snapshot.
+  it('leaves the trade’s escrow liability equal to the refundable item amount', () => {
+    const lines = fundingJournalLines(TRADE, fundingAmounts(snapshot()));
+    const credited = (type: string) =>
+      lines
+        .filter((line) => line.account.type === type && line.direction === 'CREDIT')
+        .reduce((total, line) => total + line.amountMinor, 0n);
+
+    expect(credited('USER_ESCROW_LIABILITY')).toBe(45_000_000n);
+    expect(credited('BUYER_PROTECTION_FEE_LIABILITY')).toBe(675_000n);
   });
 
   it('recognises no revenue at funding', () => {
@@ -128,6 +141,7 @@ describe('the funding posting', () => {
       fundingAmounts(snapshot({ buyerProtectionFeeMinor: 0n, buyerTotalMinor: 45_000_000n })),
     );
     expect(lines).toHaveLength(2);
+    expect(lines.map((line) => line.account.type)).not.toContain('BUYER_PROTECTION_FEE_LIABILITY');
     expect(lines.every((line) => line.amountMinor > 0n)).toBe(true);
     expect(() => assertBalanced(lines)).not.toThrow();
   });

@@ -23,10 +23,11 @@ describe.runIf(infraEnabled)('ledger schema', () => {
     return { journal, pool, escrow };
   };
 
-  it('names the six account types in chart order', async () => {
+  it('names the seven account types in chart order', async () => {
     expect(await enumLabels(t.owner(), 'ledger_account_type')).toEqual([
       'PLATFORM_ESCROW_POOL',
       'USER_ESCROW_LIABILITY',
+      'BUYER_PROTECTION_FEE_LIABILITY',
       'USER_PAYABLE',
       'PLATFORM_FEE_REVENUE',
       'BUYER_PROTECTION_FEE_REVENUE',
@@ -34,9 +35,20 @@ describe.runIf(infraEnabled)('ledger schema', () => {
     ]);
   });
 
+  // 0043 rebuilds the type rather than extending it, because a value ALTER TYPE adds cannot be used
+  // in the transaction that adds it and the migrator runs the whole pending set in one. If the
+  // rebuild ever left the old type behind, this is where it would show.
+  it('leaves exactly one ledger_account_type behind after the rebuild', async () => {
+    const { rows } = await t.owner().query<{ n: string }>(
+      `SELECT count(*)::text AS n FROM pg_type ty JOIN pg_namespace ns ON ns.oid = ty.typnamespace
+        WHERE ns.nspname = 'ledger' AND ty.typname LIKE 'ledger_account_type%'`,
+    );
+    expect(rows[0]?.n).toBe('1');
+  });
+
   it('has no Park account type', async () => {
     const labels = await enumLabels(t.owner(), 'ledger_account_type');
-    expect(labels).toHaveLength(6);
+    expect(labels).toHaveLength(7);
     expect(labels.filter((label) => label.includes('PARK'))).toEqual([]);
   });
 
@@ -53,6 +65,18 @@ describe.runIf(infraEnabled)('ledger schema', () => {
       [trade],
     );
     expect(rows[0]?.account_key).toBe(`NGN:USER_ESCROW_LIABILITY:${trade}`);
+  });
+
+  it('names the fee liability by its trade, apart from the same trade’s escrow', async () => {
+    const trade = randomUUID();
+    const { rows } = await t.app().query<{ account_key: string }>(
+      `INSERT INTO ledger.ledger_accounts (account_type, trade_id)
+            VALUES ('BUYER_PROTECTION_FEE_LIABILITY', $1) RETURNING account_key`,
+      [trade],
+    );
+    expect(rows[0]?.account_key).toBe(`NGN:BUYER_PROTECTION_FEE_LIABILITY:${trade}`);
+    // The same trade's escrow liability is a different account, not a second row for the same key.
+    await insertAccount(t.app(), 'USER_ESCROW_LIABILITY', { trade_id: trade });
   });
 
   it('names a platform account with no scope at all', async () => {
@@ -110,6 +134,20 @@ describe.runIf(infraEnabled)('ledger schema', () => {
     expect(
       await constraintName(
         insertAccount(t.app(), 'USER_PAYABLE', { owner_user_id: randomUUID(), trade_id: randomUUID() }),
+      ),
+    ).toBe('ledger_accounts_scope');
+  });
+
+  it('rejects a fee liability with no trade, or with another scope as well', async () => {
+    expect(await constraintName(insertAccount(t.app(), 'BUYER_PROTECTION_FEE_LIABILITY'))).toBe(
+      'ledger_accounts_scope',
+    );
+    expect(
+      await constraintName(
+        insertAccount(t.app(), 'BUYER_PROTECTION_FEE_LIABILITY', {
+          trade_id: randomUUID(),
+          payout_id: randomUUID(),
+        }),
       ),
     ).toBe('ledger_accounts_scope');
   });

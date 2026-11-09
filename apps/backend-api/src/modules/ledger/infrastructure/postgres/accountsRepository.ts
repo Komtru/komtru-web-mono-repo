@@ -20,6 +20,7 @@ export type Reader = Db | Tx;
 const scopeColumns = (ref: AccountRef) => {
   switch (ref.type) {
     case 'USER_ESCROW_LIABILITY':
+    case 'BUYER_PROTECTION_FEE_LIABILITY':
       return { tradeId: ref.tradeId };
     case 'USER_PAYABLE':
       return { ownerUserId: ref.ownerUserId };
