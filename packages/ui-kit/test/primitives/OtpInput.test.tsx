@@ -108,6 +108,24 @@ describe('OtpInput', () => {
     expect(onComplete).toHaveBeenCalledWith('353126');
   });
 
+  it('takes an autofilled code as the whole code even after a digit was typed', () => {
+    // Typed "1", the caret moved on, then the keyboard's SMS suggestion was tapped: the code is the
+    // code, not "1" followed by it.
+    const onComplete = vi.fn();
+    render(<Harness onComplete={onComplete} />);
+    fireEvent.change(cells()[0]!, { target: { value: '1' } });
+    fireEvent.change(cells()[1]!, { target: { value: '482913' } });
+    expect(onComplete).toHaveBeenLastCalledWith('482913');
+  });
+
+  it('takes an autofilled code over a filled cell without keeping the old digit', () => {
+    const onComplete = vi.fn();
+    render(<Harness onComplete={onComplete} />);
+    fireEvent.change(cells()[0]!, { target: { value: '4' } });
+    fireEvent.change(cells()[0]!, { target: { value: '4123456' } });
+    expect(onComplete).toHaveBeenLastCalledWith('123456');
+  });
+
   it('keeps every digit when keys arrive faster than the screen redraws', () => {
     // A parent that has not re-rendered yet still holds the old value; each keystroke must build on
     // the last one this control reported, or fast typing keeps only the last digit.

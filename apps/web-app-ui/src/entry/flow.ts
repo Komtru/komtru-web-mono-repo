@@ -18,19 +18,36 @@ export const ENTRY = {
   fullTerms: '/terms',
 } as const;
 
+/** An origin no real request has, to resolve `next` against and see whether it stays there. */
+const PROBE = 'https://next.invalid';
+
 /**
- * A path on this host and nothing else. `//evil.com` and `/\evil.com` resolve to another origin
- * once a router follows them, so anything that is not plainly a same-site path is dropped. The
- * entry screens themselves are dropped too: sending someone who just signed in back to the login
- * screen is a loop, not a destination.
+ * A path on this host and nothing else, or `undefined`.
+ *
+ * Decided by parsing, not by looking at the first characters: the URL parser strips tabs and
+ * newlines and reads a backslash as a slash, so `/\t/evil.com` passes every prefix test and still
+ * resolves to `https://evil.com/` — and `router.replace` follows that off-site. Any control character
+ * or backslash is refused outright, and what is left must resolve on the probe origin.
+ *
+ * The entry screens are dropped too: sending someone who just signed in back to the login screen is
+ * a loop, not a destination.
  */
 export function safeNext(value: string | null | undefined): string | undefined {
   if (value === undefined || value === null || value === '') return undefined;
-  if (!value.startsWith('/') || value.startsWith('//') || value.startsWith('/\\')) return undefined;
-  const path = value.split(/[?#]/, 1)[0] ?? '';
+  // eslint-disable-next-line no-control-regex
+  if (!value.startsWith('/') || /[\u0000-\u001f\u007f\\]/.test(value)) return undefined;
+  let url: URL;
+  try {
+    url = new URL(value, PROBE);
+  } catch {
+    return undefined;
+  }
+  if (url.origin !== PROBE || url.pathname.startsWith('//')) return undefined;
   const entry = [ENTRY.login, ENTRY.signUp, ENTRY.verify, ENTRY.forgot, ENTRY.terms];
-  if (entry.some((prefix) => path === prefix || path.startsWith(`${prefix}/`))) return undefined;
-  return value;
+  if (entry.some((prefix) => url.pathname === prefix || url.pathname.startsWith(`${prefix}/`))) {
+    return undefined;
+  }
+  return `${url.pathname}${url.search}${url.hash}`;
 }
 
 const withNext = (path: string, next: string | undefined): string =>
@@ -68,11 +85,20 @@ export function checkNewPassword(password: string, confirmation: string): string
 
 export const UNAVAILABLE = "We couldn't reach Komtru. Check your connection and try again.";
 
+/** "30 seconds", "4 minutes", "about an hour": a wait the way a person would say it. */
+export function waitPhrase(seconds: number): string {
+  if (seconds < 60) return `${String(seconds)} seconds`;
+  const minutes = Math.ceil(seconds / 60);
+  if (minutes < 60) return minutes === 1 ? 'a minute' : `${String(minutes)} minutes`;
+  const hours = Math.round(minutes / 60);
+  return hours === 1 ? 'about an hour' : `about ${String(hours)} hours`;
+}
+
 export function failureMessage(failure: CommonFailure): string {
   if (failure.kind === 'unavailable') return UNAVAILABLE;
   return failure.wait === undefined
     ? 'Too many attempts. Wait a minute and try again.'
-    : `Too many attempts. Try again in ${String(failure.wait)} seconds.`;
+    : `Too many attempts. Try again in ${waitPhrase(failure.wait)}.`;
 }
 
 /** "Resend in 0:24", from seconds left. */

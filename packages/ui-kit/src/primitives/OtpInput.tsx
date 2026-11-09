@@ -108,15 +108,26 @@ export function OtpInput({
             aria-label={`Digit ${index + 1} of ${length}`}
             value={digit}
             onChange={(event) => {
-              const digits = event.target.value.replace(/\D/g, '');
+              const raw = event.target.value;
+              // What was just put in, without the digit the cell already held: the insertion ends at
+              // the caret, so the old digit is whatever is left on either side of it.
+              const caret = event.target.selectionStart ?? raw.length;
+              const insertedLength = Math.max(raw.length - digit.length, 1);
+              const inserted =
+                raw.slice(Math.max(caret - insertedLength, 0), caret) || raw.slice(-insertedLength);
+              const digits = inserted.replace(/\D/g, '');
               if (digits === '') return;
-              if (digits.length > 2) {
+              if (digits.length >= length) {
+                // A whole code — SMS autofill or a keyboard's code suggestion — is the code,
+                // wherever the caret was and whatever had been typed before it.
+                fillFrom(0, digits.slice(-length));
+                return;
+              }
+              if (digits.length > 1) {
                 fillFrom(index, digits);
                 return;
               }
-              // Two characters is a digit typed into a filled cell: keep the one that is new.
-              const typed = digits.length === 2 && digits[0] === digit ? digits[1]! : digits.slice(-1);
-              focusCell(writeAt(index, typed) + 1);
+              focusCell(writeAt(index, digits) + 1);
             }}
             onKeyDown={(event) => {
               if (event.key === 'Backspace') {

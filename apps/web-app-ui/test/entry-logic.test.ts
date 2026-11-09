@@ -1,5 +1,12 @@
 import { describe, expect, it, vi } from 'vitest';
-import { afterSession, checkNewPassword, countdown, defaultFactor, safeNext } from '../src/entry/flow';
+import {
+  afterSession,
+  checkNewPassword,
+  countdown,
+  defaultFactor,
+  failureMessage,
+  safeNext,
+} from '../src/entry/flow';
 import {
   proveCode,
   proveFactor,
@@ -182,6 +189,21 @@ describe('safeNext', () => {
     expect(safeNext(value)).toBeUndefined();
   });
 
+  it.each(['/\t/evil.com', '/\n/evil.com', '/\t\\evil.com', '/\u0000/evil.com', '/\\/evil.com'])(
+    'drops %j, which the URL parser turns into another origin',
+    (value) => {
+      expect(safeNext(value)).toBeUndefined();
+    },
+  );
+
+  it('refuses a percent-encoded tab once decoded, and keeps it on this host while still encoded', () => {
+    // Next hands the page `searchParams` already decoded, so the decoded form is the one that arrives.
+    expect(safeNext(decodeURIComponent('/%09/evil.com'))).toBeUndefined();
+    expect(new URL(safeNext('/%09/evil.com') ?? '', 'https://app.komtru.com').origin).toBe(
+      'https://app.komtru.com',
+    );
+  });
+
   it('drops the way in itself, which would be a loop', () => {
     expect(safeNext('/login?next=%2Ftrades')).toBeUndefined();
     expect(safeNext('/signup/terms')).toBeUndefined();
@@ -198,6 +220,12 @@ describe('the small things', () => {
     expect(checkNewPassword('short', 'short')).toMatch(/10 characters/);
     expect(checkNewPassword('long enough phrase', 'long enough phrasf')).toMatch(/don't match/);
     expect(checkNewPassword('long enough phrase', 'long enough phrase')).toBeNull();
+  });
+
+  it('says a long wait in minutes or hours, not thousands of seconds', () => {
+    expect(failureMessage({ kind: 'limited', wait: 42 })).toMatch(/42 seconds/);
+    expect(failureMessage({ kind: 'limited', wait: 3600 })).toMatch(/about an hour/);
+    expect(failureMessage({ kind: 'limited', wait: 600 })).toMatch(/10 minutes/);
   });
 
   it('counts down the way the reference writes it', () => {
