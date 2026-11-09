@@ -12,7 +12,14 @@ import type { Logger } from '../platform/logger.js';
 import type { KomtruModule, SeedableModule } from '../platform/module.js';
 import { casesModule } from './cases/index.js';
 import { configModule } from './config/index.js';
-import { filesModule, filesSeed, requestTombstone, tombstoneByUploader } from './files/index.js';
+import {
+  filesModule,
+  filesSeed,
+  findFile,
+  requestTombstone,
+  retrieveFile,
+  tombstoneByUploader,
+} from './files/index.js';
 import { geoModule, getCitiesByIds } from './geo/index.js';
 import { createIdentityAuth, identityModule, identitySeed, resolvePrincipal } from './identity/index.js';
 import { ledgerModule } from './ledger/index.js';
@@ -63,6 +70,26 @@ export const createModules: ModuleBuilder = (deps) => {
   const auth = createIdentityAuth({
     ...deps,
     cities: getCitiesByIds,
+    // T-041 (M1 D7): identity sees the files module only through these three functions.
+    // TODO(T-034): `fetchImage` and `ingest` (provider avatar import) are unwired - files has no
+    // server-side upload yet (uploads are client-direct and only files/jobs may hold the Cloudinary
+    // client). Until they exist, `importProviderAvatar` answers SKIPPED.
+    avatar: {
+      findFile: (fileId) => findFile(deps.db, fileId),
+      // PROFILE_PHOTO is PUBLIC, so M20 allows any viewer; the subject is still passed so the decision
+      // (and the audit row for an audited category) is made exactly as for every other read.
+      signUrl: async (fileId, viewer) =>
+        (
+          await retrieveFile(
+            deps.db,
+            { files: deps.config.files, logger: deps.logger },
+            { fileId, subject: { userId: viewer.userId, scope: viewer.scope, roles: viewer.roles } },
+          )
+        ).url,
+      tombstone: async (fileId, reason) => {
+        await requestTombstone(deps.db, { fileId, reason });
+      },
+    },
     hasActiveTrades,
     // M1 §15 step 6: the avatar first (named, so it is tombstoned even if the record names another
     // uploader), then every other upload, through files, after the commit.
