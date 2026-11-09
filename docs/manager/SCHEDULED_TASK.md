@@ -38,6 +38,6 @@ Hard rules:
 
 End your final reply with:
 
-- the output of `pnpm progress` (the MVP and total bars);
-- one line per ticket touched: merged, saved at which phase, or failed and why;
+- the output of `pnpm progress` (the MVP and total feature bars);
+- one line per feature touched: Done, one layer merged, saved at which phase, or failed and why;
 - any question the owner must answer.
