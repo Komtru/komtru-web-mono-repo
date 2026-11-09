@@ -5,6 +5,9 @@ import { describe, expect, it } from 'vitest';
 import type { RouteDefinition } from '../../../src/platform/http/route.js';
 import { routeLabel } from '../../../src/platform/http/route.js';
 import { trustRoutes } from '../../../src/modules/trust/http/routes.js';
+import { trustAdminRoutes } from '../../../src/modules/trust/http/admin.routes.js';
+import { decideBody } from '../../../src/modules/trust/http/admin.validations.js';
+import { isKnownPermission } from '../../../src/modules/identity/index.js';
 import {
   addressBody,
   bankAccountBody,
@@ -38,7 +41,7 @@ const routeFor = (label: string): RouteDefinition => {
 };
 
 describe('trustRoutes', () => {
-  it('declares the M6 §11 user surface and nothing admin-facing yet', () => {
+  it('declares the M6 §11 user surface', () => {
     expect(labels).toEqual([
       'POST /verification/nin',
       'POST /verification/bvn',
@@ -53,8 +56,8 @@ describe('trustRoutes', () => {
     ]);
   });
 
-  /** §11's admin half — the review queue and the duplicate flags — is T-052's, with T-037's RBAC. */
-  it('exposes nothing under /admin', () => {
+  /** §11's admin half is `trustAdminRoutes` (T-052), declared separately and asserted below. */
+  it('keeps the user surface free of /admin', () => {
     expect(labels.filter((label) => label.includes('/admin'))).toEqual([]);
   });
 
@@ -102,7 +105,8 @@ describe('trustRoutes', () => {
   });
 
   it('is what the registry mounts', () => {
-    expect((testModule('trust').routes ?? []).map(routeLabel)).toEqual(labels);
+    const admin = trustAdminRoutes({ db: () => ({}) as never }).map(routeLabel);
+    expect((testModule('trust').routes ?? []).map(routeLabel)).toEqual([...labels, ...admin]);
   });
 });
 
@@ -262,5 +266,54 @@ describe('statusResponse', () => {
       ],
     });
     expect(parsed.data?.rejections[0]?.reason.why).toMatch(/doesn’t|doesn't/);
+  });
+});
+
+describe('trustAdminRoutes', () => {
+  const adminRoutes = trustAdminRoutes({ db: () => ({}) as never });
+  const adminLabels = adminRoutes.map(routeLabel);
+  const adminRoute = (label: string): RouteDefinition => {
+    const found = adminRoutes.find((route) => routeLabel(route) === label);
+    if (!found) throw new Error(`no route ${label}`);
+    return found;
+  };
+
+  it('declares M6 §11’s admin surface, plus the override pair', () => {
+    expect(adminLabels).toEqual([
+      'GET /admin/kyc/queue',
+      'GET /admin/kyc/queue/:requestId',
+      'POST /admin/kyc/queue/:requestId/assign',
+      'POST /admin/kyc/queue/:requestId/decide',
+      'GET /admin/kyc/duplicate-flags',
+      'POST /admin/kyc/duplicate-flags/:id/resolve',
+      'POST /admin/kyc/overrides',
+      'POST /admin/kyc/overrides/:approvalId/execute',
+    ]);
+  });
+
+  it('puts every route in the STAFF scope behind a catalogued permission', () => {
+    for (const route of adminRoutes) {
+      expect(route.scope).toBe('STAFF');
+      expect(isKnownPermission(route.permission ?? '')).toBe(true);
+    }
+    expect(adminRoute('POST /admin/kyc/overrides').permission).toBe('verification.override');
+    expect(adminRoute('POST /admin/kyc/overrides/:approvalId/execute').permission).toBe(
+      'verification.override',
+    );
+    expect(adminRoute('POST /admin/kyc/queue/:requestId/decide').permission).toBe('verification.review');
+    expect(adminRoute('POST /admin/kyc/duplicate-flags/:id/resolve').permission).toBe(
+      'duplicate_flag.resolve',
+    );
+  });
+
+  it('paginates the two lists', () => {
+    expect(adminRoute('GET /admin/kyc/queue').paginated).toBe('page');
+    expect(adminRoute('GET /admin/kyc/duplicate-flags').paginated).toBe('page');
+  });
+
+  it('refuses a decision body that tries to carry anything but an outcome, reason and citation', () => {
+    expect(decideBody.safeParse({ outcome: 'APPROVE', reason: 'ok' }).success).toBe(true);
+    expect(decideBody.safeParse({ outcome: 'APPROVE', advisory: 'approve' }).success).toBe(false);
+    expect(decideBody.safeParse({ outcome: 'MAYBE' }).success).toBe(false);
   });
 });

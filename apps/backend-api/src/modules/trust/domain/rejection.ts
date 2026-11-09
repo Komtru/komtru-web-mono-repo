@@ -57,6 +57,10 @@ export const REJECTION_CODES = [
   // --- shared --------------------------------------------------------------------------------
   /** The provider never answered and the sweep closed the request (§6.2). Not the user's fault. */
   'PROVIDER_UNAVAILABLE',
+  /** A reviewer confirmed the identifier already backs another account (M6 §7). */
+  'DUPLICATE_IDENTITY',
+  /** A reviewer looked at the evidence and declined it (M6 §6.8). */
+  'REVIEW_DECLINED',
   /** Not a rejection: a MANUAL_REVIEW request, which is waiting on a person (§7). */
   'NEEDS_HUMAN_REVIEW',
 ] as const;
@@ -234,6 +238,22 @@ const REASONS: Record<RejectionCode, Omit<RejectionReason, 'code'>> = {
     // this one asks them to do the same thing again, and saying so is the difference between a
     // retry and a support ticket.
     why: 'We did not hear back in time from the service that checks this. Nothing was wrong with what you sent — please try again.',
+    remedy: 'RESUBMIT',
+    identityLevelAffected: false,
+  },
+  DUPLICATE_IDENTITY: {
+    surface: 'VF1',
+    outcome: 'REJECTED',
+    whyHeading: 'Why',
+    why: 'This number is already verified on another account, so we cannot use it here. If that account is yours, or you think this is a mistake, contact support and we will look into it.',
+    remedy: 'CONTACT_SUPPORT',
+    identityLevelAffected: true,
+  },
+  REVIEW_DECLINED: {
+    surface: 'VF1',
+    outcome: 'REJECTED',
+    whyHeading: 'Why',
+    why: 'Our team looked at what you sent and could not confirm it. Check your details and submit again, or contact support if you need help.',
     remedy: 'RESUBMIT',
     identityLevelAffected: false,
   },

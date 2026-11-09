@@ -434,6 +434,11 @@
       "definition": "CHECK (((inspection_window_hours > 0) AND (delivery_grace_hours > 0)))"
     },
     {
+      "table": "trust.duplicate_identity_flags",
+      "name": "duplicate_flags_distinct_users",
+      "definition": "CHECK ((first_user_id <> conflicting_user_id))"
+    },
+    {
       "table": "trust.verification_requests",
       "name": "verification_requests_target_level",
       "definition": "CHECK (((target_level >= 2) AND (target_level <= 4)))"

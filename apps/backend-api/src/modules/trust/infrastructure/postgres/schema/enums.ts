@@ -97,6 +97,17 @@ export const LEVEL_CHANGE_DIRECTIONS = ['GRANT', 'REVOKE'] as const;
 /** §6.11's `actor_type`. `SYSTEM` covers the expiry sweep and any future automated revocation. */
 export const LEVEL_CHANGE_ACTOR_TYPES = ['PROVIDER_AUTO', 'KYC_ANALYST', 'SYSTEM'] as const;
 
+/** §6.1's `duplicate_flag_status`. Nothing sets any of the last three but a person (§7). */
+export const DUPLICATE_FLAG_STATUSES = [
+  'OPEN',
+  'CONFIRMED_DUPLICATE',
+  'CLEARED_FALSE_POSITIVE',
+  'ESCALATED',
+] as const;
+
+export const duplicateFlagStatus = trust.enum('duplicate_flag_status', DUPLICATE_FLAG_STATUSES);
+export type DuplicateFlagStatus = (typeof DUPLICATE_FLAG_STATUSES)[number];
+
 export const verificationType = trust.enum('verification_type', VERIFICATION_TYPES);
 export const socialProofPlatform = trust.enum('social_proof_platform', SOCIAL_PROOF_PLATFORMS);
 export const bankMatchResult = trust.enum('bank_match_result', BANK_MATCH_RESULTS);

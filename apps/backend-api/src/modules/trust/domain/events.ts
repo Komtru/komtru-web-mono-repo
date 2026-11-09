@@ -87,3 +87,49 @@ export const verificationDuplicateIdentityDetected = defineEvent(
     requestId: z.uuid(),
   }),
 );
+
+/**
+ * M6 §9: two rejections for one user inside 30 days auto-opens a support ticket. T-100 (M10) is not
+ * built yet, so this event is the whole of the hand-off: the consumer will turn it into a ticket, and
+ * until then it sits in the outbox. It fires once per crossing of the threshold, not on every rejection.
+ */
+export const verificationRepeatedRejection = defineEvent(
+  'trust.verification.repeated_rejection',
+  1,
+  z.object({
+    userId: z.uuid(),
+    /** The rejection that tipped it over. */
+    requestId: z.uuid(),
+    type: verificationType,
+    rejectionCount: z.number().int().min(2),
+    windowDays: z.number().int().min(1),
+  }),
+);
+
+/** A person on the KYC queue decided a request that sat in MANUAL_REVIEW. Consumed by Notifications and Audit. */
+export const verificationReviewDecided = defineEvent(
+  'trust.verification.review_decided',
+  1,
+  z.object({
+    requestId: z.uuid(),
+    userId: z.uuid(),
+    type: verificationType,
+    outcome: z.enum(['APPROVED', 'REJECTED']),
+    caseId: z.uuid().nullable(),
+    decidedByUserId: z.uuid(),
+  }),
+);
+
+/** A duplicate flag was resolved by a person (M6 §7). Consumed by Risk (M13) and Audit. */
+export const verificationDuplicateFlagResolved = defineEvent(
+  'trust.verification.duplicate_flag_resolved',
+  1,
+  z.object({
+    flagId: z.uuid(),
+    identifierType: verificationType,
+    status: z.enum(['CONFIRMED_DUPLICATE', 'CLEARED_FALSE_POSITIVE', 'ESCALATED']),
+    firstUserId: z.uuid(),
+    conflictingUserId: z.uuid(),
+    resolvedByUserId: z.uuid(),
+  }),
+);
