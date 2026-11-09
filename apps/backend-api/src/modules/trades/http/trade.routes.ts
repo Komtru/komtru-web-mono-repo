@@ -2,6 +2,8 @@
 //
 //   POST /trades/preview        Z3: sides, category requirements and the buyer total, stored nowhere
 //   POST /trades                create a draft with its first terms
+//   GET  /trades                the caller's trades, newest-relevant first (cursor-paginated)
+//   GET  /trades/by-code/:code  resolve a trade code for a party or the named invitee, else 404
 //   GET  /trades/:id            the trade as the caller sees it
 //   POST /trades/:id/send       name the counterparty (username, email or phone) and send
 //   POST /trades/:id/counter    W2/BR1: a counter-proposal, a new terms version and the turn flips
@@ -12,7 +14,14 @@
 //
 // Every mutating route is `retryable: true`: the platform's Idempotency-Key replays the stored
 // response, and each service function is itself a no-op on a repeat by the same person.
+import {
+  canonicalTradeCodeSchema,
+  tradeByCodeResponseSchema,
+  tradeListResponseSchema,
+  tradeListStateSchema,
+} from '@komtru/shared-types';
 import { isIP } from 'node:net';
+import { z } from 'zod';
 import type { Request } from 'express';
 import { defineRoute, type RouteDefinition } from '../../../platform/http/route.js';
 import { requireUserId, type Actor } from '../../../platform/http/principal.js';
@@ -26,6 +35,7 @@ import {
 } from '../services/proposal.service.js';
 import { cancelTrade, declineTrade, getTrade } from '../services/trade.service.js';
 import type { TradeDeps } from '../services/ports.js';
+import { listTrades, resolveTradeByCode } from '../services/tradeList.service.js';
 import {
   acceptBodySchema,
   cancelBodySchema,
@@ -41,6 +51,21 @@ import {
 
 const SIGN_IN = 'Sign in to trade';
 const ACTION_BUDGET = { points: 30, durationSeconds: 60, by: ['user', 'ip'] as ('user' | 'ip')[] };
+/** A list is re-fetched on every push and every focus, so it gets the room an inbox needs. */
+const LIST_BUDGET = { points: 120, durationSeconds: 60, by: ['user', 'ip'] as ('user' | 'ip')[] };
+/**
+ * A trade code is a bearer-ish secret, so a lookup by code is the tightest budget in the module:
+ * a handful of tries a minute per person. The per-IP window is wider only because one carrier IP
+ * is thousands of subscribers, and it is still far too small to enumerate a code space of nine million.
+ */
+const BY_CODE_BUDGET = {
+  points: 10,
+  durationSeconds: 60,
+  by: ['user', 'ip'] as ('user' | 'ip')[],
+  perKey: { ip: { points: 30, durationSeconds: 60 } },
+};
+const listQuerySchema = z.object({ state: tradeListStateSchema.default('ALL') });
+const byCodeParamSchema = z.object({ code: canonicalTradeCodeSchema });
 const me = (actor: Actor): string => requireUserId(actor, SIGN_IN);
 
 type Deps = () => TradeDeps;
@@ -68,6 +93,33 @@ export function tradeRoutes(deps: Deps): RouteDefinition[] {
       rateLimit: { ...ACTION_BUDGET },
       schema: { body: createTradeBodySchema, response: tradeViewSchema },
       handler: (ctx) => createProposal(deps(), { userId: me(ctx.actor), ...ctx.body }),
+    }),
+
+    defineRoute({
+      method: 'get',
+      path: '/trades',
+      scope: 'CONSUMER',
+      summary: 'The trades you are a party to, newest-relevant first',
+      paginated: 'cursor',
+      rateLimit: { ...LIST_BUDGET },
+      schema: { query: listQuerySchema, response: tradeListResponseSchema },
+      handler: (ctx) =>
+        listTrades(deps(), {
+          userId: me(ctx.actor),
+          limit: ctx.query.limit ?? 20,
+          state: ctx.query.state,
+          cursor: ctx.cursor,
+        }),
+    }),
+
+    defineRoute({
+      method: 'get',
+      path: '/trades/by-code/:code',
+      scope: 'CONSUMER',
+      summary: 'Open a trade from its code, if you are a party to it or the invitee',
+      rateLimit: BY_CODE_BUDGET,
+      schema: { params: byCodeParamSchema, response: tradeByCodeResponseSchema },
+      handler: (ctx) => resolveTradeByCode(deps(), { userId: me(ctx.actor), tradeCode: ctx.params.code }),
     }),
 
     defineRoute({

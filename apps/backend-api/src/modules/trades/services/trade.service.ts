@@ -9,11 +9,13 @@
 import { and, eq, isNull } from 'drizzle-orm';
 import { ApiError } from '../../../platform/errors.js';
 import type { Tx } from '../../../platform/events/publish.js';
+import { tradeCategories } from '../../config/index.js';
 import { cancelInvitation, userAddresses } from '../../identity/index.js';
 import { addressRequiredError, notYourTurnError, tradeNotFoundError } from '../domain/errors.js';
 import type { TradeInitiatorRole } from '../domain/eligibility.js';
 import { sideOf, type ProofCheck } from '../domain/proposal.js';
 import type { TradeStatus } from '../domain/stateMachine.js';
+import { tradeDeepLink } from '../infrastructure/notifications.js';
 import { tradeActivity } from '../infrastructure/postgres/schema/audit.js';
 import { tradeProofMedia } from '../infrastructure/postgres/schema/proof.js';
 import { tradeTermsVersions } from '../infrastructure/postgres/schema/terms.js';
@@ -167,6 +169,16 @@ const asString = (value: bigint | null): string | null => (value === null ? null
 export type TradeView = {
   id: string;
   tradeCode: string;
+  /**
+   * `https://app.komtru.com/trades/<code>`: what an initiator can share. It is only the code in a link, so
+   * holding it opens nothing: `GET /trades/by-code/:code` answers a party or the named invitee, and
+   * everyone else the same as a code that does not exist. No token scheme (see the plan).
+   */
+  shareUrl: string;
+  /** The category and pinned Trade Standard version; `null` together when the trade has none. */
+  categoryCode: string | null;
+  categoryName: string | null;
+  standardVersion: number | null;
   status: TradeStatus;
   statusRevision: number;
   initiatorRole: TradeInitiatorRole;
@@ -201,13 +213,32 @@ export type TradeView = {
 };
 
 export async function viewTrade(tx: Tx, trade: TradeRow, userId: string): Promise<TradeView> {
-  const role = requireParty(trade, userId);
+  return buildView(tx, trade, userId, requireParty(trade, userId));
+}
+
+/** The view for a caller whose role the CALLER of this function has already established. */
+export async function buildView(
+  tx: Tx,
+  trade: TradeRow,
+  userId: string,
+  role: TradeInitiatorRole,
+): Promise<TradeView> {
   const terms = trade.currentTermsVersionId ? await loadTerms(tx, trade.currentTermsVersionId) : null;
   const proof = await proofFileIds(tx, trade.id);
+  const [category] = trade.categoryId
+    ? await tx
+        .select({ code: tradeCategories.code, name: tradeCategories.name })
+        .from(tradeCategories)
+        .where(eq(tradeCategories.id, trade.categoryId))
+    : [];
   const open = trade.status === 'AWAITING_ACCEPTANCE';
   return {
     id: trade.id,
     tradeCode: trade.tradeCode,
+    shareUrl: tradeDeepLink(trade.tradeCode),
+    categoryCode: category?.code ?? null,
+    categoryName: category?.name ?? null,
+    standardVersion: category ? trade.tradeStandardVersion : null,
     status: trade.status,
     statusRevision: trade.statusRevision,
     initiatorRole: trade.initiatorRole,

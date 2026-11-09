@@ -77,13 +77,17 @@ describe.runIf(infraEnabled)('fulfilment evidence tables (migration 0045)', () =
     ).rejects.toThrow();
   });
 
-  const openDeadline = async (tradeId: string) =>
-    insertRow(t.app(), 'trade.trade_deadlines', {
+  const openDeadline = async (tradeId: string) => {
+    // One instant for both columns. Two `Date.now()` calls straddled a millisecond boundary about one
+    // run in three, making `original_due_at` later than `due_at` and tripping `trade_deadlines_never_shortened`.
+    const dueAt = new Date(Date.now() + 86_400_000).toISOString();
+    return insertRow(t.app(), 'trade.trade_deadlines', {
       trade_id: tradeId,
       kind: 'DELIVERY',
-      due_at: new Date(Date.now() + 86_400_000).toISOString(),
-      original_due_at: new Date(Date.now() + 86_400_000).toISOString(),
+      due_at: dueAt,
+      original_due_at: dueAt,
     });
+  };
 
   const extension = (
     tradeId: string,

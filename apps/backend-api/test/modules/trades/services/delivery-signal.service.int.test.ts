@@ -102,11 +102,12 @@ describe.runIf(infraEnabled)('delivery signals (T-064)', () => {
 
     it('opens the inspection deadline and meets the delivery deadline', async () => {
       const { tradeId } = await tradeAt(t, 'SHIPPED');
+      const dueAt = new Date(Date.now() + 86_400_000).toISOString();
       await insertRow(t.owner(), 'trade.trade_deadlines', {
         trade_id: tradeId,
         kind: 'DELIVERY',
-        due_at: new Date(Date.now() + 86_400_000).toISOString(),
-        original_due_at: new Date(Date.now() + 86_400_000).toISOString(),
+        due_at: dueAt,
+        original_due_at: dueAt,
       });
       await applyDeliverySignal(deps(), signal(tradeId, 'PARTNER_PORTAL', { reference: pkg() }));
       const rows = await deadlines(tradeId);

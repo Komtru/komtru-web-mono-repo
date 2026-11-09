@@ -18,6 +18,8 @@ import {
   otpPurposeLabel,
 } from '../../identity/index.js';
 import { identitySessionReuseDetectedEvent } from '@komtru/shared-types';
+import { TRADE_NOTIFICATION_PLANS, resolveTradeAudience } from '../../trades/index.js';
+import type { Tx } from '../../../platform/events/publish.js';
 
 export interface NotificationRecipient {
   userId: string;
@@ -41,10 +43,34 @@ export interface NotificationBinding<S extends z.ZodType = z.ZodType> {
   templateKey: string;
   /** Usually one recipient; a trade event tells both parties, so it is a list. */
   recipients: (payload: z.output<S>) => NotificationRecipient[];
+  /**
+   * For an event whose payload names a thing but not its people (a trade event carries a trade id, not
+   * its buyer and seller). When present it is used INSTEAD of `recipients`, inside the subscriber's
+   * transaction so the read agrees with the event. `recipients` is then unused and returns nobody.
+   */
+  audience?: (payload: z.output<S>, tx: Tx) => Promise<NotificationRecipient[]>;
 }
 
-export const defineBinding = <S extends z.ZodType>(binding: NotificationBinding<S>): NotificationBinding =>
-  binding;
+/** What `recipients` is for a binding whose audience is looked up instead; see `defineAudienceBinding`. */
+const NO_PAYLOAD_RECIPIENTS = (): NotificationRecipient[] => [];
+
+export const defineBinding = <S extends z.ZodType>(binding: NotificationBinding<S>): NotificationBinding => {
+  // The subscriber prefers `audience`, so a binding that set both would have its `recipients` silently
+  // ignored. Refused at definition time (module load), not left as a precedence rule to remember.
+  if (binding.audience !== undefined && binding.recipients !== NO_PAYLOAD_RECIPIENTS) {
+    throw new Error(
+      `notify: binding ${binding.subscriber} sets both recipients and audience; use defineAudienceBinding`,
+    );
+  }
+  return binding;
+};
+
+/** A binding whose audience cannot be read off the payload (a trade event names a trade, not its people). */
+export const defineAudienceBinding = <S extends z.ZodType>(
+  binding: Omit<NotificationBinding<S>, 'recipients' | 'audience'> & {
+    audience: NonNullable<NotificationBinding<S>['audience']>;
+  },
+): NotificationBinding => defineBinding({ ...binding, recipients: NO_PAYLOAD_RECIPIENTS });
 
 /**
  * Template keys whose whole job is to PROVE control of an address, so the address cannot already be
@@ -169,4 +195,14 @@ export const BINDINGS: NotificationBinding[] = [
       },
     ],
   }),
+
+  // T-068: every trade event the workspace surfaces. Who hears what is the trades module's plan.
+  ...TRADE_NOTIFICATION_PLANS.map((plan) =>
+    defineAudienceBinding({
+      subscriber: plan.subscriber,
+      event: plan.event,
+      templateKey: plan.templateKey,
+      audience: (payload, tx) => resolveTradeAudience(tx, plan, payload),
+    }),
+  ),
 ];

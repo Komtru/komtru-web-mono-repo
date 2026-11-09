@@ -74,3 +74,38 @@ export const RELEASE_ACKNOWLEDGEMENT = 'RELEASE_IS_FINAL_V1';
 
 /** Z5: "explicit acknowledgment before the irreversible action". Nothing but literal `true` counts. */
 export const confirmReleaseBodySchema = z.object({ acknowledged: z.literal(true) });
+
+// ---------------------------------------------------------------------------
+// The inspection reminder (T-068)
+// ---------------------------------------------------------------------------
+
+/** The most notice a buyer is given: a day before the window closes. */
+export const REMINDER_LEAD_CAP_HOURS = 24;
+
+/**
+ * A day, or half the window if the window is shorter than two days, so a short window is reminded
+ * part-way through rather than the moment it opens. At least one hour.
+ */
+export const reminderLeadHours = (windowHours: number): number =>
+  Math.max(1, Math.min(REMINDER_LEAD_CAP_HOURS, Math.floor(windowHours / 2)));
+
+export type ReminderDecision = 'REMIND' | 'NOT_YET' | 'SKIP';
+
+/**
+ * Whether the one reminder for an inspection deadline is due.
+ *
+ * - `SKIP`: it will never be due on this row: the trade left INSPECTION, a reminder was already sent
+ *   for this deadline, or a hold or open dispute means the buyer cannot confirm (a reminder to act in
+ *   a window they cannot act in would be wrong). A hold that lifts before the deadline lets a later
+ *   sweep send it, because the row stays unreminded.
+ * - `NOT_YET`: too early, or the deadline has passed (the auto-release sweep owns that moment).
+ */
+export function decideInspectionReminder(
+  facts: Facts & { alreadyReminded: boolean; dueAt: Date; now: Date; windowHours: number },
+): ReminderDecision {
+  if (facts.status !== 'INSPECTION') return 'SKIP';
+  if (facts.alreadyReminded || facts.hasActiveHold || facts.hasOpenDispute) return 'SKIP';
+  const remaining = facts.dueAt.getTime() - facts.now.getTime();
+  if (remaining <= 0) return 'NOT_YET';
+  return remaining <= reminderLeadHours(facts.windowHours) * HOUR_MS ? 'REMIND' : 'NOT_YET';
+}

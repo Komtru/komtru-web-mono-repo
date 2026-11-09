@@ -1,0 +1,1 @@
+ALTER TABLE "trade"."trade_deadlines" ADD COLUMN "reminder_sent_at" timestamp with time zone;

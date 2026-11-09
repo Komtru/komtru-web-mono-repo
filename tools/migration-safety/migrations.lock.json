@@ -234,6 +234,11 @@
       "tag": "0046_trade_inspection",
       "when": 1794249558354,
       "sha256": "598f78588dec0853021cf1bf8bd27939406bc3ba31647ba42bb4cf3267b4ae08"
+    },
+    {
+      "tag": "0047_trade_inspection_reminder",
+      "when": 1794254639384,
+      "sha256": "b3f25bd3c81fdfb1579a2bd01b3c251b24b25123e508d11f79fa31d3dcc01395"
     }
   ]
 }

@@ -1,7 +1,13 @@
 import { randomUUID } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 import { CATALOGUE } from '../../../../src/modules/notify/domain/catalogue.js';
-import { BINDINGS, allowsUnverifiedDestination } from '../../../../src/modules/notify/domain/binding.js';
+import { TRADE_NOTIFICATION_PLANS } from '../../../../src/modules/trades/infrastructure/notifications.js';
+import {
+  BINDINGS,
+  allowsUnverifiedDestination,
+  defineAudienceBinding,
+  defineBinding,
+} from '../../../../src/modules/notify/domain/binding.js';
 
 const bindingFor = (eventType: string) => {
   const found = BINDINGS.find((binding) => binding.event.eventType === eventType);
@@ -82,7 +88,9 @@ describe("notify's identity bindings", () => {
       },
     };
 
-    for (const binding of BINDINGS) {
+    // Trade bindings resolve their audience from the database; their variables are checked against the
+    // catalogue in trade-bindings.test.ts.
+    for (const binding of BINDINGS.filter((b) => b.audience === undefined)) {
       const declared = new Set(
         CATALOGUE.templates.filter((t) => t.templateKey === binding.templateKey).flatMap((t) => t.variables),
       );
@@ -125,6 +133,40 @@ describe("notify's identity bindings", () => {
     expect(allowsUnverifiedDestination('identity.password.changed')).toBe(false);
     expect(allowsUnverifiedDestination('identity.device.new_sign_in')).toBe(false);
     expect(allowsUnverifiedDestination('identity.session.reuse_detected')).toBe(false);
+  });
+});
+
+describe('bindings that look their audience up', () => {
+  it('are exactly the trade plans: any other binding must name its recipients from its payload', () => {
+    const lookedUp = BINDINGS.filter((b) => b.audience !== undefined).map((b) => b.subscriber);
+    expect(lookedUp.sort()).toEqual(TRADE_NOTIFICATION_PLANS.map((p) => p.subscriber).sort());
+  });
+
+  it('never also name recipients from the payload', () => {
+    for (const binding of BINDINGS.filter((b) => b.audience !== undefined)) {
+      expect(binding.recipients({}), binding.subscriber).toEqual([]);
+    }
+  });
+
+  it('cannot be defined with both, because the subscriber would silently prefer audience', () => {
+    const [first] = BINDINGS.filter((b) => b.audience !== undefined);
+    expect(() =>
+      defineBinding({
+        subscriber: 'notify.on-both',
+        event: first!.event,
+        templateKey: first!.templateKey,
+        recipients: () => [{ userId: 'u', variables: {} }],
+        audience: () => Promise.resolve([]),
+      }),
+    ).toThrow(/both recipients and audience/);
+    expect(() =>
+      defineAudienceBinding({
+        subscriber: 'notify.on-audience',
+        event: first!.event,
+        templateKey: first!.templateKey,
+        audience: () => Promise.resolve([]),
+      }),
+    ).not.toThrow();
   });
 });
 
