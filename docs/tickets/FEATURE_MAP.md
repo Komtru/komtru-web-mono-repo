@@ -336,7 +336,7 @@ list a trade.
 - **Absorbs:** T-116 (todo), T-068 (todo)
 - **Backend scope:** Trade realtime, notification fan-out and deep links over the F-007 socket gateway (T-068).
 - **Frontend scope:** The canonical tabbed Trade Workspace — CWT-01–CWT-09 — plus the buyer's trades list and detail entry (Customer-3, Customer-5). _11 v2 screens._
-- **Status:** Not started
+- **Status:** Backend done, UI outstanding
 - **Depends on:** F-017
 - **MVP:** yes
 - **Note:** The spine screen. Every trade feature from here on renders a tab or a sheet inside it, which is why it is its own feature and comes before funding.
