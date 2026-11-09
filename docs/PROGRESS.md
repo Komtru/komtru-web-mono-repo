@@ -5,11 +5,11 @@ after every run. The run-by-run history is [`manager/RUN_LOG.md`](manager/RUN_LO
 behind it is [`BUILD_PLAN.md`](BUILD_PLAN.md).
 
 ```
-MVP   ████████████████··················  53/112  (47%)
-Total ███████████·······················  53/168  (32%)
+MVP   ████████████████··················  54/112  (48%)
+Total ███████████·······················  54/168  (32%)
 ```
 
-59 MVP tickets left, 56 deferred past it.
+58 MVP tickets left, 56 deferred past it.
 
 ## By epic
 
@@ -20,7 +20,7 @@ Total ███████████····················�
 | 02-backend-platform    | 9    | 10    |
 | 03-identity            | 10   | 11    |
 | 04-files-notify-config | 7    | 7     |
-| 05-trust               | 2    | 3     |
+| 05-trust               | 3    | 3     |
 | 06-merchant-search     | 0    | 3     |
 | 07-trades              | 2    | 9     |
 | 08-ledger              | 2    | 8     |
@@ -40,7 +40,6 @@ Total ███████████····················�
 | Ticket | Title                                                   | MVP |
 | ------ | ------------------------------------------------------- | --- |
 | T-029  | Isolate the integration suite's shared Redis and queues | yes |
-| T-052  | Duplicate identity detection and KYC review queue       | yes |
 | T-072  | Funding a trade                                         | yes |
 
 ## Ready to start (MVP first)
@@ -48,9 +47,9 @@ Total ███████████····················�
 | Ticket | Title                                                             | MVP |
 | ------ | ----------------------------------------------------------------- | --- |
 | T-029  | Isolate the integration suite's shared Redis and queues           | yes |
-| T-052  | Duplicate identity detection and KYC review queue                 | yes |
 | T-072  | Funding a trade                                                   | yes |
 | T-112  | First-time onboarding                                             | yes |
+| T-144  | Identity review                                                   | yes |
 | T-034  | Social login                                                      |     |
 | T-067  | IMEI verification                                                 |     |
 | T-085  | Logistics schema and Park seed                                    |     |
@@ -75,7 +74,6 @@ Total ███████████····················�
 | ------ | ------------------------------------------------------------------------- | --- |
 | T-005  | Hosting confirmation and real deploy jobs                                 | yes |
 | T-029  | Isolate the integration suite's shared Redis and queues                   | yes |
-| T-052  | Duplicate identity detection and KYC review queue                         | yes |
 | T-055  | Merchant applications and certification                                   | yes |
 | T-056  | Listings lifecycle, images and stock                                      | yes |
 | T-057  | Search and discovery (M19)                                                | yes |
