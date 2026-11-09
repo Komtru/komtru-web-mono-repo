@@ -96,8 +96,8 @@ describe.runIf(infraEnabled)('socket fan-out across instances', () => {
       const joined: unknown = await socket.emitWithAck('room:join', { prefix: 'fanout', id: 'room-1' });
       expect(joined).toEqual({ joined: true });
 
-      const received = nextEvent<{ ok: boolean }>(socket, 'trade.updated');
-      a.gateway.emitToRoom('fanout', 'room-1', 'trade.updated', { ok: true });
+      const received = nextEvent<{ ok: boolean }>(socket, 'trade:updated');
+      a.gateway.emitToRoom('fanout', 'room-1', 'trade:updated', { ok: true });
       await expect(received).resolves.toEqual({ ok: true });
     },
     BUDGET_MS,

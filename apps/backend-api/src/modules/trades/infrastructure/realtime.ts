@@ -9,7 +9,15 @@
 // re-authorised on every request. A push that carried the detail would make the socket a second,
 // weaker read path — and the gateway does not re-authorise joined rooms when a role is revoked, so
 // the thin payload is also what bounds that gap.
-import type { EventDefinition, EventEnvelope } from '@komtru/shared-types';
+import {
+  TRADE_ROOM_PREFIX,
+  TRADE_UPDATED_EVENT,
+  TRADE_UPDATE_KINDS,
+  type EventDefinition,
+  type EventEnvelope,
+  type TradeUpdate,
+  type TradeUpdateKind,
+} from '@komtru/shared-types';
 import { eq } from 'drizzle-orm';
 import type { z } from 'zod';
 import type { Db } from '../../../db/index.js';
@@ -29,13 +37,11 @@ import {
   tradeInspectionReminderDueEvent,
 } from '../domain/inspectionEvents.js';
 import { tradeStateChangedEvent } from '../domain/events.js';
-import type { TradeAction, TradeStatus } from '../domain/stateMachine.js';
 import { trades } from './postgres/schema/trades.js';
 
-export const TRADE_ROOM_PREFIX = 'trade';
-
-/** The socket event every trade push uses. */
-export const TRADE_UPDATED_EVENT = 'trade:updated';
+// The wire contract (event name, room prefix, kinds and the payload schema) is in shared-types, so a
+// client imports it instead of copying it. Re-exported here for the backend's own imports.
+export { TRADE_ROOM_PREFIX, TRADE_UPDATED_EVENT, TRADE_UPDATE_KINDS, type TradeUpdate, type TradeUpdateKind };
 
 /** The permission that lets staff watch any trade (M7 section 11). */
 export const TRADE_VIEW_ALL = 'trade.view_all';
@@ -99,41 +105,6 @@ export const tradeRoomAuthorizer =
 // ---------------------------------------------------------------------------
 // What is pushed
 // ---------------------------------------------------------------------------
-
-/** What happened, in the UI's terms. `STATE_CHANGED` is the one every status change produces. */
-export const TRADE_UPDATE_KINDS = [
-  'STATE_CHANGED',
-  'DELIVERY_EXTENSION_REQUESTED',
-  'DELIVERY_EXTENSION_RESPONDED',
-  'DELIVERY_OVERDUE',
-  'REFUND_REQUESTED',
-  'COMPLETED',
-  'INSPECTION_EXTENSION_REQUESTED',
-  'INSPECTION_EXTENSION_RESPONDED',
-  'INSPECTION_REMINDER',
-] as const;
-export type TradeUpdateKind = (typeof TRADE_UPDATE_KINDS)[number];
-
-/**
- * The `trade:updated` payload. Everything beyond `kind` is optional because only a state change has a
- * status; the rest are the few non-sensitive facts a tab needs to know WHICH part to refetch. There is
- * no `reason`, `actorId`, amount or address here, by design (see the header).
- */
-export interface TradeUpdate {
-  tradeId: string;
-  tradeCode: string;
-  kind: TradeUpdateKind;
-  /** The trade's status after the change; present on `STATE_CHANGED` and `DELIVERY_OVERDUE`. */
-  status?: TradeStatus;
-  previousStatus?: TradeStatus;
-  action?: TradeAction;
-  /** The deadline now in force, ISO 8601, when the event moved or reported one. */
-  dueAt?: string;
-  decision?: 'ACCEPTED' | 'DECLINED';
-  via?: 'BUYER_CONFIRMED' | 'INSPECTION_ELAPSED';
-  /** When the event happened, so a client can discard an update older than its last refetch. */
-  occurredAt: string;
-}
 
 export interface TradePush<S extends z.ZodType = z.ZodType> {
   /** The platform subscriber name; one subscriber per event type. */

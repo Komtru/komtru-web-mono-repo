@@ -1,6 +1,5 @@
 // What a trade room is told (T-068). The payloads are a "refetch now" signal, so the tests pin both
 // that every state change produces one and that nothing sensitive can ride along.
-import { randomUUID } from 'node:crypto';
 import { describe, expect, it, vi } from 'vitest';
 import {
   TRADE_PUSHES,
@@ -10,83 +9,7 @@ import {
 import { tradeStateChangedEvent } from '../../../../src/modules/trades/domain/events.js';
 import { transitionTriples } from '../../../../src/modules/trades/domain/stateMachine.js';
 import { testLogger } from '../../identity/support.js';
-
-const tradeId = randomUUID();
-const tradeCode = 'KMT-7398512-NG';
-const user = randomUUID();
-const now = '2026-11-09T10:00:00.000Z';
-
-const envelope = (payload: unknown) =>
-  ({ eventId: randomUUID(), eventType: 'x', occurredAt: now, payload }) as never;
-
-const SAMPLES: Record<string, unknown> = {
-  'trades.trade.state_changed': {
-    tradeId,
-    tradeCode,
-    action: 'ACCEPT',
-    from: 'AWAITING_ACCEPTANCE',
-    to: 'PENDING_PAYMENT',
-    actorType: 'SELLER',
-    actorId: user,
-    reason: 'staff-only wording that must never reach a room',
-  },
-  'trades.delivery_extension.requested': {
-    tradeId,
-    tradeCode,
-    requestId: randomUUID(),
-    deadlineId: randomUUID(),
-    requestedByUserId: user,
-    reason: 'RESTOCKING_ITEM',
-    currentDueAt: now,
-    requestedDueAt: now,
-  },
-  'trades.delivery_extension.responded': {
-    tradeId,
-    tradeCode,
-    requestId: randomUUID(),
-    decision: 'ACCEPTED',
-    respondedByUserId: user,
-    newDueAt: now,
-  },
-  'trades.delivery.overdue': {
-    tradeId,
-    tradeCode,
-    deadlineId: randomUUID(),
-    status: 'FUNDED',
-    dueAt: now,
-    refundRequested: true,
-  },
-  'trades.refund.requested': {
-    tradeId,
-    tradeCode,
-    reason: 'DELIVERY_OVERDUE',
-    scope: 'FULL',
-  },
-  'trades.trade.completed': { tradeId, tradeCode, via: 'INSPECTION_ELAPSED', completedAt: now },
-  'trades.inspection_extension.requested': {
-    tradeId,
-    tradeCode,
-    requestId: randomUUID(),
-    deadlineId: randomUUID(),
-    requestedByUserId: user,
-    extraHours: 24,
-    currentDueAt: now,
-    requestedDueAt: now,
-  },
-  'trades.inspection.reminder_due': {
-    tradeId,
-    tradeCode,
-    deadlineId: randomUUID(),
-    dueAt: now,
-  },
-  'trades.inspection_extension.responded': {
-    tradeId,
-    tradeCode,
-    requestId: randomUUID(),
-    decision: 'DECLINED',
-    respondedByUserId: user,
-  },
-};
+import { SAMPLES, envelope, now, tradeCode, tradeId, user } from '../push-samples.js';
 
 describe('trade pushes', () => {
   it('has one subscriber per event, with distinct, well-formed names', () => {
