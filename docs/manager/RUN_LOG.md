@@ -462,3 +462,12 @@ VALUE` cannot work here at all (drizzle runs every pending migration in one tran
   hashes, which wants its own ticket), and the T-029 compose change.
 - Next: a full infra run on `main`, then T-029 once the compose change is approved. T-072 unblocked
   T-064, T-073, T-074 and T-075, so the ledger critical path is open.
+
+## 2026-11-09 18:13 WAT — run summary
+
+- Usage at start: 5h 11%, week 91%. At end: 5h 11%, week 91%.
+- Capacity: 0. skipped: budget (5h 11%, week 91%). Weekly usage is past the 85% owner reserve;
+  it resets 2026-11-10 14:59 WAT. No in-flight worktrees or ticket branches to resume.
+- Tickets: none.
+- Next: once the weekly window resets, a full `KOMTRU_INFRA_TESTS=1` run on `main` (still owed from
+  the T-052/T-072 merges), then the ledger critical path T-064, T-073, T-074, T-075.
