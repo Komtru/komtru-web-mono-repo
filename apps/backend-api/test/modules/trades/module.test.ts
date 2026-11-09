@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-return, @typescript-eslint/no-unsafe-call -- a vi.fn spy's recorded calls are untyped */
 // What the trades module registers with the platform (T-064 adds a schedule and a subscriber).
 import { describe, expect, it, vi } from 'vitest';
 import { createTradesModule } from '../../../src/modules/trades/module.js';
@@ -36,7 +37,7 @@ describe('the trades module', () => {
     expect(subscription.event.eventType).toBe('trades.trade.state_changed');
     // Any other transition is none of its business: it must not touch the database.
     await expect(
-      subscription.handler({ payload: { to: 'SHIPPED', tradeId: 'x' } }, {} as never),
+      subscription.handler({ payload: { to: 'SHIPPED', tradeId: 'x' } }, {}),
     ).resolves.toBeUndefined();
   });
 });

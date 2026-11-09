@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-unsafe-member-access -- raw `pg` rows are untyped in assertions */
 // Migration 0045: the self-arranged shipment evidence, extension requests and the substate column.
 // Skipped unless KOMTRU_INFRA_TESTS=1.
 import { randomUUID } from 'node:crypto';

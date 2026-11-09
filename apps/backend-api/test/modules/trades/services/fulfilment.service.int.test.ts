@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access -- raw `pg` rows are untyped in assertions */
 // T-064 ship step against the real database: the dispatch guard (X1), the options the server
 // computes (X2, design 7.8) and the self-arranged branch. Skipped unless KOMTRU_INFRA_TESTS=1.
 import { randomUUID } from 'node:crypto';

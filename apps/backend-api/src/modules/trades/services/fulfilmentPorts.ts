@@ -12,9 +12,9 @@ export interface FulfilmentDeps {
   proofFiles: TradeDeps['proofFiles'];
   standards: TradeDeps['standards'];
   /** Every `ENABLED` logistics company, Park's default row included (the builder pins and splits it). */
-  logistics: { enabledCompanies(tx: Tx): Promise<EnabledCompany[]> };
+  logistics: { enabledCompanies: (tx: Tx) => Promise<EnabledCompany[]> };
   /** Design §7.8: which of these cities Park serves today. */
-  park: { serviceableCityIds(tx: Tx, cityIds: readonly string[]): Promise<ReadonlySet<string>> };
+  park: { serviceableCityIds: (tx: Tx, cityIds: readonly string[]) => Promise<ReadonlySet<string>> };
   now: () => Date;
 }
 

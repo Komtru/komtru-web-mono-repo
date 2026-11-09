@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-return, @typescript-eslint/no-unsafe-argument -- raw `pg` rows are untyped in assertions */
 // T-064 deadlines against the real database: opening the delivery deadline, the extension request
 // and answer (DE1, DE2) and the overdue sweep (DE3, DE4). The sweep is the job body, so its
 // idempotency, hold handling and refund seam are tested here directly.

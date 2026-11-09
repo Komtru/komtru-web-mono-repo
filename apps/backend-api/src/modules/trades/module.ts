@@ -71,7 +71,7 @@ export function buildFulfilmentDeps(deps: TradeDeps): FulfilmentDeps {
   return {
     db: deps.db,
     cities: deps.cities,
-    proofFiles: deps.proofFiles,
+    proofFiles: (tx, ids) => deps.proofFiles(tx, ids),
     standards: deps.standards,
     logistics: noLogisticsCompanies,
     park: noParkCoverage,

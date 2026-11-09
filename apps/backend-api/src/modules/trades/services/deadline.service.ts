@@ -576,13 +576,13 @@ export async function sweepDeliveryDeadlines(
     .limit(options.limit ?? 200);
 
   const result: SweepResult = { examined: due.length };
-  let failure: unknown;
+  let failure: Error | undefined;
   for (const { id } of due) {
     try {
       const outcome = await deps.db.transaction((tx) => processDeliveryDeadline(tx, id, now));
       result[outcome] = (result[outcome] ?? 0) + 1;
     } catch (error) {
-      failure ??= error;
+      failure ??= error instanceof Error ? error : new Error(String(error));
     }
   }
   if (failure) throw failure;

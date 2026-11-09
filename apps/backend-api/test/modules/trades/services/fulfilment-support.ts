@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-return -- raw `pg` rows are untyped in assertions */
 // Fixtures shared by the three T-064 integration tests: a funded trade whose accepted terms carry
 // chosen cities, and a FulfilmentDeps whose other-module ports are fixtures.
 import { randomUUID } from 'node:crypto';

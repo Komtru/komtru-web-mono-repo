@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-return, @typescript-eslint/no-unsafe-argument -- raw `pg` rows are untyped in assertions */
 // T-064's single delivery-signal consumer against the real database: trust weighting (M7 section 6),
 // the partner-history exception, replay safety and the two human entry points.
 // Skipped unless KOMTRU_INFRA_TESTS=1.
