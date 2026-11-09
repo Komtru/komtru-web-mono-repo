@@ -7,7 +7,10 @@ import { ApiClientProvider } from '../../src/react/client-context.js';
 import {
   tradeKeys,
   useDeclineTrade,
+  useDeliveryDeadline,
+  useInspection,
   useTrade,
+  useTradeActivity,
   useTradeList,
   useTradeStandards,
 } from '../../src/react/trades.js';
@@ -221,5 +224,74 @@ describe('useTradeList', () => {
     screen.getByRole('button', { name: 'more' }).click();
     await screen.findByText('03');
     expect(requests.filter((url) => url.includes('cursor=stale'))).toHaveLength(1);
+  });
+});
+
+describe("a trade's own reads", () => {
+  const item = (n: number) => ({
+    id: `S:${String(n)}`,
+    occurredAt: '2026-11-09T10:00:00.000000Z',
+    kind: 'FUNDS_PROTECTED',
+    actor: 'KOMTRU',
+    toStatus: 'FUNDED',
+    reason: null,
+  });
+
+  it('pages the activity feed with the cursor exactly as it came', async () => {
+    const urls: string[] = [];
+    const { wrapper: Wrapper } = setup((url) => {
+      urls.push(url.replace('https://api.test/v1', ''));
+      return url.includes('cursor=')
+        ? { items: [item(1)], nextCursor: null }
+        : { items: [item(2)], nextCursor: 'a b+c' };
+    });
+    function Probe() {
+      const feed = useTradeActivity(ID);
+      return (
+        <>
+          <p>{String(feed.data?.pages.flatMap((page) => page.items).length ?? 0)}</p>
+          <button type="button" onClick={() => void feed.fetchNextPage()}>
+            more
+          </button>
+        </>
+      );
+    }
+    render(<Probe />, { wrapper: Wrapper });
+    await screen.findByText('1');
+    screen.getByRole('button', { name: 'more' }).click();
+    await screen.findByText('2');
+    expect(urls[0]).toBe(`/trades/${ID}/activity?limit=20`);
+    expect(urls[1]).toBe(`/trades/${ID}/activity?limit=20&cursor=a+b%2Bc`);
+  });
+
+  it('refuses a feed row carrying a field the contract does not have', async () => {
+    const { wrapper: Wrapper } = setup(() => ({
+      items: [{ ...item(1), summary: 'internal wording' }],
+      nextCursor: null,
+    }));
+    function Probe() {
+      const feed = useTradeActivity(ID);
+      return <p>{feed.isError ? 'refused' : feed.isSuccess ? 'accepted' : 'loading'}</p>;
+    }
+    render(<Probe />, { wrapper: Wrapper });
+    await screen.findByText('refused');
+  });
+
+  it('keeps every read of one trade under one key, so one invalidation refetches all of it', () => {
+    for (const key of [tradeKeys.activity(ID), tradeKeys.deliveryDeadline(ID), tradeKeys.inspection(ID)]) {
+      expect(key.slice(0, 2)).toEqual(tradeKeys.one(ID));
+    }
+  });
+
+  it('does not read the deadline or the inspection until the trade is somewhere they apply', async () => {
+    const { wrapper: Wrapper, requests } = setup(() => ({ deadline: null, extensionRequest: null }));
+    function Probe() {
+      useDeliveryDeadline(ID, false);
+      useInspection(ID, false);
+      return <p>idle</p>;
+    }
+    render(<Probe />, { wrapper: Wrapper });
+    await screen.findByText('idle');
+    expect(requests).toEqual([]);
   });
 });

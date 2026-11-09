@@ -21,6 +21,7 @@ describe('trade routes (T-061)', () => {
       'GET /trades',
       'GET /trades/by-code/:code',
       'GET /trades/:id',
+      'GET /trades/:id/activity',
       'POST /trades/:id/send',
       'POST /trades/:id/counter',
       'POST /trades/:id/accept',

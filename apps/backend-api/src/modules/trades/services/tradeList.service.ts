@@ -16,7 +16,8 @@ import { tradeCategories } from '../../config/index.js';
 import { partyInvitations } from '../../identity/index.js';
 import { tradeNotFoundError } from '../domain/errors.js';
 import type { TradeInitiatorRole } from '../domain/eligibility.js';
-import { TERMINAL_STATUSES, type TradeStatus } from '../domain/stateMachine.js';
+import { TERMINAL_STATUSES } from '../domain/stateMachine.js';
+import { HIDDEN_AFTER_CANCEL_FROM, HIDDEN_STATUSES, canSeeTrade } from '../domain/visibility.js';
 import { attentionFor, itemTitle, readTradeListCursor, tradeListCursor } from '../domain/tradeList.js';
 import {
   deliveryExtensionRequests,
@@ -30,11 +31,18 @@ import { buildView, type TradeRow, type TradeView } from './trade.service.js';
 type ListDeps = Pick<TradeDeps, 'db' | 'displays'>;
 
 /**
- * What a counterparty may not see yet: a draft is nobody else's, and a proposal held for TrustOps review
- * is invisible to the party it was addressed to until staff clear it (M7 R1, T-062). Their list leaves
- * both out; the INITIATOR still sees their own. `GET /trades/:id` on a held proposal is T-062's to close.
+ * The list's half of the one visibility rule (domain/visibility.ts): the proposer sees their own trade in any
+ * status; everyone else sees it unless it is a draft, held, turned back by review, or withdrawn while held.
+ * Built from the rule's own constants so the list cannot disagree with the view, the feed or the room.
  */
-const HIDDEN_FROM_COUNTERPARTY: TradeStatus[] = ['DRAFT', 'UNDER_PROPOSAL_REVIEW'];
+const visibleToCaller = (userId: string) =>
+  or(
+    eq(trades.initiatorUserId, userId),
+    and(
+      notInArray(trades.status, [...HIDDEN_STATUSES]),
+      sql`NOT (${trades.status} = 'CANCELLED' AND COALESCE(${inArray(trades.previousStatus, [...HIDDEN_AFTER_CANCEL_FROM])}, false))`,
+    ),
+  );
 
 const CURSOR_TS = sql<string>`to_char(${trades.updatedAt} AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"')`;
 
@@ -66,7 +74,7 @@ export async function listTrades(
       .where(
         and(
           or(eq(trades.buyerUserId, userId), eq(trades.sellerUserId, userId)),
-          or(eq(trades.initiatorUserId, userId), notInArray(trades.status, HIDDEN_FROM_COUNTERPARTY)),
+          visibleToCaller(userId),
           input.state === 'OPEN' ? notInArray(trades.status, [...TERMINAL_STATUSES]) : undefined,
           input.state === 'CLOSED' ? inArray(trades.status, [...TERMINAL_STATUSES]) : undefined,
           after
@@ -205,6 +213,8 @@ export async function resolveTradeByCode(
       found.invitationStatus === 'CLAIMED' &&
       found.invitationClaimedBy === input.userId;
     if (!isParty && !isNamedInvitee) throw tradeNotFoundError();
+    // A party who may not see the trade yet (held, turned back, withdrawn while held) gets the same answer.
+    if (isParty && !canSeeTrade(trade, input.userId)) throw tradeNotFoundError();
 
     if (isParty) {
       const role: TradeInitiatorRole =

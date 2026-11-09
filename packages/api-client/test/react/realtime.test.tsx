@@ -4,6 +4,7 @@ import { act, cleanup, render, screen, waitFor } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { SocketLike } from '../../src/realtime/connection.js';
+import { fakeSocket as fakeRoomSocket } from '../support/fake-socket.js';
 import { RealtimeProvider, useNotifications, useSocket, useSocketEvent } from '../../src/react/realtime.js';
 
 type Handler = (...args: never[]) => void;
@@ -29,7 +30,13 @@ const fakeSocket = () => {
     });
   };
 
-  const socket: SocketLike = { ...bind(socketHandlers), disconnect: vi.fn(), io: bind(managerHandlers) };
+  const socket: SocketLike = {
+    ...bind(socketHandlers),
+    disconnect: vi.fn(),
+    emit: vi.fn(),
+    emitWithAck: vi.fn(() => Promise.resolve({ joined: true })),
+    io: bind(managerHandlers),
+  };
 
   return {
     socket,
@@ -181,5 +188,119 @@ describe('useSocketEvent', () => {
     emit('parcel.scanned', { id: 'p2' });
 
     expect(received).toEqual([{ id: 'p1' }]);
+  });
+});
+
+describe('a token that changes while connected', () => {
+  it('is forwarded to the gateway as auth:token without reconnecting', async () => {
+    const { socket } = fakeRoomSocket();
+    const connect = vi.fn(() => socket);
+    const queryClient = new QueryClient();
+    const tree = (token: string) => (
+      <QueryClientProvider client={queryClient}>
+        <RealtimeProvider token={token} url="http://socket.test" connect={connect}>
+          <ConnectionBadge />
+        </RealtimeProvider>
+      </QueryClientProvider>
+    );
+    const view = render(tree('first'));
+    await waitFor(() => expect(screen.getByTestId('has-socket').textContent).toBe('yes'));
+    expect(socket.emit).not.toHaveBeenCalled();
+
+    view.rerender(tree('second'));
+    expect(socket.emit).toHaveBeenCalledWith('auth:token', { token: 'second' });
+    expect(connect).toHaveBeenCalledTimes(1);
+    expect(socket.disconnect).not.toHaveBeenCalled();
+  });
+
+  it('does not connect at all until there is a token, and then connects as that person', async () => {
+    const { socket } = fakeRoomSocket();
+    const connect = vi.fn(() => socket);
+    const queryClient = new QueryClient();
+    const tree = (token: string) => (
+      <QueryClientProvider client={queryClient}>
+        <RealtimeProvider token={token} url="http://socket.test" connect={connect}>
+          <ConnectionBadge />
+        </RealtimeProvider>
+      </QueryClientProvider>
+    );
+    const view = render(tree(''));
+    await Promise.resolve();
+    expect(connect).not.toHaveBeenCalled();
+
+    view.rerender(tree('minted'));
+    await waitFor(() =>
+      expect(connect).toHaveBeenCalledWith('http://socket.test', 'minted', expect.any(Function)),
+    );
+  });
+});
+
+describe('a token that lapses on a screen that is only listening', () => {
+  const mount = (refreshToken?: () => Promise<string | null>, token = 'first') => {
+    const fake = fakeRoomSocket();
+    const connect = vi.fn((_url: string, _token: string, _latest?: () => string) => fake.socket);
+    const queryClient = new QueryClient();
+    const tree = (t: string) => (
+      <QueryClientProvider client={queryClient}>
+        <RealtimeProvider
+          token={t}
+          url="http://socket.test"
+          connect={connect}
+          {...(refreshToken ? { refreshToken } : {})}
+        >
+          <ConnectionBadge />
+        </RealtimeProvider>
+      </QueryClientProvider>
+    );
+    const view = render(tree(token));
+    return { fake, connect, rerender: (t: string) => view.rerender(tree(t)) };
+  };
+
+  it('hands the connection a way to read the NEWEST token, so a reconnect does not present the first', async () => {
+    const { fake, connect, rerender } = mount();
+    await waitFor(() => expect(connect).toHaveBeenCalled());
+    const latest = connect.mock.calls[0]![2]!;
+    expect(latest()).toBe('first');
+    rerender('second');
+    expect(latest()).toBe('second');
+    void fake;
+  });
+
+  it('answers the gateway asking for a fresh token by refreshing one and sending it, with no request involved', async () => {
+    const refresh = vi.fn(() => Promise.resolve('fresh'));
+    const { fake } = mount(refresh);
+    await waitFor(() => expect(screen.getByTestId('has-socket').textContent).toBe('yes'));
+    fake.fire('auth:refresh');
+    await waitFor(() => expect(fake.socket.emit).toHaveBeenCalledWith('auth:token', { token: 'fresh' }));
+    expect(refresh).toHaveBeenCalledTimes(1);
+  });
+
+  it('sends the fresh token to a later reconnect too, not the stale one it opened with', async () => {
+    const { fake, connect } = mount(() => Promise.resolve('fresh'));
+    await waitFor(() => expect(connect).toHaveBeenCalled());
+    const latest = connect.mock.calls[0]![2]!;
+    fake.fire('auth:refresh');
+    await waitFor(() => expect(latest()).toBe('fresh'));
+  });
+
+  it.each([
+    ['the session is over', () => Promise.resolve(null)],
+    ['the refresh fails', () => Promise.reject(new Error('offline'))],
+  ])('sends nothing and does not throw when %s', async (_name, refresh) => {
+    const { fake } = mount(refresh);
+    await waitFor(() => expect(screen.getByTestId('has-socket').textContent).toBe('yes'));
+    fake.fire('auth:refresh');
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(fake.socket.emit).not.toHaveBeenCalled();
+  });
+
+  it('does nothing when the app gave no way to refresh', async () => {
+    const { fake } = mount();
+    await waitFor(() => expect(screen.getByTestId('has-socket').textContent).toBe('yes'));
+    expect(() => {
+      fake.fire('auth:refresh');
+    }).not.toThrow();
+    expect(fake.socket.emit).not.toHaveBeenCalled();
   });
 });

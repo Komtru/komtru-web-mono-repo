@@ -16,6 +16,10 @@ export interface SocketEmitter {
 
 export interface SocketLike extends SocketEmitter {
   disconnect: () => void;
+  /** Fire and forget: `auth:token` is sent this way. */
+  emit: (event: string, ...args: unknown[]) => unknown;
+  /** Resolves with the server's acknowledgement; `room:join` is asked this way. */
+  emitWithAck: (event: string, ...args: unknown[]) => Promise<unknown>;
   /** The manager, which is what emits `reconnect` once a dropped connection comes back. */
   io: SocketEmitter;
 }

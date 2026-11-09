@@ -25,6 +25,8 @@ const fakeSocket = () => {
   const socket: SocketLike = {
     ...bind(socketHandlers),
     disconnect: vi.fn(),
+    emit: vi.fn(),
+    emitWithAck: vi.fn(() => Promise.resolve({ joined: true })),
     io: bind(managerHandlers),
   };
 

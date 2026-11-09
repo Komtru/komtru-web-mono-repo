@@ -24,7 +24,7 @@ import {
   startInstance,
   type ApiInstance,
 } from '../socket/support.int.js';
-import { insertTrade } from './support.js';
+import { driveTo, insertTrade } from './support.js';
 
 describe.runIf(infraEnabled)('trade rooms over a real socket (T-068)', () => {
   const t = useTestDatabase();
@@ -60,6 +60,8 @@ describe.runIf(infraEnabled)('trade rooms over a real socket (T-068)', () => {
 
   const tradeFor = async (buyer: string, seller: string): Promise<string> => {
     const id = await insertTrade(t.owner(), { buyer, seller });
+    // A sent proposal: a draft is nobody else's yet, so the counterparty could not join its room (and should not).
+    await driveTo(t.owner(), id, 'AWAITING_ACCEPTANCE');
     const { rows } = await t
       .owner()
       .query<{ trade_code: string }>(`SELECT trade_code FROM trade.trades WHERE id = $1`, [id]);

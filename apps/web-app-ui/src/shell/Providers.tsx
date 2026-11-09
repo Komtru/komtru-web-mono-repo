@@ -51,6 +51,9 @@ export function Providers({ children }: { children: React.ReactNode }): React.JS
       // through the same-origin route handler and retries. The entry screens hand the client the
       // token directly the moment sign-in or a verified code opens the session (T-111).
       session={null}
+      // The refresh cookie is not readable to a page, so the layout cannot mint a socket token. The socket connects
+      // as the access token the client already holds, once the first request has produced one.
+      socketFollowsSession
       onSessionEnded={onSessionEnded}
       queryClient={queries}
     >

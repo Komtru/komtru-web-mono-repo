@@ -10,6 +10,8 @@ import type { Mock } from 'vitest';
 export interface CallEndpoint {
   method: string;
   path: string;
+  /** The api-client's own definition carries the response schema it parses with in production. */
+  schema?: { response?: { parse: (value: unknown) => unknown } };
 }
 export interface CallInput {
   params?: Record<string, string>;
@@ -31,7 +33,10 @@ export function answerWith(call: Mock<CallFn>, given: Record<string, unknown>): 
     const handler = handlers[key];
     try {
       const value = typeof handler === 'function' ? (handler as Handler)(input) : handler;
-      return value instanceof Error ? Promise.reject(value) : Promise.resolve(value);
+      if (value instanceof Error) return Promise.reject(value);
+      // The real client parses every response with the endpoint's schema. A mock that skipped that would let a
+      // fixture drift from the platform's contract and every screen test would stay green; so it parses too.
+      return Promise.resolve(endpoint.schema?.response ? endpoint.schema.response.parse(value) : value);
     } catch (error) {
       return Promise.reject(error instanceof Error ? error : new Error(String(error)));
     }

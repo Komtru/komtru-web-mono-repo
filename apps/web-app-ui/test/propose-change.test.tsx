@@ -154,7 +154,8 @@ describe('Propose a Change (TC-05)', () => {
               false,
             );
           }
-          return { sent: body };
+          void body;
+          return tradeView({ statusRevision: 4 });
         },
       }),
     );

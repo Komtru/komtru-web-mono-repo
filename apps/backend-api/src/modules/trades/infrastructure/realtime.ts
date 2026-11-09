@@ -37,6 +37,7 @@ import {
   tradeInspectionReminderDueEvent,
 } from '../domain/inspectionEvents.js';
 import { tradeStateChangedEvent } from '../domain/events.js';
+import { pushDisposition, canSeeTrade, type VisibleTrade } from '../domain/visibility.js';
 import { trades } from './postgres/schema/trades.js';
 
 // The wire contract (event name, room prefix, kinds and the payload schema) is in shared-types, so a
@@ -54,7 +55,7 @@ export const TRADE_VIEW_ALL = 'trade.view_all';
  */
 const CANONICAL_TRADE_CODE = /^KMT-\d{5,8}-NG$/;
 
-export interface TradeParties {
+export interface TradeParties extends VisibleTrade {
   buyerUserId: string | null;
   sellerUserId: string | null;
 }
@@ -68,7 +69,13 @@ export const postgresTradeParties =
   (db: Pick<Db, 'select'>): TradeRoomDeps['parties'] =>
   async (tradeCode) => {
     const [row] = await db
-      .select({ buyerUserId: trades.buyerUserId, sellerUserId: trades.sellerUserId })
+      .select({
+        buyerUserId: trades.buyerUserId,
+        sellerUserId: trades.sellerUserId,
+        status: trades.status,
+        previousStatus: trades.previousStatus,
+        initiatorUserId: trades.initiatorUserId,
+      })
       .from(trades)
       .where(eq(trades.tradeCode, tradeCode))
       .limit(1);
@@ -99,7 +106,10 @@ export const tradeRoomAuthorizer =
     const parties = await deps.parties(id);
     if (!parties) return false;
     if (principal.scope === 'STAFF') return true;
-    return principal.userId === parties.buyerUserId || principal.userId === parties.sellerUserId;
+    const isParty = principal.userId === parties.buyerUserId || principal.userId === parties.sellerUserId;
+    // A counterparty is refused while the trade is held or was withdrawn from a hold: being in the room would
+    // tell them the trade exists. The same rule as every HTTP read (domain/visibility.ts).
+    return isParty && canSeeTrade(parties, principal.userId);
   };
 
 // ---------------------------------------------------------------------------
@@ -110,7 +120,11 @@ export interface TradePush<S extends z.ZodType = z.ZodType> {
   /** The platform subscriber name; one subscriber per event type. */
   subscriber: string;
   event: EventDefinition<S>;
-  update: (payload: z.output<S>, envelope: EventEnvelope<z.output<S>>) => Omit<TradeUpdate, 'occurredAt'>;
+  /** `null` withholds the push altogether (see `pushDisposition`). */
+  update: (
+    payload: z.output<S>,
+    envelope: EventEnvelope<z.output<S>>,
+  ) => Omit<TradeUpdate, 'occurredAt'> | null;
 }
 
 const definePush = <S extends z.ZodType>(push: TradePush<S>): TradePush => push;
@@ -124,14 +138,18 @@ export const TRADE_PUSHES: TradePush[] = [
   definePush({
     subscriber: 'trades.push-state-changed',
     event: tradeStateChangedEvent,
-    update: (p) => ({
-      tradeId: p.tradeId,
-      tradeCode: p.tradeCode,
-      kind: 'STATE_CHANGED',
-      status: p.to,
-      previousStatus: p.from,
-      action: p.action,
-    }),
+    update: (p) => {
+      // The room may hold the counterparty, who must not learn a proposal is, was or has been in review.
+      const disposition = pushDisposition(p.from, p.to);
+      if (disposition === 'WITHHOLD') return null;
+      const base = {
+        tradeId: p.tradeId,
+        tradeCode: p.tradeCode,
+        kind: 'STATE_CHANGED' as const,
+        status: p.to,
+      };
+      return disposition === 'REDACT' ? base : { ...base, previousStatus: p.from, action: p.action };
+    },
   }),
   definePush({
     subscriber: 'trades.push-delivery-extension-requested',
@@ -223,10 +241,9 @@ export interface TradeRoomGateway {
 export const pushHandler =
   (gateway: TradeRoomGateway, logger: Logger, push: TradePush) =>
   (envelope: EventEnvelope<unknown>): Promise<AfterCommit> => {
-    const update: TradeUpdate = {
-      ...push.update(envelope.payload, envelope),
-      occurredAt: envelope.occurredAt,
-    };
+    const body = push.update(envelope.payload, envelope);
+    if (body === null) return Promise.resolve(() => Promise.resolve());
+    const update: TradeUpdate = { ...body, occurredAt: envelope.occurredAt };
     return Promise.resolve(() => {
       try {
         gateway.emitToRoom(TRADE_ROOM_PREFIX, update.tradeCode, TRADE_UPDATED_EVENT, update);

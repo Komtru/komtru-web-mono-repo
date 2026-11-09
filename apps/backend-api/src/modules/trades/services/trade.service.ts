@@ -14,6 +14,7 @@ import { cancelInvitation, userAddresses } from '../../identity/index.js';
 import { addressRequiredError, notYourTurnError, tradeNotFoundError } from '../domain/errors.js';
 import type { TradeInitiatorRole } from '../domain/eligibility.js';
 import { sideOf, type ProofCheck } from '../domain/proposal.js';
+import { canSeeTrade } from '../domain/visibility.js';
 import type { TradeStatus } from '../domain/stateMachine.js';
 import { tradeDeepLink } from '../infrastructure/notifications.js';
 import { tradeActivity } from '../infrastructure/postgres/schema/audit.js';
@@ -54,6 +55,9 @@ export async function loadTerms(tx: Tx, versionId: string | null): Promise<Terms
 
 /** A stranger and a missing trade look the same: the endpoint is not an existence oracle. */
 export function requireParty(trade: TradeRow, userId: string): TradeInitiatorRole {
+  // Held, turned back or withdrawn-while-held: the counterparty gets the answer a missing trade gets. This is
+  // the one door every read and action of a party goes through, so the rule (domain/visibility.ts) is here.
+  if (!canSeeTrade(trade, userId)) throw tradeNotFoundError();
   const side = sideOf(trade, userId);
   if (side) return side;
   // Before binding, the initiator is the only person on the trade.

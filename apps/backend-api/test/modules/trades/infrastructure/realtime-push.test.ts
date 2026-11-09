@@ -1,5 +1,6 @@
 // What a trade room is told (T-068). The payloads are a "refetch now" signal, so the tests pin both
 // that every state change produces one and that nothing sensitive can ride along.
+import { tradeUpdateSchema } from '@komtru/shared-types';
 import { describe, expect, it, vi } from 'vitest';
 import {
   TRADE_PUSHES,
@@ -8,6 +9,7 @@ import {
 } from '../../../../src/modules/trades/infrastructure/realtime.js';
 import { tradeStateChangedEvent } from '../../../../src/modules/trades/domain/events.js';
 import { transitionTriples } from '../../../../src/modules/trades/domain/stateMachine.js';
+import { pushDisposition } from '../../../../src/modules/trades/domain/visibility.js';
 import { testLogger } from '../../identity/support.js';
 import { SAMPLES, envelope, now, tradeCode, tradeId, user } from '../push-samples.js';
 
@@ -65,6 +67,45 @@ describe('trade pushes', () => {
     });
   });
 
+  describe('a proposal in review (the room may hold the counterparty)', () => {
+    const run = async (from: string, to: string, action: string) => {
+      const push = TRADE_PUSHES.find((p) => p.event === tradeStateChangedEvent)!;
+      const emitToRoom = vi.fn();
+      const payload = tradeStateChangedEvent.payload.parse({
+        ...(SAMPLES['trades.trade.state_changed'] as object),
+        from,
+        to,
+        action,
+      });
+      await (
+        await pushHandler({ emitToRoom }, testLogger, push)(envelope(payload))
+      )();
+      return emitToRoom;
+    };
+
+    it.each([
+      ['into review', 'DRAFT', 'UNDER_PROPOSAL_REVIEW', 'SEND'],
+      ['turned back', 'UNDER_PROPOSAL_REVIEW', 'REJECTED', 'REJECT_REVIEW'],
+      ['withdrawn while held', 'UNDER_PROPOSAL_REVIEW', 'CANCELLED', 'CANCEL'],
+    ])('pushes nothing at all for a proposal %s', async (_name, from, to, action) => {
+      expect((await run(from, to, action)).mock.calls).toHaveLength(0);
+    });
+
+    it('tells the room a cleared review is now awaiting an answer, and not that there was a review', async () => {
+      const emit = await run('UNDER_PROPOSAL_REVIEW', 'AWAITING_ACCEPTANCE', 'CLEAR_REVIEW');
+      expect(emit).toHaveBeenCalledTimes(1);
+      const sent = emit.mock.calls[0]?.[3] as Record<string, unknown>;
+      expect(sent).toMatchObject({ kind: 'STATE_CHANGED', status: 'AWAITING_ACCEPTANCE' });
+      expect(JSON.stringify(sent)).not.toMatch(/REVIEW|previousStatus|action/);
+      expect(tradeUpdateSchema.safeParse(sent).success).toBe(true);
+    });
+
+    it('still pushes an ordinary send, with its detail', async () => {
+      const emit = await run('DRAFT', 'AWAITING_ACCEPTANCE', 'SEND');
+      expect(emit.mock.calls[0]?.[3]).toMatchObject({ previousStatus: 'DRAFT', action: 'SEND' });
+    });
+  });
+
   it('does not emit until the transaction has committed', async () => {
     const push = TRADE_PUSHES[0]!;
     const emitToRoom = vi.fn();
@@ -104,7 +145,15 @@ describe('trade pushes', () => {
         push,
       )(envelope({ tradeId, tradeCode, action, from, to, actorType: 'SYSTEM' }));
       await after();
-      expect(emitToRoom.mock.calls[0]?.[3]).toMatchObject({ kind: 'STATE_CHANGED', status: to, action });
+      const disposition = pushDisposition(from, to);
+      if (disposition === 'WITHHOLD') {
+        // The one deliberate exception: a change that would tell the counterparty about a review.
+        expect(emitToRoom, `${action} ${from}->${to}`).not.toHaveBeenCalled();
+      } else if (disposition === 'REDACT') {
+        expect(emitToRoom.mock.calls[0]?.[3]).toMatchObject({ kind: 'STATE_CHANGED', status: to });
+      } else {
+        expect(emitToRoom.mock.calls[0]?.[3]).toMatchObject({ kind: 'STATE_CHANGED', status: to, action });
+      }
     }
   });
 });

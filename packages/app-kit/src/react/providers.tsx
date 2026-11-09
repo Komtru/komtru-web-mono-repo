@@ -20,7 +20,17 @@ import {
   type SocketFactory,
 } from '@komtru/api-client/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore,
+  type ReactNode,
+} from 'react';
 import type { AppConfig } from '../config.js';
 
 /**
@@ -48,6 +58,14 @@ export interface KomtruProvidersProps {
   session: AuthSession | null;
   /** The short-lived, socket-scoped token the layout minted (socket guide §6). */
   socketToken?: string;
+  /**
+   * Connect the socket as whoever the app is signed in as, using the access token the HTTP client already
+   * holds, and forward each refreshed one. For an app whose layout cannot mint a socket token because its
+   * refresh cookie is not readable to a page (the platform authenticates a socket with the same access token
+   * as HTTP). Until the first call has produced a session there is nobody to connect as, so no socket yet.
+   * Ignored when `socketToken` is given.
+   */
+  socketFollowsSession?: boolean;
   /** Invalidated on every reconnect. Omit to invalidate everything, which is the safe default. */
   resyncQueryKeys?: readonly (readonly unknown[])[];
   /**
@@ -72,6 +90,7 @@ export function KomtruProviders({
   config,
   session,
   socketToken,
+  socketFollowsSession = false,
   resyncQueryKeys,
   onSessionEnded,
   queryClient,
@@ -113,6 +132,24 @@ export function KomtruProviders({
 
   const value = useMemo<KomtruContextValue>(() => ({ client, session }), [client, session]);
 
+  // The access token the client holds right now. It is empty until the first request has refreshed a session,
+  // and whenever signed out; the realtime provider connects only while it is not.
+  const heldToken = useSyncExternalStore(
+    (listener) => client.tokens?.subscribe(listener) ?? (() => undefined),
+    () => client.tokens?.session()?.accessToken ?? '',
+    () => '',
+  );
+  // The gateway asks for a fresh token when the one it has lapses. The HTTP client refreshes lazily, so a screen
+  // that only listens would never make the request that does it; this is that request.
+  const refreshSocketToken = useCallback(async (): Promise<string | null> => {
+    const tokens = client.tokens;
+    if (tokens === undefined) return null;
+    const next = await tokens.refreshOnce(tokens.read().generation);
+    return next.accessToken;
+  }, [client]);
+  const follow = socketToken === undefined && socketFollowsSession;
+  const liveToken = socketToken ?? (follow ? heldToken : undefined);
+
   // The same client under both contexts: `@komtru/api-client/react`'s hooks (`useAddresses`, `useStates`,
   // the trade hooks) read `ApiClientProvider`, and this package's `useApiClient` reads `KomtruContext`.
   // Without the inner provider an app could call one family of hooks or the other, never both.
@@ -124,11 +161,14 @@ export function KomtruProviders({
 
   return (
     <QueryClientProvider client={queries}>
-      {socketToken === undefined || socketToken === '' || config.socketUrl === undefined ? (
+      {liveToken === undefined || (!follow && liveToken === '') || config.socketUrl === undefined ? (
         tree
       ) : (
+        // When following the session this stays mounted (with an empty token) from the first render, so the app's
+        // tree is never remounted when the first token arrives: the provider simply connects then.
         <RealtimeProvider
-          token={socketToken}
+          token={liveToken}
+          refreshToken={refreshSocketToken}
           url={config.socketUrl}
           {...(resyncQueryKeys ? { resyncQueryKeys } : {})}
           {...(connect ? { connect } : {})}
