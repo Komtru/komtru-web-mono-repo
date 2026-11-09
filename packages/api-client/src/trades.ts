@@ -5,6 +5,7 @@
 // never adds, subtracts or multiplies it: the fee lines and totals come from the trade's own snapshot.
 import {
   canonicalTradeCodeSchema,
+  counterpartyDisplaySchema,
   cursorPageRequestSchema,
   koboJsonSchema,
   tradeByCodeResponseSchema,
@@ -70,6 +71,10 @@ export const tradeViewSchema = z.looseObject({
   categoryCode: z.string().nullable(),
   categoryName: z.string().nullable(),
   standardVersion: z.number().nullable(),
+  /** That exact version's id: read it at `GET /config/trade-standards/versions/:id`, however many newer ones exist. */
+  standardVersionId: z.uuid().nullable(),
+  /** The other party, as the list shows them. Absent on the fulfilment and inspection actions' answers. */
+  counterparty: counterpartyDisplaySchema.nullable().optional(),
   status: z.string(),
   statusRevision: z.number(),
   initiatorRole: tradeRoleSchema,

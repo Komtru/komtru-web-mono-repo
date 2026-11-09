@@ -20,6 +20,7 @@ const trade = (status: string) => ({
   categoryCode: null,
   categoryName: null,
   standardVersion: null,
+  standardVersionId: null,
   status,
   statusRevision: 3,
   initiatorRole: 'SELLER',

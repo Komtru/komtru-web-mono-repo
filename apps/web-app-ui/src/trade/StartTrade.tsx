@@ -35,7 +35,7 @@ import { nairaToKobo } from '@komtru/shared-types';
 import { useRouter } from 'next/navigation';
 import { useEffect, useMemo, useState } from 'react';
 import { AddressPicker } from './AddressPicker';
-import { initialsOf, naira, problemMessage } from './format';
+import { initialsOf, naira, problemMessage, proofNeeds } from './format';
 import { ProofUpload } from './ProofUpload';
 
 export interface StartTradeProps {
@@ -81,6 +81,7 @@ export function StartTrade({ defaultRole = 'BUYER', counterparty = '' }: StartTr
   const [amount, setAmount] = useState('');
   const [addressId, setAddressId] = useState<string | null>(null);
   const [proof, setProof] = useState<string[]>([]);
+  const [proofCounts, setProofCounts] = useState({ photos: 0, videos: 0 });
   const [who, setWho] = useState(counterparty);
   const [looked, setLooked] = useState<Looked | undefined>(undefined);
   // The draft this form has already created, and the exact inputs it was created from.
@@ -131,14 +132,19 @@ export function StartTrade({ defaultRole = 'BUYER', counterparty = '' }: StartTr
   const specMissing = (standard?.itemSpecFields ?? []).filter(
     (field) => field.required && (spec[field.key] ?? '').trim() === '',
   );
-  const proofNeeded = role === 'SELLER' ? (standard?.proofMedia.minPhotos ?? 0) : 0;
+  const needs =
+    role === 'SELLER' && standard !== undefined
+      ? proofNeeds(standard.proofMedia)
+      : { photos: 0, video: false };
+  const proofNeeded = needs.photos;
   const invalid =
     standard === undefined ||
     specMissing.length > 0 ||
     kobo === undefined ||
     addressId === null ||
     party === undefined ||
-    proof.length < proofNeeded;
+    proofCounts.photos < proofNeeded ||
+    (needs.video && proofCounts.videos < 1);
 
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -308,7 +314,15 @@ export function StartTrade({ defaultRole = 'BUYER', counterparty = '' }: StartTr
         {role === 'SELLER' && (
           <>
             <SectionLabel>Proof of the item</SectionLabel>
-            <ProofUpload required={proofNeeded} onChange={setProof} step="send" />
+            <ProofUpload
+              required={proofNeeded}
+              requireVideo={needs.video}
+              onChange={(ids, summary) => {
+                setProof(ids);
+                setProofCounts(summary);
+              }}
+              step="send"
+            />
           </>
         )}
 
@@ -369,7 +383,7 @@ export function StartTrade({ defaultRole = 'BUYER', counterparty = '' }: StartTr
                 ? 'Enter the price to carry on.'
                 : addressId === null
                   ? 'Choose an address to carry on.'
-                  : proof.length < proofNeeded
+                  : proofCounts.photos < proofNeeded || (needs.video && proofCounts.videos < 1)
                     ? 'Add proof of the item to carry on.'
                     : 'Say who the trade is with to carry on.'}
           </p>

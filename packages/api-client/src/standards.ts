@@ -29,3 +29,14 @@ export const listTradeStandards = defineEndpoint({
     response: pagedSchema(tradeStandardSchema),
   },
 });
+
+/**
+ * One standard version by id: exactly what a trade froze, which `trade.standardVersionId` names. A
+ * version never changes, so this stays true after a newer one is published.
+ */
+export const getTradeStandardVersion = defineEndpoint({
+  method: 'get',
+  path: '/config/trade-standards/versions/:id',
+  scope: 'PUBLIC',
+  schema: { params: z.object({ id: z.uuid() }), response: tradeStandardSchema },
+});

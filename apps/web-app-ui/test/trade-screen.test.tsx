@@ -9,7 +9,7 @@ import {
   address,
   answerWith,
   counterparty,
-  listItem,
+  electronics,
   callsTo,
   id,
   page,
@@ -42,6 +42,8 @@ const withTrade = (view: unknown, more: Record<string, unknown> = {}) =>
     'GET /trades/:id': view,
     'GET /me/addresses': page([address(1)]),
     'GET /config/trade-standards': standardsPage(),
+    'GET /config/trade-standards/versions/:id': ({ params }: { params?: Record<string, string> }) =>
+      standardsPage().items.find((item) => item.versionId === params?.id),
     'GET /trades': page([]),
     ...more,
   });
@@ -235,22 +237,27 @@ describe('a proposal waiting on the seller (R1)', () => {
 });
 
 describe('who is on the other side', () => {
-  it("shows the counterparty from the trades list: R1's buyer strip", async () => {
-    withTrade(tradeView(), { 'GET /trades': page([listItem(1)]) });
+  it("shows the counterparty the trade carries: R1's buyer strip", async () => {
+    withTrade(tradeView());
     renderWithApi(api.call, <TradeScreen id={id(1)} />);
     expect(await screen.findByText('Amaka B.')).toBeTruthy();
     expect(screen.getByText('AB')).toBeTruthy();
   });
 
+  it('does not read the trades list at all, so it is right for the twenty-first trade too', async () => {
+    withTrade(tradeView());
+    renderWithApi(api.call, <TradeScreen id={id(1)} />);
+    await screen.findByText('Amaka B.');
+    expect(callsTo(api.call, 'GET', '/trades')).toHaveLength(0);
+  });
+
   it('falls back to the handle, and draws no strip when the platform has no counterparty to show', async () => {
-    withTrade(tradeView(), {
-      'GET /trades': page([listItem(1, { counterparty: counterparty({ displayName: null }) })]),
-    });
+    withTrade(tradeView({ counterparty: counterparty({ displayName: null }) }));
     const first = renderWithApi(api.call, <TradeScreen id={id(1)} />);
     expect(await screen.findByText('@amaka')).toBeTruthy();
     first.unmount();
 
-    withTrade(tradeView(), { 'GET /trades': page([listItem(1, { counterparty: null })]) });
+    withTrade(tradeView({ counterparty: null }));
     renderWithApi(api.call, <TradeScreen id={id(1)} />);
     await screen.findByText('Apple iPhone 13 Pro');
     expect(screen.queryByText('Amaka B.')).toBeNull();
@@ -259,49 +266,114 @@ describe('who is on the other side', () => {
 });
 
 describe('the proof the pinned standard asks for', () => {
-  const fashionTrade = (over: Record<string, unknown> = {}) =>
-    tradeView({
-      categoryCode: 'fashion',
-      categoryName: 'Fashion & Luxury',
-      standardVersion: 1,
-      terms: { ...tradeView().terms, itemSpec: { brand: 'Zara' } },
-      ...over,
+  const version = (over: Record<string, unknown>) => ({ ...electronics, ...over });
+  const withPinned = (pinned: Record<string, unknown>, more: Record<string, unknown> = {}) =>
+    withTrade(tradeView({ standardVersionId: pinned.versionId }), {
+      'GET /config/trade-standards/versions/:id': pinned,
+      ...more,
     });
 
   it("asks for exactly the pinned standard's photos: electronics two", async () => {
     withTrade(tradeView());
     renderWithApi(api.call, <TradeScreen id={id(1)} />);
     expect(await screen.findByText(/Attach 2 photos or video of the item/)).toBeTruthy();
+    expect(callsTo(api.call, 'GET', '/config/trade-standards/versions/:id')[0]?.params).toEqual({
+      id: id(60),
+    });
   });
 
-  it('asks for none when the pinned standard asks for none, and lets the seller accept', async () => {
-    withTrade(fashionTrade());
+  it('still demands what the trade froze after a newer standard has been published', async () => {
+    // The trade froze version 1 (four photos and a video). The category's CURRENT standard is now looser.
+    const frozen = version({
+      versionId: id(62),
+      versionNumber: 1,
+      proofMedia: { minPhotos: 4, requireVideo: true },
+    });
+    const newer = version({
+      versionId: id(63),
+      versionNumber: 2,
+      proofMedia: { minPhotos: 1, requireVideo: false },
+    });
+    withPinned(frozen, { 'GET /config/trade-standards': standardsPage([newer]) });
     renderWithApi(api.call, <TradeScreen id={id(1)} />);
-    const accept = await screen.findByRole<HTMLButtonElement>('button', { name: 'Accept trade request' });
+    expect(await screen.findByText(/Attach 4 photos and a video of the item/)).toBeTruthy();
+    // It read the frozen version by its id and never fell back to the category's current one.
+    expect(callsTo(api.call, 'GET', '/config/trade-standards/versions/:id')[0]?.params).toEqual({
+      id: id(62),
+    });
+    expect(callsTo(api.call, 'GET', '/config/trade-standards')).toHaveLength(0);
+    expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Accept trade request' }).disabled).toBe(
+      true,
+    );
+  });
+
+  it('needs a video as well as the photos when the pinned standard says so', async () => {
+    withPinned(version({ versionId: id(64), proofMedia: { minPhotos: 1, requireVideo: true } }), {
+      'POST /files/upload-url': () => {
+        uploads += 1;
+        return {
+          fileId: id(89 + uploads),
+          cloudName: 'k',
+          uploadUrl: 'https://upload.test/x',
+          params: {},
+          maxBytes: 9_999_999,
+          expiresAt: 'x',
+        };
+      },
+      'POST /files/:id/finalize': ({ params }: { params?: Record<string, string> }) => ({
+        fileId: params?.id,
+        uploadState: 'PENDING',
+      }),
+    });
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() => Promise.resolve(new Response('{}', { status: 200 }))),
+    );
+    const { container } = renderWithApi(api.call, <TradeScreen id={id(1)} />);
+    await screen.findByText(/Attach 1 photo and a video/);
     await waitFor(() => {
       expect(screen.getByRole<HTMLInputElement>('radio', { name: /Home/ }).checked).toBe(true);
     });
-    expect(accept.disabled).toBe(false);
-    expect(screen.queryByText('Proof of the item needed')).toBeNull();
-  });
-
-  it('does not guess a category from the item details: a fashion trade whose details look like electronics still follows its own standard', async () => {
-    withTrade(
-      fashionTrade({
-        terms: { ...tradeView().terms, itemSpec: { brand: 'Apple', model: 'iPhone', condition: 'New' } },
-      }),
+    const input = container.querySelector('input[type="file"]') as HTMLInputElement;
+    fireEvent.change(input, { target: { files: [new File(['x'], 'a.jpg', { type: 'image/jpeg' })] } });
+    await screen.findByText(/Attach 1 more/);
+    expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Accept trade request' }).disabled).toBe(
+      true,
     );
-    renderWithApi(api.call, <TradeScreen id={id(1)} />);
-    const accept = await screen.findByRole<HTMLButtonElement>('button', { name: 'Accept trade request' });
+    fireEvent.change(input, { target: { files: [new File(['x'], 'v.mp4', { type: 'video/mp4' })] } });
     await waitFor(() => {
-      expect(accept.disabled).toBe(false);
+      expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Accept trade request' }).disabled).toBe(
+        false,
+      );
     });
+    vi.unstubAllGlobals();
   });
 
-  it('asks for one photo when the pinned version is no longer the current one, and the platform decides the rest', async () => {
-    withTrade(fashionTrade({ standardVersion: 99 }));
+  it('keeps the platform floor of one photo when the standard asks for none and no video', async () => {
+    withPinned(version({ versionId: id(61), proofMedia: { minPhotos: 0, requireVideo: false } }));
     renderWithApi(api.call, <TradeScreen id={id(1)} />);
     expect(await screen.findByText(/Attach 1 photo or video of the item/)).toBeTruthy();
+    expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Accept trade request' }).disabled).toBe(
+      true,
+    );
+  });
+
+  it('is an error, not a lower bar, when the pinned standard cannot be read', async () => {
+    withTrade(tradeView(), { 'GET /config/trade-standards/versions/:id': new Error('offline') });
+    renderWithApi(api.call, <TradeScreen id={id(1)} />);
+    expect(await screen.findByText("Couldn't load what proof this trade needs")).toBeTruthy();
+    expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Accept trade request' }).disabled).toBe(
+      true,
+    );
+    expect(screen.queryByText(/Attach \d/)).toBeNull();
+  });
+
+  it('shows the buyer no proof section and does not read the standard at all', async () => {
+    withTrade(tradeView({ yourRole: 'BUYER', initiatorRole: 'SELLER' }));
+    renderWithApi(api.call, <TradeScreen id={id(1)} />);
+    await screen.findByText('Delivery address');
+    expect(screen.queryByText('Proof of the item')).toBeNull();
+    expect(callsTo(api.call, 'GET', '/config/trade-standards/versions/:id')).toHaveLength(0);
   });
 });
 

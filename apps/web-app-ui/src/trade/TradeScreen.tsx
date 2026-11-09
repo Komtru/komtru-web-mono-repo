@@ -6,8 +6,7 @@ import {
   useCancelTrade,
   useDeclineTrade,
   useTrade,
-  useTradeList,
-  useTradeStandards,
+  usePinnedStandard,
   tradeKeys,
 } from '@komtru/api-client/react';
 import {
@@ -48,7 +47,7 @@ import {
   initialsOf,
   naira,
   partyName,
-  pinnedStandard,
+  proofNeeds,
   problemMessage,
 } from './format';
 import { ProofUpload } from './ProofUpload';
@@ -111,17 +110,11 @@ function TradeState({ trade }: { trade: TradeView }): React.JSX.Element {
 // ---------------------------------------------------------------------------
 
 /**
- * Who is on the other side, from the trades list (the single-trade view carries no counterparty). `null`
- * when the platform has none to show (not bound yet, or a closed account); `undefined` until the list is
- * in, or when this trade is not on its first page. Either way the strip is simply not drawn.
+ * Who is on the other side, from the trade itself. The platform sends nothing for a proposal still waiting
+ * for an invitee, or for an erased or closed account, and then no strip is drawn.
  */
-function useCounterparty(tradeId: string) {
-  const list = useTradeList('ALL');
-  return list.data?.pages.flatMap((page) => page.items).find((item) => item.id === tradeId)?.counterparty;
-}
-
-function PartyHeader({ tradeId }: { tradeId: string }): React.JSX.Element | null {
-  const party = useCounterparty(tradeId);
+function PartyHeader({ trade }: { trade: TradeView }): React.JSX.Element | null {
+  const party = trade.counterparty;
   if (party === undefined || party === null) return null;
   const name = partyName(party);
   return <PartyStrip name={name} initials={initialsOf(name.replace(/^@/, ''))} />;
@@ -223,7 +216,8 @@ function AnswerProposal({ trade }: { trade: TradeView }): React.JSX.Element {
   const selling = trade.yourRole === 'SELLER';
   const accept = useAcceptTrade();
   const decline = useDeclineTrade();
-  const standards = useTradeStandards();
+  // The standard this trade froze, by its own id: still the one it froze after a newer one is published.
+  const standard = usePinnedStandard(selling ? trade.standardVersionId : null);
   const queryClient = useQueryClient();
   const [addressId, setAddressId] = useState<string | null>(null);
   const [proof, setProof] = useState<string[]>([]);
@@ -231,12 +225,14 @@ function AnswerProposal({ trade }: { trade: TradeView }): React.JSX.Element {
   const [reason, setReason] = useState('');
   const [problem, setProblem] = useState<string | undefined>(undefined);
 
-  // What the standard this trade pinned asks for. One while the standards load, and one for a trade
-  // whose pinned version cannot be found (the platform has published a newer one): the platform makes
-  // the final call either way and says what is missing.
-  const pinned = pinnedStandard(trade, standards.data ?? []);
-  const needed = selling ? (pinned?.proofMedia.minPhotos ?? 1) : 0;
-  const ready = trade.terms !== null && addressId !== null && proof.length >= needed;
+  // What that standard asks for. A trade with no standard states no requirement and the platform decides;
+  // one whose standard cannot be read is an error, never a reason to ask for less.
+  const needs =
+    standard.data === undefined ? { photos: 0, video: false } : proofNeeds(standard.data.proofMedia);
+  const standardReady = !selling || trade.standardVersionId === null || standard.isSuccess;
+  const [counts, setCounts] = useState({ photos: 0, videos: 0 });
+  const proofMet = counts.photos >= needs.photos && (!needs.video || counts.videos >= 1);
+  const ready = trade.terms !== null && addressId !== null && standardReady && proofMet;
 
   const onAccept = () => {
     if (trade.terms === null || addressId === null) return;
@@ -282,7 +278,7 @@ function AnswerProposal({ trade }: { trade: TradeView }): React.JSX.Element {
           : 'A seller proposed these terms. Review them, then accept, change them or decline.'}
       </NoteBanner>
       <ItemSummary trade={trade} />
-      <PartyHeader tradeId={trade.id} />
+      <PartyHeader trade={trade} />
       <SectionLabel>{selling ? "Buyer's proposed terms" : 'Terms of this trade'}</SectionLabel>
       <TermsRows trade={trade} />
       <div className="mt-[16px]">
@@ -295,7 +291,29 @@ function AnswerProposal({ trade }: { trade: TradeView }): React.JSX.Element {
       {selling && (
         <>
           <SectionLabel>Proof of the item</SectionLabel>
-          <ProofUpload required={needed} onChange={setProof} step="accept" />
+          {standard.isError && (
+            <RiskBanner title="Couldn't load what proof this trade needs">
+              <button type="button" className="underline" onClick={() => void standard.refetch()}>
+                Try again
+              </button>
+            </RiskBanner>
+          )}
+          {standard.isPending && trade.standardVersionId !== null && (
+            <p role="status" className="mb-[12px] text-[12px] text-slate">
+              Loading what proof this trade needs…
+            </p>
+          )}
+          {standardReady && (
+            <ProofUpload
+              required={needs.photos}
+              requireVideo={needs.video}
+              onChange={(ids, summary) => {
+                setProof(ids);
+                setCounts(summary);
+              }}
+              step="accept"
+            />
+          )}
         </>
       )}
       {problem !== undefined && <RiskBanner>{problem}</RiskBanner>}

@@ -22,7 +22,7 @@ import {
 import { ProblemError } from '../problems.js';
 import { nextPageParam } from '../pagination.js';
 import type { TradeListState } from '@komtru/shared-types';
-import { listTradeStandards, type TradeStandard } from '../standards.js';
+import { getTradeStandardVersion, listTradeStandards, type TradeStandard } from '../standards.js';
 import { useApiClient } from './client-context.js';
 
 export const tradeKeys = {
@@ -146,5 +146,21 @@ export function useTradeList(state: TradeListState = 'ALL') {
         throw error;
       }
     },
+  });
+}
+
+/**
+ * The standard a trade froze, by the id on the trade. Idle for a trade with no standard. A version
+ * never changes, so it is cached for good; a failure to read it is a real error for the screen to show,
+ * never a reason to lower what the trade asks for.
+ */
+export function usePinnedStandard(versionId: string | null | undefined) {
+  const client = useApiClient();
+  return useQuery({
+    queryKey: ['trade-standard-version', versionId ?? ''] as const,
+    queryFn: ({ signal }) =>
+      client.call(getTradeStandardVersion, { params: { id: versionId ?? '' } }, { signal }),
+    enabled: versionId !== null && versionId !== undefined,
+    staleTime: Infinity,
   });
 }

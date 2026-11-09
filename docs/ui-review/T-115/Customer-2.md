@@ -3,7 +3,7 @@
 - **Reference:** `docs/design-reference/Komtru — UI Living Master v2.html` line 3994 — Customer (Buyer) — Mobile Web
 - **Built:** http://localhost:3101/trade/0190b0a0-0000-7000-8000-000000000002
 - **Frame:** mobile, 340px reference frame; compared at 340 × 660
-- **Differing pixels:** 22,603 of 224,400 (10.07%)
+- **Differing pixels:** 22,537 of 224,400 (10.04%)
 - **Side by side:** `Customer-2.png` (reference · built · heat map) — **heat map:** `Customer-2.diff.png`
 
 ## Deviations
@@ -23,6 +23,6 @@ ids mapped to states) because no backend runs in the review environment; copy an
 screens, the data is illustrative.
 
 - **The screen is the buyer's review of a seller's proposal, not "Review & Fund".** Funding is F-024 and has no screen yet, so there is no "Fund this trade" button and no dead link. The button is "Accept terms"; after it, TC-06 says payment is not available in the app yet.
-- **The seller strip is drawn** from the trades list's `counterparty`, without the drawn record line ("342 trades · 98.7% fulfilment"), which the counterparty display does not carry. "Recent reviews" is not drawn: reviews are not built.
+- **The seller strip is drawn** from the trade's own `counterparty`, without the drawn record line ("342 trades · 98.7% fulfilment"), which the counterparty display does not carry (Trust Passport data, F-016: deferred, not missed). "Recent reviews" is not drawn: reviews are not built.
 - **Terms** are the trade's own: price, inspection window from the standard, ships-from address, version. The drawn "Delivery 2-4 days", "Cancellation Free before shipment" and "Refund Full, if item doesn't match" are policy copy with no API source and are not drawn.
 - **Added:** the buyer's delivery-address picker, "Propose a change" and Decline.

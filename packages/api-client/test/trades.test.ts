@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { createApiClient } from '../src/client.js';
 import { UploadError, finalizeUpload, requestUploadUrl, uploadFile } from '../src/files.js';
 import { classifyParty, lookupParty } from '../src/parties.js';
-import { listTradeStandards } from '../src/standards.js';
+import { getTradeStandardVersion, listTradeStandards } from '../src/standards.js';
 import {
   acceptTrade,
   cancelTrade,
@@ -29,6 +29,7 @@ const trade = {
   categoryCode: 'electronics',
   categoryName: 'Electronics',
   standardVersion: 2,
+  standardVersionId: '0190b0a0-0000-7000-8000-0000000000aa',
   status: 'AWAITING_ACCEPTANCE',
   statusRevision: 2,
   initiatorRole: 'BUYER',
@@ -253,6 +254,7 @@ describe('the trade list and the lookup by code', () => {
         categoryCode: null,
         categoryName: null,
         standardVersion: null,
+        standardVersionId: null,
       },
       counterparty: null,
     });
@@ -261,5 +263,27 @@ describe('the trade list and the lookup by code', () => {
     expect(calls[0]?.url).toBe('https://api.test/v1/trades/by-code/KMT-9042800-NG');
     expect(result.access).toBe('INVITEE');
     expect(getTradeByCode.retryable).toBeUndefined();
+  });
+});
+
+describe('the pinned standard', () => {
+  it('is read by the version id the trade carries, not by category and number', async () => {
+    const version = {
+      versionId: id(7),
+      categoryCode: 'electronics',
+      categoryName: 'Electronics',
+      versionNumber: 1,
+      createdAt: '2026-11-01T00:00:00.000Z',
+      inspectionWindowHours: 48,
+      itemSpecFields: [],
+      proofMedia: { minPhotos: 4, requireVideo: true },
+      imeiVerification: false,
+      deliveryDeadlineDays: 7,
+    };
+    const { calls, client } = recording(() => json(version));
+    const read = await client.call(getTradeStandardVersion, { params: { id: id(7) } });
+    expect(calls[0]?.url).toBe(`https://api.test/v1/config/trade-standards/versions/${id(7)}`);
+    expect(read.proofMedia).toEqual({ minPhotos: 4, requireVideo: true });
+    expect(getTradeStandardVersion.scope).toBe('PUBLIC');
   });
 });

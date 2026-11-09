@@ -159,6 +159,8 @@ export const tradeView = (over: Record<string, unknown> = {}): TradeView => ({
   categoryCode: 'electronics',
   categoryName: 'Electronics',
   standardVersion: 1,
+  standardVersionId: id(60),
+  counterparty: counterparty(),
   status: 'AWAITING_ACCEPTANCE',
   statusRevision: 2,
   initiatorRole: 'BUYER',
@@ -185,14 +187,15 @@ export const tradeView = (over: Record<string, unknown> = {}): TradeView => ({
   ...over,
 });
 
-export const counterparty = (over: Record<string, unknown> = {}) => ({
-  publicId: 'U-AMAKA',
-  username: 'amaka',
-  displayName: 'Amaka B.',
-  avatarUrl: null,
-  ...over,
-});
-
+export function counterparty(over: Record<string, unknown> = {}) {
+  return {
+    publicId: 'U-AMAKA',
+    username: 'amaka',
+    displayName: 'Amaka B.',
+    avatarUrl: null,
+    ...over,
+  };
+}
 /** One row of `GET /trades`. */
 export const listItem = (n: number, over: Record<string, unknown> = {}) => ({
   id: id(n),

@@ -1,6 +1,6 @@
 // What a proposal screen says and how it says it. Pure functions, so the wording rules are tested
 // without a DOM. Money arrives as a digit string of kobo and is only ever formatted here, never summed.
-import { ProblemError, type TradeStandard, type TradeView } from '@komtru/api-client';
+import { ProblemError } from '@komtru/api-client';
 import {
   formatNaira,
   type CounterpartyDisplay,
@@ -183,18 +183,16 @@ export function describeTrade(trade: Pick<TradeListItem, 'status' | 'attention' 
 }
 
 /**
- * The Trade Standard a trade pinned: the one for exactly its category and version. A trade with no
- * category has none. When the platform has since published a newer version the pinned one is not in
- * the current list, and `undefined` says so (the version is only addressable by id, which the trade
- * view does not carry; reported as an API gap).
+ * What a seller must attach, by the platform's own rule (`checkProofMedia`): a standard's `minPhotos`
+ * raises the bar and cannot lower it below one piece of media, so a standard that asks for no photos
+ * still asks for one unless it asks for a video instead. Photos and videos are counted apart.
  */
-export function pinnedStandard(
-  trade: Pick<TradeView, 'categoryCode' | 'standardVersion'>,
-  standards: readonly TradeStandard[],
-): TradeStandard | undefined {
-  if (trade.categoryCode === null || trade.standardVersion === null) return undefined;
-  return standards.find(
-    (standard) =>
-      standard.categoryCode === trade.categoryCode && standard.versionNumber === trade.standardVersion,
-  );
+export function proofNeeds(proofMedia: { minPhotos: number; requireVideo: boolean }): {
+  photos: number;
+  video: boolean;
+} {
+  return {
+    photos: Math.max(proofMedia.minPhotos, proofMedia.requireVideo ? 0 : 1),
+    video: proofMedia.requireVideo,
+  };
 }

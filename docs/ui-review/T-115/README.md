@@ -11,7 +11,7 @@ against the real app and a canned stand-in for the backend, signed in through a 
 | G3             | `/trade/[id]` (held)     | 25.52%           |
 | Q1             | `/trades`                | 5.12%            |
 | R1             | `/trade/[id]` (seller)   | 9.98%            |
-| Customer-2     | `/trade/[id]` (buyer)    | 10.07%           |
+| Customer-2     | `/trade/[id]` (buyer)    | 10.04%           |
 | TC-05          | `/trade/[id]/counter`    | 15.18%           |
 | TC-06          | `/trade/[id]` (agreed)   | 9.38%            |
 

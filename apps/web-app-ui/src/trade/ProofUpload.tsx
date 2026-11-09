@@ -15,8 +15,10 @@ interface Attached extends MediaItem {
 export interface ProofUploadProps {
   /** How many photos the category's standard asks for before the trade can go on. 0 is no gate. */
   required: number;
-  /** Told the ids of everything attached, on every change. */
-  onChange: (fileIds: string[]) => void;
+  /** A video is required as well as the photos. */
+  requireVideo?: boolean;
+  /** Told the ids of everything attached and how many are photos and videos, on every change. */
+  onChange: (fileIds: string[], counts: { photos: number; videos: number }) => void;
   /** What the locked banner says: the gate guards a send, an acceptance or a counter. */
   step: 'send' | 'accept';
 }
@@ -26,7 +28,12 @@ export interface ProofUploadProps {
  * straight to storage through a signed ticket and is attached by id, so what the platform holds is a
  * reference to a private file, never bytes it relayed.
  */
-export function ProofUpload({ required, onChange, step }: ProofUploadProps): React.JSX.Element {
+export function ProofUpload({
+  required,
+  requireVideo = false,
+  onChange,
+  step,
+}: ProofUploadProps): React.JSX.Element {
   const client = useApiClient();
   const [media, setMedia] = useState<Attached[]>([]);
   const [busy, setBusy] = useState(0);
@@ -36,7 +43,13 @@ export function ProofUpload({ required, onChange, step }: ProofUploadProps): Rea
 
   const report = (next: Attached[]) => {
     setMedia(next);
-    onChange(next.map((item) => item.fileId));
+    onChange(
+      next.map((item) => item.fileId),
+      {
+        photos: next.filter((item) => item.kind !== 'video').length,
+        videos: next.filter((item) => item.kind === 'video').length,
+      },
+    );
   };
 
   const add = async (files: File[]) => {
@@ -78,7 +91,7 @@ export function ProofUpload({ required, onChange, step }: ProofUploadProps): Rea
         label={busy > 0 ? 'Uploading…' : 'Add photos or a video of the item'}
         hint="Taken now, showing the item in your possession"
         media={media}
-        requiredCount={required}
+        requiredCount={required + (requireVideo ? 1 : 0)}
         accept="image/*,video/*"
         onAdd={(files) => void add(files)}
         onRemove={(id) => {
@@ -88,7 +101,7 @@ export function ProofUpload({ required, onChange, step }: ProofUploadProps): Rea
           title: 'Proof of the item needed',
           message: (attached, missing) =>
             attached === 0
-              ? `Attach ${String(required)} photo${required === 1 ? '' : 's'} or video of the item in your possession before you can ${verb}.`
+              ? `Attach ${String(required)} photo${required === 1 ? '' : 's'}${requireVideo ? ' and a video' : ' or video'} of the item in your possession before you can ${verb}.`
               : `Attach ${String(missing)} more before you can ${verb}.`,
         }}
       />

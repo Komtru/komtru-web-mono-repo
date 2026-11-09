@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { ProblemError, type ResponseMeta, type TradeStandard } from '@komtru/api-client';
+import { ProblemError, type ResponseMeta } from '@komtru/api-client';
 import { describe, expect, it } from 'vitest';
 import {
   addressLine,
@@ -12,7 +12,7 @@ import {
   nairaShort,
   partyName,
   problemMessage,
-  pinnedStandard,
+  proofNeeds,
 } from '../src/trade/format';
 
 const meta: ResponseMeta = {
@@ -152,33 +152,14 @@ describe('partyName', () => {
   });
 });
 
-describe('pinnedStandard', () => {
-  const standard = (categoryCode: string, versionNumber: number, minPhotos: number) =>
-    ({
-      versionId: 'v',
-      categoryCode,
-      categoryName: categoryCode,
-      versionNumber,
-      createdAt: '',
-      inspectionWindowHours: 24,
-      itemSpecFields: [] as TradeStandard['itemSpecFields'],
-      proofMedia: { minPhotos, requireVideo: false },
-      imeiVerification: false,
-      deliveryDeadlineDays: 7,
-    }) satisfies TradeStandard;
-  const standards: TradeStandard[] = [standard('electronics', 2, 3), standard('fashion', 1, 0)];
-
-  it('finds exactly the category and version the trade pinned', () => {
-    expect(
-      pinnedStandard({ categoryCode: 'electronics', standardVersion: 2 }, standards)?.proofMedia.minPhotos,
-    ).toBe(3);
-    expect(
-      pinnedStandard({ categoryCode: 'fashion', standardVersion: 1 }, standards)?.proofMedia.minPhotos,
-    ).toBe(0);
+describe('proofNeeds', () => {
+  it("is the platform's own rule: minPhotos raises the bar and cannot lower it below one piece of media", () => {
+    expect(proofNeeds({ minPhotos: 3, requireVideo: false })).toEqual({ photos: 3, video: false });
+    expect(proofNeeds({ minPhotos: 0, requireVideo: false })).toEqual({ photos: 1, video: false });
   });
 
-  it('finds nothing for a trade with no category, or whose version is no longer current', () => {
-    expect(pinnedStandard({ categoryCode: null, standardVersion: null }, standards)).toBeUndefined();
-    expect(pinnedStandard({ categoryCode: 'electronics', standardVersion: 1 }, standards)).toBeUndefined();
+  it('asks for no photo at all when a video stands in for them, and for both when both are set', () => {
+    expect(proofNeeds({ minPhotos: 0, requireVideo: true })).toEqual({ photos: 0, video: true });
+    expect(proofNeeds({ minPhotos: 4, requireVideo: true })).toEqual({ photos: 4, video: true });
   });
 });
