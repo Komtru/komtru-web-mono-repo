@@ -5,6 +5,7 @@
 // KYC adapter is constructed (design §4.4, T-028). Nothing in `services/` or `http/` can follow that
 // path, which is what keeps every provider call inside a job.
 import type { TrustConfig } from '../../config/env.js';
+import type { Db } from '../../db/index.js';
 import { createEncryption, type Encryption } from '../../platform/crypto/encryption.js';
 import { createHmacHasher, type HmacHasher } from '../../platform/crypto/hmac.js';
 import type { Logger } from '../../platform/logger.js';
@@ -20,6 +21,7 @@ import {
   type LivenessCheckJob,
   type SocialProofCheckJob,
 } from './domain/queues.js';
+import { trustAdminRoutes } from './http/admin.routes.js';
 import { trustRoutes } from './http/routes.js';
 import { bindStore } from './infrastructure/postgres/bind-store.js';
 import type { TrustStore } from './infrastructure/postgres/store.js';
@@ -58,6 +60,7 @@ const JOB_ATTEMPTS = 3;
 const JOB_BACKOFF_MS = 5_000;
 
 interface TrustRuntime {
+  db: Db;
   store: TrustStore;
   queues: QueueFactory;
   config: TrustConfig;
@@ -94,14 +97,18 @@ export function createTrustModule(options: TrustModuleOptions): KomtruModule {
   return defineModule({
     name: 'trust',
 
-    routes: trustRoutes({
-      store: () => need().store,
-      hasher: () => need().hasher,
-      encryption: () => need().encryption,
-      requestTtlMinutes: () => need().config.requestTtlMinutes,
-      logger: () => need().logger,
-      queues: () => need().queues,
-    }),
+    routes: [
+      ...trustRoutes({
+        store: () => need().store,
+        hasher: () => need().hasher,
+        encryption: () => need().encryption,
+        requestTtlMinutes: () => need().config.requestTtlMinutes,
+        logger: () => need().logger,
+        queues: () => need().queues,
+      }),
+      // M6 §11's admin half (T-052): the KYC queue, the duplicate flags and the override.
+      ...trustAdminRoutes({ db: () => need().db }),
+    ],
 
     queues: [
       {
@@ -174,6 +181,7 @@ export function createTrustModule(options: TrustModuleOptions): KomtruModule {
       const store = bindStore(ctx.db);
 
       runtime = {
+        db: ctx.db,
         store,
         queues: ctx.queues,
         config,

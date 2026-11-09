@@ -31,3 +31,5 @@ export { readBankNameMatch } from './services/bankMatch.service.js';
 export type { BankNameMatchRecord } from './infrastructure/postgres/store.js';
 /** What VF1 and BVR1 render, so a consumer can describe a stored code without re-deriving the copy. */
 export { describeRejection, isRejectionCode, type RejectionReason } from './domain/rejection.js';
+/** T-052: the facts a risk rule or a support ticket consumer reads, and the rules the admin surface enforces. */
+export { REPEATED_REJECTION_THRESHOLD, REPEATED_REJECTION_WINDOW_DAYS } from './domain/review.js';
