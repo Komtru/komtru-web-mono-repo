@@ -86,11 +86,11 @@ const cityOf = (snapshot: unknown): string | null => {
 // X2: the options
 // ---------------------------------------------------------------------------
 
-export interface ShipOptionsView {
+export type ShipOptionsView = {
   tradeId: string;
   tradeCode: string;
   options: ShipOption[];
-}
+};
 
 /**
  * What the seller may choose, computed here so the client never decides availability. Park is
