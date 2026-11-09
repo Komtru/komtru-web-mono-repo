@@ -16,6 +16,7 @@ import { resolveTermsVersions } from './domain/terms.js';
 import { createActorResolver } from './http/middleware.js';
 import { authRoutes } from './http/routes/auth.routes.js';
 import { addressRoutes } from './http/routes/address.routes.js';
+import { meRoutes } from './http/routes/me.routes.js';
 import { deviceRoutes } from './http/routes/device.routes.js';
 import { mfaRoutes } from './http/routes/mfa.routes.js';
 import { passwordRoutes } from './http/routes/password.routes.js';
@@ -159,6 +160,23 @@ export {
   type CityLookup,
 } from './services/address.service.js';
 import type { CityLookup } from './services/address.service.js';
+// T-041. `resolveAvatarUrls` is what a PartyCard's `enrich` calls; `importProviderAvatar` is T-034's.
+export {
+  importProviderAvatar,
+  removeAvatar,
+  resolveAvatarUrl,
+  resolveAvatarUrls,
+  setAvatar,
+  type AvatarDeps,
+  type AvatarPorts,
+  type AvatarRequestContext,
+  type AvatarResult,
+  type AvatarViewer,
+  type ImportProviderAvatarInput,
+  type ImportProviderAvatarOutcome,
+  type ProviderImage,
+} from './services/avatar.service.js';
+import type { AvatarPorts } from './services/avatar.service.js';
 export {
   createCapabilityService,
   postgresBuyerFacts,
@@ -260,6 +278,12 @@ export interface IdentityAuthOptions {
   hasActiveTrades?: NonNullable<LifecyclePorts['hasActiveTrades']>;
   /** Files' `tombstoneByUploader`, called after an anonymisation commits (M1 §15, M20 D4). */
   tombstoneUserFiles?: NdpaDeps['tombstoneUserFiles'];
+  /**
+   * T-041. The files module as seen from identity (find, sign, tombstone, and the optional provider
+   * import), wired by the registry. Absent means the avatar routes fail loudly rather than skip the
+   * ownership check.
+   */
+  avatar?: AvatarPorts;
 }
 
 export interface IdentityAuth {
@@ -283,6 +307,15 @@ export interface IdentityAuth {
  * the pool did not exist that early; a builder that is handed the pool removes the holder and the
  * "used before start" failure mode with it.
  */
+const missingAvatarPorts: AvatarPorts = {
+  findFile: () =>
+    Promise.reject(new Error('identity: no avatar ports were wired in (IdentityAuthOptions.avatar)')),
+  signUrl: () =>
+    Promise.reject(new Error('identity: no avatar ports were wired in (IdentityAuthOptions.avatar)')),
+  tombstone: () =>
+    Promise.reject(new Error('identity: no avatar ports were wired in (IdentityAuthOptions.avatar)')),
+};
+
 const missingCityLookup: CityLookup = () =>
   Promise.reject(new Error('identity: no city lookup was wired in (IdentityAuthOptions.cities)'));
 
@@ -404,6 +437,7 @@ export function createIdentityAuth(options: IdentityAuthOptions): IdentityAuth {
       ...partyRoutes(party),
       ...deviceRoutes({ db, logger }),
       ...addressRoutes({ db, cities: options.cities ?? missingCityLookup }),
+      ...meRoutes({ db, logger, ports: options.avatar ?? missingAvatarPorts }),
       ...mfaRoutes(account),
       ...lifecycleRoutes(lifecycle),
     ],
