@@ -50,3 +50,19 @@ describe('the reference frames', () => {
     expect(matchFrame('screen-unit')).toBeNull();
   });
 });
+
+describe('frameWidths on the v2 master', () => {
+  it('reads min(Npx,100%) as the pixel width and skips a bare 100%, which states none', () => {
+    const css = `.mweb-frame{width:340px}.mweb-frame{width:min(340px,100%)}.mweb-frame{width:100%}
+      .dweb-frame.tablet{width:560px}.dweb-frame.desktop{max-width:1040px}
+      #p3-canonical .p2-browser.p2-tablet{width:560px}#p3-canonical .p2-browser{max-width:1040px}
+      .device.phone{width:230px}`;
+    expect(frameWidths(`<style>${css}</style>`)['.mweb-frame']).toBe(340);
+  });
+
+  it('still refuses a width that is neither pixels nor a fill', () => {
+    const css = `.mweb-frame{width:20rem}.dweb-frame.tablet{width:560px}.dweb-frame.desktop{max-width:1040px}
+      #p3-canonical .p2-browser.p2-tablet{width:560px}#p3-canonical .p2-browser{max-width:1040px}.device.phone{width:230px}`;
+    expect(() => frameWidths(`<style>${css}</style>`)).toThrow(/not a pixel width/);
+  });
+});
