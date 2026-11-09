@@ -24,7 +24,10 @@ export {
   type RegisterResult,
 } from './services/register.service.js';
 /** With `actor: null`, pass `source` (your module's name): it is written to the trail. */
-export { resolveEvidenceRequest } from './services/case.service.js';
+export { decideCase, escalateCase, resolveEvidenceRequest, takeCase } from './services/case.service.js';
+/** T-052: the KYC queue serves the advisory beside its own item and records its decisions as cases'. */
+export { adviseOnCase } from './services/advisory.service.js';
+export type { CaseActor } from './services/audit.js';
 export { createCasesModule };
 
 export const casesModule = createCasesModule();

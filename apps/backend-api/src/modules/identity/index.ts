@@ -461,3 +461,8 @@ export const identityModule = (auth: IdentityAuth): KomtruModule =>
     resolveActor: auth.resolveActor,
     onAccessDenied: auth.onAccessDenied,
   });
+
+// T-052. The verification override is a foreign two-step action: trust requests it here, a second
+// holder approves through /admin/approvals, and trust spends the approval with `consumeApproval`.
+export { consumeApproval, requestApproval, type RequestApprovalInput } from './services/approval.service.js';
+export type { StaffActor } from './services/rbac.service.js';
