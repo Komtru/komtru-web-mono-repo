@@ -66,6 +66,7 @@ Spec: `docs/specs/module-01-identity-and-user-management.md`. Decision C2 (desig
   - The synchronous code exchange is the documented exception in T-028, with timeout and circuit breaker; JWKS cached by a scheduled job.
   - Staff scope can never be obtained via social login (M1 C2).
   - **T-028:** the code exchange uses `providerRequest` wrapped in `createCircuitBreaker` from `src/platform/providers/`; the provider calls live in `identity/infrastructure/providers/<provider>.client.ts`, which only `identity/jobs/` and the one documented synchronous callback path may import.
+  - **T-041 hand-off (provider avatars):** after a sign-in or link, call `importProviderAvatar` (exported from the identity barrel) with the provider's picture URL. T-034 must wire `fetchImage` and `ingest` into `IdentityAuthOptions.avatar` (in `modules/index.ts`): `fetchImage` is an outbound request on a provider-chosen URL and must pass `describeFetchImageContract` in `apps/backend-api/test/support/fetch-image-contract.ts` (no redirects, refusal of private addresses judged on the connected address, a size cap enforced while reading, an overall timeout); `ingest` needs a files-side server-side upload of a PROFILE_PHOTO owned by the user (files has none yet - uploads are client-direct, and only `files/jobs/` may hold the Cloudinary client). Until both are wired, the import answers `SKIPPED`. Use `onlyIfNone: true` for a first-login auto-import so a photo the user chose is never overwritten.
 
 ### T-035 — Party lookup and invitations
 
