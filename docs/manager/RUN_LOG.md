@@ -55,6 +55,23 @@ cost and to find work to resume.
     one at once; at most 10 attempts per trade, 1 minute apart;
   - whether attempt expiry should tie to `trades.payment_deadline_hours` (a trade-side deadline job);
   - stock reservation (T-056) consumes `ledger.payment.escrow_funded`.
+- **T-041 avatar defaults** (merged 2026-11-09; listed in `docs/superpowers/plans/2026-11-09-t-041-avatars.md`):
+  - replacing or removing an avatar tombstones the old file; provider images are JPEG, PNG or WebP only, checked
+    by magic bytes, at most 5 MiB, https only; 10 writes a minute per user and IP;
+  - **party-lookup timing:** a party card for a user with an avatar costs 1–2 more queries than a miss, because
+    signing reads the file record. That is a small "has an avatar" timing signal under §17. Is it acceptable, or
+    should files get a purely local signer for PUBLIC files?
+  - provider import returns SKIPPED until T-034 wires `fetchImage` and `ingest`. The contract they must pass is
+    in `apps/backend-api/test/support/fetch-image-contract.ts`.
+- **T-052 KYC review defaults** (not merged; the branch still needs its fixer; listed in
+  `docs/superpowers/plans/2026-11-09-t-052-kyc-review-queue.md` on `t-052-kyc-review-queue`):
+  - clearing a duplicate flag needs a dual-approved `VERIFICATION_OVERRIDE`; confirming needs only
+    `duplicate_flag.resolve`. A release drops the first account to level 1 (NIN/BVN) or level 2 (CAC);
+  - a level override grants only level 2 or 3, never 4, and revokes to level 1 at the lowest;
+  - the repeated-rejection event fires when a user's rejections in a rolling 30 days, across all types, reach
+    exactly 2;
+  - approving a FUZZY bank match approves the request but doesn't grant level 3;
+  - duplicate cases are HIGH priority, all others NORMAL.
 - **T-029 infra isolation: needs a go-ahead to edit `docker-compose.yml`.** The last open flake is
   Postgres connection exhaustion (12 parallel test databases × PgBouncer pool 20 against
   `max_connections` 100). The proposed fix: Postgres `max_connections=300`; PgBouncer
@@ -357,3 +374,30 @@ cost and to find work to resume.
   docker-compose go-ahead).
 - Next: T-052 (KYC review queue; trust module, now that T-107 is in). T-072 once the fee question is
   answered; T-029 once the compose change is approved.
+
+## 2026-11-09 13:13 WAT — run summary
+
+- Usage at start: 5h 1%, week 76%. At end: 5h 59%, week 84%.
+- The stale lock from 2026-11-07 12:12Z (older than 4 hours) was replaced.
+- Capacity: 2 (`est` 22, `est_week` 3: 1 + 2×22 ≤ 90; 76 + 2×3 ≤ 85). T-052 was the only unblocked Ready MVP
+  ticket; T-041 (identity, no migration) ran alongside it. Tickets: T-041 (merged), T-052 (saved at review).
+  - T-041 (Sonnet): `POST`/`DELETE /me/avatar`, signed URLs at read time, and a provider-import path behind
+    ports. Sonnet review: 1 must-fix item (party cards never got `avatarUrl`; `enrich` is now wired, with
+    decoy signing on a miss) and 9 should-fix items (the swap race, `onlyIfNone` under the lock, orphan cleanup,
+    magic-byte sniffing, the `fetchImage` SSRF contract for T-034, concurrency tests), all fixed. On `main`
+    with infra: backend-api 256 files and 4613 tests, shared-types 192, api-client 161, all green; format is clean.
+  - T-052 (Sonnet): migration 0042 `trust.duplicate_identity_flags`, the `/admin/kyc` queue, duplicate flags,
+    dual-approved overrides and the repeated-rejection event. 4585 infra tests green on the branch. Sonnet review: 3 must-fix
+    items (a racy 30-day counter; a duplicate with a null `firstUserId` gets a case but no flag, so it can be
+    decided through the plain queue; missing concurrency and approval-replay tests) and 8 should-fix items. The
+    fixer was not started: weekly usage was 83% with the T-041 fix still running, and the fix phase would have
+    reached the 85% reserve. The review items are in the plan on the branch (commit `eb584f1`).
+- Ticket costs, together: 5h-cost=58 week-cost=8, about 29 and 4 each. Both implementers ran with
+  infra tests on the shared Postgres; they collided on `komtru_test_*` names until T-052 set
+  `KOMTRU_TEST_DB_PREFIX`. Tell parallel implementers to set distinct prefixes.
+- Not touched: `t-072-funding` (fee question), `t-029-infra-isolation` (compose go-ahead), and a new
+  `t-111-entry-auth` worktree this run did not create (the owner's or another session's).
+- `main` has uncommitted owner work (populate-frontend-env scripts, package.json, turbo.json, README); it was
+  left untouched and not committed.
+- Next: resume T-052 with a fixer (on `t-052-kyc-review-queue`), then merge it. The weekly limit resets
+  2026-11-10 15:00 WAT; until then the 85% reserve leaves no room for a ticket cycle.
