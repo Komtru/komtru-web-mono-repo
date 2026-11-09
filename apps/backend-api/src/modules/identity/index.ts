@@ -320,6 +320,13 @@ const missingAvatarPorts: AvatarPorts = {
 const missingCityLookup: CityLookup = () =>
   Promise.reject(new Error('identity: no city lookup was wired in (IdentityAuthOptions.cities)'));
 
+/**
+ * No SMS will really be sent, outside production: the SMS channel is a dry run (the default outside
+ * production) or Termii is not configured. Phone codes are then emailed too (`AccountDeps`).
+ */
+export const smsUndeliverable = (config: AppConfig): boolean =>
+  config.nodeEnv !== 'production' && (config.notify.smsDryRun || config.notify.termii === undefined);
+
 export function createIdentityAuth(options: IdentityAuthOptions): IdentityAuth {
   const { db, redis, config, logger } = options;
   const signer = createTokenSigner(config);
@@ -356,6 +363,7 @@ export function createIdentityAuth(options: IdentityAuthOptions): IdentityAuth {
     breach: { enabled: config.identity.breachCheckEnabled, logger },
     terms: resolveTermsVersions(config.terms),
     mirrorPhoneOtpToEmail: config.identity.mirrorPhoneOtpToEmail,
+    smsUndeliverable: smsUndeliverable(config),
     encryption,
     // Allowed to throw here, naming its variable, the way the pepper check above does: an empty
     // WebAuthn origin list is not a wildcard, and a process that will serve a passkey ceremony

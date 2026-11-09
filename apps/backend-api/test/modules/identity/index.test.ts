@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import * as identity from '../../../src/modules/identity/index.js';
+import { smsUndeliverable } from '../../../src/modules/identity/index.js';
 import { ANONYMOUS_ACTOR } from '../../../src/platform/http/principal.js';
 import { assertRouteInvariants } from '../../../src/platform/http/route.js';
 import { registryConfig, stubProcessDeps, testModules } from '../../support/modules.js';
@@ -229,5 +230,30 @@ describe('every env a real process is started from satisfies identity (T-035)', 
         logger: createLogger(config),
       }),
     ).not.toThrow();
+  });
+});
+
+describe('smsUndeliverable', () => {
+  const config = (nodeEnv: string, smsDryRun: boolean, termii: boolean) =>
+    ({
+      nodeEnv,
+      notify: {
+        smsDryRun,
+        ...(termii ? { termii: { apiKey: 'k', senderId: 'K', baseUrl: 'https://x' } } : {}),
+      },
+    }) as unknown as Parameters<typeof smsUndeliverable>[0];
+
+  it('is true outside production whenever no text will really go out', () => {
+    expect(smsUndeliverable(config('development', true, true))).toBe(true);
+    expect(smsUndeliverable(config('test', false, false))).toBe(true);
+  });
+
+  it('is false outside production when SMS really sends', () => {
+    expect(smsUndeliverable(config('development', false, true))).toBe(false);
+  });
+
+  it('is never true in production, where an emailed code must not prove a phone', () => {
+    expect(smsUndeliverable(config('production', true, false))).toBe(false);
+    expect(smsUndeliverable(config('production', false, false))).toBe(false);
   });
 });

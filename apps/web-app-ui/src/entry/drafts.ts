@@ -9,6 +9,7 @@
 
 export interface SignUpDraft {
   phone: string;
+  email: string;
   fullName: string;
 }
 
@@ -98,7 +99,10 @@ const isObject = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null;
 
 const isSignUp = (value: unknown): value is SignUpDraft =>
-  isObject(value) && typeof value.phone === 'string' && typeof value.fullName === 'string';
+  isObject(value) &&
+  typeof value.phone === 'string' &&
+  typeof value.email === 'string' &&
+  typeof value.fullName === 'string';
 
 const isSentCode = (value: unknown): value is SentCode =>
   isObject(value) &&

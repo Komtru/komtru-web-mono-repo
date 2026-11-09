@@ -171,6 +171,7 @@ export const accountDeps = (overrides: Partial<AccountDeps> = {}): AccountDeps =
     breach: { enabled: false, logger: testLogger },
     terms: resolveTermsVersions(config.terms),
     mirrorPhoneOtpToEmail: false,
+    smsUndeliverable: false,
     ...overrides,
   };
 };

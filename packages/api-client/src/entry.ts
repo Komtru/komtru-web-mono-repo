@@ -37,6 +37,8 @@ export const getPublishedTerms = defineEndpoint({
 export const registerBodySchema = z.object({
   channel: z.literal('PHONE'),
   phone: z.string().min(4).max(32),
+  /** The second channel, unverified; where the code also goes when no SMS can be sent. */
+  email: z.string().min(3).max(254).optional(),
   fullName: z.string().min(1).max(120).optional(),
   acceptedTermsVersion: versionSchema,
   acceptedPrivacyVersion: versionSchema,
