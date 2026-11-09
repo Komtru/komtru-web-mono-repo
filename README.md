@@ -28,12 +28,44 @@ Most apps are still placeholders. Each one is built out by its own ticket in [do
 
 `pnpm infra:up` starts Postgres, PgBouncer, Redis and Mailpit in Docker, and `pnpm env:backend` writes the backend's `.env`. The [local development runbook](docs/runbooks/local-dev.md) covers both, including the credentials file you need first.
 
+## Run the apps
+
+```bash
+pnpm dev            # every app with a dev server, in one terminal
+```
+
+`pnpm dev` builds the shared packages first, then starts the API, the BullMQ worker and the Next dev servers together and keeps them running. Stop them all with Ctrl-C.
+
+Three things have to be in place before the first run, all covered by the [local development runbook](docs/runbooks/local-dev.md):
+
+1. `pnpm infra:up` — without Postgres and Redis the API and worker fail on startup.
+2. `pnpm env:backend` — writes `apps/backend-api/.env`.
+3. `pnpm env:apps` — writes each frontend's `.env.local` from its `.env.example`, generating the `KOMTRU_SESSION_SECRET` a committed example cannot carry. Copying the example by hand instead leaves that value empty, and middleware then answers 500 on every page.
+
+| Process                   | Address                  |
+| ------------------------- | ------------------------ |
+| `apps/backend-api` API    | http://localhost:7813    |
+| `apps/backend-api` worker | no port; BullMQ consumer |
+| `apps/web-app-ui`         | http://localhost:3001    |
+| `apps/operations-app`     | http://localhost:3002    |
+
+`apps/logistics-ops` and `apps/park-agent-app` are still placeholder packages with no dev server, so `pnpm dev` skips them; they join it when their tickets turn them into Next apps.
+
+To start a subset:
+
+```bash
+pnpm dev:api        # API and worker only
+pnpm dev:web        # the Next apps only
+pnpm turbo run dev --filter=@komtru/web-app-ui   # one app
+```
+
 ## Commands
 
 Run from the repository root.
 
 ```bash
 pnpm install        # install every workspace; also installs git hooks
+pnpm dev            # start every app's dev server (see above)
 pnpm lint           # ESLint with type information, every workspace
 pnpm typecheck      # tsc --noEmit, every workspace
 pnpm test           # Vitest in every workspace, then repository checks
