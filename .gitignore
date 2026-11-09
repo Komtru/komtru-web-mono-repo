@@ -47,3 +47,6 @@ tools/tickets/.tickets.json
 
 # Build-manager run lock (docs/manager/MANAGER.md)
 .claude/manager.lock
+
+# Python bytecode from tools/tickets
+__pycache__/
