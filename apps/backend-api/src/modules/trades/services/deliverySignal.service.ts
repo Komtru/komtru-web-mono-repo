@@ -187,15 +187,15 @@ async function humanSignal(
     return trade.status;
   });
 
-  // A repeat by the same person returns the trade as it stands, like every other action here.
-  const settled =
-    status === 'SHIPPED' ||
-    (source === 'BUYER_CONFIRMATION' && status === 'UNCONFIRMED_DELIVERY') ||
-    (source === 'SELLER_SELF_REPORT' && status === 'UNCONFIRMED_DELIVERY') ||
-    AT_OR_PAST_DELIVERY.includes(status);
-  if (!settled) throw notShippedError(status);
-
-  if (status === 'SHIPPED' || (source === 'BUYER_CONFIRMATION' && status === 'UNCONFIRMED_DELIVERY')) {
+  // The signal applies from SHIPPED, and from UNCONFIRMED_DELIVERY when the buyer is confirming. A
+  // repeat by the same person (the trade is already there or past it) returns the trade as it
+  // stands, like every other action here; anything else is not a step this trade can take.
+  const applies =
+    status === 'SHIPPED' || (source === 'BUYER_CONFIRMATION' && status === 'UNCONFIRMED_DELIVERY');
+  if (!applies && status !== 'UNCONFIRMED_DELIVERY' && !AT_OR_PAST_DELIVERY.includes(status)) {
+    throw notShippedError(status);
+  }
+  if (applies) {
     await applyDeliverySignal(deps, {
       tradeId: input.tradeId,
       source,
