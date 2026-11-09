@@ -34,6 +34,7 @@ import {
   insertRow,
   insertTermsVersion,
   insertTrade,
+  testFeeSnapshot,
   insertUser,
   transition,
 } from '../trades/support.js';
@@ -75,13 +76,17 @@ describe.runIf(infraEnabled)('releasing a trade (T-074)', () => {
     item = ITEM,
     fee = FEE,
     commission = COMMISSION,
+    refundableOnFullRefund = true,
   ): Promise<void> => {
     const terms = await insertTermsVersion(t.app(), tradeId, buyer, {
       item_amount_minor: item.toString(),
     });
     for (const step of ROUTES[target] ?? []) {
       const extra = step.fees
-        ? { ...feeSnapshotColumnValues(item, fee, commission), accepted_terms_version_id: terms }
+        ? {
+            ...feeSnapshotColumnValues(item, fee, commission, refundableOnFullRefund),
+            accepted_terms_version_id: terms,
+          }
         : {};
       await transition(t.app(), tradeId, step, extra);
     }
@@ -113,6 +118,22 @@ describe.runIf(infraEnabled)('releasing a trade (T-074)', () => {
   const refusal = (result: ReleaseResult): string => {
     expect(result.outcome).toBe('NOT_RELEASABLE');
     return result.outcome === 'NOT_RELEASABLE' ? result.reason : '';
+  };
+
+  /**
+   * Corrupts the stored snapshot the way a hand-edited row or a half-finished backfill would.
+   * The application cannot do this — `trade_freeze_immutable_columns` (migration 0024) refuses
+   * every write to `fee_snapshot` once the fees are frozen — which is exactly why the tests that
+   * need a corrupt row have to go round the trigger as the owner to produce one.
+   */
+  const corruptSnapshot = async (jsonb: string) => {
+    const owner = t.owner();
+    await owner.query(`ALTER TABLE trade.trades DISABLE TRIGGER trade_freeze_immutable_columns`);
+    try {
+      await owner.query(`UPDATE trade.trades SET fee_snapshot = $2::jsonb WHERE id = $1`, [tradeId, jsonb]);
+    } finally {
+      await owner.query(`ALTER TABLE trade.trades ENABLE TRIGGER trade_freeze_immutable_columns`);
+    }
   };
 
   const outboxOf = async (eventType: string) => {
@@ -342,6 +363,34 @@ describe.runIf(infraEnabled)('releasing a trade (T-074)', () => {
       expect(refusal(result)).toContain('the trade is COMPLETED');
     });
 
+    it('still answers ALREADY_SETTLED when the stored snapshot has become unreadable', async () => {
+      await driveWithFees('COMPLETED');
+      await fund();
+      expect((await release()).outcome).toBe('SETTLED');
+
+      // A half-finished backfill, a hand-edited row: whatever did it, the trade was settled
+      // correctly and a redelivery of its completion event must not dead-letter over it.
+      await corruptSnapshot('{"broken": true}');
+
+      expect(await release()).toMatchObject({ outcome: 'ALREADY_SETTLED' });
+      expect(await balance(PAYABLE())).toBe(PROCEEDS);
+      expect(await outboxOf('ledger.payment.escrow_released')).toHaveLength(1);
+    });
+
+    it('refuses a first settlement whose snapshot disagrees with the frozen columns', async () => {
+      await driveWithFees('COMPLETED');
+      await fund();
+      // Internally consistent — it would pass `feeSnapshotSchema` on its own — and a kobo away
+      // from the columns every line is built from. That is the shape a bad backfill takes, and
+      // the only reason to compare the two at all.
+      await corruptSnapshot(JSON.stringify(testFeeSnapshot(ITEM + 1n, FEE, COMMISSION)));
+
+      expect(refusal(await release())).toContain(
+        `item is ${ITEM + 1n} in the snapshot, ${ITEM} in the column`,
+      );
+      expect(await balance(ESCROW())).toBe(ITEM);
+    });
+
     it('refuses a trade that is not there', async () => {
       expect(await release({ tradeId: randomUUID() })).toEqual({
         outcome: 'NOT_RELEASABLE',
@@ -393,14 +442,19 @@ describe.runIf(infraEnabled)('releasing a trade (T-074)', () => {
       expect(Number(rows[0]?.n)).toBe(1);
     });
 
-    it('gives the protection fee back when the whole item goes back', async () => {
+    it('credits the seller nothing when the whole item goes back', async () => {
       await split({ releaseToSellerMinor: 0n, commissionMinor: 0n, refundToBuyerMinor: ITEM });
-
-      expect(await balance(FEE_LIABILITY())).toBe(0n);
-      expect(await balance(FEE_REVENUE)).toBe(0n);
       expect(await balance(PAYABLE())).toBe(0n);
-      // Everything the buyer paid is back in the pool, ready to go out through the provider.
-      expect(await balance(POOL)).toBe(0n);
+      // Where the fee itself ends up is Q4's business, below.
+    });
+
+    it('refuses to book the whole escrowed item as commission, sum or no sum', async () => {
+      await expect(
+        split({ releaseToSellerMinor: 0n, commissionMinor: ITEM, refundToBuyerMinor: 0n }),
+      ).rejects.toThrow(ReleaseSplitError);
+
+      expect(await balance(ESCROW())).toBe(ITEM);
+      expect(await balance(COMMISSION_REVENUE)).toBe(0n);
     });
 
     it('refuses amounts that do not sum to the escrowed item, before writing anything', async () => {
@@ -423,6 +477,43 @@ describe.runIf(infraEnabled)('releasing a trade (T-074)', () => {
         outcome: 'DISPUTE_SPLIT',
         sellerProceedsMinor: (PROCEEDS - 5_000_000n).toString(),
         refundToBuyerMinor: '5000000',
+        buyerProtectionFeeTreatment: 'RECOGNISE',
+      });
+    });
+  });
+
+  describe("Q4's two branches, where the fee actually ends up", () => {
+    // Both decide whether a buyer gets the protection fee back. Neither may be reachable only
+    // through a unit test: the end balances are the answer, and only a real ledger has those.
+    const fullRefund = () =>
+      split({ releaseToSellerMinor: 0n, commissionMinor: 0n, refundToBuyerMinor: ITEM });
+
+    it('hands the fee back when the trade froze it refundable', async () => {
+      await driveWithFees('DISPUTED', ITEM, FEE, COMMISSION, true);
+      await fund();
+
+      await fullRefund();
+
+      expect(await balance(FEE_LIABILITY())).toBe(0n);
+      expect(await balance(FEE_REVENUE)).toBe(0n);
+      // Everything the buyer paid is back in the pool, ready to leave through the provider.
+      expect(await balance(POOL)).toBe(0n);
+      expect((await outboxOf('ledger.payment.escrow_released'))[0]).toMatchObject({
+        buyerProtectionFeeTreatment: 'REFUND',
+      });
+    });
+
+    it('keeps the fee when the trade froze it non-refundable', async () => {
+      await driveWithFees('DISPUTED', ITEM, FEE, COMMISSION, false);
+      await fund();
+
+      await fullRefund();
+
+      expect(await balance(FEE_LIABILITY())).toBe(0n);
+      // Earned, not handed back: the buyer gets the item price, the platform keeps the fee.
+      expect(await balance(FEE_REVENUE)).toBe(FEE);
+      expect(await balance(POOL)).toBe(FEE);
+      expect((await outboxOf('ledger.payment.escrow_released'))[0]).toMatchObject({
         buyerProtectionFeeTreatment: 'RECOGNISE',
       });
     });

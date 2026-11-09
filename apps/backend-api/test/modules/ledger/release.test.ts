@@ -9,14 +9,17 @@ import {
   disputeSplitJournalLines,
   escrowRefundLines,
   feeRefundLines,
+  feeRecognitionLines,
   feeTreatmentForSplit,
   planSettlement,
   refundableOnFullRefundOf,
+  assertSnapshotMatchesColumns,
   releaseAmounts,
   releaseIdempotencyKey,
   releaseJournalLines,
   ReleaseSnapshotError,
   ReleaseSplitError,
+  SettlementAmountError,
   type ReleaseAmounts,
   type ReleaseParties,
   type TradeReleaseSnapshot,
@@ -31,6 +34,32 @@ const ITEM = 45_000_000n;
 const FEE = 675_000n;
 const COMMISSION = 900_000n;
 
+/** The `fee_snapshot` JSONB as T-047 writes it, which is the only place Q4's flag survives. */
+const storedSnapshot = (refundable = true, item = ITEM, fee = FEE, commission = COMMISSION) => ({
+  version: 'test-fee-schedule',
+  currency: 'NGN',
+  // Fixed, not `new Date()`: two calls a millisecond apart must build the same snapshot.
+  takenAt: '2026-11-09T09:00:00.000Z',
+  sellerKind: 'CASUAL',
+  amounts: {
+    itemMinor: item.toString(),
+    buyerProtectionFeeMinor: fee.toString(),
+    buyerTotalMinor: (item + fee).toString(),
+    commissionMinor: commission.toString(),
+    sellerProceedsMinor: (item - commission).toString(),
+    platformRevenueMinor: (fee + commission).toString(),
+  },
+  terms: {
+    buyerProtectionBps: 100,
+    buyerProtectionMinMinor: '0',
+    buyerProtectionMaxMinor: null,
+    buyerProtectionRefundableOnFullRefund: refundable,
+    commissionBps: 20,
+    commissionMinMinor: '0',
+    commissionMaxMinor: null,
+  },
+});
+
 const snapshot = (overrides: Partial<TradeReleaseSnapshot> = {}): TradeReleaseSnapshot => ({
   tradeId: TRADE,
   currency: 'NGN',
@@ -39,7 +68,7 @@ const snapshot = (overrides: Partial<TradeReleaseSnapshot> = {}): TradeReleaseSn
   buyerProtectionFeeMinor: FEE,
   commissionMinor: COMMISSION,
   sellerProceedsMinor: ITEM - COMMISSION,
-  refundableOnFullRefund: true,
+  feeSnapshot: storedSnapshot(),
   ...overrides,
 });
 
@@ -77,14 +106,13 @@ describe('the amounts a release is for', () => {
       buyerProtectionFeeMinor: FEE,
       commissionMinor: COMMISSION,
       sellerProceedsMinor: ITEM - COMMISSION,
-      refundableOnFullRefund: true,
+      feeSnapshot: snapshot().feeSnapshot,
     });
   });
 
   it('refuses a trade with no complete snapshot', () => {
     expect(() => releaseAmounts(snapshot({ feeScheduleVersion: null }))).toThrow(ReleaseSnapshotError);
     expect(() => releaseAmounts(snapshot({ commissionMinor: null }))).toThrow(ReleaseSnapshotError);
-    expect(() => releaseAmounts(snapshot({ refundableOnFullRefund: null }))).toThrow(ReleaseSnapshotError);
   });
 
   it('refuses a snapshot whose proceeds are not the item minus the commission', () => {
@@ -115,8 +143,12 @@ describe('the journal for a normal release', () => {
 
     expect(escrow).toHaveLength(1);
     expect(escrow[0]).toMatchObject({ direction: 'DEBIT', amountMinor: ITEM });
-    // The buyer total is item + fee; debiting that would overdraw the escrow liability by the fee.
-    expect(escrow[0]?.amountMinor).not.toBe(ITEM + FEE);
+    // And the fee left through its own account, not through this one: the whole posting takes
+    // item + fee out of the two liabilities between them, item from here and fee from there.
+    expect(lines.filter((l) => l.direction === 'DEBIT').map((l) => [l.account.type, l.amountMinor])).toEqual([
+      ['USER_ESCROW_LIABILITY', ITEM],
+      ['BUYER_PROTECTION_FEE_LIABILITY', FEE],
+    ]);
   });
 
   it('credits the seller, the commission and the fee, and balances', () => {
@@ -227,6 +259,16 @@ describe('the refund-side line builders (the T-075 seam)', () => {
   it('has nothing to say about a zero amount', () => {
     expect(escrowRefundLines(TRADE, 0n)).toEqual([]);
     expect(feeRefundLines(TRADE, 0n)).toEqual([]);
+    expect(feeRecognitionLines(TRADE, 0n)).toEqual([]);
+  });
+
+  it('refuses a negative amount instead of quietly building nothing', () => {
+    // These are exported for T-075 to reuse, and "zero means no line" one step away from
+    // "negative means no line" is how a refund silently posts half of itself.
+    for (const build of [escrowRefundLines, feeRefundLines, feeRecognitionLines]) {
+      expect(() => build(TRADE, -1n)).toThrow(SettlementAmountError);
+      expect(() => build(TRADE, -FEE)).toThrow(/-675000/);
+    }
   });
 });
 
@@ -241,7 +283,16 @@ describe('the fee treatment on a dispute split (design §12 Q4)', () => {
   });
 
   it('honours the treatment frozen on the trade, not the one in force today', () => {
-    expect(feeTreatmentForSplit(amounts({ refundableOnFullRefund: false }), ITEM)).toBe('RECOGNISE');
+    expect(feeTreatmentForSplit(amounts({ feeSnapshot: storedSnapshot(false) }), ITEM)).toBe('RECOGNISE');
+  });
+
+  it('does not even read the stored snapshot unless the whole item is going back', () => {
+    // A release and a partial split must not depend on the JSONB being readable: an unreadable one
+    // on a trade settled months ago would otherwise make every redelivery of its event throw.
+    const unreadable = amounts({ feeSnapshot: { nothing: 'useful' } });
+    expect(feeTreatmentForSplit(unreadable, ITEM - 1n)).toBe('RECOGNISE');
+    expect(() => releaseJournalLines(parties, unreadable)).not.toThrow();
+    expect(() => feeTreatmentForSplit(unreadable, ITEM)).toThrow(ReleaseSnapshotError);
   });
 });
 
@@ -280,6 +331,36 @@ describe('the journal for a dispute split (T-080)', () => {
     expect(() => disputeSplitJournalLines(parties, amounts(), split(-1n, 0n, ITEM + 1n))).toThrow(
       ReleaseSplitError,
     );
+  });
+
+  it('will not book more commission than the trade froze, sum or no sum', () => {
+    // The shares add up perfectly and the whole escrowed item becomes platform revenue. The trade's
+    // own commission is the ceiling the snapshot already carries, so a caller bug is a refusal.
+    expect(() => disputeSplitJournalLines(parties, amounts(), split(0n, ITEM, 0n))).toThrow(
+      ReleaseSplitError,
+    );
+    expect(() => disputeSplitJournalLines(parties, amounts(), split(0n, ITEM, 0n))).toThrow(
+      `commission ${ITEM} is more than the ${COMMISSION} this trade froze`,
+    );
+  });
+
+  it('allows any commission up to the frozen one', () => {
+    for (const commission of [0n, 1n, COMMISSION - 1n, COMMISSION]) {
+      const lines = disputeSplitJournalLines(
+        parties,
+        amounts(),
+        split(ITEM - commission - 1n, commission, 1n),
+      );
+      expect(() => assertBalanced(lines)).not.toThrow();
+    }
+  });
+
+  it('allows no commission at all on a trade that froze none', () => {
+    const free = amounts({ commissionMinor: 0n, sellerProceedsMinor: ITEM });
+    expect(() => disputeSplitJournalLines(parties, free, split(0n, 1n, ITEM - 1n))).toThrow(
+      ReleaseSplitError,
+    );
+    expect(() => disputeSplitJournalLines(parties, free, split(ITEM, 0n, 0n))).not.toThrow();
   });
 
   it('sends the fee back to the pool when the whole item is refunded', () => {
@@ -356,41 +437,38 @@ describe('the journal for a dispute split (T-080)', () => {
 });
 
 describe("Q4's treatment out of the stored snapshot", () => {
-  const stored = (refundable: boolean) => ({
-    version: 'test-fee-schedule',
-    currency: 'NGN',
-    takenAt: new Date().toISOString(),
-    sellerKind: 'CASUAL',
-    amounts: {
-      itemMinor: ITEM.toString(),
-      buyerProtectionFeeMinor: FEE.toString(),
-      buyerTotalMinor: (ITEM + FEE).toString(),
-      commissionMinor: COMMISSION.toString(),
-      sellerProceedsMinor: (ITEM - COMMISSION).toString(),
-      platformRevenueMinor: (FEE + COMMISSION).toString(),
-    },
-    terms: {
-      buyerProtectionBps: 100,
-      buyerProtectionMinMinor: '0',
-      buyerProtectionMaxMinor: null,
-      buyerProtectionRefundableOnFullRefund: refundable,
-      commissionBps: 20,
-      commissionMinMinor: '0',
-      commissionMaxMinor: null,
-    },
-  });
-
   it('reads the frozen flag, either way', () => {
-    expect(refundableOnFullRefundOf(stored(true))).toBe(true);
-    expect(refundableOnFullRefundOf(stored(false))).toBe(false);
+    expect(refundableOnFullRefundOf(storedSnapshot(true))).toBe(true);
+    expect(refundableOnFullRefundOf(storedSnapshot(false))).toBe(false);
   });
 
   it('refuses a snapshot it cannot read rather than defaulting to keeping the money', () => {
     expect(() => refundableOnFullRefundOf(null)).toThrow(ReleaseSnapshotError);
     expect(() => refundableOnFullRefundOf({ terms: {} })).toThrow(ReleaseSnapshotError);
-    const bent = stored(true);
+    const bent = storedSnapshot();
     bent.amounts.buyerTotalMinor = '1';
     expect(() => refundableOnFullRefundOf(bent)).toThrow(ReleaseSnapshotError);
+  });
+});
+
+describe('the stored snapshot against the frozen columns', () => {
+  it('passes when they agree', () => {
+    expect(() => assertSnapshotMatchesColumns(amounts())).not.toThrow();
+  });
+
+  it('catches a column and a JSONB that disagree about any of the three amounts', () => {
+    const cases: [string, Partial<TradeReleaseSnapshot>][] = [
+      ['itemMinor', { feeSnapshot: storedSnapshot(true, ITEM + 1n, FEE, COMMISSION) }],
+      ['buyerProtectionFeeMinor', { feeSnapshot: storedSnapshot(true, ITEM, FEE + 1n, COMMISSION) }],
+      ['commissionMinor', { feeSnapshot: storedSnapshot(true, ITEM, FEE, COMMISSION + 1n) }],
+    ];
+    for (const [field, override] of cases) {
+      expect(() => assertSnapshotMatchesColumns(amounts(override)), field).toThrow(ReleaseSnapshotError);
+    }
+  });
+
+  it('catches a snapshot that cannot be read at all', () => {
+    expect(() => assertSnapshotMatchesColumns(amounts({ feeSnapshot: null }))).toThrow(ReleaseSnapshotError);
   });
 });
 

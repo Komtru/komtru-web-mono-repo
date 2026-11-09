@@ -9,14 +9,13 @@ import { and, eq, isNull } from 'drizzle-orm';
 import { tradeHolds, trades } from '../../../trades/index.js';
 import type { Tx } from '../../../../platform/events/publish.js';
 import type { Db } from '../../../../db/index.js';
-import { refundableOnFullRefundOf, type TradeReleaseSnapshot } from '../../domain/release.js';
+import type { TradeReleaseSnapshot } from '../../domain/release.js';
 
 type Reader = Db | Tx;
 
 export interface TradeForRelease extends TradeReleaseSnapshot {
   tradeCode: string;
   status: string;
-  buyerUserId: string | null;
   sellerUserId: string | null;
 }
 
@@ -24,7 +23,6 @@ const columns = {
   tradeId: trades.id,
   tradeCode: trades.tradeCode,
   status: trades.status,
-  buyerUserId: trades.buyerUserId,
   sellerUserId: trades.sellerUserId,
   currency: trades.currency,
   feeScheduleVersion: trades.feeScheduleVersion,
@@ -36,27 +34,33 @@ const columns = {
 };
 
 /**
- * The trade as a settlement reads it: the frozen fee columns, the parties, and Q4's treatment out
- * of the stored snapshot. Held FOR SHARE until the caller's transaction ends.
+ * The trade as a settlement reads it: the frozen fee columns, the seller, and the stored snapshot
+ * verbatim. Held FOR SHARE until the caller's transaction ends.
  *
- * `refundableOnFullRefund` is null exactly when there is no snapshot at all — the nine columns are
- * written together or not at all (`trades_fee_snapshot_complete`) — so `releaseAmounts` reports
- * "no complete fee snapshot" rather than this port guessing a refund policy.
+ * The snapshot is handed over UNPARSED on purpose. Parsing here would make a trade with an
+ * unreadable `fee_snapshot` throw before the caller could even discover that its escrow was
+ * settled correctly months ago — turning a harmless redelivery into a dead letter. The ledger
+ * reads the JSONB in exactly two places, both of them past the replay check: Q4's flag when a
+ * split returns the whole item, and `assertSnapshotMatchesColumns` before a first settlement.
  */
 export async function lockTradeForRelease(tx: Tx, tradeId: string): Promise<TradeForRelease | undefined> {
   const [row] = await tx.select(columns).from(trades).where(eq(trades.id, tradeId)).for('share');
-  if (!row) return undefined;
-  const { feeSnapshot, ...rest } = row;
-  return {
-    ...rest,
-    refundableOnFullRefund: feeSnapshot === null ? null : refundableOnFullRefundOf(feeSnapshot),
-  };
+  return row;
 }
 
 /**
  * The sources of every hold still on the trade (design §6.2: a hold freezes auto-transitions and
  * release without hiding where the trade is). Empty is the normal case, and the only one that lets
  * money move.
+ *
+ * **CONTRACT FOR WHOEVER WRITES A HOLD (T-062, T-080, admin tooling): lock the trade row
+ * `FOR UPDATE` in the same transaction as the INSERT.** The release path holds `trade.trades`
+ * `FOR SHARE` and then reads this table, but a share lock on the trade does not block an INSERT
+ * into `trade_holds` — and under READ COMMITTED an uncommitted hold is invisible here, so a
+ * release placed at the same instant as a hold will post anyway. Taking `FOR UPDATE` on the trade
+ * before inserting makes the hold writer wait for any in-flight release, and makes any later
+ * release wait for the hold. Nothing writes this table yet, which is the only reason the gap is
+ * theoretical today; it stops being theoretical the day it does.
  */
 export async function activeTradeHolds(db: Reader, tradeId: string): Promise<string[]> {
   const rows = await db

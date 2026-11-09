@@ -44,8 +44,13 @@ export interface TradeReleaseSnapshot {
   buyerProtectionFeeMinor: Kobo | null;
   commissionMinor: Kobo | null;
   sellerProceedsMinor: Kobo | null;
-  /** Q4's refund treatment as it stood at acceptance, from the stored snapshot's `terms`. */
-  refundableOnFullRefund: boolean | null;
+  /**
+   * `trades.fee_snapshot`, verbatim and UNPARSED. Carried rather than read, because the only thing
+   * in it this module needs — Q4's `refundable_on_full_refund` — matters in exactly one case, and
+   * parsing eagerly would make an unreadable snapshot on a trade settled months ago throw on every
+   * redelivery of its completion event instead of answering "already settled".
+   */
+  feeSnapshot: unknown;
 }
 
 export interface ReleaseAmounts {
@@ -57,7 +62,8 @@ export interface ReleaseAmounts {
   commissionMinor: Kobo;
   /** The item minus the commission: what the seller is owed. */
   sellerProceedsMinor: Kobo;
-  refundableOnFullRefund: boolean;
+  /** The stored snapshot, still unparsed. See `TradeReleaseSnapshot.feeSnapshot`. */
+  feeSnapshot: unknown;
 }
 
 export class ReleaseSnapshotError extends Error {
@@ -65,6 +71,20 @@ export class ReleaseSnapshotError extends Error {
   constructor(readonly detail: string) {
     super(`The trade's escrow cannot be released from its fee snapshot: ${detail}`);
     this.name = 'ReleaseSnapshotError';
+  }
+}
+
+/**
+ * An amount that cannot be a ledger line. Zero is legitimate — it means "no line" — but a negative
+ * amount is a caller that has lost track of a direction, and the primitives below must not turn it
+ * into silence. T-075 reuses those primitives, so this is the guard that stops a refund posting
+ * half of itself.
+ */
+export class SettlementAmountError extends Error {
+  readonly code = 'SETTLEMENT_AMOUNT_NEGATIVE';
+  constructor(readonly amountMinor: Kobo) {
+    super(`A settlement amount cannot be negative; got ${amountMinor}`);
+    this.name = 'SettlementAmountError';
   }
 }
 
@@ -104,15 +124,13 @@ export function releaseAmounts(snapshot: TradeReleaseSnapshot): ReleaseAmounts {
     buyerProtectionFeeMinor,
     commissionMinor,
     sellerProceedsMinor,
-    refundableOnFullRefund,
   } = snapshot;
   if (
     feeScheduleVersion === null ||
     itemAmountMinor === null ||
     buyerProtectionFeeMinor === null ||
     commissionMinor === null ||
-    sellerProceedsMinor === null ||
-    refundableOnFullRefund === null
+    sellerProceedsMinor === null
   ) {
     throw new ReleaseSnapshotError('the trade has no complete fee snapshot');
   }
@@ -123,21 +141,26 @@ export function releaseAmounts(snapshot: TradeReleaseSnapshot): ReleaseAmounts {
     buyerProtectionFeeMinor,
     commissionMinor,
     sellerProceedsMinor,
-    refundableOnFullRefund,
+    feeSnapshot: snapshot.feeSnapshot,
   });
 }
 
 /**
- * A line, or nothing at all when the amount is zero. A ledger line is strictly positive
+ * A line, or nothing at all when the amount is zero — and a throw when it is negative. A ledger
+ * line is strictly positive
  * (`journalLineSchema`), and a zero-commission trade — which is every trade under Q14's default —
- * must produce a journal without a commission line rather than one the schema rejects.
+ * must produce a journal without a commission line rather than one the schema rejects. Zero meaning
+ * "no line" must not slide into negative meaning "no line": that would let a caller drop a leg of
+ * its own posting and never hear about it, so every builder below inherits the refusal from here.
  *
  * The ref is normalised here, so a uuid that arrived upper-case from a path parameter or a provider
  * payload names the same account as its lower-case form, and a malformed one is a loud failure at
  * the posting site rather than a quiet second account.
  */
-const line = (account: AccountRef, direction: 'DEBIT' | 'CREDIT', amountMinor: Kobo): JournalLineInput[] =>
-  amountMinor > 0n ? [{ account: normaliseAccountRef(account), direction, amountMinor }] : [];
+const line = (account: AccountRef, direction: 'DEBIT' | 'CREDIT', amountMinor: Kobo): JournalLineInput[] => {
+  if (amountMinor < 0n) throw new SettlementAmountError(amountMinor);
+  return amountMinor > 0n ? [{ account: normaliseAccountRef(account), direction, amountMinor }] : [];
+};
 
 /**
  * The journal for a normal release (M8 §4 step 2, with T-072's fee account):
@@ -197,7 +220,13 @@ export type FeeTreatment = 'RECOGNISE' | 'REFUND';
  * accepted, not the one in force when the dispute is decided.
  */
 export const feeTreatmentForSplit = (amounts: ReleaseAmounts, refundToBuyerMinor: Kobo): FeeTreatment =>
-  refundToBuyerMinor === amounts.itemAmountMinor && amounts.refundableOnFullRefund ? 'REFUND' : 'RECOGNISE';
+  // The stored snapshot is parsed ONLY here, and only when the whole item is going back: that is
+  // the one outcome the flag decides. A release and a partial split never touch the JSONB, so a
+  // trade whose snapshot is unreadable can still be settled from its frozen columns, and the replay
+  // of a trade settled long ago still answers instead of throwing.
+  refundToBuyerMinor === amounts.itemAmountMinor && refundableOnFullRefundOf(amounts.feeSnapshot)
+    ? 'REFUND'
+    : 'RECOGNISE';
 
 /**
  * How T-080 divides the escrowed item. The caller supplies all three amounts already computed: how
@@ -223,6 +252,15 @@ export function assertSplitSums(amounts: ReleaseAmounts, split: DisputeSplit): v
   if (shares.some((share) => share < 0n)) {
     throw new ReleaseSplitError(
       `a share is negative (seller ${split.releaseToSellerMinor}, commission ${split.commissionMinor}, buyer ${split.refundToBuyerMinor})`,
+    );
+  }
+  // Summing to the item is not enough on its own: `(seller 0, commission item, buyer 0)` adds up
+  // perfectly and books the entire escrowed item as platform revenue. The trade's own frozen
+  // commission is the ceiling, and it is already on the snapshot — asserting it invents no fee
+  // rule, it only refuses to take more than the trade ever said the platform could.
+  if (split.commissionMinor > amounts.commissionMinor) {
+    throw new ReleaseSplitError(
+      `commission ${split.commissionMinor} is more than the ${amounts.commissionMinor} this trade froze`,
     );
   }
   const total = shares.reduce((sum, share) => sum + share, 0n);
@@ -276,6 +314,42 @@ export function refundableOnFullRefundOf(feeSnapshot: unknown): boolean {
     throw new ReleaseSnapshotError('the stored fee snapshot is not a readable fee snapshot');
   }
   return parsed.data.terms.buyerProtectionRefundableOnFullRefund;
+}
+
+/**
+ * The stored snapshot against the nine frozen columns. Both are written in one transaction at
+ * acceptance and neither can be edited afterwards (migration 0019's freeze trigger), so a
+ * disagreement means a hand-edited row, a half-finished backfill or a serialisation bug — and the
+ * columns are what every posting is built from. Checked at the cheapest point there is: the
+ * snapshot is already in hand, and this runs once per trade, before its first settlement.
+ *
+ * Deliberately NOT run on a replay (see `releaseEscrow`): a trade settled correctly months ago
+ * must still be able to answer "already settled" when its event is redelivered.
+ */
+export function assertSnapshotMatchesColumns(amounts: ReleaseAmounts): void {
+  const parsed = feeSnapshotSchema.safeParse(amounts.feeSnapshot);
+  if (!parsed.success) {
+    throw new ReleaseSnapshotError('the stored fee snapshot is not a readable fee snapshot');
+  }
+  const stored = parsed.data.amounts;
+  const disagreements = (
+    [
+      ['item', stored.itemMinor, amounts.itemAmountMinor],
+      ['buyer protection fee', stored.buyerProtectionFeeMinor, amounts.buyerProtectionFeeMinor],
+      ['commission', stored.commissionMinor, amounts.commissionMinor],
+    ] as const
+  ).filter(([, inSnapshot, inColumn]) => BigInt(inSnapshot) !== inColumn);
+
+  if (disagreements.length) {
+    throw new ReleaseSnapshotError(
+      disagreements
+        .map(
+          ([what, inSnapshot, inColumn]) =>
+            `${what} is ${inSnapshot} in the snapshot, ${inColumn} in the column`,
+        )
+        .join('; '),
+    );
+  }
 }
 
 /** Which way a trade's escrow is being settled. T-080 supplies the split; `trade.completed` does not. */

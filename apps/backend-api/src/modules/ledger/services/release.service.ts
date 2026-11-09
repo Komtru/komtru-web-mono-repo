@@ -23,9 +23,11 @@ import { publish, type Tx } from '../../../platform/events/publish.js';
 import type { Logger } from '../../../platform/logger.js';
 import { paymentEscrowReleasedEvent } from '../domain/events.js';
 import {
+  assertSnapshotMatchesColumns,
   planSettlement,
   releaseAmounts,
   releaseIdempotencyKey,
+  ReleaseSnapshotError,
   type ReleaseAmounts,
   type Settlement,
   type SettlementShares,
@@ -169,6 +171,19 @@ async function checkReleasable(
   // Holds first: a held trade is not a broken one, and it should not be reported as one.
   const holds = await activeTradeHolds(tx, trade.tradeId);
   if (holds.length) return { outcome: 'HELD', holds };
+
+  // The stored snapshot against the columns every line was built from. A refusal rather than a
+  // throw: it is a finding about one trade's data, exactly like the balance mismatches below, and
+  // no number of retries repairs it. Reached only on a first settlement, so a replay of a trade
+  // whose JSONB has since become unreadable is still answered.
+  try {
+    assertSnapshotMatchesColumns(amounts);
+  } catch (error) {
+    if (error instanceof ReleaseSnapshotError) {
+      return { outcome: 'NOT_RELEASABLE', reason: error.detail };
+    }
+    throw error;
+  }
 
   const allowed = RELEASABLE_STATUSES[settlement.kind];
   if (!allowed.includes(trade.status)) {
