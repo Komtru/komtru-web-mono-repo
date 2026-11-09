@@ -1,14 +1,21 @@
-// The trades this device has seen, by id.
+// The trades this device has seen for one person, by id.
 //
 // STOPGAP. The platform has no `GET /trades` list yet (reported in the F-017 plan), so "Your Trades"
 // is built from the ids of trades this person proposed or opened here, each read through
 // `GET /trades/:id`. It stores ids only, never terms or names. When the list route exists this file
 // is deleted and `MyTrades` reads the route instead; nothing else depends on it.
+//
+// The list is per person: the key carries the user's id, so a second person on the same phone starts
+// with an empty list and never sees that the first person's ids exist. Sign-out clears every list
+// (`forgetKnownTrades`, called from `onSessionEnded`) as well, because the phone at a motor park
+// counter is a shared phone.
 import { useMemo, useSyncExternalStore } from 'react';
 
-const KEY = 'komtru.trades.known';
+const PREFIX = 'komtru.trades.known';
 const MAX = 100;
 const CHANGED = 'komtru:known-trades';
+
+const keyFor = (userId: string): string => `${PREFIX}.${userId}`;
 
 const storage = (): Storage | undefined => {
   try {
@@ -19,8 +26,8 @@ const storage = (): Storage | undefined => {
   }
 };
 
-export function knownTradeIds(): string[] {
-  const raw = storage()?.getItem(KEY);
+export function knownTradeIds(userId: string): string[] {
+  const raw = storage()?.getItem(keyFor(userId));
   if (raw === null || raw === undefined) return [];
   try {
     const parsed: unknown = JSON.parse(raw);
@@ -30,21 +37,44 @@ export function knownTradeIds(): string[] {
   }
 }
 
-/** Newest first, once each. */
-export function rememberTrade(id: string): void {
-  const ids = [id, ...knownTradeIds().filter((known) => known !== id)].slice(0, MAX);
+const write = (userId: string, ids: string[]): void => {
   try {
-    storage()?.setItem(KEY, JSON.stringify(ids));
+    storage()?.setItem(keyFor(userId), JSON.stringify(ids));
     window.dispatchEvent(new Event(CHANGED));
   } catch {
     // A full or blocked store costs the person a list entry, not the trade.
   }
+};
+
+/** Newest first, once each, at most `MAX`. */
+export function rememberTrade(userId: string, id: string): void {
+  write(userId, [id, ...knownTradeIds(userId).filter((known) => known !== id)].slice(0, MAX));
 }
 
-/** On sign-out, with everything else the previous person left on a shared phone. */
+/** A trade that can never be read again (gone, or not this person's) leaves the list. */
+export function forgetTrade(userId: string, id: string): void {
+  const ids = knownTradeIds(userId);
+  if (ids.includes(id))
+    write(
+      userId,
+      ids.filter((known) => known !== id),
+    );
+}
+
+/**
+ * On sign-out: every person's list, and the unscoped key an earlier build wrote, so nothing the
+ * previous person opened is left for the next one.
+ */
 export function forgetKnownTrades(): void {
+  const store = storage();
+  if (store === undefined) return;
   try {
-    storage()?.removeItem(KEY);
+    const keys: string[] = [];
+    for (let index = 0; index < store.length; index += 1) {
+      const key = store.key(index);
+      if (key !== null && (key === PREFIX || key.startsWith(`${PREFIX}.`))) keys.push(key);
+    }
+    for (const key of keys) store.removeItem(key);
     window.dispatchEvent(new Event(CHANGED));
   } catch {
     // Nothing to clear if storage is not there.
@@ -61,15 +91,18 @@ const subscribe = (notify: () => void): (() => void) => {
 };
 
 /**
- * The ids, read the way React reads an external store: `undefined` on the server and for the first
- * client render (so the markup matches), then the stored list, kept current when another tab or this
- * one changes it.
+ * The ids, read the way React reads an external store: `undefined` on the server, for the first client
+ * render (so the markup matches) and until the person is known, then the stored list, kept current
+ * when another tab or this one changes it.
  */
-export function useKnownTradeIds(): string[] | undefined {
+export function useKnownTradeIds(userId: string | undefined): string[] | undefined {
   const raw = useSyncExternalStore(
     subscribe,
-    () => storage()?.getItem(KEY) ?? '',
+    () => (userId === undefined ? '' : (storage()?.getItem(keyFor(userId)) ?? '')),
     () => null,
   );
-  return useMemo(() => (raw === null ? undefined : knownTradeIds()), [raw]);
+  return useMemo(
+    () => (raw === null || userId === undefined ? undefined : knownTradeIds(userId)),
+    [raw, userId],
+  );
 }

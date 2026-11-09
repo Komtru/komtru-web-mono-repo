@@ -2,16 +2,29 @@
 
 import { useAddresses, useCounterTrade, useTrade } from '@komtru/api-client/react';
 import { nairaToKobo } from '@komtru/shared-types';
-import { ActionStack, Button, CounterDiffRow, ScreenHeader, SectionLabel, TextField } from '@komtru/ui-kit';
+import {
+  ActionStack,
+  Button,
+  CounterDiffRow,
+  LoadFailed,
+  LoadingScreen,
+  NoteBanner,
+  RiskBanner,
+  ScreenColumn,
+  ScreenHeader,
+  SectionLabel,
+  TermList,
+  TermRow,
+  TextField,
+} from '@komtru/ui-kit';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { AddressPicker } from './AddressPicker';
 import { addressLine, isProblem, naira, problemMessage } from './format';
-import { Column, LoadFailed, LoadingScreen, NoteBanner, RiskBanner } from './parts';
 
 const asNairaText = (minor: string): string => {
   const kobo = BigInt(minor);
-  const whole = (kobo / 100n).toString();
+  const whole = (kobo / 100n).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',');
   const fraction = (kobo % 100n).toString().padStart(2, '0');
   return fraction === '00' ? whole : `${whole}.${fraction}`;
 };
@@ -43,10 +56,10 @@ export function ProposeChange({ id }: { id: string }): React.JSX.Element {
 
   if (trade.isPending) {
     return (
-      <Column>
+      <ScreenColumn>
         <ScreenHeader title="Propose a Change" backHref={`/trade/${id}`} />
         <LoadingScreen label="Loading the trade" />
-      </Column>
+      </ScreenColumn>
     );
   }
   if (trade.isError) {
@@ -63,7 +76,7 @@ export function ProposeChange({ id }: { id: string }): React.JSX.Element {
   const terms = view.terms;
   if (view.awaiting !== 'YOU' || terms === null) {
     return (
-      <Column>
+      <ScreenColumn>
         <ScreenHeader title="Propose a Change" backHref={`/trade/${id}`} />
         <NoteBanner>
           It isn&apos;t your turn on this trade, so there&apos;s nothing to change right now.
@@ -73,7 +86,7 @@ export function ProposeChange({ id }: { id: string }): React.JSX.Element {
             <a href={`/trade/${id}`}>Back to the trade</a>
           </Button>
         </ActionStack>
-      </Column>
+      </ScreenColumn>
     );
   }
 
@@ -101,13 +114,23 @@ export function ProposeChange({ id }: { id: string }): React.JSX.Element {
         onSuccess: () => {
           router.push(`/trade/${id}`);
         },
-        onError: (error) => setProblem(problemMessage(error, "We couldn't send that change. Try again.")),
+        onError: (error) => {
+          setProblem(problemMessage(error, "We couldn't send that change. Try again."));
+          if (isProblem(error, 'CONFLICT')) {
+            // The trade moved on: show the latest terms and drop the edit made against the old ones,
+            // so the next send carries the new revision instead of failing the same way again.
+            setAmount(undefined);
+            setChangeAddress(false);
+            setAddressId(null);
+            void trade.refetch();
+          }
+        },
       },
     );
   };
 
   return (
-    <Column>
+    <ScreenColumn>
       <ScreenHeader title="Propose a Change" backHref={`/trade/${id}`} />
       <NoteBanner>
         Only the terms you change are different. The {proposer} must review the revised agreement.
@@ -159,10 +182,25 @@ export function ProposeChange({ id }: { id: string }): React.JSX.Element {
         <CounterDiffRow
           label={view.yourRole === 'BUYER' ? 'Delivery to' : 'Ships from'}
           before={ownSide === null ? 'No address yet' : addressLine(ownSide)}
-          after={chosenAddress.streetLine}
+          after={addressLine({ street: chosenAddress.streetLine, landmark: chosenAddress.landmark ?? '' })}
           afterCaption="your counter"
         />
       )}
+      <SectionLabel>Revised terms summary</SectionLabel>
+      <TermList aria-label="Revised terms summary">
+        <TermRow label="Item price">{kobo === undefined ? '—' : naira(kobo.toString())}</TermRow>
+        <TermRow label={view.yourRole === 'BUYER' ? 'Delivery to' : 'Ships from'}>
+          {chosenAddress === undefined
+            ? ownSide === null
+              ? 'Not set yet'
+              : addressLine(ownSide)
+            : addressLine({ street: chosenAddress.streetLine, landmark: chosenAddress.landmark ?? '' })}
+        </TermRow>
+        <TermRow label="Other terms">Unchanged</TermRow>
+      </TermList>
+      <p className="mt-[12px] text-[11px] leading-[1.5] text-trust-gray">
+        The previous proposal is not the accepted agreement.
+      </p>
       {problem !== undefined && <RiskBanner>{problem}</RiskBanner>}
       <ActionStack>
         <Button
@@ -176,6 +214,6 @@ export function ProposeChange({ id }: { id: string }): React.JSX.Element {
           <a href={`/trade/${id}`}>Discard changes</a>
         </Button>
       </ActionStack>
-    </Column>
+    </ScreenColumn>
   );
 }

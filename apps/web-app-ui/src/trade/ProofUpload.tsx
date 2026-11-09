@@ -2,9 +2,8 @@
 
 import { UploadError, uploadFile } from '@komtru/api-client';
 import { useApiClient } from '@komtru/api-client/react';
-import { FileDropzone, type MediaItem } from '@komtru/ui-kit';
+import { FileDropzone, type MediaItem, RiskBanner } from '@komtru/ui-kit';
 import { useRef, useState } from 'react';
-import { RiskBanner } from './parts';
 
 /** The file the platform stores the seller's proof under: private to the trade, never public. */
 const PROOF = { category: 'OTHER', visibility: 'PRIVATE_CASE' } as const;

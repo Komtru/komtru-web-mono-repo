@@ -6,6 +6,7 @@ import { TradeScreen } from '../src/trade/TradeScreen';
 import { knownTradeIds } from '../src/trade/known-trades';
 import { expectNoAxeViolations } from './axe';
 import {
+  ME_ID,
   SHELL_RULES,
   address,
   answerWith,
@@ -13,6 +14,7 @@ import {
   id,
   page,
   renderWithApi,
+  standardsPage,
   tradeView,
   type CallFn,
 } from './support/trade';
@@ -34,12 +36,19 @@ const problem = (code: string, status: number, detail?: string) =>
     false,
   );
 
+let uploads = 0;
 const withTrade = (view: unknown, more: Record<string, unknown> = {}) =>
-  answerWith(api.call, { 'GET /trades/:id': view, 'GET /me/addresses': page([address(1)]), ...more });
+  answerWith(api.call, {
+    'GET /trades/:id': view,
+    'GET /me/addresses': page([address(1)]),
+    'GET /config/trade-standards': standardsPage(),
+    ...more,
+  });
 
 beforeEach(() => {
   api.call.mockReset();
   router.push.mockReset();
+  uploads = 0;
   window.localStorage.clear();
 });
 afterEach(cleanup);
@@ -49,7 +58,7 @@ describe('opening a trade', () => {
     withTrade(tradeView({ status: 'PENDING_PAYMENT', awaiting: null }));
     renderWithApi(api.call, <TradeScreen id={id(1)} />);
     await screen.findByRole('heading', { name: 'Terms agreed' });
-    expect(knownTradeIds()).toEqual([id(1)]);
+    expect(knownTradeIds(ME_ID)).toEqual([id(1)]);
   });
 
   it('says a trade cannot be found, with no retry, when the platform says 404', async () => {
@@ -57,7 +66,7 @@ describe('opening a trade', () => {
     renderWithApi(api.call, <TradeScreen id={id(1)} />);
     expect(await screen.findByText("We can't find that trade. It may have been withdrawn.")).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'Try again' })).toBeNull();
-    expect(knownTradeIds()).toEqual([]);
+    expect(knownTradeIds(ME_ID)).toEqual([]);
   });
 
   it('offers a retry for any other failure', async () => {
@@ -98,19 +107,27 @@ describe('a proposal waiting on the seller (R1)', () => {
     });
     expect(accept.disabled).toBe(true);
     expect(screen.getByText('Proof of the item needed')).toBeTruthy();
+    // The category's own standard sets the count: electronics asks for two photos.
+    expect(await screen.findByText(/Attach 2 photos or video of the item/)).toBeTruthy();
   });
 
   it('accepts the version on screen with the chosen address and the uploaded proof', async () => {
     withTrade(request(), {
-      'POST /files/upload-url': {
-        fileId: id(90),
-        cloudName: 'komtru',
-        uploadUrl: 'https://upload.test/x',
-        params: { signature: 's' },
-        maxBytes: 5_000_000,
-        expiresAt: '2026-11-09T12:00:00.000Z',
+      'POST /files/upload-url': () => {
+        uploads += 1;
+        return {
+          fileId: id(89 + uploads),
+          cloudName: 'komtru',
+          uploadUrl: 'https://upload.test/x',
+          params: { signature: 's' },
+          maxBytes: 5_000_000,
+          expiresAt: '2026-11-09T12:00:00.000Z',
+        };
       },
-      'POST /files/:id/finalize': { fileId: id(90), uploadState: 'PENDING' },
+      'POST /files/:id/finalize': ({ params }: { params?: Record<string, string> }) => ({
+        fileId: params?.id,
+        uploadState: 'PENDING',
+      }),
       'POST /trades/:id/accept': tradeView({ status: 'PENDING_PAYMENT', awaiting: null }),
     });
     vi.stubGlobal(
@@ -126,7 +143,12 @@ describe('a proposal waiting on the seller (R1)', () => {
     const input = container.querySelector<HTMLInputElement>('input[type="file"]');
     expect(input).not.toBeNull();
     fireEvent.change(input as HTMLInputElement, {
-      target: { files: [new File(['x'], 'front.jpg', { type: 'image/jpeg' })] },
+      target: {
+        files: [
+          new File(['x'], 'front.jpg', { type: 'image/jpeg' }),
+          new File(['x'], 'back.jpg', { type: 'image/jpeg' }),
+        ],
+      },
     });
     await waitFor(() => {
       expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Accept trade request' }).disabled).toBe(
@@ -139,12 +161,16 @@ describe('a proposal waiting on the seller (R1)', () => {
       contentType: 'image/jpeg',
     });
 
+    // What was attached is shown as the person's own files, never as an id.
+    expect(container.textContent).not.toContain(id(90));
+    expect(container.textContent).not.toContain(id(91));
+
     fireEvent.click(screen.getByRole('button', { name: 'Accept trade request' }));
     expect(await screen.findByRole('heading', { name: 'Terms agreed' })).toBeTruthy();
     expect(callsTo(api.call, 'POST', '/trades/:id/accept')[0]?.body).toEqual({
       termsVersionId: id(40),
       addressId: id(1),
-      proofFileIds: [id(90)],
+      proofFileIds: [id(90), id(91)],
     });
     vi.unstubAllGlobals();
   });
@@ -169,15 +195,21 @@ describe('a proposal waiting on the seller (R1)', () => {
         422,
         'Attach 1 more photo before this trade can move to payment.',
       ),
-      'POST /files/upload-url': {
-        fileId: id(90),
-        cloudName: 'k',
-        uploadUrl: 'https://upload.test/x',
-        params: {},
-        maxBytes: 9_999_999,
-        expiresAt: 'x',
+      'POST /files/upload-url': () => {
+        uploads += 1;
+        return {
+          fileId: id(89 + uploads),
+          cloudName: 'komtru',
+          uploadUrl: 'https://upload.test/x',
+          params: { signature: 's' },
+          maxBytes: 5_000_000,
+          expiresAt: '2026-11-09T12:00:00.000Z',
+        };
       },
-      'POST /files/:id/finalize': { fileId: id(90), uploadState: 'PENDING' },
+      'POST /files/:id/finalize': ({ params }: { params?: Record<string, string> }) => ({
+        fileId: params?.id,
+        uploadState: 'PENDING',
+      }),
     });
     vi.stubGlobal(
       'fetch',
@@ -189,7 +221,12 @@ describe('a proposal waiting on the seller (R1)', () => {
       expect(screen.getByRole<HTMLInputElement>('radio', { name: /Home/ }).checked).toBe(true);
     });
     fireEvent.change(container.querySelector('input[type="file"]') as HTMLInputElement, {
-      target: { files: [new File(['x'], 'a.jpg', { type: 'image/jpeg' })] },
+      target: {
+        files: [
+          new File(['x'], 'a.jpg', { type: 'image/jpeg' }),
+          new File(['x'], 'b.jpg', { type: 'image/jpeg' }),
+        ],
+      },
     });
     await waitFor(() => {
       expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Accept trade request' }).disabled).toBe(
@@ -263,41 +300,147 @@ describe('waiting on the other party, and the invite', () => {
     renderWithApi(api.call, <TradeScreen id={id(1)} />);
     expect(await screen.findByRole('heading', { name: 'Invitation waiting' })).toBeTruthy();
     expect(screen.getByText(/They're not on Komtru yet/)).toBeTruthy();
+    // Nothing sends a link and nothing tells the sender to pass one on.
+    expect(screen.queryByText(/link/i)).toBeNull();
+    expect(screen.queryByText(/Send them/)).toBeNull();
     expect(screen.getByRole('button', { name: 'Withdraw the invitation' })).toBeTruthy();
   });
 
-  it('lets an invited person take their place', async () => {
-    withTrade(
-      tradeView({
-        yourRole: 'SELLER',
-        initiatorRole: 'BUYER',
-        status: 'PENDING_COUNTERPARTY',
-        awaiting: null,
-      }),
-      {
-        'POST /trades/:id/claim': tradeView({ status: 'AWAITING_ACCEPTANCE', awaiting: 'YOU' }),
-      },
-    );
+  const invited = () =>
+    tradeView({ yourRole: 'SELLER', initiatorRole: 'BUYER', status: 'PENDING_COUNTERPARTY', awaiting: null });
+
+  it('lets an invited person take their place once they have an address', async () => {
+    withTrade(invited(), {
+      'POST /trades/:id/claim': tradeView({ status: 'AWAITING_ACCEPTANCE', awaiting: 'YOU' }),
+    });
     renderWithApi(api.call, <TradeScreen id={id(1)} />);
-    fireEvent.click(await screen.findByRole('button', { name: 'Take your place' }));
+    const claim = await screen.findByRole<HTMLButtonElement>('button', { name: 'Take your place' });
+    await waitFor(() => {
+      expect(claim.disabled).toBe(false);
+    });
+    fireEvent.click(claim);
     expect(await screen.findByRole('button', { name: 'Accept trade request' })).toBeTruthy();
   });
 
-  it('sends the person to add an address when the claim needs one', async () => {
+  it('gives a new invitee, who has no address, the way to add one before they can claim', async () => {
+    let list = page<unknown>([]);
+    withTrade(invited(), {
+      'GET /me/addresses': () => list,
+      'GET /geo/states': page([{ id: id(70), code: 'LA', name: 'Lagos' }]),
+      'GET /geo/states/:stateId/cities': page([{ id: id(71), stateId: id(70), name: 'Ikeja', active: true }]),
+      'POST /me/addresses': () => {
+        const saved = address(5, { label: 'Shop', isDefault: true });
+        list = page([saved]);
+        return saved;
+      },
+      'POST /trades/:id/claim': tradeView({ status: 'AWAITING_ACCEPTANCE', awaiting: 'YOU' }),
+    });
+    renderWithApi(api.call, <TradeScreen id={id(1)} />);
+
+    // The add-address form is on the screen, and claiming waits for an address.
+    const claim = await screen.findByRole<HTMLButtonElement>('button', { name: 'Take your place' });
+    expect(claim.disabled).toBe(true);
+    fireEvent.change(await screen.findByLabelText('Name for this address'), { target: { value: 'Shop' } });
+    fireEvent.change(screen.getByLabelText('Recipient name'), { target: { value: 'Ada Obi' } });
+    fireEvent.change(screen.getByLabelText('Recipient phone'), { target: { value: '08012345678' } });
+    fireEvent.change(screen.getByLabelText('Street address'), { target: { value: '12 Allen Avenue' } });
+    await screen.findByRole('option', { name: 'Lagos' });
+    fireEvent.change(screen.getByLabelText('State'), { target: { value: id(70) } });
+    await screen.findByRole('option', { name: 'Ikeja' });
+    fireEvent.change(screen.getByLabelText('City'), { target: { value: id(71) } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save address' }));
+
+    await waitFor(() => {
+      expect(screen.getByRole<HTMLInputElement>('radio', { name: /Shop/ }).checked).toBe(true);
+    });
+    await waitFor(() => {
+      expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Take your place' }).disabled).toBe(false);
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Take your place' }));
+    expect(await screen.findByRole('button', { name: 'Accept trade request' })).toBeTruthy();
+    expect(callsTo(api.call, 'POST', '/trades/:id/claim')).toHaveLength(1);
+  });
+
+  it('says why when the claim is still refused, and leaves the picker there to fix it', async () => {
+    withTrade(invited(), { 'POST /trades/:id/claim': problem('ADDRESS_REQUIRED', 422) });
+    renderWithApi(api.call, <TradeScreen id={id(1)} />);
+    const claim = await screen.findByRole<HTMLButtonElement>('button', { name: 'Take your place' });
+    await waitFor(() => {
+      expect(claim.disabled).toBe(false);
+    });
+    fireEvent.click(claim);
+    expect(await screen.findByText('Choose or add a saved address first.')).toBeTruthy();
+    expect(screen.getByRole('radio', { name: /Home/ })).toBeTruthy();
+  });
+});
+
+describe('a stale accept', () => {
+  it('loads the latest terms and says they changed, so the next accept is of what is on screen', async () => {
+    let reads = 0;
     withTrade(
-      tradeView({
-        yourRole: 'SELLER',
-        initiatorRole: 'BUYER',
-        status: 'PENDING_COUNTERPARTY',
-        awaiting: null,
-      }),
+      () => {
+        reads += 1;
+        return tradeView(
+          reads === 1
+            ? {}
+            : {
+                terms: {
+                  ...tradeView().terms,
+                  versionId: id(41),
+                  versionNumber: 2,
+                  itemAmountMinor: '49500000',
+                },
+              },
+        );
+      },
       {
-        'POST /trades/:id/claim': problem('ADDRESS_REQUIRED', 422),
+        'POST /trades/:id/accept': problem('CONFLICT', 409, 'The other party changed the terms.'),
+        'POST /files/upload-url': () => {
+          uploads += 1;
+          return {
+            fileId: id(89 + uploads),
+            cloudName: 'k',
+            uploadUrl: 'https://upload.test/x',
+            params: {},
+            maxBytes: 9_999_999,
+            expiresAt: 'x',
+          };
+        },
+        'POST /files/:id/finalize': ({ params }: { params?: Record<string, string> }) => ({
+          fileId: params?.id,
+          uploadState: 'PENDING',
+        }),
       },
     );
-    renderWithApi(api.call, <TradeScreen id={id(1)} />);
-    fireEvent.click(await screen.findByRole('button', { name: 'Take your place' }));
-    expect(await screen.findByText('Choose or add a saved address first.')).toBeTruthy();
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() => Promise.resolve(new Response('{}', { status: 200 }))),
+    );
+    const { container } = renderWithApi(api.call, <TradeScreen id={id(1)} />);
+    await screen.findByText('Apple iPhone 13 Pro');
+    await waitFor(() => {
+      expect(screen.getByRole<HTMLInputElement>('radio', { name: /Home/ }).checked).toBe(true);
+    });
+    fireEvent.change(container.querySelector('input[type="file"]') as HTMLInputElement, {
+      target: {
+        files: [
+          new File(['x'], 'a.jpg', { type: 'image/jpeg' }),
+          new File(['x'], 'b.jpg', { type: 'image/jpeg' }),
+        ],
+      },
+    });
+    await waitFor(() => {
+      expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Accept trade request' }).disabled).toBe(
+        false,
+      );
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Accept trade request' }));
+
+    expect(await screen.findByText(/The terms changed while you were looking/)).toBeTruthy();
+    // The screen now shows the version the platform holds, not the one that was refused.
+    expect((await screen.findAllByText('₦495,000.00')).length).toBeGreaterThan(0);
+    expect(reads).toBeGreaterThanOrEqual(2);
+    vi.unstubAllGlobals();
   });
 });
 
@@ -327,6 +470,13 @@ describe('held for review (G3) and not sent (IF1)', () => {
     expect(await screen.findByRole('heading', { name: "This proposal can't go ahead" })).toBeTruthy();
     expect(screen.getByText("This isn't automatically your fault")).toBeTruthy();
     expect(screen.getByRole('link', { name: 'Start a new trade' }).getAttribute('href')).toBe('/trade/new');
+  });
+
+  it('has one h1: the header, with the hero a level below it', async () => {
+    withTrade(tradeView({ yourRole: 'BUYER', status: 'REJECTED', awaiting: null }));
+    renderWithApi(api.call, <TradeScreen id={id(1)} />);
+    await screen.findByRole('heading', { name: "This proposal can't go ahead" });
+    expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1);
   });
 });
 
@@ -361,8 +511,8 @@ describe('terms agreed (TC-06)', () => {
       'listitem',
     );
     expect(versions.map((item) => item.querySelector('b')?.textContent)).toEqual([
-      'Version 1 · Buyer proposal',
-      'Version 2 · Seller counter',
+      'Version 1',
+      'Version 2',
       'Version 3 · Accepted',
     ]);
     await expectNoAxeViolations(container, SHELL_RULES);

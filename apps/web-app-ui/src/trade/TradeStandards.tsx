@@ -2,9 +2,26 @@
 
 import { type TradeStandard } from '@komtru/api-client';
 import { useTradeStandards } from '@komtru/api-client/react';
-import { ScreenHeader, StandardCard, TermList, TermRow } from '@komtru/ui-kit';
+import {
+  LoadFailed,
+  LoadingScreen,
+  NoteBanner,
+  ScreenColumn,
+  ScreenHeader,
+  StandardCard,
+  TermList,
+  TermRow,
+} from '@komtru/ui-kit';
 import { hoursLabel } from './format';
-import { Column, LoadFailed, LoadingScreen, NoteBanner, RULES } from './parts';
+
+/** CTS1's own mark on its banner: two nodes on a rail, for rules that apply without anyone setting them. */
+const RULES = (
+  <svg viewBox="0 0 24 24" fill="none" strokeWidth="2" strokeLinecap="round" aria-hidden>
+    <circle cx="6" cy="12" r="2" />
+    <circle cx="18" cy="12" r="2" />
+    <path d="M8 12h8" />
+  </svg>
+);
 
 const BRIEFCASE = (
   <svg
@@ -58,7 +75,7 @@ export function TradeStandards({ backHref = '/trades' }: { backHref?: string }):
   const standards = useTradeStandards();
 
   return (
-    <Column>
+    <ScreenColumn>
       <ScreenHeader title="Trade Standards" backHref={backHref} />
       <NoteBanner icon={RULES}>
         These apply automatically to every trade in the category. Nobody sets them per trade, which is what
@@ -91,6 +108,6 @@ export function TradeStandards({ backHref = '/trades' }: { backHref?: string }):
           </TermList>
         </StandardCard>
       ))}
-    </Column>
+    </ScreenColumn>
   );
 }

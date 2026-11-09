@@ -1,10 +1,9 @@
 'use client';
 
 import { useAddresses, useCities, useCreateAddress, useStates } from '@komtru/api-client/react';
-import { Button, OptionCard, Select, SectionLabel, TextField } from '@komtru/ui-kit';
+import { Button, OptionCard, RiskBanner, SectionLabel, Select, TextField } from '@komtru/ui-kit';
 import { useEffect, useState } from 'react';
 import { problemMessage } from './format';
-import { RiskBanner } from './parts';
 
 export interface AddressPickerProps {
   /** "Delivery address" for a buyer, "Ships from" for a seller. */

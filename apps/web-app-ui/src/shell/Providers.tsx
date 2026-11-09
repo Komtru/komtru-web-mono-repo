@@ -2,11 +2,12 @@
 
 import { captureException } from '@sentry/nextjs';
 
-import { KomtruProviders } from '@komtru/app-kit/react';
+import { createKomtruQueryClient, KomtruProviders } from '@komtru/app-kit/react';
 import { readAppConfig } from '@komtru/app-kit';
 import { useRouter } from 'next/navigation';
-import { useCallback } from 'react';
+import { useCallback, useState } from 'react';
 import { appSpec, webAppEnv } from '../app-config';
+import { forgetKnownTrades } from '../trade/known-trades';
 import { clearOfflineCache } from './ServiceWorker';
 
 /**
@@ -19,9 +20,15 @@ import { clearOfflineCache } from './ServiceWorker';
  */
 export function Providers({ children }: { children: React.ReactNode }): React.JSX.Element {
   const router = useRouter();
+  // Held here so a session ending can empty it: the next person on this device must not be handed
+  // the previous person's cached trades from memory.
+  const [queries] = useState(createKomtruQueryClient);
   const config = readAppConfig(appSpec, webAppEnv());
 
   const onSessionEnded = useCallback(() => {
+    // Everything kept for the person whose session just ended, before the next one can see it.
+    forgetKnownTrades();
+    queries.clear();
     // Everything this device saved belonged to the person whose session just ended. The Cache API
     // is per origin, not per person, and the phone at a motor park counter is a shared phone — so
     // the pages go before the next person reaches the sign-in screen.
@@ -36,7 +43,7 @@ export function Providers({ children }: { children: React.ReactNode }): React.JS
         // `replace`, not `push`: a dead session is not somewhere to go back to.
         router.replace(appSpec.signInPath);
       });
-  }, [router]);
+  }, [router, queries]);
 
   return (
     <KomtruProviders
@@ -47,6 +54,7 @@ export function Providers({ children }: { children: React.ReactNode }): React.JS
       // token directly the moment sign-in or a verified code opens the session (T-111).
       session={null}
       onSessionEnded={onSessionEnded}
+      queryClient={queries}
     >
       {children}
     </KomtruProviders>

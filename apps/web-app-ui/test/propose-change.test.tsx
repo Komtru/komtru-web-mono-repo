@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { ProblemError } from '@komtru/api-client';
-import { cleanup, fireEvent, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ProposeChange } from '../src/trade/ProposeChange';
 import { expectNoAxeViolations } from './axe';
@@ -37,7 +37,7 @@ describe('Propose a Change (TC-05)', () => {
   it('starts from the current terms and shows nothing as changing until something is', async () => {
     answerWith(api.call, handlers());
     const { container } = renderWithApi(api.call, <ProposeChange id={id(1)} />);
-    expect((await screen.findByLabelText<HTMLInputElement>('Item price')).value).toBe('452000');
+    expect((await screen.findByLabelText<HTMLInputElement>('Item price')).value).toBe('452,000');
     expect(screen.getByText(/Nothing yet/)).toBeTruthy();
     expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Send counter-proposal' }).disabled).toBe(
       true,
@@ -83,6 +83,39 @@ describe('Propose a Change (TC-05)', () => {
     });
   });
 
+  it('shows the revised terms summary and the note that the old proposal is not the agreement', async () => {
+    answerWith(api.call, handlers());
+    renderWithApi(api.call, <ProposeChange id={id(1)} />);
+    fireEvent.change(await screen.findByLabelText('Item price'), { target: { value: '495,000' } });
+    const summary = screen.getByLabelText('Revised terms summary');
+    expect(within(summary).getByText('Item price').nextElementSibling?.textContent).toBe('₦495,000.00');
+    expect(within(summary).getByText('Other terms').nextElementSibling?.textContent).toBe('Unchanged');
+    expect(screen.getByText('The previous proposal is not the accepted agreement.')).toBeTruthy();
+  });
+
+  it('writes both sides of an address change in the same form: street, then landmark', async () => {
+    const ownSide = { street: '5 Adeola Odeku', landmark: 'Victoria Island' };
+    answerWith(
+      api.call,
+      handlers({
+        'GET /trades/:id': tradeView({
+          yourRole: 'BUYER',
+          initiatorRole: 'SELLER',
+          terms: { ...tradeView().terms, deliveryAddress: ownSide },
+        }),
+        'GET /me/addresses': page([
+          address(1),
+          address(2, { streetLine: '3 Broad Street', landmark: 'By the bank' }),
+        ]),
+      }),
+    );
+    renderWithApi(api.call, <ProposeChange id={id(1)} />);
+    fireEvent.click(await screen.findByLabelText(/Use a different/));
+    fireEvent.click(await screen.findByRole('radio', { name: /Address 2/ }));
+    expect(screen.getByText(/Was:/).parentElement?.textContent).toBe('Was: 5 Adeola Odeku, Victoria Island');
+    expect(screen.getByText(/Now:/).parentElement?.textContent).toContain('3 Broad Street, By the bank');
+  });
+
   it('refuses an amount that is not a price', async () => {
     answerWith(api.call, handlers());
     renderWithApi(api.call, <ProposeChange id={id(1)} />);
@@ -93,28 +126,67 @@ describe('Propose a Change (TC-05)', () => {
     );
   });
 
-  it('says so when the trade moved on while the person was editing', async () => {
+  it('recovers from a stale counter: loads the latest terms and sends the new revision next time', async () => {
+    let reads = 0;
+    let sends = 0;
     answerWith(
       api.call,
       handlers({
-        'POST /trades/:id/counter': new ProblemError(
-          { type: 'about:blank', title: 't', status: 409, code: 'INVALID_TRANSITION' },
-          {
-            status: 409,
-            requestId: undefined,
-            replayed: false,
-            retryAfterMs: undefined,
-            rateLimit: undefined,
-          },
-          false,
-        ),
+        'GET /trades/:id': () => {
+          reads += 1;
+          // The other party changed the price meanwhile; the revision moved on with it.
+          return reads === 1
+            ? tradeView()
+            : tradeView({ statusRevision: 3, terms: { ...tradeView().terms, itemAmountMinor: '47000000' } });
+        },
+        'POST /trades/:id/counter': ({ body }: { body?: unknown }) => {
+          sends += 1;
+          if (sends === 1) {
+            return new ProblemError(
+              { type: 'about:blank', title: 't', status: 409, code: 'CONFLICT' },
+              {
+                status: 409,
+                requestId: undefined,
+                replayed: false,
+                retryAfterMs: undefined,
+                rateLimit: undefined,
+              },
+              false,
+            );
+          }
+          return { sent: body };
+        },
       }),
     );
     renderWithApi(api.call, <ProposeChange id={id(1)} />);
     fireEvent.change(await screen.findByLabelText('Item price'), { target: { value: '500,000' } });
     fireEvent.click(screen.getByRole('button', { name: 'Send counter-proposal' }));
-    expect(await screen.findByText(/This trade has moved on since you opened it/)).toBeTruthy();
-    expect(router.push).not.toHaveBeenCalled();
+
+    expect(await screen.findByText(/The terms changed while you were looking/)).toBeTruthy();
+    // The edit made against the old terms is dropped and the form shows what the platform now holds.
+    await waitFor(() => {
+      expect(screen.getByLabelText<HTMLInputElement>('Item price').value).toBe('470,000');
+    });
+
+    fireEvent.change(screen.getByLabelText('Item price'), { target: { value: '480,000' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Send counter-proposal' }));
+    await waitFor(() => {
+      expect(router.push).toHaveBeenCalled();
+    });
+    const sent = callsTo(api.call, 'POST', '/trades/:id/counter').map((call) => call.body);
+    expect(sent[0]).toMatchObject({ expectedRevision: 2 });
+    expect(sent[1]).toMatchObject({ expectedRevision: 3, itemAmountMinor: '48000000' });
+  });
+
+  it('shows the shape of the page while the trade loads, and a retry when it cannot be read', async () => {
+    api.call.mockImplementation(() => new Promise(() => undefined));
+    const first = renderWithApi(api.call, <ProposeChange id={id(1)} />);
+    expect(screen.getByRole('status', { name: 'Loading the trade' })).toBeTruthy();
+    first.unmount();
+
+    answerWith(api.call, handlers({ 'GET /trades/:id': new Error('offline') }));
+    renderWithApi(api.call, <ProposeChange id={id(1)} />);
+    expect(await screen.findByRole('button', { name: 'Try again' })).toBeTruthy();
   });
 
   it("does not offer a change when it is not the person's turn", async () => {

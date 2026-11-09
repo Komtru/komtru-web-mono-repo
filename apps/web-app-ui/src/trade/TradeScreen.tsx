@@ -6,29 +6,48 @@ import {
   useCancelTrade,
   useClaimTrade,
   useDeclineTrade,
+  useMe,
   useTrade,
+  useTradeStandards,
+  tradeKeys,
 } from '@komtru/api-client/react';
 import {
   ActionStack,
   Button,
   CodeCard,
   ItemCard,
+  LoadFailed,
+  LoadingScreen,
+  NoteBanner,
+  ReadyBanner,
+  RiskBanner,
+  ScreenColumn,
   ScreenHeader,
   SectionLabel,
   Sheet,
   StatusHero,
+  type StatusHeroTone,
   TermList,
   TermRow,
   TextField,
-  VersionTimeline,
-  type StatusHeroTone,
   type VersionStep,
+  VersionTimeline,
+  WarnBanner,
 } from '@komtru/ui-kit';
+import { useQueryClient } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
 import { AddressPicker } from './AddressPicker';
-import { addressLine, hoursLabel, itemSub, itemTitle, naira, problemMessage, isProblem } from './format';
+import {
+  addressLine,
+  hoursLabel,
+  isProblem,
+  itemSub,
+  itemTitle,
+  naira,
+  problemMessage,
+  proofRequired,
+} from './format';
 import { rememberTrade } from './known-trades';
-import { Column, LoadFailed, LoadingScreen, NoteBanner, ReadyBanner, RiskBanner, WarnBanner } from './parts';
 import { ProofUpload } from './ProofUpload';
 
 /**
@@ -41,19 +60,21 @@ import { ProofUpload } from './ProofUpload';
  */
 export function TradeScreen({ id }: { id: string }): React.JSX.Element {
   const trade = useTrade(id);
+  const me = useMe();
 
-  // A trade somebody opens is a trade they are part of, so it joins the list on this device.
+  // A trade somebody opens is a trade they are part of, so it joins their list on this device.
   const found = trade.data !== undefined;
+  const userId = me.data?.id;
   useEffect(() => {
-    if (found) rememberTrade(id);
-  }, [found, id]);
+    if (found && userId !== undefined) rememberTrade(userId, id);
+  }, [found, userId, id]);
 
   if (trade.isPending) {
     return (
-      <Column>
+      <ScreenColumn>
         <ScreenHeader title="Trade" backHref="/trades" />
         <LoadingScreen label="Loading the trade" />
-      </Column>
+      </ScreenColumn>
     );
   }
   if (trade.isError) {
@@ -190,13 +211,17 @@ function AnswerProposal({ trade }: { trade: TradeView }): React.JSX.Element {
   const selling = trade.yourRole === 'SELLER';
   const accept = useAcceptTrade();
   const decline = useDeclineTrade();
+  const standards = useTradeStandards();
+  const queryClient = useQueryClient();
   const [addressId, setAddressId] = useState<string | null>(null);
   const [proof, setProof] = useState<string[]>([]);
   const [declining, setDeclining] = useState(false);
   const [reason, setReason] = useState('');
   const [problem, setProblem] = useState<string | undefined>(undefined);
 
-  const ready = trade.terms !== null && addressId !== null && (!selling || proof.length > 0);
+  // One until the standards have loaded, then what the category asks for.
+  const needed = selling ? proofRequired(trade.terms?.itemSpec, standards.data ?? []) : 0;
+  const ready = trade.terms !== null && addressId !== null && proof.length >= needed;
 
   const onAccept = () => {
     if (trade.terms === null || addressId === null) return;
@@ -208,7 +233,14 @@ function AnswerProposal({ trade }: { trade: TradeView }): React.JSX.Element {
         addressId,
         ...(selling && proof.length > 0 ? { proofFileIds: proof } : {}),
       },
-      { onError: (error) => setProblem(problemMessage(error, "We couldn't accept that. Try again.")) },
+      {
+        onError: (error) => {
+          setProblem(problemMessage(error, "We couldn't accept that. Try again."));
+          // A stale terms version: show the latest, so the next try accepts what is on screen.
+          if (isProblem(error, 'CONFLICT'))
+            void queryClient.invalidateQueries({ queryKey: tradeKeys.one(trade.id) });
+        },
+      },
     );
   };
 
@@ -227,7 +259,7 @@ function AnswerProposal({ trade }: { trade: TradeView }): React.JSX.Element {
   };
 
   return (
-    <Column>
+    <ScreenColumn>
       <ScreenHeader title={selling ? 'New Request' : 'Review terms'} backHref="/trades" />
       <NoteBanner>
         {selling
@@ -247,7 +279,7 @@ function AnswerProposal({ trade }: { trade: TradeView }): React.JSX.Element {
       {selling && (
         <>
           <SectionLabel>Proof of the item</SectionLabel>
-          <ProofUpload required={1} onChange={setProof} step="accept" />
+          <ProofUpload required={needed} onChange={setProof} step="accept" />
         </>
       )}
       {problem !== undefined && <RiskBanner>{problem}</RiskBanner>}
@@ -293,7 +325,7 @@ function AnswerProposal({ trade }: { trade: TradeView }): React.JSX.Element {
             : {})}
         />
       </ConfirmSheet>
-    </Column>
+    </ScreenColumn>
   );
 }
 
@@ -322,10 +354,10 @@ function WaitingOnThem({ trade }: { trade: TradeView }): React.JSX.Element {
   };
 
   return (
-    <Column>
+    <ScreenColumn>
       <StatusHero tone="info" title={invited ? 'Invitation waiting' : 'Request sent'}>
         {invited
-          ? "They're not on Komtru yet. When they sign up with the phone number or email you used, this request is waiting for them. Send them the Trade Code so they know it's from you."
+          ? "They're not on Komtru yet. When they sign up with the phone number or email you used, this request is waiting for them."
           : "They've been notified. You'll see their answer here, and you can change your mind until they accept."}
       </StatusHero>
       <ItemSummary trade={trade} />
@@ -358,25 +390,33 @@ function WaitingOnThem({ trade }: { trade: TradeView }): React.JSX.Element {
           The other party won&apos;t be able to accept it. Nothing has been paid.
         </p>
       </ConfirmSheet>
-    </Column>
+    </ScreenColumn>
   );
 }
 
 function ClaimInvitation({ trade }: { trade: TradeView }): React.JSX.Element {
   const claim = useClaimTrade();
+  // Taking your place needs a usable saved address, and a person invited by phone or email has none
+  // yet. The picker is the way to add one, so the screen never ends on "add an address" with nowhere to.
+  const [addressId, setAddressId] = useState<string | null>(null);
   const [problem, setProblem] = useState<string | undefined>(undefined);
   return (
-    <Column>
+    <ScreenColumn>
       <ScreenHeader title="You're invited" backHref="/trades" />
       <NoteBanner>
         Someone invited you to this trade. Take your place in it to see the terms and answer.
       </NoteBanner>
       <ItemSummary trade={trade} />
+      <AddressPicker
+        label={trade.yourRole === 'SELLER' ? 'Ships from' : 'Delivery address'}
+        value={addressId}
+        onChange={setAddressId}
+      />
       {problem !== undefined && <RiskBanner>{problem}</RiskBanner>}
       <ActionStack>
         <Button
           type="button"
-          disabled={claim.isPending}
+          disabled={claim.isPending || addressId === null}
           onClick={() => {
             setProblem(undefined);
             claim.mutate(trade.id, {
@@ -388,7 +428,7 @@ function ClaimInvitation({ trade }: { trade: TradeView }): React.JSX.Element {
           {claim.isPending ? 'Joining…' : 'Take your place'}
         </Button>
       </ActionStack>
-    </Column>
+    </ScreenColumn>
   );
 }
 
@@ -403,7 +443,7 @@ function ClaimInvitation({ trade }: { trade: TradeView }): React.JSX.Element {
  */
 function HeldForReview({ trade }: { trade: TradeView }): React.JSX.Element {
   return (
-    <Column>
+    <ScreenColumn>
       <StatusHero tone="info" title="Held for review">
         The other party hasn&apos;t seen this yet. We&apos;re checking it before it&apos;s forwarded, and
         you&apos;ll see it move on here as soon as it&apos;s cleared.
@@ -413,16 +453,16 @@ function HeldForReview({ trade }: { trade: TradeView }): React.JSX.Element {
       </NoteBanner>
       <CodeCard label="Your Trade Code. Save this either way" code={trade.tradeCode} />
       <ActionStack>{BACK_TO_TRADES}</ActionStack>
-    </Column>
+    </ScreenColumn>
   );
 }
 
 /** IF1's shape for the other state a review can end in: not forwarded, and the trade cannot continue. */
 function NotSent({ trade }: { trade: TradeView }): React.JSX.Element {
   return (
-    <Column>
+    <ScreenColumn>
       <ScreenHeader title="Not sent" backHref="/trades" />
-      <StatusHero tone="risk" title="This proposal can't go ahead" className="pt-[8px]">
+      <StatusHero tone="risk" as="h2" title="This proposal can't go ahead" className="pt-[8px]">
         It didn&apos;t pass review, so it wasn&apos;t sent. Nothing has been paid.
       </StatusHero>
       <WarnBanner title="This isn't automatically your fault">
@@ -436,7 +476,7 @@ function NotSent({ trade }: { trade: TradeView }): React.JSX.Element {
         </Button>
         {BACK_TO_TRADES}
       </ActionStack>
-    </Column>
+    </ScreenColumn>
   );
 }
 
@@ -444,26 +484,25 @@ function NotSent({ trade }: { trade: TradeView }): React.JSX.Element {
 // TC-06: terms agreed
 // ---------------------------------------------------------------------------
 
+/**
+ * The versions this agreement went through. The platform returns only the current terms, so only the
+ * current version is described (who proposed it is the API's own `proposedByRole`); the ones before
+ * it are listed as superseded without saying who wrote them, because that is not something the
+ * screen is told.
+ */
 function versionSteps(trade: TradeView): VersionStep[] {
   const current = trade.terms?.versionNumber ?? 1;
-  const roleOf = (n: number) =>
-    // A counter-proposal flips the turn, so versions alternate between the two sides from the first.
-    (n % 2 === 1) === (trade.initiatorRole === 'BUYER') ? 'Buyer' : 'Seller';
+  const proposer = trade.terms?.proposedByRole === 'SELLER' ? 'seller' : 'buyer';
   return Array.from({ length: current }, (_, index) => {
     const n = index + 1;
     return n === current
       ? {
           id: String(n),
           title: `Version ${String(n)} · Accepted`,
-          detail: `Proposed by the ${roleOf(n).toLowerCase()}. Current agreed version`,
+          detail: `Proposed by the ${proposer}. Current agreed version`,
           state: 'done' as const,
         }
-      : {
-          id: String(n),
-          title: `Version ${String(n)} · ${roleOf(n)} ${n === 1 ? 'proposal' : 'counter'}`,
-          detail: 'Superseded',
-          state: 'done' as const,
-        };
+      : { id: String(n), title: `Version ${String(n)}`, detail: 'Superseded', state: 'done' as const };
   });
 }
 
@@ -471,7 +510,7 @@ function TermsAgreed({ trade }: { trade: TradeView }): React.JSX.Element {
   const buyer = trade.yourRole === 'BUYER';
   const tone: StatusHeroTone = 'success';
   return (
-    <Column>
+    <ScreenColumn>
       <StatusHero tone={tone} title="Terms agreed">
         Both parties accepted this version, so the trade has been created.
       </StatusHero>
@@ -506,7 +545,7 @@ function TermsAgreed({ trade }: { trade: TradeView }): React.JSX.Element {
       </p>
       <CodeCard label="Trade Code" code={trade.tradeCode} className="mt-[16px]" />
       <ActionStack>{BACK_TO_TRADES}</ActionStack>
-    </Column>
+    </ScreenColumn>
   );
 }
 
@@ -532,7 +571,7 @@ const CLOSED: Record<string, { title: string; body: string }> = {
 function Closed({ trade }: { trade: TradeView }): React.JSX.Element {
   const copy = CLOSED[trade.status] ?? CLOSED.CANCELLED;
   return (
-    <Column>
+    <ScreenColumn>
       <StatusHero tone="warning" title={copy?.title ?? 'Trade ended'}>
         {copy?.body}
       </StatusHero>
@@ -544,17 +583,17 @@ function Closed({ trade }: { trade: TradeView }): React.JSX.Element {
         </Button>
         {BACK_TO_TRADES}
       </ActionStack>
-    </Column>
+    </ScreenColumn>
   );
 }
 
 function MovedOn({ trade }: { trade: TradeView }): React.JSX.Element {
   return (
-    <Column>
+    <ScreenColumn>
       <ScreenHeader title={trade.tradeCode} backHref="/trades" />
       <ItemSummary trade={trade} />
       <TermsRows trade={trade} />
       <ActionStack>{BACK_TO_TRADES}</ActionStack>
-    </Column>
+    </ScreenColumn>
   );
 }

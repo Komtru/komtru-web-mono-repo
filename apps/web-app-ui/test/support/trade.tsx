@@ -22,8 +22,13 @@ export const id = (n: number): string => `0190b0a0-0000-7000-8000-${String(n).pa
 
 type Handler = (input: CallInput) => unknown;
 
+/** The signed-in person. Every screen asks who they are before it touches the per-person device list. */
+export const ME_ID = id(900);
+const ME = { id: ME_ID, publicId: 'U-ME' };
+
 /** Makes a mocked `client.call` answer by "METHOD /path". A handler may be a value, a function or a thrown error. */
-export function answerWith(call: Mock<CallFn>, handlers: Record<string, unknown>): void {
+export function answerWith(call: Mock<CallFn>, given: Record<string, unknown>): void {
+  const handlers: Record<string, unknown> = { 'GET /me': ME, ...given };
   call.mockImplementation((endpoint, input = {}) => {
     const key = `${endpoint.method.toUpperCase()} ${endpoint.path}`;
     if (!(key in handlers)) return Promise.reject(new Error(`no handler for ${key}`));

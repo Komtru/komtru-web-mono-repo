@@ -1,6 +1,6 @@
 // What a proposal screen says and how it says it. Pure functions, so the wording rules are tested
 // without a DOM. Money arrives as a digit string of kobo and is only ever formatted here, never summed.
-import { ProblemError, type TradeView } from '@komtru/api-client';
+import { ProblemError, type TradeStandard, type TradeView } from '@komtru/api-client';
 import { formatNaira } from '@komtru/shared-types';
 
 export const naira = (minor: string): string => formatNaira(BigInt(minor));
@@ -38,6 +38,9 @@ export function problemMessage(error: unknown, fallback: string): string {
       return 'Choose or add a saved address first.';
     case 'RATE_LIMITED':
       return 'Too many tries. Wait a minute and try again.';
+    case 'CONFLICT':
+      // The platform's answer to a stale revision or a stale terms version.
+      return 'The terms changed while you were looking. We loaded the latest. Review them and try again.';
     case 'INVALID_TRANSITION':
       return 'This trade has moved on since you opened it. Reload to see where it stands.';
     case 'NOT_FOUND':
@@ -189,4 +192,20 @@ export function describeTrade(
         closed: false,
       };
   }
+}
+
+/**
+ * How many photos the seller must attach to accept. The trade view does not say which category it is
+ * in (reported as an API gap), so the category is recognised by its item details: the standards whose
+ * required fields the trade's item spec fills. Where that is still more than one, the strictest wins,
+ * so the screen never lets someone try with less than the platform will ask for. Always at least one,
+ * because acceptance without any proof is never allowed; the platform makes the final call.
+ */
+export function proofRequired(spec: unknown, standards: readonly TradeStandard[]): number {
+  const record = asRecord(spec);
+  const matching = standards.filter((standard) =>
+    standard.itemSpecFields.every((field) => !field.required || text(record[field.key]) !== undefined),
+  );
+  const pool = matching.length > 0 ? matching : standards;
+  return Math.max(1, ...pool.map((standard) => standard.proofMedia.minPhotos));
 }

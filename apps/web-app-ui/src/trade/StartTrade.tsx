@@ -8,7 +8,9 @@ import {
   type TradeView,
 } from '@komtru/api-client';
 import {
+  meQueryOptions,
   useApiClient,
+  useCancelTrade,
   useCreateTrade,
   usePreviewTrade,
   useSendTrade,
@@ -17,20 +19,26 @@ import {
 import {
   ActionStack,
   Button,
+  LoadFailed,
+  LoadingScreen,
+  NoteBanner,
   OptionCard,
   PartyStrip,
+  RiskBanner,
+  ScreenColumn,
   ScreenHeader,
   SectionLabel,
   Select,
   TextField,
+  WarnBanner,
 } from '@komtru/ui-kit';
 import { nairaToKobo } from '@komtru/shared-types';
+import { useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'next/navigation';
 import { useEffect, useMemo, useState } from 'react';
 import { AddressPicker } from './AddressPicker';
 import { initialsOf, naira, problemMessage } from './format';
 import { rememberTrade } from './known-trades';
-import { Column, LoadFailed, LoadingScreen, NoteBanner, RiskBanner, WarnBanner } from './parts';
 import { ProofUpload } from './ProofUpload';
 
 export interface StartTradeProps {
@@ -68,6 +76,8 @@ export function StartTrade({ defaultRole = 'BUYER', counterparty = '' }: StartTr
   const preview = usePreviewTrade();
   const create = useCreateTrade();
   const send = useSendTrade();
+  const cancel = useCancelTrade();
+  const queryClient = useQueryClient();
 
   const [categoryCode, setCategoryCode] = useState('');
   const [chosenRole, setChosenRole] = useState<TradeRole>(defaultRole);
@@ -77,7 +87,8 @@ export function StartTrade({ defaultRole = 'BUYER', counterparty = '' }: StartTr
   const [proof, setProof] = useState<string[]>([]);
   const [who, setWho] = useState(counterparty);
   const [looked, setLooked] = useState<Looked | undefined>(undefined);
-  const [tradeId, setTradeId] = useState<string | undefined>(undefined);
+  // The draft this form has already created, and the exact inputs it was created from.
+  const [draft, setDraft] = useState<{ id: string; inputs: string } | undefined>(undefined);
   const [tried, setTried] = useState(false);
   const [problem, setProblem] = useState<string | undefined>(undefined);
   const [busy, setBusy] = useState(false);
@@ -147,23 +158,39 @@ export function StartTrade({ defaultRole = 'BUYER', counterparty = '' }: StartTr
 
     setBusy(true);
     try {
-      let id = tradeId;
+      const itemSpec: Record<string, string> = {};
+      for (const [key, value] of Object.entries(spec)) {
+        if (value.trim() !== '') itemSpec[key] = value.trim();
+      }
+      const proofFileIds = role === 'SELLER' && proof.length > 0 ? proof : undefined;
+      // A draft is its inputs. One made from different ones (the person changed the price, the
+      // category, the side or the address after a send failed) is not sent: it is withdrawn and a new
+      // one is made from what is on screen, so a retry never proposes terms the person has since edited.
+      const inputs = JSON.stringify([
+        role,
+        standard.categoryCode,
+        kobo.toString(),
+        itemSpec,
+        addressId,
+        proofFileIds,
+      ]);
+      let id = draft?.inputs === inputs ? draft.id : undefined;
       if (id === undefined) {
-        const itemSpec: Record<string, string> = {};
-        for (const [key, value] of Object.entries(spec)) {
-          if (value.trim() !== '') itemSpec[key] = value.trim();
+        if (draft !== undefined) {
+          setDraft(undefined);
+          // Best effort: an orphan that cannot be cancelled is never shown to anyone, only unsent.
+          await cancel.mutateAsync({ id: draft.id }).catch(() => undefined);
         }
-        const draft = await create.mutateAsync({
+        const created = await create.mutateAsync({
           role,
           categoryCode: standard.categoryCode,
           itemAmountMinor: kobo.toString(),
           itemSpec,
           addressId,
-          ...(role === 'SELLER' && proof.length > 0 ? { proofFileIds: proof } : {}),
+          ...(proofFileIds === undefined ? {} : { proofFileIds }),
         });
-        id = draft.id;
-        setTradeId(id);
-        rememberTrade(id);
+        id = created.id;
+        setDraft({ id, inputs });
       }
       const sent: TradeView = await send.mutateAsync({
         id,
@@ -174,6 +201,13 @@ export function StartTrade({ defaultRole = 'BUYER', counterparty = '' }: StartTr
             : { phone: party.value }),
         ...(role === 'SELLER' && proof.length > 0 ? { proofFileIds: proof } : {}),
       });
+      // A trade joins this person's list on this device only once it has been sent, never as a draft.
+      await queryClient
+        .ensureQueryData(meQueryOptions(client))
+        .then((me) => {
+          rememberTrade(me.id, sent.id);
+        })
+        .catch(() => undefined);
       router.push(`/trade/${sent.id}`);
     } catch (error) {
       setProblem(problemMessage(error, "We couldn't send that request. Check the details and try again."));
@@ -184,22 +218,22 @@ export function StartTrade({ defaultRole = 'BUYER', counterparty = '' }: StartTr
 
   if (standards.isPending) {
     return (
-      <Column>
+      <ScreenColumn>
         <ScreenHeader title="Start Trade" backHref="/trades" />
         <LoadingScreen label="Loading the categories" />
-      </Column>
+      </ScreenColumn>
     );
   }
   if (standards.isError || standard === undefined) {
     return (
-      <Column>
+      <ScreenColumn>
         <ScreenHeader title="Start Trade" backHref="/trades" />
         <LoadFailed
           title="Couldn't load the categories"
           body="Check your connection and try again."
           onRetry={() => void standards.refetch()}
         />
-      </Column>
+      </ScreenColumn>
     );
   }
 
@@ -207,7 +241,7 @@ export function StartTrade({ defaultRole = 'BUYER', counterparty = '' }: StartTr
   const cannotInvite = lookedNow?.found === false && !lookedNow.canInvite;
 
   return (
-    <Column>
+    <ScreenColumn>
       <ScreenHeader title="Start Trade" backHref="/trades" />
       <form onSubmit={(event) => void submit(event)} noValidate>
         {allowed.length > 1 && (
@@ -357,6 +391,6 @@ export function StartTrade({ defaultRole = 'BUYER', counterparty = '' }: StartTr
           </Button>
         </ActionStack>
       </form>
-    </Column>
+    </ScreenColumn>
   );
 }

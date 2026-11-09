@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { ProblemError, type ResponseMeta } from '@komtru/api-client';
-import { describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
 import {
   addressLine,
   describeTrade,
@@ -11,8 +11,9 @@ import {
   naira,
   nairaShort,
   problemMessage,
+  proofRequired,
 } from '../src/trade/format';
-import { forgetKnownTrades, knownTradeIds, rememberTrade } from '../src/trade/known-trades';
+import { forgetKnownTrades, forgetTrade, knownTradeIds, rememberTrade } from '../src/trade/known-trades';
 
 const meta: ResponseMeta = {
   status: 422,
@@ -52,6 +53,12 @@ describe('problemMessage', () => {
   it('speaks from the code, not the title', () => {
     expect(problemMessage(problem('MERCHANT_CANNOT_BUY'), 'x')).toContain("can't be the buyer");
     expect(problemMessage(problem('ADDRESS_REQUIRED'), 'x')).toBe('Choose or add a saved address first.');
+  });
+
+  it('says the terms changed for the 409 a stale revision or stale version produces', () => {
+    expect(problemMessage(problem('CONFLICT', 'The trade moved on'), 'x')).toContain(
+      'The terms changed while you were looking',
+    );
   });
 
   it("passes on the backend's detail for a code it has nothing specific for, and the fallback otherwise", () => {
@@ -136,18 +143,93 @@ describe('describeTrade', () => {
 });
 
 describe('known trades', () => {
-  it('remembers ids newest first, once each, and forgets them on request', () => {
+  const ADA = 'user-ada';
+  const BOLA = 'user-bola';
+  const key = (user: string) => `komtru.trades.known.${user}`;
+
+  beforeEach(() => {
     window.localStorage.clear();
-    rememberTrade('a');
-    rememberTrade('b');
-    rememberTrade('a');
-    expect(knownTradeIds()).toEqual(['a', 'b']);
-    forgetKnownTrades();
-    expect(knownTradeIds()).toEqual([]);
   });
 
-  it('reads a corrupted store as empty', () => {
-    window.localStorage.setItem('komtru.trades.known', '{not json');
-    expect(knownTradeIds()).toEqual([]);
+  it('remembers ids newest first, once each', () => {
+    rememberTrade(ADA, 'a');
+    rememberTrade(ADA, 'b');
+    rememberTrade(ADA, 'a');
+    expect(knownTradeIds(ADA)).toEqual(['a', 'b']);
+  });
+
+  it("keeps each person's list apart, so a second person on the phone sees none of the first's", () => {
+    rememberTrade(ADA, 'a');
+    expect(knownTradeIds(BOLA)).toEqual([]);
+    rememberTrade(BOLA, 'b');
+    expect(knownTradeIds(ADA)).toEqual(['a']);
+  });
+
+  it('keeps the newest hundred and drops the rest', () => {
+    for (let n = 0; n < 105; n += 1) rememberTrade(ADA, `t${String(n)}`);
+    const ids = knownTradeIds(ADA);
+    expect(ids).toHaveLength(100);
+    expect(ids[0]).toBe('t104');
+    expect(ids).not.toContain('t4');
+  });
+
+  it('forgets one id that can never be read again, and only that one', () => {
+    rememberTrade(ADA, 'a');
+    rememberTrade(ADA, 'b');
+    forgetTrade(ADA, 'a');
+    expect(knownTradeIds(ADA)).toEqual(['b']);
+  });
+
+  it("clears every person's list on sign-out, and the unscoped key an earlier build wrote", () => {
+    rememberTrade(ADA, 'a');
+    rememberTrade(BOLA, 'b');
+    window.localStorage.setItem('komtru.trades.known', JSON.stringify(['old']));
+    window.localStorage.setItem('unrelated', 'kept');
+    forgetKnownTrades();
+    expect(window.localStorage.getItem(key(ADA))).toBeNull();
+    expect(window.localStorage.getItem(key(BOLA))).toBeNull();
+    expect(window.localStorage.getItem('komtru.trades.known')).toBeNull();
+    expect(window.localStorage.getItem('unrelated')).toBe('kept');
+  });
+
+  it('reads corrupted or wrongly shaped storage as empty', () => {
+    window.localStorage.setItem(key(ADA), '{not json');
+    expect(knownTradeIds(ADA)).toEqual([]);
+    window.localStorage.setItem(key(ADA), JSON.stringify({ not: 'a list' }));
+    expect(knownTradeIds(ADA)).toEqual([]);
+    window.localStorage.setItem(key(ADA), JSON.stringify(['ok', 7, null]));
+    expect(knownTradeIds(ADA)).toEqual(['ok']);
+  });
+});
+
+describe('proofRequired', () => {
+  const standard = (categoryCode: string, required: string[], minPhotos: number) =>
+    ({
+      versionId: 'v',
+      categoryCode,
+      categoryName: categoryCode,
+      versionNumber: 1,
+      createdAt: '',
+      inspectionWindowHours: 24,
+      itemSpecFields: required.map((key) => ({ key, label: key, required: true })),
+      proofMedia: { minPhotos, requireVideo: false },
+      imeiVerification: false,
+      deliveryDeadlineDays: 7,
+    }) as const;
+  const standards = [
+    standard('electronics', ['brand', 'model'], 3),
+    standard('fashion', ['brand', 'size'], 2),
+  ];
+
+  it("asks what the item's own category asks, recognised by the details it carries", () => {
+    expect(proofRequired({ brand: 'Apple', model: 'iPhone' }, standards)).toBe(3);
+    expect(proofRequired({ brand: 'Zara', size: 'M' }, standards)).toBe(2);
+  });
+
+  it('takes the strictest when the details fit more than one category, never less than one', () => {
+    expect(proofRequired({ brand: 'X', model: 'Y', size: 'Z' }, standards)).toBe(3);
+    expect(proofRequired({}, standards)).toBe(3);
+    expect(proofRequired({}, [])).toBe(1);
+    expect(proofRequired({ brand: 'a' }, [standard('x', ['brand'], 0)])).toBe(1);
   });
 });

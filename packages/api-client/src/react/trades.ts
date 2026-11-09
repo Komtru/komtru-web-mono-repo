@@ -18,6 +18,7 @@ import {
   sendTrade,
   type TradeView,
 } from '../trades.js';
+import { getMe, type Me } from '../me.js';
 import { listTradeStandards, type TradeStandard } from '../standards.js';
 import { useApiClient } from './client-context.js';
 
@@ -110,3 +111,15 @@ export const useCancelTrade = () =>
 
 export const useClaimTrade = () =>
   useTradeMutation((client, id: string) => client.call(claimTrade, { params: { id } }));
+
+export const meQueryOptions = (client: ApiClient) => ({
+  queryKey: ['me'] as const,
+  queryFn: ({ signal }: { signal: AbortSignal }): Promise<Me> => client.call(getMe, {}, { signal }),
+  staleTime: 5 * 60 * 1000,
+});
+
+/** The signed-in person's identity. Per-person device storage is keyed by `data.id`. */
+export function useMe() {
+  const client = useApiClient();
+  return useQuery(meQueryOptions(client));
+}

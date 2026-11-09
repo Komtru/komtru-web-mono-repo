@@ -6,6 +6,7 @@ import { StartTrade } from '../src/trade/StartTrade';
 import { knownTradeIds } from '../src/trade/known-trades';
 import { expectNoAxeViolations } from './axe';
 import {
+  ME_ID,
   SHELL_RULES,
   address,
   answerWith,
@@ -103,7 +104,7 @@ describe('Start Trade (I3)', () => {
     const send = callsTo(api.call, 'POST', '/trades/:id/send')[0];
     expect(send?.params).toEqual({ id: id(1) });
     expect(send?.body).toEqual({ username: 'techedge' });
-    expect(knownTradeIds()).toEqual([id(1)]);
+    expect(knownTradeIds(ME_ID)).toEqual([id(1)]);
   });
 
   it('shows what the buyer pays from the platform, and never works it out itself', async () => {
@@ -294,6 +295,104 @@ describe('Start Trade (I3)', () => {
     answerWith(api.call, baseHandlers());
     renderWithApi(api.call, <StartTrade counterparty="techedge" />);
     expect((await screen.findByLabelText<HTMLInputElement>(/The seller/)).value).toBe('techedge');
+  });
+
+  it('proposes what is on screen when the person edits after a failed send, not the draft it already made', async () => {
+    let sends = 0;
+    let created = 0;
+    answerWith(
+      api.call,
+      baseHandlers({
+        'POST /trades': () => {
+          created += 1;
+          return tradeView({ id: id(10 + created), status: 'DRAFT', awaiting: null, yourRole: 'BUYER' });
+        },
+        'POST /trades/:id/send': ({ params }: { params?: Record<string, string> }) => {
+          sends += 1;
+          return sends === 1
+            ? problem('INTERNAL', 500)
+            : tradeView({
+                id: params?.id ?? id(1),
+                status: 'AWAITING_ACCEPTANCE',
+                awaiting: 'COUNTERPARTY',
+                yourRole: 'BUYER',
+              });
+        },
+        'POST /trades/:id/cancel': tradeView({ status: 'CANCELLED', awaiting: null }),
+      }),
+    );
+    renderWithApi(api.call, <StartTrade />);
+    await fillBuyer();
+    fireEvent.click(screen.getByRole('button', { name: 'Send Trade request' }));
+    expect(await screen.findByText(/We couldn't send that request/)).toBeTruthy();
+
+    // The person notices the price is wrong and fixes it before trying again.
+    type('Price', '399,000');
+    fireEvent.click(screen.getByRole('button', { name: 'Send Trade request' }));
+    await waitFor(() => {
+      expect(router.push).toHaveBeenCalledWith(`/trade/${id(12)}`);
+    });
+
+    const drafts = callsTo(api.call, 'POST', '/trades');
+    expect(drafts).toHaveLength(2);
+    expect(drafts[0]?.body).toMatchObject({ itemAmountMinor: '45200000' });
+    expect(drafts[1]?.body).toMatchObject({ itemAmountMinor: '39900000' });
+    // The proposal that went out is the new draft, and the old one was withdrawn, not left to be sent.
+    expect(callsTo(api.call, 'POST', '/trades/:id/send').map((call) => call.params?.id)).toEqual([
+      id(11),
+      id(12),
+    ]);
+    expect(callsTo(api.call, 'POST', '/trades/:id/cancel')[0]?.params).toEqual({ id: id(11) });
+    expect(knownTradeIds(ME_ID)).toEqual([id(12)]);
+  });
+
+  it('changes the draft when the side, the category or the address changes too', async () => {
+    let created = 0;
+    answerWith(
+      api.call,
+      baseHandlers({
+        'GET /me/addresses': page([address(1), address(2, { label: 'Shop' })]),
+        'POST /trades': () => {
+          created += 1;
+          return tradeView({ id: id(20 + created), status: 'DRAFT', awaiting: null, yourRole: 'BUYER' });
+        },
+        'POST /trades/:id/send': problem('INTERNAL', 500),
+        'POST /trades/:id/cancel': tradeView({ status: 'CANCELLED', awaiting: null }),
+      }),
+    );
+    renderWithApi(api.call, <StartTrade />);
+    await fillBuyer();
+    await waitFor(() => {
+      expect(screen.getByRole<HTMLInputElement>('radio', { name: /Home/ }).checked).toBe(true);
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Send Trade request' }));
+    await screen.findByText(/We couldn't send that request/);
+    fireEvent.click(screen.getByRole('radio', { name: /Shop/ }));
+    fireEvent.click(screen.getByRole('button', { name: 'Send Trade request' }));
+    await waitFor(() => {
+      expect(callsTo(api.call, 'POST', '/trades')).toHaveLength(2);
+    });
+    expect(callsTo(api.call, 'POST', '/trades')[1]?.body).toMatchObject({ addressId: id(2) });
+  });
+
+  it('does not put an unsent draft on the list when the send fails', async () => {
+    answerWith(api.call, baseHandlers({ 'POST /trades/:id/send': problem('INTERNAL', 500) }));
+    renderWithApi(api.call, <StartTrade />);
+    await fillBuyer();
+    fireEvent.click(screen.getByRole('button', { name: 'Send Trade request' }));
+    await screen.findByText(/We couldn't send that request/);
+    expect(knownTradeIds(ME_ID)).toEqual([]);
+  });
+
+  it('shows the shape of the page while the categories load, and offers a retry if they cannot', async () => {
+    api.call.mockImplementation(() => new Promise(() => undefined));
+    const first = renderWithApi(api.call, <StartTrade />);
+    expect(screen.getByRole('status', { name: 'Loading the categories' })).toBeTruthy();
+    first.unmount();
+
+    answerWith(api.call, baseHandlers({ 'GET /config/trade-standards': new Error('offline') }));
+    renderWithApi(api.call, <StartTrade />);
+    expect(await screen.findByRole('button', { name: 'Try again' })).toBeTruthy();
   });
 
   it('has no accessibility violations', async () => {

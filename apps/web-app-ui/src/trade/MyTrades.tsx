@@ -1,27 +1,33 @@
 'use client';
 
-import { useApiClient } from '@komtru/api-client/react';
-import { getTrade, type TradeView } from '@komtru/api-client';
-import { tradeKeys } from '@komtru/api-client/react';
-import { Button, EmptyState, Skeleton, TradeRow } from '@komtru/ui-kit';
+import { getTrade, ProblemError, type TradeView } from '@komtru/api-client';
+import { tradeKeys, useApiClient, useMe } from '@komtru/api-client/react';
+import { Button, EmptyState, ScreenColumn, Skeleton, TradeRow } from '@komtru/ui-kit';
 import { useQueries } from '@tanstack/react-query';
+import { useEffect } from 'react';
 import { describeTrade, itemTitle, nairaShort } from './format';
-import { useKnownTradeIds } from './known-trades';
-import { Column } from './parts';
+import { forgetTrade, useKnownTradeIds } from './known-trades';
 
 const CODE = /^KMT-\d+$/i;
 
+/** A trade that is gone, or was never this person's, will not come back by reloading. */
+const isPermanent = (error: unknown): boolean =>
+  error instanceof ProblemError && (error.status === 403 || error.status === 404);
+
 /**
- * Q1 and the buyer's trades tab: every trade this device knows about, with what to do next on each.
+ * Q1 and the buyer's trades tab: every trade this device knows about for this person, with what to do
+ * next on each.
  *
  * A trade waiting on you is drawn with the indigo border Q1 gives the one that needs attention, and
  * counted in the line under the heading. The platform has no list route yet, so the rows come from the
- * ids this device holds (see `known-trades.ts`); a trade somebody invited you to joins the list when
- * you open it.
+ * ids this device holds for the signed-in person (see `known-trades.ts`). An id the platform says is
+ * gone or not theirs is dropped from the list rather than reported as a failure every time.
  */
 export function MyTrades({ code }: { code?: string }): React.JSX.Element {
   const client = useApiClient();
-  const ids = useKnownTradeIds();
+  const me = useMe();
+  const userId = me.data?.id;
+  const ids = useKnownTradeIds(userId);
 
   const results = useQueries({
     queries: (ids ?? []).map((id) => ({
@@ -31,11 +37,37 @@ export function MyTrades({ code }: { code?: string }): React.JSX.Element {
     })),
   });
 
+  const gone = (ids ?? []).filter((_, index) => isPermanent(results[index]?.error));
+  const goneKey = gone.join(',');
+  useEffect(() => {
+    if (userId === undefined || goneKey === '') return;
+    for (const id of goneKey.split(',')) forgetTrade(userId, id);
+  }, [userId, goneKey]);
+
+  if (me.isError) {
+    return (
+      <ScreenColumn>
+        <EmptyState
+          tone="error"
+          title="Couldn't load your trades"
+          body="Check your connection and try again."
+          action={
+            <Button type="button" onClick={() => void me.refetch()}>
+              Try again
+            </Button>
+          }
+        />
+      </ScreenColumn>
+    );
+  }
+
   if (ids === undefined) {
     return (
-      <Column>
-        <Skeleton width="full" lines={3} />
-      </Column>
+      <ScreenColumn>
+        <div role="status" aria-label="Loading your trades" aria-busy="true">
+          <Skeleton width="full" lines={3} />
+        </div>
+      </ScreenColumn>
     );
   }
 
@@ -46,14 +78,13 @@ export function MyTrades({ code }: { code?: string }): React.JSX.Element {
   const states = shown.map((trade) => ({ trade, state: describeTrade(trade) }));
   const attention = states.filter(({ state }) => state.needsYou).length;
   const active = states.filter(({ state }) => !state.closed).length;
-  const failed = results.filter((result) => result.isError).length;
+  // Only a failure that trying again can fix is reported; permanent ones are pruned.
+  const failed = results.filter((result) => result.isError && !isPermanent(result.error)).length;
+  const pending = results.some((result) => result.isPending);
 
-  if (
-    ids.length === 0 ||
-    (loaded.length === 0 && failed === 0 && results.every((result) => !result.isPending))
-  ) {
+  if (ids.length === 0 || (loaded.length === 0 && failed === 0 && !pending)) {
     return (
-      <Column>
+      <ScreenColumn>
         <EmptyState
           title="No protected trades yet"
           body="Start one with a seller or a buyer. Every completed trade adds to your Trust Profile."
@@ -63,20 +94,18 @@ export function MyTrades({ code }: { code?: string }): React.JSX.Element {
             </Button>
           }
         />
-      </Column>
+      </ScreenColumn>
     );
   }
 
   return (
-    <Column>
+    <ScreenColumn>
       <h1 className="text-[19px] font-semibold">Your Trades</h1>
       <p className="mb-[16px] mt-[3px] text-[11.5px] text-slate">
         {String(attention)} need{attention === 1 ? 's' : ''} your attention · {String(active)} active
       </p>
       {wanted !== undefined && shown.length === 0 && (
-        <p className="mb-[12px] text-[12.5px] text-slate">
-          No trade with the code {wanted} on this device. Open the link you were sent to add it.
-        </p>
+        <p className="mb-[12px] text-[12.5px] text-slate">No trade with the code {wanted} on this device.</p>
       )}
       <ul className="m-0 list-none p-0">
         {states.map(({ trade, state }) => (
@@ -99,6 +128,6 @@ export function MyTrades({ code }: { code?: string }): React.JSX.Element {
       <Button asChild variant="secondary" className="mt-[8px]">
         <a href="/trade/new">Start a trade</a>
       </Button>
-    </Column>
+    </ScreenColumn>
   );
 }
