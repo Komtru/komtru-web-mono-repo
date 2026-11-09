@@ -13,10 +13,10 @@ import {
   verificationDuplicateIdentityDetected,
   verificationLevelAttained,
   verificationLevelRevoked,
-  verificationRejected,
   verificationSubmitted,
 } from '../../domain/events.js';
 import { decideLevelChange, levelName, levelNumber } from '../../domain/levels.js';
+import { publishRejected, parkForReview } from './review.js';
 import { bankAccountNameMatches, businessVerifications } from './schema/business.js';
 import { addressChecks, verificationDocuments } from './schema/documents.js';
 import { socialProofClaims } from './schema/social-proof.js';
@@ -312,9 +312,10 @@ export function bindStore(db: Db): TrustStore {
           // Roll the outcome row back with it: a `nin_verifications` row whose request was expired by
           // the sweep is an orphan that the uniqueness index would still honour.
           if (moved.length === 0) tx.rollback();
+          if (input.requestStatus === 'MANUAL_REVIEW') await parkForReview(tx, input.request);
 
           if (input.requestStatus === 'REJECTED') {
-            await publish(tx, verificationRejected, {
+            await publishRejected(tx, {
               payload: {
                 requestId: input.request.id,
                 userId: input.request.userId,
@@ -361,6 +362,10 @@ export function bindStore(db: Db): TrustStore {
             )
             .returning({ id: verificationRequests.id });
           if (moved.length === 0) tx.rollback();
+          await parkForReview(tx, input.request, {
+            identifierHash: input.hash,
+            firstUserId: input.firstUserId,
+          });
 
           await publish(tx, verificationDuplicateIdentityDetected, {
             payload: {
@@ -410,9 +415,10 @@ export function bindStore(db: Db): TrustStore {
             )
             .returning({ id: verificationRequests.id });
           if (moved.length === 0) tx.rollback();
+          if (input.requestStatus === 'MANUAL_REVIEW') await parkForReview(tx, input.request);
 
           if (input.requestStatus === 'REJECTED') {
-            await publish(tx, verificationRejected, {
+            await publishRejected(tx, {
               payload: {
                 requestId: input.request.id,
                 userId: input.request.userId,
@@ -685,9 +691,10 @@ export function bindStore(db: Db): TrustStore {
           ) {
             tx.rollback();
           }
+          if (input.requestStatus === 'MANUAL_REVIEW') await parkForReview(tx, input.request);
 
           if (input.requestStatus === 'REJECTED') {
-            await publish(tx, verificationRejected, {
+            await publishRejected(tx, {
               payload: {
                 requestId: input.request.id,
                 userId: input.request.userId,
@@ -718,6 +725,10 @@ export function bindStore(db: Db): TrustStore {
           ) {
             tx.rollback();
           }
+          await parkForReview(tx, input.request, {
+            identifierHash: Buffer.from(input.rcNumberHashHex, 'hex'),
+            firstUserId: input.firstUserId,
+          });
 
           await publish(tx, verificationDuplicateIdentityDetected, {
             payload: {
@@ -769,9 +780,10 @@ export function bindStore(db: Db): TrustStore {
           ) {
             tx.rollback();
           }
+          if (input.requestStatus === 'MANUAL_REVIEW') await parkForReview(tx, input.request);
 
           if (input.requestStatus === 'REJECTED') {
-            await publish(tx, verificationRejected, {
+            await publishRejected(tx, {
               payload: {
                 requestId: input.request.id,
                 userId: input.request.userId,
@@ -925,6 +937,8 @@ export function bindStore(db: Db): TrustStore {
             storageRef: input.documentRef,
           });
         }
+
+        await parkForReview(tx, row);
 
         await publish(tx, verificationSubmitted, {
           payload: { requestId: row.id, userId: row.userId, type: 'ADDRESS' },
@@ -1088,7 +1102,7 @@ export function bindStore(db: Db): TrustStore {
           });
 
         for (const row of expired) {
-          await publish(tx, verificationRejected, {
+          await publishRejected(tx, {
             payload: {
               requestId: row.requestId,
               userId: row.userId,
