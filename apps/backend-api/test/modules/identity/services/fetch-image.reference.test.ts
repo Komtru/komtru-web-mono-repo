@@ -44,7 +44,6 @@ const makeReference =
               if (!error && first && isIP(first) && isPrivate(first) && !options.allowLoopbackHttp) {
                 return callback(new Error('refused: private address'), '', 4);
               }
-              // @ts-expect-error node's overloads differ between the array and scalar forms
               callback(error, address, family);
             }),
         },
