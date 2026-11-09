@@ -79,6 +79,11 @@ const RULES: Record<CaseType, Rule[]> = {
   ],
   KYB: [
     {
+      when: (i) => isTrue(i, 'duplicateIdentity'),
+      suggestion: 'Confirm the duplicate unless the earlier account is the same person’s abandoned one',
+      because: () => 'The same identifier is already verified on another account',
+    },
+    {
       when: (i) => isFalse(i, 'documentsComplete'),
       suggestion: 'Request the missing business documents',
       because: () => 'The document set is incomplete',
@@ -107,6 +112,11 @@ const RULES: Record<CaseType, Rule[]> = {
     },
   ],
   IDENTITY: [
+    {
+      when: (i) => isTrue(i, 'duplicateIdentity'),
+      suggestion: 'Confirm the duplicate unless the earlier account is the same person’s abandoned one',
+      because: () => 'The same identifier is already verified on another account',
+    },
     {
       when: (i) => isFalse(i, 'nameMatch'),
       suggestion: 'Request a clearer identity document',
