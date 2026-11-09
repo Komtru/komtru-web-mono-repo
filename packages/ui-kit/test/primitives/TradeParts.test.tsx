@@ -6,7 +6,11 @@ import {
   Chip,
   CodeCard,
   CounterDiffRow,
+  CountdownStrip,
+  InfoCard,
+  InfoRow,
   ItemCard,
+  TabNav,
   LoadFailed,
   LoadingScreen,
   NoteBanner,
@@ -288,5 +292,56 @@ describe('LoadingScreen and LoadFailed', () => {
   it('keeps its content in the reference column', () => {
     const { container } = render(<ScreenColumn>x</ScreenColumn>);
     expect(container.firstElementChild?.className).toContain('max-w-[480px]');
+  });
+});
+
+describe('TabNav', () => {
+  const items = [
+    { id: 'overview', label: 'Overview', href: '/trade/1' },
+    { id: 'terms', label: 'Terms', href: '/trade/1/terms' },
+    { id: 'activity', label: 'Activity', href: '/trade/1/activity' },
+  ];
+
+  it('links each view, marks only the current one, and is one named navigation', () => {
+    render(<TabNav aria-label="Trade views" items={items} current="terms" />);
+    const nav = screen.getByRole('navigation', { name: 'Trade views' });
+    const links = within(nav).getAllByRole('link');
+    expect(links.map((link) => link.getAttribute('href'))).toEqual([
+      '/trade/1',
+      '/trade/1/terms',
+      '/trade/1/activity',
+    ]);
+    expect(links.map((link) => link.getAttribute('aria-current'))).toEqual([null, 'page', null]);
+  });
+
+  it('marks nothing when the current id is not one of the tabs', () => {
+    render(<TabNav aria-label="Trade views" items={items} current="elsewhere" />);
+    expect(screen.queryByRole('link', { current: 'page' })).toBeNull();
+  });
+});
+
+describe('InfoCard', () => {
+  it('lists plain facts and links, and only a link is focusable', () => {
+    render(
+      <InfoCard aria-label="Trade details">
+        <InfoRow title="Waybill" detail="KT-883192" />
+        <InfoRow title="Agreement" detail="Accepted terms" href="/trade/1/terms" />
+      </InfoCard>,
+    );
+    const rows = within(screen.getByRole('list', { name: 'Trade details' })).getAllByRole('listitem');
+    expect(rows).toHaveLength(2);
+    expect(within(rows[0]!).queryByRole('link')).toBeNull();
+    expect(
+      within(rows[1]!)
+        .getByRole('link', { name: /Agreement/ })
+        .getAttribute('href'),
+    ).toBe('/trade/1/terms');
+  });
+});
+
+describe('CountdownStrip', () => {
+  it('prints exactly the line it was given', () => {
+    render(<CountdownStrip>Inspection ends · 2 Oct, 13:24</CountdownStrip>);
+    expect(screen.getByText('Inspection ends · 2 Oct, 13:24')).toBeTruthy();
   });
 });
