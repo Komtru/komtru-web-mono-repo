@@ -4,15 +4,19 @@
 // a trade and never computes a fee, amounts arrive already computed from the trade's snapshot
 // (design §6.5) — and T-071's provider layer, the adapter interface, the Paystack implementation,
 // the registry and its jobs. Funding, the webhook route and the payouts are T-072 and T-073.
+import { UnrecoverableError } from 'bullmq';
 import type { Redis } from 'ioredis';
 import type { AppConfig } from '../../config/env.js';
 import type { Db } from '../../db/index.js';
 import type { QueueFactory } from '../../platform/queue/factory.js';
 import type { Logger } from '../../platform/logger.js';
 import { defineModule, type ModuleContext } from '../../platform/module.js';
+import { tradeStateChangedEvent } from '../trades/index.js';
+import { IdempotencyKeyConflictError } from './domain/journal.js';
 import { createRedisBankListCache, type BankListCache } from './infrastructure/bankListCache.js';
 import type { ProviderRegistry } from './infrastructure/providerRegistry.js';
 import { paymentRoutes } from './http/routes.js';
+import { releaseEscrow } from './services/release.service.js';
 import { webhookRoutes } from './http/webhookRoutes.js';
 import type { VerifiedChargeView } from './domain/funding.js';
 import {
@@ -41,6 +45,7 @@ export * from './domain/accounts.js';
 export * from './domain/journal.js';
 export * from './domain/events.js';
 export * from './domain/funding.js';
+export * from './domain/release.js';
 export * from './infrastructure/postgres/schema/index.js';
 export {
   findAccountId,
@@ -65,6 +70,18 @@ export {
   type TrialBalanceRow,
 } from './infrastructure/postgres/balancesRepository.js';
 export { postJournal, type PostedJournal } from './services/journal.service.js';
+export {
+  releaseEscrow,
+  RELEASABLE_STATUSES,
+  type ReleaseDeps,
+  type ReleaseInput,
+  type ReleaseResult,
+} from './services/release.service.js';
+export {
+  activeTradeHolds,
+  lockTradeForRelease,
+  type TradeForRelease,
+} from './infrastructure/postgres/tradeRelease.js';
 
 // The provider layer (T-071).
 export type {
@@ -228,6 +245,55 @@ export const ledgerModule = defineModule({
   ],
   start: (ctx: ModuleContext) => {
     deps = buildDeps(ctx);
+
+    // `trade.completed` in M7's vocabulary is one `state_changed` event among fifteen, so the
+    // filter is the subscription (trades/domain/events.ts). The handler runs inside the bus's own
+    // claim transaction, which is exactly what `releaseEscrow` wants: the journal, the trade's
+    // FOR SHARE lock and the escrow_released event all commit together or not at all.
+    //
+    // What this handler does and does not throw, in full:
+    //   * `SETTLED` and `ALREADY_SETTLED` are the two normal outcomes;
+    //   * `HELD` and `NOT_RELEASABLE` return. Neither is fixed by retrying — a hold outlives any
+    //     backoff, and a trade whose escrow does not match its snapshot needs a person — so the
+    //     event is consumed rather than redelivered eight times. Whoever lifts a hold calls
+    //     `releaseEscrow` again; `NOT_RELEASABLE` on a COMPLETED trade is logged as the incident
+    //     it is, and T-076's pending-release read is the backstop;
+    //   * `IdempotencyKeyConflictError` means this trade's escrow was already settled a DIFFERENT
+    //     way — a release after a dispute split, or two resolutions disagreeing. Nothing was
+    //     posted, and nothing should be: it is dead-lettered immediately as `UnrecoverableError`
+    //     rather than retried, because the answer will not change and the attempts would only
+    //     delay the alert. This is the one path out of here that throws;
+    //   * anything else (a lost connection, a serialisation failure) propagates, and the bus
+    //     retries the whole transaction, which is what those need.
+    ctx.events.subscribe({
+      name: 'ledger.on-trade-completed',
+      event: tradeStateChangedEvent,
+      handler: async ({ payload, eventId, correlationId }, tx) => {
+        if (payload.to !== 'COMPLETED') return;
+        const result = await releaseEscrow(
+          tx,
+          { logger: ctx.logger },
+          { tradeId: payload.tradeId, causationId: eventId, ...(correlationId ? { correlationId } : {}) },
+        ).catch((error: unknown) => {
+          if (!(error instanceof IdempotencyKeyConflictError)) throw error;
+          throw new UnrecoverableError(
+            `ledger: trade ${payload.tradeId} is already settled another way (${error.difference})`,
+          );
+        });
+
+        // A completed trade the ledger cannot settle is an incident: the ledger is holding
+        // something other than what the trade says it should. A hold is routine. They must not
+        // read the same in the logs, because only one of them needs somebody tonight.
+        const line = { tradeId: payload.tradeId, outcome: result.outcome };
+        if (result.outcome === 'NOT_RELEASABLE') {
+          ctx.logger.error({ ...line, reason: result.reason }, 'ledger: a completed trade could not settle');
+        } else if (result.outcome === 'HELD') {
+          ctx.logger.warn({ ...line, holds: result.holds }, 'ledger: release waiting on a hold');
+        } else {
+          ctx.logger.info(line, 'ledger: settled a completed trade');
+        }
+      },
+    });
     return Promise.resolve();
   },
   stop: () => {

@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { describe, expect, it, vi } from 'vitest';
 import type { Redis } from 'ioredis';
 import { loadConfig } from '../../../src/config/env.js';
@@ -56,7 +57,7 @@ describe('the ledger module', () => {
     expect(registry.get('ledger.refresh-bank-list')?.cron).toMatch(/^\S+ \S+ \* \* \*$/);
   });
 
-  it('says so at boot when Paystack is unconfigured', async () => {
+  const startedContext = () => {
     const config = loadConfig({
       NODE_ENV: 'test',
       LOG_LEVEL: 'silent',
@@ -65,14 +66,65 @@ describe('the ledger module', () => {
       ...testRedisEnv(),
     });
     const warn = vi.fn();
-    const logger = { warn, info: vi.fn(), error: vi.fn() } as unknown as ModuleContext['logger'];
-    const ctx = { config, logger, redis: {} as Redis } as ModuleContext;
+    const info = vi.fn();
+    const error = vi.fn();
+    const subscribe = vi.fn();
+    const logger = { warn, info, error } as unknown as ModuleContext['logger'];
+    const ctx = {
+      config,
+      logger,
+      redis: {} as Redis,
+      events: { subscribe } as unknown as ModuleContext['events'],
+    } as ModuleContext;
+    return { ctx, warn, info, error, subscribe };
+  };
+
+  it('says so at boot when Paystack is unconfigured', async () => {
+    const { ctx, warn } = startedContext();
 
     await ledgerModule.start?.(ctx);
     await ledgerModule.stop?.();
 
     // Otherwise an unset key and an attack look identical in the logs: every signature returns false.
     expect(warn).toHaveBeenCalledWith(expect.stringContaining('PAYSTACK_SECRET_KEY'));
+  });
+
+  it('answers a completed trade, and only a completed one, with a release (T-074)', async () => {
+    const { ctx, error, subscribe } = startedContext();
+    await ledgerModule.start?.(ctx);
+    await ledgerModule.stop?.();
+
+    interface Subscription {
+      name: string;
+      event: { eventType: string };
+      handler: (envelope: unknown, tx: unknown) => Promise<void>;
+    }
+    // By name, not by position: another ticket adding a ledger subscription must not fail this.
+    const subscription = subscribe.mock.calls
+      .map((call) => call[0] as Subscription)
+      .find((s) => s.name === 'ledger.on-trade-completed');
+    expect(subscription?.event.eventType).toBe('trades.trade.state_changed');
+
+    // A `tx` that answers "no such trade", so the handler runs all the way to a decision without a
+    // database. Reaching `releaseEscrow` at all is the thing under test; what it decides on a
+    // trade that exists is release.int.test.ts's business.
+    const selected = vi.fn(() => Promise.resolve([]));
+    const tx = { select: () => ({ from: () => ({ where: () => ({ for: selected }) }) }) };
+    const envelope = (to: string) => ({ eventId: randomUUID(), payload: { tradeId: randomUUID(), to } });
+
+    // Every other transition publishes this same event. Settling on one of those would release the
+    // escrow of a trade that has not completed, so the filter is tested, not merely written.
+    for (const to of ['FUNDED', 'SHIPPED', 'INSPECTION', 'DISPUTED', 'SETTLED', 'CANCELLED_REFUNDED']) {
+      await subscription?.handler(envelope(to), tx);
+    }
+    expect(selected).not.toHaveBeenCalled();
+
+    await subscription?.handler(envelope('COMPLETED'), tx);
+    expect(selected).toHaveBeenCalledTimes(1);
+    expect(error).toHaveBeenCalledWith(
+      expect.objectContaining({ outcome: 'NOT_RELEASABLE', reason: 'the trade does not exist' }),
+      expect.stringContaining('could not settle'),
+    );
   });
 
   it('refuses to run a job before the module started, rather than failing on undefined', async () => {

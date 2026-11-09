@@ -5,11 +5,11 @@ after every run. The run-by-run history is [`manager/RUN_LOG.md`](manager/RUN_LO
 behind it is [`BUILD_PLAN.md`](BUILD_PLAN.md).
 
 ```
-MVP   █████████████████·················  56/112  (50%)
-Total ███████████·······················  56/168  (33%)
+MVP   █████████████████·················  57/112  (51%)
+Total ████████████······················  57/168  (34%)
 ```
 
-56 MVP tickets left, 56 deferred past it.
+55 MVP tickets left, 56 deferred past it.
 
 ## By epic
 
@@ -23,7 +23,7 @@ Total ███████████····················�
 | 05-trust               | 3    | 3     |
 | 06-merchant-search     | 0    | 3     |
 | 07-trades              | 3    | 9     |
-| 08-ledger              | 3    | 8     |
+| 08-ledger              | 4    | 8     |
 | 09-disputes            | 0    | 2     |
 | 10-logistics           | 0    | 3     |
 | 11-park                | 0    | 6     |
@@ -49,7 +49,6 @@ Total ███████████····················�
 | T-029  | Isolate the integration suite's shared Redis and queues           | yes |
 | T-065  | Inspection and completion                                         | yes |
 | T-073  | Payout accounts, preferences and payouts                          | yes |
-| T-074  | Release and settlement                                            | yes |
 | T-075  | Refunds                                                           | yes |
 | T-112  | First-time onboarding                                             | yes |
 | T-144  | Identity review                                                   | yes |
@@ -85,7 +84,6 @@ Total ███████████····················�
 | T-066  | Post-funding cancellation and can't-fulfil refunds                        | yes |
 | T-068  | Trade realtime, notifications and deep links                              | yes |
 | T-073  | Payout accounts, preferences and payouts                                  | yes |
-| T-074  | Release and settlement                                                    | yes |
 | T-075  | Refunds                                                                   | yes |
 | T-080  | Disputes core                                                             | yes |
 | T-081  | Evidence comparison and dispute read models                               | yes |

@@ -94,9 +94,17 @@ const toBalance = (row: RawBalance): AccountBalance => {
   };
 };
 
+/**
+ * The scope an unposted account's zero balance reports. Both per-trade liabilities belong here:
+ * T-072 added `BUYER_PROTECTION_FEE_LIABILITY` beside the escrow liability, and a zero balance that
+ * named no trade would read as a fee belonging to nothing.
+ */
 const scopeOf = (ref: AccountRef) => ({
   ownerUserId: ref.type === 'USER_PAYABLE' ? ref.ownerUserId : null,
-  tradeId: ref.type === 'USER_ESCROW_LIABILITY' ? ref.tradeId : null,
+  tradeId:
+    ref.type === 'USER_ESCROW_LIABILITY' || ref.type === 'BUYER_PROTECTION_FEE_LIABILITY'
+      ? ref.tradeId
+      : null,
   payoutId: ref.type === 'SETTLEMENT_CLEARING' ? ref.payoutId : null,
 });
 
