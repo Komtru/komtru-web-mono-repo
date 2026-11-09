@@ -27,8 +27,25 @@ One app for every consumer with no buyer or seller views (design C22, §6.3), pl
 
 ### T-111 — Entry and authentication
 
-- **Screens (v2):** E1, E2, E3, E4, E3b, TOS1, TOS2, AC2, AC3; social callback
-- **Depends on:** T-110, T-032, T-034, T-036, T-190
+- **Status:** Done (2026-11-09). Built without social sign-in by owner decision (below). Verified against the real backend in the running app: sign-up through E3b to a session and the first password, log-in with a wrong and a right password, the session gate, and a full password reset. Reviewed by a fresh whole-branch reviewer (Opus): 4 must-fix and 10 should-fix items; all must-fix and 8 should-fix fixed. Visual check: `docs/ui-review/T-111/`.
+- **Review findings closed:** `next` could redirect off-site after sign-in (`/\t/evil.com` passes prefix checks and the URL parser strips the tab), so `safeNext` now parses and requires the same origin. OTP autofill into a row with a digit already typed produced a corrupted code. Coming back from E3 to TOS1 opened a second account and sent a second SMS. TOS1 sent whatever Terms version was current at submit rather than the one on screen. A used-up second factor read as "wrong code" forever. AC3 dead-ended once the reset token expired. Validation failures were drawn but not announced. A one-hour rate limit read as "3600 seconds". The backend route did not typecheck.
+- **Also fixed in shared packages:** `@komtru/ui-kit` `OtpInput` dropped digits under fast typing and truncated SMS autofill and keyboard code suggestions to one digit (`maxLength={1}`); `Button asChild` links now centre their label. `@komtru/app-kit` gains the `/api/auth/verify` handler; `@komtru/api-client` the entry endpoints; the backend a public `GET /auth/terms`.
+- **Deviations:** E2's button is "Continue", because TOS1 has to come before the account exists and the account and code come from one call. Passwords need 10 characters (backend policy), not the reference's 8. E4 accepts a phone number, email or username, with the reference's phone label and a helper line. The second factor continues on E4 with E3's cells (no reference screen); passkeys are not offered. Suspended, locked and closed accounts get an inline notice; AS1/AS2 are T-205. TOS1's boxes start unticked. TOS2 lists "What changed" rows only for a version whose changes are recorded in `src/entry/terms-copy.ts`. The phone path's first password (`/set-password`) has no reference screen.
+- **Not done, and why:** no Playwright e2e — the repo has no app e2e harness yet (only `tools/visual-check`), so the happy path is held by component tests against a faked network plus the manual run above. TOS1, E3/E3b, AC3 and TOS2 have no visual-check shots: they need in-flow state the harness cannot set.
+- **Deferred review items:** `/set-password` and `/terms-updated` are client redirects after sign-in, so a person who opens `/home` directly skips them; enforcing either belongs in the shell or the backend, and the first-time onboarding chain is T-112's. `next` is not carried through sign-up or password reset, only through log-in. `OtpInput` re-syncs its internal value only when the parent's value changes, so a parent that refuses an edit by keeping the same value leaves a stale base for the next keystroke.
+
+- **Screens (v2):** E1, E2, E3, E4, E3b, TOS1, TOS2, AC2, AC3; social callback (moved to T-034, below)
+- **Depends on:** T-110, T-032, T-036, T-190
+- **Owner decision (2026-11-09):** build T-111 without social sign-in rather than wait for T-034. The
+  social buttons and the OAuth callback screen belong to T-034, which adds them to E1, E2 and E4 when
+  it lands.
+- **Follow-on (2026-11-09):** E2 now also asks for an email address, required, stored as the account's
+  unverified second channel. Outside production, when no SMS can really go out — `NOTIFY_SMS_DRY_RUN`
+  or no Termii credentials — a registration or phone-reset code is emailed as well as queued for SMS,
+  and E3 names the inbox it went to. The challenge stays a phone challenge, so entering the code
+  still proves the phone. Production is unchanged: a missing SMS provider still dead-letters rather
+  than verify a number from an inbox. `nextStep` now puts the second channel's verification after the
+  password and username, so a phone sign-up that gave an email is still asked to set a password.
 
 ### T-112 — First-time onboarding
 

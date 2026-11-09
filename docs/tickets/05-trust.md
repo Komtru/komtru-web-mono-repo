@@ -37,3 +37,4 @@ Spec: `docs/specs/module-06-trust-and-verification.md`. Provider credentials do 
   - KYC and KYB review items register as cases (`IDENTITY`, `KYB`) in the universal case model, with an advisory suggestion.
   - `verification.override` only through dual approval.
   - Two rejections within 30 days auto-open a support ticket (event to T-100).
+- **Status (2026-11-09): in progress** — implemented and reviewed on `t-052-kyc-review-queue` (migration 0042); next: fixer; open review items: 3 must-fix (racy 30-day rejection counter, a duplicate without a flag can be decided through the plain queue, missing concurrency/replay tests) and 8 should-fix, listed in `docs/superpowers/plans/2026-11-09-t-052-kyc-review-queue.md` on the branch.

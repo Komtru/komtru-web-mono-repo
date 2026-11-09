@@ -23,6 +23,7 @@
 - **Touches:** `identity/services/avatar.service.ts`, `identity/http/me.controller.ts`
 - **Depends on:** T-040, T-030
 - **Acceptance criteria:** `POST /me/avatar { fileId }` and `DELETE /me/avatar` per M1 D7; `avatar_file_id` resolved to a signed URL at read time; provider avatars imported server-side through the same flow.
+- **Status:** Done (2026-11-09). Plan: `docs/superpowers/plans/2026-11-09-t-041-avatars.md`. Review: 1 must-fix and 9 should-fix items fixed. No migration. Provider import is built against `fetchImage`/`ingest` ports that return SKIPPED until T-034 wires them (contract in `test/support/fetch-image-contract.ts`). Owner: a user with an avatar still costs 1–2 more queries than a lookup miss.
 
 ### T-045 — Notifications delivery pipeline (M11)
 

@@ -1,8 +1,8 @@
 import type { Metadata } from 'next';
-import { SectionPage } from '../../../src/shell/SectionPage';
+import { Today } from '../../../src/cases/Today';
 
-export const metadata: Metadata = { title: 'Work Queue' };
+export const metadata: Metadata = { title: 'Today' };
 
 export default function Page(): React.JSX.Element {
-  return <SectionPage id="queue" />;
+  return <Today />;
 }

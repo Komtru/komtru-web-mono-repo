@@ -109,13 +109,31 @@ describe.runIf(infraEnabled)('password login', () => {
   });
 
   it.each(['SUSPENDED', 'LOCKED', 'CLOSED', 'ANONYMISED'])(
-    'answers REJECTED for a %s account, with the same shape as a wrong password (S3)',
+    'answers REJECTED for a %s account without the password, with the same shape as an unknown one (S3)',
     async (status) => {
       await seedSignedUp(status);
-      expect(await attempt(EMAIL)).toEqual({ outcome: 'REJECTED' });
+      expect(await attempt(EMAIL, 'not the password 1')).toEqual({ outcome: 'REJECTED' });
       expect(await attempt('nobody@example.com')).toEqual({ outcome: 'REJECTED' });
     },
   );
+
+  it.each([
+    ['SUSPENDED', 'ACCOUNT_SUSPENDED'],
+    ['LOCKED', 'ACCOUNT_LOCKED'],
+    ['CLOSED', 'ACCOUNT_CLOSED'],
+  ])(
+    'tells the holder of the right password why a %s account cannot sign in (AS1, AS2)',
+    async (status, noticeKey) => {
+      await seedSignedUp(status);
+      const result = await attempt(EMAIL);
+      expect(result).toMatchObject({ outcome: 'ACCOUNT_NOTICE', notice: { status, noticeKey } });
+    },
+  );
+
+  it('never gives an anonymised account a notice', async () => {
+    await seedSignedUp('ANONYMISED');
+    expect(await attempt(EMAIL)).toEqual({ outcome: 'REJECTED' });
+  });
 
   it.each(['PENDING_VERIFICATION', 'RESTRICTED'])(
     'lets a %s account sign in (M1 §9.1 table)',

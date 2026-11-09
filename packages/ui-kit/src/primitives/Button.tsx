@@ -81,7 +81,13 @@ export function Button({
       ...lent,
       ...children.props,
       ...composeHandlers(lent, children.props),
-      className: cx(classes, children.props.className as string | undefined),
+      // A `<button>` centres its label and an `<a>` does not, so a link drawn as a full-width
+      // button would read left-aligned. The ghost treatment is inline text and keeps its own flow.
+      className: cx(
+        classes,
+        variant !== 'ghost' && 'block text-center no-underline',
+        children.props.className as string | undefined,
+      ),
     });
   }
 

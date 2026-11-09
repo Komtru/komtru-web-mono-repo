@@ -34,10 +34,13 @@ import type {
   searchQuery,
   statusBody,
 } from '../validations/admin.validation.js';
+import type { LifecyclePorts } from '../../services/lifecycle.service.js';
 import { callerAgent, callerIp } from './request.js';
 
 export interface AdminControllerDeps extends ApprovalDeps {
   db: Db;
+  /** T-039: the trade check behind a staff closure. */
+  ports?: LifecyclePorts;
 }
 
 const MAX_REASON_LENGTH = 1000;

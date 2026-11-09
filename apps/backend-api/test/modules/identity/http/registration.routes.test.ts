@@ -21,6 +21,7 @@ describe('the registration routes (M1 §10.1)', () => {
       'POST /auth/register',
       'POST /auth/otp/resend',
       'POST /auth/verify-otp',
+      'GET /auth/terms',
       'GET /me/terms',
       'POST /me/terms/accept',
     ]);
@@ -37,6 +38,18 @@ describe('the registration routes (M1 §10.1)', () => {
     expect(byPath['/auth/otp/resend']?.scope).toBe('PUBLIC');
     expect(byPath['/auth/verify-otp']?.scope).toBe('PUBLIC');
     expect(byPath['/me/terms']?.scope).toBe('CONSUMER');
+    expect(byPath['/me/terms/accept']?.scope).toBe('CONSUMER');
+  });
+
+  it('publishes the versions in force to anyone, because TOS1 runs before there is an account', async () => {
+    // Registration refuses a body whose `acceptedTermsVersion` is not the version in force, so a
+    // client that cannot read that version can only guess — and a guess goes stale the day an
+    // operator sets APP_TERMS_VERSION.
+    const route = byPath['/auth/terms'];
+    expect(route?.scope).toBe('PUBLIC');
+    expect(route?.method).toBe('get');
+    const body = await route?.handler({ body: undefined, query: {}, params: {} } as never);
+    expect(body).toEqual({ termsVersion: '2026-08-01', privacyVersion: '2026-08-01' });
     expect(byPath['/me/terms/accept']?.scope).toBe('CONSUMER');
   });
 
@@ -106,13 +119,25 @@ describe('the registration request shapes', () => {
     );
   });
 
-  it('refuses a body naming one channel and carrying the other', () => {
+  it('takes an email beside the phone on the PHONE path, where the code can be emailed too', () => {
     expect(
       registerRequestSchema.safeParse({
         ...base,
         channel: 'PHONE',
         phone: '08023415567',
         email: 'jane@example.com',
+      }).success,
+    ).toBe(true);
+  });
+
+  it('still refuses a phone on the EMAIL path, which has nothing to do with one', () => {
+    expect(
+      registerRequestSchema.safeParse({
+        ...base,
+        channel: 'EMAIL',
+        email: 'jane@example.com',
+        password: 'a long passphrase',
+        phone: '08023415567',
       }).success,
     ).toBe(false);
   });

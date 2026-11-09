@@ -16,6 +16,7 @@ import { resolveTermsVersions } from './domain/terms.js';
 import { createActorResolver } from './http/middleware.js';
 import { authRoutes } from './http/routes/auth.routes.js';
 import { addressRoutes } from './http/routes/address.routes.js';
+import { meRoutes } from './http/routes/me.routes.js';
 import { deviceRoutes } from './http/routes/device.routes.js';
 import { mfaRoutes } from './http/routes/mfa.routes.js';
 import { passwordRoutes } from './http/routes/password.routes.js';
@@ -38,12 +39,21 @@ import { createLookupBudget } from './infrastructure/redis/lookup-budget.js';
 import { createTokenSigner, type TokenSigner } from './infrastructure/jwt/access-token.js';
 import { createEpochCache, type EpochCache } from './infrastructure/redis/epoch-cache.js';
 import { seedIdentityCatalogue } from './infrastructure/postgres/seed.js';
+import { lifecycleRoutes } from './http/routes/lifecycle.routes.js';
+import type { LifecycleControllerDeps } from './http/controllers/lifecycle.controller.js';
+import { requireStepUp as requireStepUpToken } from './services/step-up.service.js';
+import { activeFactors } from './services/mfa.service.js';
+import { sweepAbandonedRegistrations, type LifecyclePorts } from './services/lifecycle.service.js';
+import { expireRecoveryRequests } from './services/recovery.service.js';
+import type { NdpaDeps } from './services/ndpa.service.js';
 
 export * from './infrastructure/postgres/schema/index.js';
 export * from './domain/events.js';
 export * from './domain/rbac/catalog.js';
 export * from './domain/rbac/sod.js';
 export { bootstrapSuperAdmins, BootstrapRefused } from './services/bootstrap.service.js';
+// T-107: the cases index checks a reassignment target holds a live role, without re-deriving "live".
+export { liveRoleCodes } from './services/rbac.service.js';
 export * from './domain/username/policy.js';
 export * from './domain/username/reserved.js';
 export * from './domain/username/skeleton.js';
@@ -150,6 +160,24 @@ export {
   type CityLookup,
 } from './services/address.service.js';
 import type { CityLookup } from './services/address.service.js';
+// T-041. `resolveAvatarUrls` is what a PartyCard's `enrich` calls; `importProviderAvatar` is T-034's.
+export {
+  avatarEnrichment,
+  importProviderAvatar,
+  removeAvatar,
+  resolveAvatarUrl,
+  resolveAvatarUrls,
+  setAvatar,
+  type AvatarDeps,
+  type AvatarPorts,
+  type AvatarRequestContext,
+  type AvatarResult,
+  type AvatarViewer,
+  type ImportProviderAvatarInput,
+  type ImportProviderAvatarOutcome,
+  type ProviderImage,
+} from './services/avatar.service.js';
+import { avatarEnrichment, type AvatarPorts } from './services/avatar.service.js';
 export {
   createCapabilityService,
   postgresBuyerFacts,
@@ -195,6 +223,42 @@ export const PARTY_INVITATIONS_EXPIRE_SCHEDULE = 'identity.party-invitations-exp
 export const STAFF_INVITATIONS_EXPIRE_CRON = '15 2 * * *';
 export const STAFF_INVITATIONS_EXPIRE_SCHEDULE = 'identity.staff-invitations-expire';
 
+// T-039. The lifecycle machine, the NDPA procedures and account recovery.
+export * from './domain/lifecycle.js';
+export * from './domain/recovery.js';
+export {
+  applyStatusTransition,
+  assertNoActiveTrades,
+  closeOwnAccount,
+  getAccountNotice,
+  lockAccount,
+  lockUserForTrade,
+  sweepAbandonedRegistrations,
+  type AccountNotice,
+  type LifecyclePorts,
+  type TransitionResult,
+} from './services/lifecycle.service.js';
+export {
+  anonymiseUser,
+  requestDataExport,
+  requestErasure,
+  type AnonymiseInput,
+  type AnonymiseResult,
+  type NdpaDeps,
+} from './services/ndpa.service.js';
+export {
+  decideRecovery,
+  expireRecoveryRequests,
+  listRecoveryRequests,
+  requestRecovery,
+} from './services/recovery.service.js';
+
+export const ABANDONED_REGISTRATIONS_SCHEDULE = 'identity.abandoned-registrations-close';
+/** 02:25 Africa/Lagos, after the invitation sweeps. */
+export const ABANDONED_REGISTRATIONS_CRON = '25 2 * * *';
+export const RECOVERY_EXPIRE_SCHEDULE = 'identity.recovery-requests-expire';
+export const RECOVERY_EXPIRE_CRON = '35 2 * * *';
+
 export interface IdentityAuthOptions {
   db: Db;
   redis: Redis;
@@ -207,6 +271,20 @@ export interface IdentityAuthOptions {
    * identity). Absent means address writes fail loudly rather than skip the city check.
    */
   cities?: CityLookup;
+  /**
+   * True when the user is a party to a trade that has not reached a terminal state (CA1/CA2). Wired
+   * by the registry from trades, which imports identity. ABSENT MEANS "YES": an unwired process
+   * refuses to close an account rather than closing it blind.
+   */
+  hasActiveTrades?: NonNullable<LifecyclePorts['hasActiveTrades']>;
+  /** Files' `tombstoneByUploader`, called after an anonymisation commits (M1 §15, M20 D4). */
+  tombstoneUserFiles?: NdpaDeps['tombstoneUserFiles'];
+  /**
+   * T-041. The files module as seen from identity (find, sign, tombstone, and the optional provider
+   * import), wired by the registry. Absent means the avatar routes fail loudly rather than skip the
+   * ownership check.
+   */
+  avatar?: AvatarPorts;
 }
 
 export interface IdentityAuth {
@@ -230,8 +308,24 @@ export interface IdentityAuth {
  * the pool did not exist that early; a builder that is handed the pool removes the holder and the
  * "used before start" failure mode with it.
  */
+const missingAvatarPorts: AvatarPorts = {
+  findFile: () =>
+    Promise.reject(new Error('identity: no avatar ports were wired in (IdentityAuthOptions.avatar)')),
+  signUrl: () =>
+    Promise.reject(new Error('identity: no avatar ports were wired in (IdentityAuthOptions.avatar)')),
+  tombstone: () =>
+    Promise.reject(new Error('identity: no avatar ports were wired in (IdentityAuthOptions.avatar)')),
+};
+
 const missingCityLookup: CityLookup = () =>
   Promise.reject(new Error('identity: no city lookup was wired in (IdentityAuthOptions.cities)'));
+
+/**
+ * No SMS will really be sent, outside production: the SMS channel is a dry run (the default outside
+ * production) or Termii is not configured. Phone codes are then emailed too (`AccountDeps`).
+ */
+export const smsUndeliverable = (config: AppConfig): boolean =>
+  config.nodeEnv !== 'production' && (config.notify.smsDryRun || config.notify.termii === undefined);
 
 export function createIdentityAuth(options: IdentityAuthOptions): IdentityAuth {
   const { db, redis, config, logger } = options;
@@ -269,6 +363,7 @@ export function createIdentityAuth(options: IdentityAuthOptions): IdentityAuth {
     breach: { enabled: config.identity.breachCheckEnabled, logger },
     terms: resolveTermsVersions(config.terms),
     mirrorPhoneOtpToEmail: config.identity.mirrorPhoneOtpToEmail,
+    smsUndeliverable: smsUndeliverable(config),
     encryption,
     // Allowed to throw here, naming its variable, the way the pepper check above does: an empty
     // WebAuthn origin list is not a wildcard, and a process that will serve a passkey ceremony
@@ -278,16 +373,42 @@ export function createIdentityAuth(options: IdentityAuthOptions): IdentityAuth {
     staffRequireMfa: config.identity.staffRequireMfa,
   };
 
-  // T-035. `enrich` is deliberately absent: M7's completed-trade count, M5's merchant name and
-  // M20's signed avatar URL have no module to come from yet, so every PartyCard carries zero trades,
-  // no merchant name and no avatar. See `PartyPorts.enrich` for the rule whoever supplies it must
-  // keep.
+  // T-035 / T-041. `enrich` supplies the avatar only: M7's completed-trade count (T-061) and M5's
+  // merchant name (T-055) still have no module to come from, so those two keep their defaults. It
+  // exists only when the registry wired the files ports. PROFILE_PHOTO is PUBLIC, so M20 allows any
+  // viewer; each owner is passed as their own viewer because `enrich` is not told who is looking, and
+  // that is harmless for a PUBLIC class (a non-public avatar category would have to widen the port).
+  const enrich = options.avatar ? avatarEnrichment({ db, logger, ports: options.avatar }) : undefined;
+
   const party: PartyControllerDeps = {
+    ...(enrich ? { enrich } : {}),
     db,
     budget: createLookupBudget({ redis, logger }),
     hasher: account.otpHasher,
     encryption,
     logger,
+  };
+
+  const ports: LifecyclePorts = options.hasActiveTrades ? { hasActiveTrades: options.hasActiveTrades } : {};
+  // A password is the proof for closing an account that has one; one that has none (a social or
+  // passkey-only account) presents a step-up token, whose accepted factors are its live ones.
+  const lifecycle: LifecycleControllerDeps = {
+    db,
+    ports,
+    epochs,
+    hasher: account.hasher,
+    breach: account.breach,
+    logger,
+    identifierHasher: account.otpHasher,
+    requireStepUp: async (tx, userId, token) => {
+      const live = await activeFactors(tx, userId);
+      await requireStepUpToken(tx, account, {
+        userId,
+        token,
+        acceptedFactors: live.length > 0 ? live.map((factor) => factor.factorType) : ['PASSWORD'],
+      });
+    },
+    ...(options.tombstoneUserFiles ? { tombstoneUserFiles: options.tombstoneUserFiles } : {}),
   };
 
   return {
@@ -323,13 +444,15 @@ export function createIdentityAuth(options: IdentityAuthOptions): IdentityAuth {
       ...registrationRoutes(account),
       ...passwordRoutes(account),
       ...staffAuthRoutes(account),
-      ...adminRoutes({ db, epochs }),
+      ...adminRoutes({ db, epochs, ports }),
       ...staffInvitationRoutes({ db, hasher: account.otpHasher, encryption, logger }),
       ...usernameRoutes({ db }),
       ...partyRoutes(party),
       ...deviceRoutes({ db, logger }),
       ...addressRoutes({ db, cities: options.cities ?? missingCityLookup }),
+      ...meRoutes({ db, logger, ports: options.avatar ?? missingAvatarPorts }),
       ...mfaRoutes(account),
+      ...lifecycleRoutes(lifecycle),
     ],
     schedules: [
       {
@@ -343,6 +466,18 @@ export function createIdentityAuth(options: IdentityAuthOptions): IdentityAuth {
         cron: STAFF_INVITATIONS_EXPIRE_CRON,
         description: 'Expires staff invitations unaccepted after 7 days (T-038).',
         handler: () => expireStaffInvitations(db),
+      },
+      {
+        name: ABANDONED_REGISTRATIONS_SCHEDULE,
+        cron: ABANDONED_REGISTRATIONS_CRON,
+        description: 'Closes registrations that verified no channel within 30 days (M1 §9.1).',
+        handler: () => sweepAbandonedRegistrations({ db, ports }),
+      },
+      {
+        name: RECOVERY_EXPIRE_SCHEDULE,
+        cron: RECOVERY_EXPIRE_CRON,
+        description: 'Expires account recovery requests nobody decided within 7 days (M1 §5.8).',
+        handler: () => expireRecoveryRequests(db),
       },
     ],
   };

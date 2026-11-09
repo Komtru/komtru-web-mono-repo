@@ -74,6 +74,18 @@ export async function signIn(
       factors: result.factors,
     };
   }
+  if (result.outcome === 'ACCOUNT_NOTICE') {
+    // AS1/AS2: a 403 whose body carries the screen's data (a notice key and a support reference,
+    // never the staff-written reason). Only a caller who proved the password gets here.
+    throw new ApiError(
+      403,
+      'FORBIDDEN',
+      'This account cannot sign in',
+      'Contact support with your reference',
+      undefined,
+      { account: result.notice },
+    );
+  }
   if (result.outcome !== 'SESSION') throw rejected();
 
   return {

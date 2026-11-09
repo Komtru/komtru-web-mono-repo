@@ -15,6 +15,7 @@ Same definition of done as Epic 13, applied to desktop and tablet reference fram
 
 - **Screens (v2):** P1, OP-01, OP-02, OP-03, OP-04, OP-12, OP-19
 - **Depends on:** T-140, T-107, T-190
+- **Status:** Done (2026-11-07). Plan: `docs/superpowers/plans/2026-11-07-t-141-work-queue.md`. Review: 2 must-fix and 8 should-fix items fixed. Parts left undrawn until the backend exists: `GET /admin/me`, staff roster and capacity, queue aggregates, a staff trade read model, an alert inbox; no module calls `registerCase` yet, so queues are empty against a real backend.
 
 ### T-142 — Trade proposals
 

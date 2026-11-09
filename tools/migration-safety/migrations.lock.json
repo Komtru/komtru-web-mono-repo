@@ -201,8 +201,18 @@
       "sha256": "f2eb4a2076a5d5ba9585b1f8e5d7de62cf8556203278d7e946bb195e28312e73"
     },
     {
-      "tag": "0040_ledger_payments",
-      "when": 1794031816538,
+      "tag": "0040_cases_index",
+      "when": 1794044242926,
+      "sha256": "c1db31d34ccb4da943a4ce79c64dfaf10b15518dadae023c7c873a9e33ef821b"
+    },
+    {
+      "tag": "0041_cases_append_only",
+      "when": 1794044252601,
+      "sha256": "803b7a473c7bc819bbd0997a031d303690ec457e0d855d7c9dc438b4bd0b4f4b"
+    },
+    {
+      "tag": "0042_ledger_payments",
+      "when": 1794241874487,
       "sha256": "ca9ec66c8a4adb370845400fa2eee1fc032fa820b18b512fd802ba91fc184c71"
     }
   ]

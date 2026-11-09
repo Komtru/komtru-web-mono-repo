@@ -5,11 +5,11 @@ after every run. The run-by-run history is [`manager/RUN_LOG.md`](manager/RUN_LO
 behind it is [`BUILD_PLAN.md`](BUILD_PLAN.md).
 
 ```
-MVP   ███████████████···················  48/111  (43%)
-Total ██████████························  48/168  (29%)
+MVP   ████████████████··················  53/112  (47%)
+Total ███████████·······················  53/168  (32%)
 ```
 
-63 MVP tickets left, 57 deferred past it.
+59 MVP tickets left, 56 deferred past it.
 
 ## By epic
 
@@ -18,8 +18,8 @@ Total ██████████······················
 | 00-foundations         | 5    | 6     |
 | 01-shared-packages     | 8    | 8     |
 | 02-backend-platform    | 9    | 10    |
-| 03-identity            | 9    | 11    |
-| 04-files-notify-config | 6    | 7     |
+| 03-identity            | 10   | 11    |
+| 04-files-notify-config | 7    | 7     |
 | 05-trust               | 2    | 3     |
 | 06-merchant-search     | 0    | 3     |
 | 07-trades              | 2    | 9     |
@@ -27,9 +27,9 @@ Total ██████████······················
 | 09-disputes            | 0    | 2     |
 | 10-logistics           | 0    | 3     |
 | 11-park                | 0    | 6     |
-| 12-ops-domains         | 0    | 9     |
-| 13-web-app-ui          | 1    | 22    |
-| 14-operations-app      | 1    | 16    |
+| 12-ops-domains         | 1    | 9     |
+| 13-web-app-ui          | 2    | 22    |
+| 14-operations-app      | 2    | 16    |
 | 15-logistics-ops       | 0    | 3     |
 | 16-park-agent-app      | 0    | 5     |
 | 17-release             | 0    | 4     |
@@ -40,17 +40,18 @@ Total ██████████······················
 | Ticket | Title                                                   | MVP |
 | ------ | ------------------------------------------------------- | --- |
 | T-029  | Isolate the integration suite's shared Redis and queues | yes |
+| T-052  | Duplicate identity detection and KYC review queue       | yes |
+| T-072  | Funding a trade                                         | yes |
 
 ## Ready to start (MVP first)
 
 | Ticket | Title                                                             | MVP |
 | ------ | ----------------------------------------------------------------- | --- |
 | T-029  | Isolate the integration suite's shared Redis and queues           | yes |
-| T-039  | Account lifecycle, recovery and NDPA hooks                        | yes |
+| T-052  | Duplicate identity detection and KYC review queue                 | yes |
 | T-072  | Funding a trade                                                   | yes |
-| T-107  | Universal case model, work queue and advisory                     | yes |
+| T-112  | First-time onboarding                                             | yes |
 | T-034  | Social login                                                      |     |
-| T-041  | Avatars                                                           |     |
 | T-067  | IMEI verification                                                 |     |
 | T-085  | Logistics schema and Park seed                                    |     |
 | T-100  | Support tickets (M10)                                             |     |
@@ -74,7 +75,6 @@ Total ██████████······················
 | ------ | ------------------------------------------------------------------------- | --- |
 | T-005  | Hosting confirmation and real deploy jobs                                 | yes |
 | T-029  | Isolate the integration suite's shared Redis and queues                   | yes |
-| T-039  | Account lifecycle, recovery and NDPA hooks                                | yes |
 | T-052  | Duplicate identity detection and KYC review queue                         | yes |
 | T-055  | Merchant applications and certification                                   | yes |
 | T-056  | Listings lifecycle, images and stock                                      | yes |
@@ -91,8 +91,6 @@ Total ██████████······················
 | T-080  | Disputes core                                                             | yes |
 | T-081  | Evidence comparison and dispute read models                               | yes |
 | T-102  | Reputation and ratings (M12)                                              | yes |
-| T-107  | Universal case model, work queue and advisory                             | yes |
-| T-111  | Entry and authentication                                                  | yes |
 | T-112  | First-time onboarding                                                     | yes |
 | T-113  | Home and discovery                                                        | yes |
 | T-114  | Seller profile and Trust Passport                                         | yes |
@@ -107,7 +105,6 @@ Total ██████████······················
 | T-123  | Seller trade handling and shipping                                        | yes |
 | T-124  | Seller payouts                                                            | yes |
 | T-126  | Trust, account and settings                                               | yes |
-| T-141  | Work queue and universal case                                             | yes |
 | T-143  | Disputes                                                                  | yes |
 | T-144  | Identity review                                                           | yes |
 | T-154  | Merchant certification review                                             | yes |

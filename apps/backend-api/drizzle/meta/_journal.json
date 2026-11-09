@@ -285,8 +285,22 @@
     {
       "idx": 40,
       "version": "7",
-      "when": 1794031816538,
-      "tag": "0040_ledger_payments",
+      "when": 1794044242926,
+      "tag": "0040_cases_index",
+      "breakpoints": true
+    },
+    {
+      "idx": 41,
+      "version": "7",
+      "when": 1794044252601,
+      "tag": "0041_cases_append_only",
+      "breakpoints": true
+    },
+    {
+      "idx": 42,
+      "version": "7",
+      "when": 1794241874487,
+      "tag": "0042_ledger_payments",
       "breakpoints": true
     }
   ]

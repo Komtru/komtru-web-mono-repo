@@ -1,5 +1,5 @@
 {
-  "id": "52a7cf83-f515-4ae8-bb25-a01d037ede66",
+  "id": "ec66e131-67b1-4905-ac42-db2126f2402a",
   "prevId": "90b476fa-ff40-4aa8-a535-0067cd716ea6",
   "version": "7",
   "dialect": "postgresql",
@@ -295,6 +295,598 @@
       "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "cases.cases": {
+      "name": "cases",
+      "schema": "cases",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "case_number": {
+          "name": "case_number",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true,
+          "identity": {
+            "type": "always",
+            "name": "cases_case_number_seq",
+            "schema": "cases",
+            "increment": "1",
+            "startWith": "1",
+            "minValue": "1",
+            "maxValue": "9223372036854775807",
+            "cache": "1",
+            "cycle": false
+          }
+        },
+        "type": {
+          "name": "type",
+          "type": "case_type",
+          "typeSchema": "cases",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "subject_type": {
+          "name": "subject_type",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "subject_id": {
+          "name": "subject_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "title": {
+          "name": "title",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "state": {
+          "name": "state",
+          "type": "case_state",
+          "typeSchema": "cases",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'OPEN'"
+        },
+        "priority": {
+          "name": "priority",
+          "type": "case_priority",
+          "typeSchema": "cases",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'NORMAL'"
+        },
+        "owner_user_id": {
+          "name": "owner_user_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "sla_hours": {
+          "name": "sla_hours",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "sla_started_at": {
+          "name": "sla_started_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "sla_due_at": {
+          "name": "sla_due_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "facts": {
+          "name": "facts",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'{}'::jsonb"
+        },
+        "escalated_at": {
+          "name": "escalated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "decided_at": {
+          "name": "decided_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "closed_at": {
+          "name": "closed_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "cases_case_number_unique": {
+          "name": "cases_case_number_unique",
+          "columns": [
+            {
+              "expression": "case_number",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "cases_subject_unique": {
+          "name": "cases_subject_unique",
+          "columns": [
+            {
+              "expression": "type",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "subject_type",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "subject_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "cases_queue_idx": {
+          "name": "cases_queue_idx",
+          "columns": [
+            {
+              "expression": "sla_due_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "where": "\"cases\".\"cases\".\"state\" NOT IN ('DECIDED', 'CLOSED')",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "cases_owner_idx": {
+          "name": "cases_owner_idx",
+          "columns": [
+            {
+              "expression": "owner_user_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "sla_due_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "where": "\"cases\".\"cases\".\"state\" NOT IN ('DECIDED', 'CLOSED')",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "cases_state_idx": {
+          "name": "cases_state_idx",
+          "columns": [
+            {
+              "expression": "state",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "type",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "cases_title_not_blank": {
+          "name": "cases_title_not_blank",
+          "value": "length(btrim(\"cases\".\"cases\".\"title\")) > 0"
+        },
+        "cases_subject_not_blank": {
+          "name": "cases_subject_not_blank",
+          "value": "length(\"cases\".\"cases\".\"subject_type\") > 0 AND length(\"cases\".\"cases\".\"subject_id\") > 0"
+        },
+        "cases_sla_positive": {
+          "name": "cases_sla_positive",
+          "value": "\"cases\".\"cases\".\"sla_hours\" > 0"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "cases.case_decisions": {
+      "name": "case_decisions",
+      "schema": "cases",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "case_id": {
+          "name": "case_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "decided_by_user_id": {
+          "name": "decided_by_user_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "outcome": {
+          "name": "outcome",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "reason": {
+          "name": "reason",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "policy_citation": {
+          "name": "policy_citation",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "decided_at": {
+          "name": "decided_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "case_decisions_case_idx": {
+          "name": "case_decisions_case_idx",
+          "columns": [
+            {
+              "expression": "case_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "decided_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "case_decisions_case_id_cases_id_fk": {
+          "name": "case_decisions_case_id_cases_id_fk",
+          "tableFrom": "case_decisions",
+          "tableTo": "cases",
+          "schemaTo": "cases",
+          "columnsFrom": ["case_id"],
+          "columnsTo": ["id"],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "case_decisions_outcome_not_blank": {
+          "name": "case_decisions_outcome_not_blank",
+          "value": "length(btrim(\"cases\".\"case_decisions\".\"outcome\")) > 0"
+        },
+        "case_decisions_reason_not_blank": {
+          "name": "case_decisions_reason_not_blank",
+          "value": "length(btrim(\"cases\".\"case_decisions\".\"reason\")) > 0"
+        },
+        "case_decisions_citation_not_blank": {
+          "name": "case_decisions_citation_not_blank",
+          "value": "length(btrim(\"cases\".\"case_decisions\".\"policy_citation\")) > 0"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "cases.case_evidence_requests": {
+      "name": "case_evidence_requests",
+      "schema": "cases",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "case_id": {
+          "name": "case_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "description": {
+          "name": "description",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "from_user_id": {
+          "name": "from_user_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "requested_by_user_id": {
+          "name": "requested_by_user_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "status": {
+          "name": "status",
+          "type": "evidence_request_status",
+          "typeSchema": "cases",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'OPEN'"
+        },
+        "due_at": {
+          "name": "due_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "resolved_by_user_id": {
+          "name": "resolved_by_user_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "resolved_at": {
+          "name": "resolved_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "resolution_note": {
+          "name": "resolution_note",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "case_evidence_requests_case_idx": {
+          "name": "case_evidence_requests_case_idx",
+          "columns": [
+            {
+              "expression": "case_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "created_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "case_evidence_requests_case_id_cases_id_fk": {
+          "name": "case_evidence_requests_case_id_cases_id_fk",
+          "tableFrom": "case_evidence_requests",
+          "tableTo": "cases",
+          "schemaTo": "cases",
+          "columnsFrom": ["case_id"],
+          "columnsTo": ["id"],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "case_evidence_requests_description_not_blank": {
+          "name": "case_evidence_requests_description_not_blank",
+          "value": "length(btrim(\"cases\".\"case_evidence_requests\".\"description\")) > 0"
+        },
+        "case_evidence_requests_resolved_together": {
+          "name": "case_evidence_requests_resolved_together",
+          "value": "(\"cases\".\"case_evidence_requests\".\"status\" = 'OPEN') = (\"cases\".\"case_evidence_requests\".\"resolved_at\" IS NULL)"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "cases.case_trail": {
+      "name": "case_trail",
+      "schema": "cases",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "bigserial",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "occurred_at": {
+          "name": "occurred_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "case_id": {
+          "name": "case_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "type": {
+          "name": "type",
+          "type": "case_trail_type",
+          "typeSchema": "cases",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "actor_user_id": {
+          "name": "actor_user_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "reason": {
+          "name": "reason",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "metadata": {
+          "name": "metadata",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {
+        "case_trail_case_idx": {
+          "name": "case_trail_case_idx",
+          "columns": [
+            {
+              "expression": "case_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "case_trail_case_id_cases_id_fk": {
+          "name": "case_trail_case_id_cases_id_fk",
+          "tableFrom": "case_trail",
+          "tableTo": "cases",
+          "schemaTo": "cases",
+          "columnsFrom": ["case_id"],
+          "columnsTo": ["id"],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "case_trail_reason_not_blank": {
+          "name": "case_trail_reason_not_blank",
+          "value": "\"cases\".\"case_trail\".\"reason\" IS NULL OR length(btrim(\"cases\".\"case_trail\".\"reason\")) > 0"
+        }
+      },
       "isRLSEnabled": false
     },
     "config.config_change_log": {
@@ -5603,428 +6195,6 @@
       },
       "isRLSEnabled": false
     },
-    "ledger.payment_attempts": {
-      "name": "payment_attempts",
-      "schema": "ledger",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true,
-          "default": "gen_random_uuid()"
-        },
-        "trade_id": {
-          "name": "trade_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "buyer_user_id": {
-          "name": "buyer_user_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "provider": {
-          "name": "provider",
-          "type": "payment_provider",
-          "typeSchema": "ledger",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "reference": {
-          "name": "reference",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "provider_reference": {
-          "name": "provider_reference",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "currency": {
-          "name": "currency",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'NGN'"
-        },
-        "fee_schedule_version": {
-          "name": "fee_schedule_version",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "item_amount_minor": {
-          "name": "item_amount_minor",
-          "type": "bigint",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "buyer_protection_fee_minor": {
-          "name": "buyer_protection_fee_minor",
-          "type": "bigint",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "amount_minor": {
-          "name": "amount_minor",
-          "type": "bigint",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "status": {
-          "name": "status",
-          "type": "payment_attempt_status",
-          "typeSchema": "ledger",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'INITIATED'"
-        },
-        "last_provider_status": {
-          "name": "last_provider_status",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "last_verified_at": {
-          "name": "last_verified_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "provider_seen_at": {
-          "name": "provider_seen_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "last_verify_error": {
-          "name": "last_verify_error",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "last_verify_error_at": {
-          "name": "last_verify_error_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "verified_amount_minor": {
-          "name": "verified_amount_minor",
-          "type": "bigint",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "verified_currency": {
-          "name": "verified_currency",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "journal_entry_id": {
-          "name": "journal_entry_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "failure_reason": {
-          "name": "failure_reason",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "review_published_at": {
-          "name": "review_published_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "initiated_at": {
-          "name": "initiated_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "pending_at": {
-          "name": "pending_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "confirmed_at": {
-          "name": "confirmed_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "closed_at": {
-          "name": "closed_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "updated_at": {
-          "name": "updated_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {
-        "payment_attempts_trade_idx": {
-          "name": "payment_attempts_trade_idx",
-          "columns": [
-            {
-              "expression": "trade_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "initiated_at",
-              "isExpression": false,
-              "asc": false,
-              "nulls": "first"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "payment_attempts_provider_ref": {
-          "name": "payment_attempts_provider_ref",
-          "columns": [
-            {
-              "expression": "provider",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "provider_reference",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": true,
-          "where": "\"ledger\".\"payment_attempts\".\"provider_reference\" IS NOT NULL",
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "payment_attempts_one_open": {
-          "name": "payment_attempts_one_open",
-          "columns": [
-            {
-              "expression": "trade_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": true,
-          "where": "\"ledger\".\"payment_attempts\".\"status\" IN ('INITIATED', 'PENDING')",
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "payment_attempts_one_success": {
-          "name": "payment_attempts_one_success",
-          "columns": [
-            {
-              "expression": "trade_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": true,
-          "where": "\"ledger\".\"payment_attempts\".\"status\" = 'SUCCEEDED'",
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "payment_attempts_journal_entry_id_ledger_journal_entries_id_fk": {
-          "name": "payment_attempts_journal_entry_id_ledger_journal_entries_id_fk",
-          "tableFrom": "payment_attempts",
-          "tableTo": "ledger_journal_entries",
-          "schemaTo": "ledger",
-          "columnsFrom": ["journal_entry_id"],
-          "columnsTo": ["id"],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {
-        "payment_attempts_reference_unique": {
-          "name": "payment_attempts_reference_unique",
-          "nullsNotDistinct": false,
-          "columns": ["reference"]
-        }
-      },
-      "policies": {},
-      "checkConstraints": {
-        "payment_attempts_currency": {
-          "name": "payment_attempts_currency",
-          "value": "\"ledger\".\"payment_attempts\".\"currency\" ~ '^[A-Z]{3}$'"
-        },
-        "payment_attempts_amounts": {
-          "name": "payment_attempts_amounts",
-          "value": "\"ledger\".\"payment_attempts\".\"item_amount_minor\" > 0 AND \"ledger\".\"payment_attempts\".\"buyer_protection_fee_minor\" >= 0\n          AND \"ledger\".\"payment_attempts\".\"amount_minor\" = \"ledger\".\"payment_attempts\".\"item_amount_minor\" + \"ledger\".\"payment_attempts\".\"buyer_protection_fee_minor\""
-        },
-        "payment_attempts_reference_shape": {
-          "name": "payment_attempts_reference_shape",
-          "value": "\"ledger\".\"payment_attempts\".\"reference\" = 'fund-' || \"ledger\".\"payment_attempts\".\"id\"::text"
-        },
-        "payment_attempts_succeeded_posted": {
-          "name": "payment_attempts_succeeded_posted",
-          "value": "(\"ledger\".\"payment_attempts\".\"status\" = 'SUCCEEDED') = (\"ledger\".\"payment_attempts\".\"journal_entry_id\" IS NOT NULL AND \"ledger\".\"payment_attempts\".\"confirmed_at\" IS NOT NULL)"
-        },
-        "payment_attempts_closed": {
-          "name": "payment_attempts_closed",
-          "value": "(\"ledger\".\"payment_attempts\".\"status\" IN ('FAILED', 'ABANDONED', 'NEEDS_REVIEW')) = (\"ledger\".\"payment_attempts\".\"closed_at\" IS NOT NULL)"
-        }
-      },
-      "isRLSEnabled": false
-    },
-    "ledger.payment_provider_webhooks": {
-      "name": "payment_provider_webhooks",
-      "schema": "ledger",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "bigserial",
-          "primaryKey": true,
-          "notNull": true
-        },
-        "provider": {
-          "name": "provider",
-          "type": "payment_provider",
-          "typeSchema": "ledger",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "provider_event_id": {
-          "name": "provider_event_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "event_type": {
-          "name": "event_type",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "payload": {
-          "name": "payload",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "signature_valid": {
-          "name": "signature_valid",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "received_at": {
-          "name": "received_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "processed_at": {
-          "name": "processed_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "processing_error": {
-          "name": "processing_error",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "duplicate_count": {
-          "name": "duplicate_count",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "default": 0
-        },
-        "sweep_count": {
-          "name": "sweep_count",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "default": 0
-        }
-      },
-      "indexes": {
-        "payment_provider_webhooks_dedup": {
-          "name": "payment_provider_webhooks_dedup",
-          "columns": [
-            {
-              "expression": "provider",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "provider_event_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": true,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "payment_provider_webhooks_unprocessed_idx": {
-          "name": "payment_provider_webhooks_unprocessed_idx",
-          "columns": [
-            {
-              "expression": "received_at",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "where": "\"ledger\".\"payment_provider_webhooks\".\"processed_at\" IS NULL",
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {},
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {
-        "payment_provider_webhooks_signed": {
-          "name": "payment_provider_webhooks_signed",
-          "value": "\"ledger\".\"payment_provider_webhooks\".\"signature_valid\""
-        }
-      },
-      "isRLSEnabled": false
-    },
     "notify.notification_event_mappings": {
       "name": "notification_event_mappings",
       "schema": "notify",
@@ -9599,6 +9769,52 @@
     }
   },
   "enums": {
+    "cases.case_priority": {
+      "name": "case_priority",
+      "schema": "cases",
+      "values": ["LOW", "NORMAL", "HIGH", "URGENT"]
+    },
+    "cases.case_state": {
+      "name": "case_state",
+      "schema": "cases",
+      "values": ["OPEN", "INVESTIGATING", "AWAITING_EVIDENCE", "ESCALATED", "DECIDED", "CLOSED"]
+    },
+    "cases.case_type": {
+      "name": "case_type",
+      "schema": "cases",
+      "values": [
+        "DISPUTE",
+        "KYB",
+        "MERCHANT_APPLICATION",
+        "IDENTITY",
+        "FRAUD",
+        "CUSTODY",
+        "PAYMENT_EXCEPTION",
+        "TRADE_PROPOSAL",
+        "PARK_HUB_APPLICATION"
+      ]
+    },
+    "cases.evidence_request_status": {
+      "name": "evidence_request_status",
+      "schema": "cases",
+      "values": ["OPEN", "FULFILLED", "CANCELLED"]
+    },
+    "cases.case_trail_type": {
+      "name": "case_trail_type",
+      "schema": "cases",
+      "values": [
+        "REGISTERED",
+        "TAKEN",
+        "REASSIGNED",
+        "PRIORITY_CHANGED",
+        "ESCALATED",
+        "EVIDENCE_REQUESTED",
+        "EVIDENCE_RESOLVED",
+        "FACTS_UPDATED",
+        "DECISION_RECORDED",
+        "CLOSED"
+      ]
+    },
     "files.file_category": {
       "name": "file_category",
       "schema": "files",
@@ -9737,11 +9953,6 @@
       "name": "payment_provider",
       "schema": "ledger",
       "values": ["PAYSTACK", "FLUTTERWAVE"]
-    },
-    "ledger.payment_attempt_status": {
-      "name": "payment_attempt_status",
-      "schema": "ledger",
-      "values": ["INITIATED", "PENDING", "SUCCEEDED", "FAILED", "ABANDONED", "NEEDS_REVIEW"]
     },
     "notify.notification_category": {
       "name": "notification_category",
@@ -9965,6 +10176,7 @@
   },
   "schemas": {
     "platform": "platform",
+    "cases": "cases",
     "config": "config",
     "files": "files",
     "geo": "geo",

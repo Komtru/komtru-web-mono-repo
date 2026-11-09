@@ -22,6 +22,8 @@ export const authRoutePaths = (base: string = AUTH_ROUTE_BASE) => ({
   /** The second step of a login that answered with a challenge (staff sign-in always does). */
   mfa: `${base}/mfa`,
   mfaChallenge: `${base}/mfa-challenge`,
+  /** Proves a one-time code: a verified channel opens the session, a reset code returns a reset token. */
+  verify: `${base}/verify`,
   refresh: `${base}/refresh`,
   logout: `${base}/logout`,
 });

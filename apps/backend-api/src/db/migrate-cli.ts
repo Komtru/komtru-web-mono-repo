@@ -11,11 +11,16 @@ try {
     directUrl: config.postgres.directUrl,
     ...(config.postgres.appPassword ? { appPassword: config.postgres.appPassword } : {}),
     ssl: config.postgres.ssl,
+    caCertPath: config.postgres.caCertPath,
     logger: createLogger(config, { process: 'migrate' }),
   });
   // Reference data, not schema: the RBAC catalogue and the reserved namespace are reconciled from
   // code on every deploy rather than frozen into a migration (see modules/*/…/seed.ts).
-  await runSeeds({ directUrl: config.postgres.directUrl, ssl: config.postgres.ssl });
+  await runSeeds({
+    directUrl: config.postgres.directUrl,
+    ssl: config.postgres.ssl,
+    caCertPath: config.postgres.caCertPath,
+  });
 } catch (error) {
   process.stderr.write(`${error instanceof ConfigError ? error.message : 'Migration failed.'}\n`);
   if (!(error instanceof ConfigError) && error instanceof Error) process.stderr.write(`${error.stack}\n`);

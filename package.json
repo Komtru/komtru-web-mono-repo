@@ -8,6 +8,9 @@
     "node": ">=22.12 <23"
   },
   "scripts": {
+    "dev": "turbo run dev dev:worker",
+    "dev:api": "turbo run dev dev:worker --filter=@komtru/backend-api",
+    "dev:web": "turbo run dev --filter=@komtru/web-app-ui --filter=@komtru/operations-app",
     "build": "turbo run build",
     "lint": "turbo run lint",
     "typecheck": "turbo run typecheck",
@@ -18,6 +21,7 @@
     "visual-check": "node --experimental-strip-types tools/visual-check/src/cli.ts",
     "test:browser": "KOMTRU_BROWSER_TESTS=1 vitest run --config scripts/vitest.config.ts test/playwright-browser.test.ts",
     "env:backend": "node scripts/env/populate-backend-env.mjs",
+    "env:apps": "node scripts/env/populate-frontend-env.mjs",
     "infra:up": "docker compose up -d --wait",
     "infra:down": "docker compose down",
     "infra:reset": "docker compose down --volumes",

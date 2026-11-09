@@ -96,7 +96,7 @@ describe('the session gate', () => {
   it('turns a visitor with no session away from a gated path', async () => {
     const response = await middleware(request('https://app.komtru.com/settings'));
     expect(response.status).toBe(307);
-    expect(response.headers.get('location')).toBe('https://app.komtru.com/sign-in?next=%2Fsettings');
+    expect(response.headers.get('location')).toBe('https://app.komtru.com/login?next=%2Fsettings');
   });
 
   it('lets a CONSUMER session through', async () => {
@@ -111,11 +111,10 @@ describe('the session gate', () => {
       request('https://app.komtru.com/settings', { cookie: await sealed('STAFF') }),
     );
     expect(response.status).toBe(307);
-    expect(response.headers.get('location')).toContain('/sign-in?error=wrong-scope');
+    expect(response.headers.get('location')).toContain('/login?error=wrong-scope');
   });
 
-  it('serves the screens the scaffold has to draw before sign-in exists', async () => {
-    // T-111 deletes PRE_AUTH_PUBLIC_PATHS; until it does, these are reachable with no session.
+  it('gates every app screen now that there is a sign-in to send people to', async () => {
     const paths = [
       '/home',
       '/trades',
@@ -127,6 +126,26 @@ describe('the session gate', () => {
       '/messages',
       '/account',
       '/hub/register',
+      '/set-password',
+      '/terms-updated',
+    ];
+    for (const path of paths) {
+      const response = await middleware(request(`https://app.komtru.com${path}`));
+      expect(response.status, path).toBe(307);
+      expect(response.headers.get('location'), path).toContain('/login?next=');
+    }
+  });
+
+  it('serves the way in to anyone, because nobody arriving there has a session yet', async () => {
+    const paths = [
+      '/',
+      '/login',
+      '/signup',
+      '/signup/terms',
+      '/verify',
+      '/reset-password',
+      '/reset-password/new',
+      '/terms',
     ];
     for (const path of paths) {
       const response = await middleware(request(`https://app.komtru.com${path}`));
@@ -137,7 +156,7 @@ describe('the session gate', () => {
   it('gates /explore now that Discover is /browse: v1 never shipped, so there is nothing to redirect', async () => {
     const response = await middleware(request('https://app.komtru.com/explore'));
     expect(response.status).toBe(307);
-    expect(response.headers.get('location')).toContain('/sign-in');
+    expect(response.headers.get('location')).toContain('/login');
   });
 
   it('is never asked about the auth routes, which are the only way to get a session', async () => {

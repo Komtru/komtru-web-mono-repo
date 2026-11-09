@@ -1,7 +1,8 @@
 // Writes apps/backend-api/.env from the old backend's live .env (docs/specs/backend-apis.env).
 //
-// Design §3.4: keep every value and the old variable names, except the database. The old URL points
-// at `komtru_dev`, which the old backend already migrated; the new build must never touch it.
+// Design §3.4: keep every value and the old variable names, except the database and this
+// monorepo's own local topology (see LOCAL_TOPOLOGY). The old URL points at `komtru_dev`, which
+// the old backend already migrated; the new build must never touch it.
 //   --target local (default)  Point Postgres and Redis at the local Docker stack (docker-compose.yml).
 //   --target rds              Keep the RDS host, switch the database to komtru_v2_dev; migrations use the
 //                             owner credentials, the app runs as komtru_app with a derived password.
@@ -10,6 +11,7 @@
 import { spawnSync } from 'node:child_process';
 import { createHmac } from 'node:crypto';
 import { chmodSync, existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { homedir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { LOCAL_APP_ROLE, LOCAL_INFRA } from './local-infra.mjs';
@@ -17,6 +19,32 @@ import { LOCAL_APP_ROLE, LOCAL_INFRA } from './local-infra.mjs';
 export const NEW_DATABASE = 'komtru_v2_dev';
 /** The least-privilege role the API and worker run as (the migrator creates it; design T-021). */
 export const RUNTIME_ROLE = 'komtru_app';
+
+/**
+ * Where this monorepo's processes live on a developer's machine. These are facts about THIS build,
+ * not about the old backend, so they are set rather than copied: the source is the old backend's
+ * env, and its answers describe the old stack — the API on 3000, origins on 3000/7820/5501, and two
+ * base URLs left empty. Copied verbatim they mis-wire every local run, and silently: the API starts
+ * on a port no frontend calls, then refuses the origins they do call from.
+ *
+ * Ports match apps/*\/.env.example and the dev-server table in the README. The same answers hold
+ * for `--target rds`, where only the database moves — the frontends are still on this laptop.
+ */
+/**
+ * Where the Amazon RDS CA bundle lives on a developer's machine. Named in the .env rather than left
+ * to NODE_EXTRA_CA_CERTS so a verified RDS connection does not depend on which shell started the
+ * process; the runbook has the one-line download. Only the rds target needs it — the Docker stack
+ * speaks plain TCP.
+ */
+export const RDS_CA_BUNDLE = path.join(homedir(), '.komtru', 'certs', 'rds-global-bundle.pem');
+
+export const LOCAL_TOPOLOGY = Object.freeze({
+  apiPort: '7813',
+  consumerApp: 'http://localhost:3001',
+  staffApp: 'http://localhost:3002',
+  /** Every frontend origin, including the two whose apps are still placeholders. */
+  origins: [3001, 3002, 3003, 3004].map((port) => `http://localhost:${port}`).join(','),
+});
 
 /** KEY -> the right-hand side exactly as written in the source (quotes, escapes, comments kept). */
 function parseEnvRaw(text) {
@@ -83,9 +111,7 @@ export function buildBackendEnv(sourceText, { target }) {
     values.POSTGRES_DIRECT_URL = LOCAL_INFRA.directUrl;
     values.POSTGRES_APP_PASSWORD = LOCAL_APP_ROLE.password;
     values.POSTGRES_SSL = 'false';
-    values.REDIS_URL = LOCAL_INFRA.redisUrl;
-    // A local run must never email real people; Mailjet's sandbox validates without sending.
-    values.MAILJET_SANDBOX = 'true';
+    values.POSTGRES_CA_CERT = '';
   } else if (target === 'rds') {
     if (!parsed.POSTGRES_URL) throw new UsageError('The source has no POSTGRES_URL to switch.');
     const ownerUrl = switchDatabase(parsed.POSTGRES_URL);
@@ -93,9 +119,26 @@ export function buildBackendEnv(sourceText, { target }) {
     values.POSTGRES_DIRECT_URL = ownerUrl;
     values.POSTGRES_URL = asRuntimeRole(ownerUrl, appPassword);
     values.POSTGRES_APP_PASSWORD = appPassword;
+    values.POSTGRES_CA_CERT = RDS_CA_BUNDLE;
   } else {
     throw new UsageError(`Unknown --target "${target}". Use "local" or "rds".`);
   }
+
+  // After the branch: `--target` chooses where the DATABASE lives, not whether this is a
+  // developer's machine. Everything below is true of both targets, and leaving any of it to the
+  // source means `--target rds` quietly inherits the old stack's answer.
+  values.REDIS_URL = LOCAL_INFRA.redisUrl;
+  // A local run must never email real people; Mailjet's sandbox validates without sending.
+  values.MAILJET_SANDBOX = 'true';
+  values.PORT = LOCAL_TOPOLOGY.apiPort;
+  values.APP_WEB_BASE_URL = LOCAL_TOPOLOGY.consumerApp;
+  values.APP_STAFF_WEB_BASE_URL = LOCAL_TOPOLOGY.staffApp;
+  values.ALLOWED_ORIGINS = LOCAL_TOPOLOGY.origins;
+  values.SOCKET_CORS_ORIGINS = LOCAL_TOPOLOGY.origins;
+  // Both land on the consumer app: it owns sign-in, and a passkey is registered against its origin.
+  values.OAUTH_REDIRECT_BASE_URL = LOCAL_TOPOLOGY.consumerApp;
+  values.WEBAUTHN_ORIGINS = LOCAL_TOPOLOGY.consumerApp;
+  values.WEBAUTHN_RP_ID = 'localhost';
 
   const names = Object.keys(values);
   const header = [

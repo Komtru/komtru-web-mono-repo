@@ -93,6 +93,18 @@ export const AUDIT_ACTIONS = {
   ADDRESS_UPDATED: 'ADDRESS_UPDATED',
   ADDRESS_ARCHIVED: 'ADDRESS_ARCHIVED',
   ADDRESS_DEFAULT_SET: 'ADDRESS_DEFAULT_SET',
+  // T-041. `metadata` carries file ids and the source, never a URL (a provider URL is untrusted input).
+  AVATAR_SET: 'AVATAR_SET',
+  AVATAR_REMOVED: 'AVATAR_REMOVED',
+  // T-039. `metadata` carries the reason, from/to and counts, never a handle or an address (§S12).
+  ACCOUNT_LOCKED: 'ACCOUNT_LOCKED',
+  ACCOUNT_CLOSED: 'ACCOUNT_CLOSED',
+  ACCOUNT_ANONYMISED: 'ACCOUNT_ANONYMISED',
+  DATA_EXPORT_REQUESTED: 'DATA_EXPORT_REQUESTED',
+  ERASURE_REQUESTED: 'ERASURE_REQUESTED',
+  RECOVERY_REQUESTED: 'RECOVERY_REQUESTED',
+  RECOVERY_DECIDED: 'RECOVERY_DECIDED',
+  ADMIN_RECOVERY_LISTED: 'ADMIN_RECOVERY_LISTED',
 } as const;
 
 export async function writeAudit(tx: Tx, input: AuditInput): Promise<void> {

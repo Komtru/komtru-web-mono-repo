@@ -2,6 +2,27 @@
   "$schema": "https://turbo.build/schema.json",
   "agentGuidance": false,
   "tasks": {
+    "dev": {
+      "dependsOn": ["^build"],
+      "cache": false,
+      "persistent": true,
+      "env": [
+        "NEXT_PUBLIC_KOMTRU_APP_URL",
+        "NEXT_PUBLIC_KOMTRU_API_URL",
+        "NEXT_PUBLIC_KOMTRU_SOCKET_URL",
+        "NEXT_PUBLIC_KOMTRU_PASSPORT_URL",
+        "NEXT_PUBLIC_KOMTRU_PARK_URL",
+        "NEXT_PUBLIC_SENTRY_DSN",
+        "KOMTRU_SESSION_SECRET"
+      ],
+      "passThroughEnv": ["KOMTRU_*", "NEXT_PUBLIC_*", "PORT", "NODE_EXTRA_CA_CERTS"]
+    },
+    "dev:worker": {
+      "dependsOn": ["^build"],
+      "cache": false,
+      "persistent": true,
+      "passThroughEnv": ["KOMTRU_*", "PORT", "NODE_EXTRA_CA_CERTS"]
+    },
     "build": {
       "dependsOn": ["^build"],
       "outputs": ["dist/**", ".next/**", "!.next/cache/**"],

@@ -130,6 +130,7 @@ describe('the app auth routes', () => {
       login: '/api/auth/login',
       mfa: '/api/auth/mfa',
       mfaChallenge: '/api/auth/mfa-challenge',
+      verify: '/api/auth/verify',
       refresh: '/api/auth/refresh',
       logout: '/api/auth/logout',
     });

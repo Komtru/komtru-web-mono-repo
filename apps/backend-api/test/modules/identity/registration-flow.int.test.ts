@@ -62,8 +62,16 @@ describe.runIf(infraEnabled)('the registration flow end to end (M1 §9.3)', () =
   let redis: Redis;
   let app: Express;
 
-  const build = (mirror: boolean) => {
-    const config = testConfig(mirror ? { IDENTITY_MIRROR_PHONE_OTP_TO_EMAIL: 'true' } : {});
+  /** A world where SMS really goes out, so nothing falls back to email. */
+  const SMS_SENDS = {
+    NOTIFY_SMS_DRY_RUN: 'false',
+    TERMII_API_KEY: 'k',
+    TERMII_SENDER_ID: 'Komtru',
+    TERMII_BASE_URL: 'https://termii.invalid',
+  };
+
+  const build = (mirror: boolean, env: Record<string, string> = {}) => {
+    const config = testConfig({ ...(mirror ? { IDENTITY_MIRROR_PHONE_OTP_TO_EMAIL: 'true' } : {}), ...env });
     const auth = createIdentityAuth({ db: t.db(), redis, config, logger: testLogger });
     return createApp({
       config,
@@ -269,7 +277,8 @@ describe.runIf(infraEnabled)('the registration flow end to end (M1 §9.3)', () =
     for (const row of rows) expect(row.status).toBe('QUEUED');
   });
 
-  it('does not mirror when the flag is off, even for a user who has an email', async () => {
+  it('does not mirror when the flag is off and SMS really sends, even for a user who has an email', async () => {
+    app = build(false, SMS_SENDS);
     const registered = bodyOf<Registered>(
       await request(app)
         .post('/v1/auth/register')
@@ -292,6 +301,87 @@ describe.runIf(infraEnabled)('the registration flow end to end (M1 §9.3)', () =
     expect(rows.map((r) => r.payload).find((p) => p.challengeId === resent.challengeId)?.channels).toEqual([
       'SMS',
     ]);
+  });
+
+  const channelsFor = async (challengeId: string): Promise<string[]> => {
+    const { rows } = await t
+      .app()
+      .query<{ payload: { challengeId: string; channels: string[] } }>(
+        `SELECT payload FROM platform.outbox WHERE event_type = 'identity.otp.requested'`,
+      );
+    const match = rows.map((r) => r.payload).find((p) => p.challengeId === challengeId);
+    if (!match) throw new Error(`no identity.otp.requested for ${challengeId}`);
+    return match.channels;
+  };
+
+  it('emails the phone code when no SMS will go out, and entering it proves the phone', async () => {
+    // The default test config is not production and runs SMS dry: no text would ever arrive.
+    const registered = bodyOf<Registered & { maskedDestination: string }>(
+      await request(app)
+        .post('/v1/auth/register')
+        .send({ channel: 'PHONE', phone: PHONE, email: EMAIL, acceptedTermsVersion: DEFAULT_TERMS_VERSION })
+        .expect(201),
+    );
+    expect(await channelsFor(registered.challengeId)).toEqual(['SMS', 'EMAIL']);
+    // E3 says where to look: the inbox, masked.
+    expect(registered.maskedDestination).toContain('@');
+    expect(registered.maskedDestination).not.toContain('jane');
+
+    const verified = bodyOf<Session>(
+      await request(app)
+        .post('/v1/auth/verify-otp')
+        .send({ challengeId: registered.challengeId, code: await codeFor(registered.challengeId) })
+        .expect(200),
+    );
+    // The phone is proven and the email is not, so the password comes next — not VERIFY_EMAIL.
+    expect(verified.nextStep).toBe('SET_PASSWORD');
+    const { rows } = await t.app().query<{ phone: boolean; email: boolean }>(
+      `SELECT (SELECT verified_at IS NOT NULL FROM identity.user_phones WHERE user_id = $1) AS phone,
+              (SELECT verified_at IS NOT NULL FROM identity.user_emails WHERE user_id = $1) AS email`,
+      [registered.userId],
+    );
+    expect(rows[0]).toEqual({ phone: true, email: false });
+  });
+
+  it('texts only, and says so, when SMS really sends', async () => {
+    app = build(false, SMS_SENDS);
+    const registered = bodyOf<Registered & { maskedDestination: string }>(
+      await request(app)
+        .post('/v1/auth/register')
+        .send({ channel: 'PHONE', phone: PHONE, email: EMAIL, acceptedTermsVersion: DEFAULT_TERMS_VERSION })
+        .expect(201),
+    );
+    expect(await channelsFor(registered.challengeId)).toEqual(['SMS']);
+    expect(registered.maskedDestination).not.toContain('@');
+  });
+
+  it('refuses an email it cannot read on the phone path, naming the field, and writes nothing', async () => {
+    const response = await request(app).post('/v1/auth/register').send({
+      channel: 'PHONE',
+      phone: PHONE,
+      email: 'not-an-address',
+      acceptedTermsVersion: DEFAULT_TERMS_VERSION,
+    });
+    expect(response.status).toBe(422);
+    expect(JSON.stringify(response.body)).toContain('email');
+    const { rows } = await t.app().query(`SELECT 1 FROM identity.users`);
+    expect(rows).toHaveLength(0);
+  });
+
+  it('emails a phone reset code too when no SMS will go out', async () => {
+    const registered = bodyOf<Registered>(
+      await request(app)
+        .post('/v1/auth/register')
+        .send({ channel: 'PHONE', phone: PHONE, email: EMAIL, acceptedTermsVersion: DEFAULT_TERMS_VERSION }),
+    );
+    await request(app)
+      .post('/v1/auth/verify-otp')
+      .send({ challengeId: registered.challengeId, code: await codeFor(registered.challengeId) })
+      .expect(200);
+    const started = bodyOf<{ challengeId: string }>(
+      await request(app).post('/v1/auth/password/forgot').send({ identifier: PHONE }).expect(202),
+    );
+    expect(await channelsFor(started.challengeId)).toEqual(['SMS', 'EMAIL']);
   });
 
   it('never writes an OTP code or a password into the audit log (S12)', async () => {

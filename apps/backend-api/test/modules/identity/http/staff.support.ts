@@ -7,7 +7,11 @@ import type { Redis } from 'ioredis';
 import request from 'supertest';
 import { expect } from 'vitest';
 import { createApp } from '../../../../src/app.js';
-import { createIdentityAuth, seedIdentityCatalogue } from '../../../../src/modules/identity/index.js';
+import {
+  createIdentityAuth,
+  seedIdentityCatalogue,
+  type IdentityAuthOptions,
+} from '../../../../src/modules/identity/index.js';
 import { totpCodeAt, totpStep } from '../../../../src/modules/identity/domain/mfa/totp.js';
 import { attachEmail, markEmailVerified } from '../../../../src/modules/identity/services/contact.service.js';
 import { setPassword } from '../../../../src/modules/identity/services/credential.service.js';
@@ -45,9 +49,14 @@ export interface ChallengeBody {
   factors: { id: string; type: string }[];
 }
 
-export const buildApp = (t: TestDatabase, redis: Redis): Express => {
+export const buildApp = (
+  t: TestDatabase,
+  redis: Redis,
+  /** T-039: the ports the registry wires in production (trade check, files tombstone). */
+  extra: Partial<IdentityAuthOptions> = {},
+): Express => {
   const config = testConfig({ WEBAUTHN_ORIGINS: 'https://app.komtru.test' });
-  const auth = createIdentityAuth({ db: t.db(), redis, config, logger: testLogger });
+  const auth = createIdentityAuth({ db: t.db(), redis, config, logger: testLogger, ...extra });
   return createApp({
     config,
     logger: testLogger,

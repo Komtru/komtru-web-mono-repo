@@ -65,6 +65,15 @@ export interface AccountDeps extends SessionDeps, CredentialDeps {
   terms: { termsVersion: string; privacyVersion: string };
   /** `IDENTITY_MIRROR_PHONE_OTP_TO_EMAIL`: also email a phone OTP, never instead of the SMS. */
   mirrorPhoneOtpToEmail: boolean;
+  /**
+   * No SMS will actually go out — the SMS channel is a dry run or Termii is not configured — and this
+   * is not production. A phone code is then also emailed to the account's email, so the person can
+   * get it at all, and entering it still proves the phone, as the mirror does.
+   *
+   * Never true in production: there, a code that only reached an inbox must not mark a phone
+   * number verified, so a missing SMS provider stays the dead-letter it is (`send.job.ts`).
+   */
+  smsUndeliverable: boolean;
 }
 
 const otpDeps = (deps: AccountDeps): OtpDeps => ({ hasher: deps.otpHasher, logger: deps.logger });
@@ -151,6 +160,12 @@ export async function register(db: Db, deps: AccountDeps, input: RegisterInput):
   if (!contact) {
     return { outcome: 'INVALID_CONTACT', channel: input.channel };
   }
+  // E2's email beside the phone: the second channel, stored unverified. Checked here, before the
+  // transaction, for the same reason the phone is.
+  const secondEmail = contact.channel === 'PHONE' && input.email ? resolveSecondEmail(input.email) : null;
+  if (contact.channel === 'PHONE' && input.email && !secondEmail) {
+    return { outcome: 'INVALID_CONTACT', channel: 'EMAIL' };
+  }
 
   // The breach check is a three-second HTTP call. Running it here rather than inside the
   // transaction is what stops a Postgres connection, and the row locks it holds, from waiting on a
@@ -187,6 +202,10 @@ export async function register(db: Db, deps: AccountDeps, input: RegisterInput):
         await attachEmail(tx, { userId: user.id, email: contact.raw, makePrimary: true });
       } else {
         await attachPhone(tx, { userId: user.id, phone: contact.raw, makePrimary: true });
+        // Primary because it is the account's only email; unverified, so it proves nothing yet and
+        // may coexist with the same address on another account (the partial unique index).
+        if (secondEmail)
+          await attachEmail(tx, { userId: user.id, email: secondEmail.raw, makePrimary: true });
       }
     } catch (error) {
       if (error instanceof ContactInvalidError) {
@@ -213,7 +232,7 @@ export async function register(db: Db, deps: AccountDeps, input: RegisterInput):
     const challenge = await issueOtp(tx, otpDeps(deps), {
       userId: user.id,
       purpose: 'REGISTRATION',
-      channels: contact.channel === 'EMAIL' ? ['EMAIL'] : await registrationChannels(deps),
+      channels: contact.channel === 'EMAIL' ? ['EMAIL'] : registrationChannels(deps, secondEmail !== null),
       destination: contact.destination,
       ip: input.ip,
     });
@@ -256,7 +275,8 @@ export async function register(db: Db, deps: AccountDeps, input: RegisterInput):
       challengeId: challenge.challengeId,
       expiresAt: challenge.expiresAt,
       nextStep: contact.channel === 'EMAIL' ? 'VERIFY_EMAIL' : 'VERIFY_PHONE',
-      maskedDestination: contact.masked,
+      // Where the person should look. When no SMS will really go out, that is the inbox.
+      maskedDestination: deps.smsUndeliverable && secondEmail ? secondEmail.masked : contact.masked,
       delivered: challenge.delivered,
     };
   });
@@ -299,13 +319,25 @@ function resolveRegistrationContact(input: RegisterInput): RegistrationContact |
   };
 }
 
+/** A second email given at phone signup, canonicalised, or null when it is not an address. */
+function resolveSecondEmail(raw: string): { raw: string; masked: string } | null {
+  try {
+    return { raw, masked: maskEmail(normaliseEmail(raw).email) };
+  } catch {
+    return null;
+  }
+}
+
+/** Whether a phone code also goes to the account's email: the mirror flag, or SMS that cannot send. */
+const emailsPhoneCodes = (deps: AccountDeps): boolean => deps.mirrorPhoneOtpToEmail || deps.smsUndeliverable;
+
 /**
- * A registration phone code has nowhere to be mirrored — the account has no email yet — so this is
- * always `['SMS']`. It is a function so the mirror flag has one place to be read from, beside
- * `deliveryChannels` below, rather than two literals that drift apart.
+ * A registration phone code. The SMS channel always comes first: it is the channel the challenge is
+ * FOR (`otp_challenges.channel`), so verifying the code proves the phone. The email rides along when
+ * the person gave one and phone codes are being emailed.
  */
-function registrationChannels(_deps: AccountDeps): Promise<OtpChannel[]> {
-  return Promise.resolve(['SMS']);
+function registrationChannels(deps: AccountDeps, hasEmail: boolean): OtpChannel[] {
+  return hasEmail && emailsPhoneCodes(deps) ? ['SMS', 'EMAIL'] : ['SMS'];
 }
 
 async function insertUser(tx: Tx, input: RegisterInput): Promise<{ id: string; publicId: string }> {
@@ -601,13 +633,13 @@ export async function resendOtp(
  * `IDENTITY_MIRROR_PHONE_OTP_TO_EMAIL` a phone code is ALSO emailed, because SMS runs dry outside
  * production and a developer would otherwise never see one. Never instead of the SMS.
  */
-async function deliveryChannels(
+export async function deliveryChannels(
   tx: Tx,
   deps: AccountDeps,
   userId: string,
   channel: string,
 ): Promise<OtpChannel[]> {
-  if (channel !== 'SMS' || !deps.mirrorPhoneOtpToEmail) {
+  if (channel !== 'SMS' || !emailsPhoneCodes(deps)) {
     return [channel === 'EMAIL' ? 'EMAIL' : 'SMS'];
   }
   const contacts = await primaryContacts(tx, userId);

@@ -55,6 +55,9 @@ const VARIABLES = {
   POSTGRES_DIRECT_URL: { schema: z.url(), required: false },
   POSTGRES_APP_PASSWORD: { schema: z.string().min(8), required: false },
   POSTGRES_SSL: { schema: bool, required: false },
+  // Path to a PEM CA bundle for the Postgres connection. Needed wherever the server's CA is not
+  // in Node's trust store, such as Amazon RDS. Empty means verify against the system store.
+  POSTGRES_CA_CERT: { schema: z.string().min(1), required: false },
   POSTGRES_POOL_MAX: { schema: int(1, 200), required: false },
   REDIS_URL: { schema: z.url(), required: true },
   // The namespace every Redis key lands under. Production leaves both unset; the integration suite
@@ -233,6 +236,8 @@ export interface AppConfig {
     /** The migrator sets this as komtru_app's login password. */
     appPassword?: string;
     ssl: boolean;
+    /** Path to a PEM CA bundle, from POSTGRES_CA_CERT; see platform/postgres-ssl.ts. */
+    caCertPath?: string;
     poolMax: number;
   };
   redis: {
@@ -478,6 +483,7 @@ export function loadConfig(env: NodeJS.ProcessEnv): AppConfig {
       ...(v.POSTGRES_DIRECT_URL ? { directUrl: v.POSTGRES_DIRECT_URL } : {}),
       ...(v.POSTGRES_APP_PASSWORD ? { appPassword: v.POSTGRES_APP_PASSWORD } : {}),
       ssl: v.POSTGRES_SSL ?? false,
+      ...(v.POSTGRES_CA_CERT ? { caCertPath: v.POSTGRES_CA_CERT } : {}),
       poolMax: v.POSTGRES_POOL_MAX ?? 10,
     },
     redis: {

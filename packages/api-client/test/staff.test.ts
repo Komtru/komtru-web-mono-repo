@@ -80,6 +80,7 @@ describe('authRoutePaths', () => {
       login: '/api/auth/login',
       mfa: '/api/auth/mfa',
       mfaChallenge: '/api/auth/mfa-challenge',
+      verify: '/api/auth/verify',
     });
   });
 });

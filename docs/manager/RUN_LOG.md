@@ -35,13 +35,77 @@ cost and to find work to resume.
 - **Q16, the T-046 city seed.** It is merged with a default list: 37 states and 129 cities (the 37 capitals plus 92 commercial
   cities) in `apps/backend-api/src/modules/geo/seed/nigeria-locations.seed.ts`. Review the list. Staff can also add,
   rename or deactivate cities later through `/admin/geo`. `geo.manage` is held by SUPER_ADMIN and OPERATIONS_ADMIN.
-- **T-061 proposal-flow defaults** (in `docs/superpowers/plans/2026-11-07-t-061-proposal-flow.md`; the
-  ticket is not merged yet):
+- **T-061 proposal-flow defaults** (merged 2026-11-07; listed in `docs/superpowers/plans/2026-11-07-t-061-proposal-flow.md`):
   - seller proof media is stored as `PRIVATE_CASE` files with the buyer granted access, because files has
     no trade-proof category;
+  - a proof file is accepted only if it is unused elsewhere, and a trade holds at most 20 proof files;
+  - the buyer's proof access is revoked when a trade is declined, cancelled or expires unfunded;
   - either party may cancel before funding, and the initiator may cancel before the counterparty binds;
   - a certified merchant who asks to be the BUYER is refused (403 `MERCHANT_CANNOT_BUY`), not silently
     switched to SELLER.
+- **T-072 funding: blocks merge.** Where does the buyer protection fee sit between funding and release? The AC
+  says "fee liability", but the chart of accounts has no fee-liability account. Default built: a second credit
+  line on the trade's escrow liability account (isolated in `fundingJournalLines`). A separate account needs a
+  new enum value and a migration that rewrites account keys. The branch `t-072-funding` is reviewed, fixed and
+  green, waiting on this answer. Other money defaults in `docs/superpowers/plans/2026-11-07-t-072-funding.md`:
+  - under-, over- or reversed payment, or money on a closed attempt or a trade no longer awaiting payment, is
+    held in full for manual review (no auto-refund);
+  - reference `fund-<uuid>`; a buyer with no email gets 422;
+  - a checkout Paystack never saw can be replaced after 30 minutes, a declined card after 10, an abandoned
+    one at once; at most 10 attempts per trade, 1 minute apart;
+  - whether attempt expiry should tie to `trades.payment_deadline_hours` (a trade-side deadline job);
+  - stock reservation (T-056) consumes `ledger.payment.escrow_funded`.
+- **T-041 avatar defaults** (merged 2026-11-09; listed in `docs/superpowers/plans/2026-11-09-t-041-avatars.md`):
+  - replacing or removing an avatar tombstones the old file; provider images are JPEG, PNG or WebP only, checked
+    by magic bytes, at most 5 MiB, https only; 10 writes a minute per user and IP;
+  - **party-lookup timing:** a party card for a user with an avatar costs 1–2 more queries than a miss, because
+    signing reads the file record. That is a small "has an avatar" timing signal under §17. Is it acceptable, or
+    should files get a purely local signer for PUBLIC files?
+  - provider import returns SKIPPED until T-034 wires `fetchImage` and `ingest`. The contract they must pass is
+    in `apps/backend-api/test/support/fetch-image-contract.ts`.
+- **T-052 KYC review defaults** (not merged; the branch still needs its fixer; listed in
+  `docs/superpowers/plans/2026-11-09-t-052-kyc-review-queue.md` on `t-052-kyc-review-queue`):
+  - clearing a duplicate flag needs a dual-approved `VERIFICATION_OVERRIDE`; confirming needs only
+    `duplicate_flag.resolve`. A release drops the first account to level 1 (NIN/BVN) or level 2 (CAC);
+  - a level override grants only level 2 or 3, never 4, and revokes to level 1 at the lowest;
+  - the repeated-rejection event fires when a user's rejections in a rolling 30 days, across all types, reach
+    exactly 2;
+  - approving a FUZZY bank match approves the request but doesn't grant level 3;
+  - duplicate cases are HIGH priority, all others NORMAL.
+- **T-029 infra isolation: needs a go-ahead to edit `docker-compose.yml`.** The last open flake is
+  Postgres connection exhaustion (12 parallel test databases × PgBouncer pool 20 against
+  `max_connections` 100). The proposed fix: Postgres `max_connections=300`; PgBouncer
+  `DEFAULT_POOL_SIZE: 10`, `MAX_DB_CONNECTIONS: 15`, `SERVER_LOGIN_RETRY: 0`. It's a shared-resource
+  file, so the manager won't change it without your go-ahead. The worktree `t-029-infra-isolation`
+  has no unmerged commits.
+- **T-107 case defaults** (merged 2026-11-07; all 16 are in `docs/superpowers/plans/2026-11-07-t-107-cases.md`):
+  - **Which roles may own and decide cases?** Today only `cases.manage` holders can: SUPER_ADMIN,
+    OPERATIONS_ADMIN and PARK_OPERATIONS. COMPLIANCE_OFFICER, FRAUD_ANALYST and KYC_ANALYST can only
+    view cases, so an escalation that needs an expert decision can't reach an expert.
+  - SLA hours: DISPUTE 48, KYB 72, MERCHANT_APPLICATION 72, IDENTITY 24, FRAUD 24, CUSTODY 48,
+    PAYMENT_EXCEPTION 24, TRADE_PROPOSAL 24, PARK_HUB_APPLICATION 120. "At risk" means the last 25% of the
+    window, or past it. The clock keeps running while a case awaits evidence.
+  - Any manager may reassign a case to themselves; a reason is required. Only the case's owner may decide it.
+  - The policy citation is free text until a policy registry exists.
+- **T-039 account-lifecycle defaults** (merged 2026-11-07; all 18 are in
+  `docs/superpowers/plans/2026-11-07-t-039-account-lifecycle.md`). The ones most worth a look:
+  - Suspended, locked and closed users have no session, so the AS1/AS2 notice comes back in the login 403
+    (notice key, support reference, abilities; never the staff reason). It has no `openTrades` count.
+    Does AS2 need it?
+  - Any non-terminal trade blocks closing. Self-close is allowed from ACTIVE, PENDING_VERIFICATION and
+    RESTRICTED. Is a staff-assisted close or erasure needed for SUSPENDED and LOCKED accounts?
+  - Every recovery request needs a human reviewer (threshold 0), and the reviewer reuses `user.reinstate`.
+    Approval only unlocks and signs out. The public route takes no evidence uploads.
+  - Erasure closes the account at once. Anonymisation isn't scheduled; T-104 must call it.
+  - Lock is system-only, and anonymising a staff member is refused.
+- **T-141 work-queue defaults** (merged 2026-11-07; listed in `docs/superpowers/plans/2026-11-07-t-141-work-queue.md`):
+  - the orient screens are tabs under `/queue`, not top-level routes;
+  - the case-type-to-area mapping, and the P1 "flagged" and "cleared today" definitions;
+  - Trade 360 finds a trade's cases by `subjectType` TRADE with the trade reference as `subjectId`;
+  - staff can only reassign a case to themselves until a roster read exists;
+  - queues refresh by polling every 60 s.
+  - Backend gaps it exposed: `GET /admin/me`, a staff roster, queue aggregates, a staff trade read model and an
+    alert inbox. No module calls `registerCase` yet, so the queues stay empty against a real backend.
 - Q1 (hosting and the GitHub remote) still blocks T-005 and the T-183 push.
 - Q3 (wallet) still blocks T-131.
 - ~~Disputes in the MVP?~~ Answered 2026-11-06: yes. T-120, T-196, T-199, T-200 and the new T-221 are in the MVP.
@@ -249,3 +313,91 @@ cost and to find work to resume.
 - In-flight, not a cheap tail, so not resumed: `t-061-proposal-flow` (review, fix and merge
   left) and `t-029-infra-isolation`.
 - Next: T-061 review, fix and merge, then T-072 funding (opus), T-107 and T-039.
+
+## 2026-11-07 06:16 WAT — run summary
+
+- Usage at start: 5h 1%, week 60%. At end: 5h 56%, week 67%.
+- Capacity: 2 (`est` 14). Tickets: T-061 (merged), T-072 (saved at fix, awaiting the owner's fee decision).
+  - T-061: Sonnet review gave 2 must-fix items (proof access was never granted on claim or on a send
+    retry) and 8 should-fix items. A fresh Sonnet fixer fixed all 10, including concurrency tests and an
+    "at least one address" check in migration 0039. Merged; 3048 backend tests green on `main`, and
+    migration safety is clean.
+  - T-072 (Opus): it first stopped, as told, because `payment_attempts` and `payment_provider_webhooks` did
+    not exist. After T-061 merged it took migration 0040 and built initiate, confirm and status, the
+    Paystack webhook, and the verify job. Sonnet review: 4 must-fix items (the Inline amount could drift
+    from the attempt, confirm and restart raced the settle, a buyer could be locked out, and review events
+    were duplicated) and 6 should-fix items, all fixed. 3121 unit and 359 ledger infra tests green. Not
+    merged: the fee-liability placement is a money rule for the owner.
+- Ticket costs: T-061 (review+fix) 5h-cost=21 week-cost=2; T-072 5h-cost=34 week-cost=5.
+- Not resumed: `t-029-infra-isolation` (cross-cutting, so it can't run alongside other work, and it's not a
+  cheap tail).
+- Next: merge T-072 once the owner answers the fee question (rebase onto `main`, re-run checks). Otherwise
+  T-107 and T-039, or T-029 on its own.
+
+## 2026-11-07 10:57 WAT — run summary
+
+- Usage at start: 5h 56%, week 67%. At end: 5h 74%, week 69%.
+- Capacity: 1. `est` 19 (median of the last 5 completed tickets), and 56 + 2×19 > 90. Tickets: T-107 (merged).
+  - T-107: Sonnet implemented `src/modules/cases/**` with migrations 0040 and 0041. Sonnet review gave 2
+    must-fix items (a cursor of the wrong shape silently restarted at page 1, and expert roles can never
+    own or decide a case) and 7 should-fix items. The fixer fixed all 9; the role question went to the
+    owner, with the RBAC catalogue unchanged. The first full run on `main` failed 3 identity MFA tests on
+    timeouts, which is the known T-029 load flake. Those files passed on their own, and a second full run
+    was green: 244 files, 4478 tests. Migration safety reports 0 errors.
+- Ticket costs: T-107 5h-cost=18 week-cost=2.
+- Not resumed: `t-072-funding` (waiting on the fee question) and `t-029-infra-isolation` (waiting on the
+  docker-compose go-ahead; it has no unmerged commits).
+- Note for T-072: T-107 took migrations 0040 and 0041. The T-072 merge must renumber its migration to 0042.
+- Next: T-039 (account lifecycle). T-072 once the fee question is answered; T-029 once the compose change is
+  approved.
+
+## 2026-11-07 13:03 WAT — run summary
+
+- Usage at start: 5h 1%, week 69%. At end: 5h 45%, week 75%.
+- Capacity: 2 (`est` 19: 1 + 2×19 ≤ 90; week 69 + 2 ≤ 85). Tickets: T-141 (merged), T-039 (merged).
+  - T-141 (Sonnet, operations-app and api-client, no migration): the work queue, universal case page,
+    Trade 360 cases view and the mobile proposal check-in. Sonnet review: 2 must-fix items (a footnote
+    promised "both parties are told", and every failure showed the same retry text) and 8 should-fix items,
+    all fixed. 151 operations-app and 159 api-client tests are green on `main`. `main` first failed because
+    its `node_modules` lacked the operations-app dependencies; `pnpm install` fixed that.
+  - T-039 (Sonnet, identity, no migration): the status machine, close guard, recovery with human review,
+    export and erasure events, and §15 anonymisation. Sonnet review: 4 must-fix items (close raced trade
+    creation, so trade creation now takes `FOR SHARE` on the party rows; the suspension notice couldn't be
+    reached; anonymisation left PII behind; the recovery receipt revealed whether an account exists) and 9
+    should-fix items, all fixed. Two full infra-on runs on `main` each failed one different
+    test (`verification.int`, then `processes.int`). Both files pass on their own and T-039 touched
+    neither, so this is the known T-029 load flake. 4547 of 4548 tests passed.
+- Subagents could not change directory into the manager's `t-0xx` worktrees and committed on their own
+  `worktree-agent-*` branches instead. The manager fast-forwarded the ticket branches from those branches.
+- Ticket costs, together: 5h-cost=44 week-cost=6, so about 22 and 3 each.
+- Not resumed: `t-072-funding` (waiting on the fee question) and `t-029-infra-isolation` (waiting on the
+  docker-compose go-ahead).
+- Next: T-052 (KYC review queue; trust module, now that T-107 is in). T-072 once the fee question is
+  answered; T-029 once the compose change is approved.
+
+## 2026-11-09 13:13 WAT — run summary
+
+- Usage at start: 5h 1%, week 76%. At end: 5h 59%, week 84%.
+- The stale lock from 2026-11-07 12:12Z (older than 4 hours) was replaced.
+- Capacity: 2 (`est` 22, `est_week` 3: 1 + 2×22 ≤ 90; 76 + 2×3 ≤ 85). T-052 was the only unblocked Ready MVP
+  ticket; T-041 (identity, no migration) ran alongside it. Tickets: T-041 (merged), T-052 (saved at review).
+  - T-041 (Sonnet): `POST`/`DELETE /me/avatar`, signed URLs at read time, and a provider-import path behind
+    ports. Sonnet review: 1 must-fix item (party cards never got `avatarUrl`; `enrich` is now wired, with
+    decoy signing on a miss) and 9 should-fix items (the swap race, `onlyIfNone` under the lock, orphan cleanup,
+    magic-byte sniffing, the `fetchImage` SSRF contract for T-034, concurrency tests), all fixed. On `main`
+    with infra: backend-api 256 files and 4613 tests, shared-types 192, api-client 161, all green; format is clean.
+  - T-052 (Sonnet): migration 0042 `trust.duplicate_identity_flags`, the `/admin/kyc` queue, duplicate flags,
+    dual-approved overrides and the repeated-rejection event. 4585 infra tests green on the branch. Sonnet review: 3 must-fix
+    items (a racy 30-day counter; a duplicate with a null `firstUserId` gets a case but no flag, so it can be
+    decided through the plain queue; missing concurrency and approval-replay tests) and 8 should-fix items. The
+    fixer was not started: weekly usage was 83% with the T-041 fix still running, and the fix phase would have
+    reached the 85% reserve. The review items are in the plan on the branch (commit `eb584f1`).
+- Ticket costs, together: 5h-cost=58 week-cost=8, about 29 and 4 each. Both implementers ran with
+  infra tests on the shared Postgres; they collided on `komtru_test_*` names until T-052 set
+  `KOMTRU_TEST_DB_PREFIX`. Tell parallel implementers to set distinct prefixes.
+- Not touched: `t-072-funding` (fee question), `t-029-infra-isolation` (compose go-ahead), and a new
+  `t-111-entry-auth` worktree this run did not create (the owner's or another session's).
+- `main` has uncommitted owner work (populate-frontend-env scripts, package.json, turbo.json, README); it was
+  left untouched and not committed.
+- Next: resume T-052 with a fixer (on `t-052-kyc-review-queue`), then merge it. The weekly limit resets
+  2026-11-10 15:00 WAT; until then the 85% reserve leaves no room for a ticket cycle.

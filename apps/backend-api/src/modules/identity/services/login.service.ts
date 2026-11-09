@@ -30,7 +30,11 @@ import { activeFactors, holdsLiveAdminRole, type MfaDeps } from './mfa.service.j
 import { verifyAndRecord } from './credential.service.js';
 import { deviceLabel, signInLocation, upsertDevice } from './device.service.js';
 import { createSession, type IssuedSession } from './session.service.js';
+import { getAccountNotice, type AccountNotice } from './lifecycle.service.js';
 import type { Tx } from '../../../platform/events/publish.js';
+
+/** Statuses whose owner is told why, once the password is proved. ANONYMISED has no password left. */
+const NOTICE_STATUSES: ReadonlySet<string> = new Set(['SUSPENDED', 'LOCKED', 'CLOSED']);
 
 export type LoginResult =
   | { outcome: 'SESSION'; session: IssuedSession; user: PublicUser; nextStep: NextStep }
@@ -44,6 +48,13 @@ export type LoginResult =
    * as a stopwatch; see `mfa-login.service.ts` for why both.
    */
   | { outcome: 'MFA_REQUIRED'; mfaToken: string; expiresAt: Date; factors: MfaChallengeView[] }
+  /**
+   * T-039 (AS1/AS2): the password was PROVED, and the account is suspended, locked or closed. Reached
+   * only by someone who already holds the credentials, so it tells a stranger nothing about which
+   * identifiers exist; what it gives the owner is the screen's data instead of a bare failure.
+   * Consumer sign-in only: the staff path never takes it.
+   */
+  | { outcome: 'ACCOUNT_NOTICE'; notice: AccountNotice }
   /** Still the only failure. §S3: one status, one body, one cost, whatever actually went wrong. */
   | { outcome: 'REJECTED' };
 
@@ -157,6 +168,14 @@ export async function login(
 
     if (verdict.outcome !== 'OK' || !candidate || !usable) {
       await recordFailure(tx, input, candidate, verdict.outcome, usable);
+      if (
+        verdict.outcome === 'OK' &&
+        candidate &&
+        scope === 'CONSUMER' &&
+        NOTICE_STATUSES.has(candidate.status)
+      ) {
+        return { outcome: 'ACCOUNT_NOTICE', notice: await getAccountNotice(tx, {}, candidate.userId) };
+      }
       return { outcome: 'REJECTED' };
     }
 

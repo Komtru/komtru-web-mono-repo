@@ -46,6 +46,20 @@ describe('the onboarding step a client should show next (M1 §9.3)', () => {
     expect(nextStep(state)).toBe(expected);
   });
 
+  it('verifies the channel the person signed up with first, even when they also gave an email', () => {
+    // E2 takes a phone and an email; the phone is the account's anchor and is chased first.
+    expect(nextStep({ ...base, hasEmail: true })).toBe('VERIFY_PHONE');
+  });
+
+  it('asks for the password once one channel is proven, leaving the second channel for later', () => {
+    // The second channel gates level 1, not sign-in. Chasing it before the password would leave a
+    // phone signup with no way back in once its first session ends.
+    expect(nextStep({ ...base, hasEmail: true, phoneVerified: true })).toBe('SET_PASSWORD');
+    expect(nextStep({ ...base, hasEmail: true, phoneVerified: true, hasPassword: true })).toBe(
+      'CHOOSE_USERNAME',
+    );
+  });
+
   it('puts stale terms ahead of everything, because TOS2 blocks the app', () => {
     expect(nextStep({ ...base, termsUpToDate: false })).toBe('ACCEPT_TERMS');
     expect(

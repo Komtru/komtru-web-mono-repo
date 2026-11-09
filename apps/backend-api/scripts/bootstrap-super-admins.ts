@@ -9,6 +9,7 @@
 import { drizzle } from 'drizzle-orm/node-postgres';
 import pg from 'pg';
 import { ConfigError, loadConfig } from '../src/config/env.js';
+import { postgresSslOptions } from '../src/platform/postgres-ssl.js';
 import { BootstrapRefused, bootstrapSuperAdmins } from '../src/modules/identity/index.js';
 
 const args = process.argv.slice(2);
@@ -31,7 +32,7 @@ try {
   if (!config.postgres.directUrl) throw new ConfigError(['POSTGRES_DIRECT_URL'], []);
   const client = new pg.Client({
     connectionString: config.postgres.directUrl,
-    ssl: config.postgres.ssl ? { rejectUnauthorized: true } : false,
+    ssl: postgresSslOptions(config.postgres),
   });
   await client.connect();
   try {

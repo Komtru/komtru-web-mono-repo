@@ -42,7 +42,19 @@ describe('Button', () => {
           <a href="/trades">Go to Trades</a>
         </Button>,
       );
-      expect(screen.getByRole('link').className).toBe(asButton);
+      const asLink = screen.getByRole('link').className.split(' ');
+      // Every class the button carries, plus what an `<a>` needs to lay out like one.
+      for (const name of asButton.split(' ')) expect(asLink).toContain(name);
+      expect(asLink).toEqual(expect.arrayContaining(['block', 'text-center']));
+    });
+
+    it('leaves a ghost link as inline text, which is what the ghost treatment is', () => {
+      render(
+        <Button variant="ghost" asChild>
+          <a href="/reset-password">Forgot password?</a>
+        </Button>,
+      );
+      expect(screen.getByRole('link').className.split(' ')).not.toContain('block');
     });
 
     it("keeps the child's own classes as well as the treatment", () => {

@@ -12,14 +12,14 @@ import { createSessionSealer, requireSessionSecret } from '@komtru/app-kit';
 import { NextRequest, NextResponse } from 'next/server';
 import { readWebAppConfig } from './src/app-config';
 import { routeRequest } from './src/hosts';
-import { PRE_AUTH_PUBLIC_PATHS, PUBLIC_PATHS } from './src/middleware-rules';
+import { ENTRY_PATHS, PUBLIC_PATHS } from './src/middleware-rules';
 
 const appConfig = readWebAppConfig(process.env);
 
 const requireSession = createKomtruMiddleware({
   config: appConfig,
   sealer: createSessionSealer(requireSessionSecret(process.env)),
-  publicPaths: [...PUBLIC_PATHS, ...PRE_AUTH_PUBLIC_PATHS],
+  publicPaths: [...PUBLIC_PATHS, ...ENTRY_PATHS],
 });
 
 /**

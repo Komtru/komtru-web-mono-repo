@@ -9,7 +9,8 @@ import type { HostRules } from './hosts';
 export const appSpec = {
   appName: 'web-app-ui',
   scope: 'CONSUMER',
-  signInPath: '/sign-in',
+  // The reference's own URL for screen E4 (`app.komtru.com/login`).
+  signInPath: '/login',
   // Buy mode's landing (`landingFor('buy')`); `app/page.tsx` sends Sell mode to `/shop`.
   homePath: '/home',
 } as const satisfies AppSpec;
