@@ -27,5 +27,6 @@ export * from './services/deliverySignal.service.js';
 export * from './services/deadline.service.js';
 export * from './services/inspection.service.js';
 export * from './services/inspectionDeadline.service.js';
+export * from './services/inspectionReminder.service.js';
 export * from './services/inspectionPorts.js';
 export { createTradesModule, type TradesModuleOptions } from './module.js';

@@ -26,6 +26,7 @@ import {
   tradeCompletedEvent,
   tradeInspectionExtensionRequestedEvent,
   tradeInspectionExtensionRespondedEvent,
+  tradeInspectionReminderDueEvent,
 } from '../domain/inspectionEvents.js';
 import { tradeStateChangedEvent } from '../domain/events.js';
 import type { TradeAction, TradeStatus } from '../domain/stateMachine.js';
@@ -109,6 +110,7 @@ export const TRADE_UPDATE_KINDS = [
   'COMPLETED',
   'INSPECTION_EXTENSION_REQUESTED',
   'INSPECTION_EXTENSION_RESPONDED',
+  'INSPECTION_REMINDER',
 ] as const;
 export type TradeUpdateKind = (typeof TRADE_UPDATE_KINDS)[number];
 
@@ -140,7 +142,7 @@ export interface TradePush<S extends z.ZodType = z.ZodType> {
   update: (payload: z.output<S>, envelope: EventEnvelope<z.output<S>>) => Omit<TradeUpdate, 'occurredAt'>;
 }
 
-const definePush = <S extends z.ZodType>(push: TradePush<S>): TradePush => push as unknown as TradePush;
+const definePush = <S extends z.ZodType>(push: TradePush<S>): TradePush => push;
 
 /**
  * Every event a workspace tab reacts to. State changes come from `applyTransition`, the only writer of
@@ -221,6 +223,16 @@ export const TRADE_PUSHES: TradePush[] = [
       kind: 'INSPECTION_EXTENSION_RESPONDED',
       decision: p.decision,
       ...(p.newDueAt ? { dueAt: p.newDueAt } : {}),
+    }),
+  }),
+  definePush({
+    subscriber: 'trades.push-inspection-reminder',
+    event: tradeInspectionReminderDueEvent,
+    update: (p) => ({
+      tradeId: p.tradeId,
+      tradeCode: p.tradeCode,
+      kind: 'INSPECTION_REMINDER',
+      dueAt: p.dueAt,
     }),
   }),
 ];

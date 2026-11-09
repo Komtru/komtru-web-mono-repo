@@ -73,6 +73,12 @@ const SAMPLES: Record<string, unknown> = {
     currentDueAt: now,
     requestedDueAt: now,
   },
+  'trades.inspection.reminder_due': {
+    tradeId,
+    tradeCode,
+    deadlineId: randomUUID(),
+    dueAt: now,
+  },
   'trades.inspection_extension.responded': {
     tradeId,
     tradeCode,

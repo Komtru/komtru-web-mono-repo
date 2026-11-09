@@ -40,13 +40,18 @@ describe('the trades module', () => {
   });
 
   it('schedules the delivery, inspection and grace sweeps every five minutes, for the worker', () => {
-    const jobs = module().schedules ?? [];
+    const jobs = (module().schedules ?? []).filter((job) => job.name !== 'trades.inspection-reminders');
     expect(jobs.map((job) => job.name).sort()).toEqual([
       'trades.delivery-deadlines',
       'trades.grace-deadlines',
       'trades.inspection-deadlines',
     ]);
     for (const job of jobs) expect(job.cron).toBe('*/5 * * * *');
+  });
+
+  it('schedules the inspection reminder sweep every fifteen minutes (T-068)', () => {
+    const job = (module().schedules ?? []).find((j) => j.name === 'trades.inspection-reminders');
+    expect(job?.cron).toBe('*/15 * * * *');
   });
 
   it('subscribes to the ledger releasing escrow, to settle the trade', async () => {

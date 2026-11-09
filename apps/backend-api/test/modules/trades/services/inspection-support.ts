@@ -34,8 +34,11 @@ export async function trade(
   t: TestDatabase,
   status: 'INSPECTION' | 'UNCONFIRMED_DELIVERY',
   dueInHours: number,
+  options: { windowHours?: number } = {},
 ): Promise<InspectionFixture> {
-  const f = await tradeAt(t, status);
+  const f = await tradeAt(t, status, {
+    overrides: options.windowHours ? { inspection_window_hours: options.windowHours } : {},
+  });
   const dueAt = new Date(Date.now() + dueInHours * H).toISOString();
   const kind = status === 'INSPECTION' ? 'INSPECTION' : 'UNCONFIRMED_DELIVERY_GRACE';
   if (status === 'INSPECTION') {

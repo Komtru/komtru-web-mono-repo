@@ -24,6 +24,7 @@ import { tradeRoutes } from './http/trade.routes.js';
 import { deliveryDeadlineJob } from './jobs/deliveryDeadline.job.js';
 import { graceDeadlineJob } from './jobs/graceDeadline.job.js';
 import { inspectionDeadlineJob } from './jobs/inspectionDeadline.job.js';
+import { inspectionReminderJob } from './jobs/inspectionReminder.job.js';
 import { ledgerEscrowReleasedEvent } from './domain/ledgerEvents.js';
 import { openDeliveryDeadline } from './services/deadline.service.js';
 import { settleTrade } from './services/inspectionDeadline.service.js';
@@ -125,6 +126,7 @@ export function createTradesModule(options: TradesModuleOptions): KomtruModule {
       deliveryDeadlineJob(() => fulfilment),
       inspectionDeadlineJob(() => inspection),
       graceDeadlineJob(() => inspection),
+      inspectionReminderJob(() => inspection),
     ],
 
     start: (ctx: ModuleContext) => {

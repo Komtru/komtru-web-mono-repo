@@ -69,8 +69,7 @@ export interface TradeNotificationPlan<S extends z.ZodType = z.ZodType> {
   extra?: (payload: z.output<S>, role: TradeRole) => Record<string, string>;
 }
 
-const plan = <S extends z.ZodType>(p: TradeNotificationPlan<S>): TradeNotificationPlan =>
-  p as unknown as TradeNotificationPlan;
+const plan = <S extends z.ZodType>(p: TradeNotificationPlan<S>): TradeNotificationPlan => p;
 
 type Changed = z.output<typeof tradeStateChangedEvent.payload>;
 
