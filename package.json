@@ -18,6 +18,7 @@
     "visual-check": "node --experimental-strip-types tools/visual-check/src/cli.ts",
     "test:browser": "KOMTRU_BROWSER_TESTS=1 vitest run --config scripts/vitest.config.ts test/playwright-browser.test.ts",
     "env:backend": "node scripts/env/populate-backend-env.mjs",
+    "env:apps": "node scripts/env/populate-frontend-env.mjs",
     "infra:up": "docker compose up -d --wait",
     "infra:down": "docker compose down",
     "infra:reset": "docker compose down --volumes",
