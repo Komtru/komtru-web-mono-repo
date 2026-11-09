@@ -133,7 +133,7 @@ export const createModules: ModuleBuilder = (deps) => {
     ledgerModule,
     // After identity (party lookup, invitations, addresses), config (standards, fees) and files
     // (proof media), which it reads through their barrels.
-    createTradesModule(deps),
+    createTradesModule({ ...deps, gateway: socket.gateway }),
     // After identity, whose audit log and role grants every staff change to a case reads and writes.
     casesModule,
     notifyModule,

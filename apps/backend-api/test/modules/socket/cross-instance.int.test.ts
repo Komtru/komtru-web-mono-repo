@@ -86,17 +86,18 @@ describe.runIf(infraEnabled)('socket fan-out across instances', () => {
     async () => {
       const session = await login();
       // Both instances must know the prefix: the authorizer runs where the socket lives (B), and the
-      // emit happens on A, which only needs the room name.
-      for (const instance of [a, b]) instance.gateway.registerRoomAuthorizer('trade', () => true);
+      // emit happens on A, which only needs the room name. Not `trade`: that prefix belongs to the
+      // trades module (T-068), which claims it at start with a real authorizer.
+      for (const instance of [a, b]) instance.gateway.registerRoomAuthorizer('fanout', () => true);
       const socket = client(b, { token: session.accessToken });
       sockets.push(socket);
       await connected(socket);
 
-      const joined: unknown = await socket.emitWithAck('room:join', { prefix: 'trade', id: 'trade-1' });
+      const joined: unknown = await socket.emitWithAck('room:join', { prefix: 'fanout', id: 'room-1' });
       expect(joined).toEqual({ joined: true });
 
       const received = nextEvent<{ ok: boolean }>(socket, 'trade.updated');
-      a.gateway.emitToRoom('trade', 'trade-1', 'trade.updated', { ok: true });
+      a.gateway.emitToRoom('fanout', 'room-1', 'trade.updated', { ok: true });
       await expect(received).resolves.toEqual({ ok: true });
     },
     BUDGET_MS,

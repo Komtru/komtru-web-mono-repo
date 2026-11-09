@@ -16,6 +16,7 @@ import type { Redis } from 'ioredis';
 import type { AppConfig } from '../../config/env.js';
 import type { Logger } from '../../platform/logger.js';
 import { createConfigAccessor } from '../config/index.js';
+import type { SocketGateway } from '../socket/index.js';
 import { tradeStateChangedEvent } from './domain/events.js';
 import { fulfilmentRoutes } from './http/fulfilment.routes.js';
 import { inspectionRoutes } from './http/inspection.routes.js';
@@ -36,6 +37,13 @@ import {
   snapshotFees,
   type TradeDeps,
 } from './services/ports.js';
+import {
+  TRADE_PUSHES,
+  TRADE_ROOM_PREFIX,
+  postgresTradeParties,
+  pushHandler,
+  tradeRoomAuthorizer,
+} from './infrastructure/realtime.js';
 import { claimTradeInvitation, expireTradeInvitation } from './services/proposal.service.js';
 
 export interface TradesModuleOptions {
@@ -43,9 +51,20 @@ export interface TradesModuleOptions {
   redis: Redis;
   config: AppConfig;
   logger: Logger;
+  /**
+   * The socket gateway, taken as a port rather than reached for (the trust module's precedent). It
+   * arrives from `createModules`, which builds the socket module first. Pushes are decided in the
+   * worker and cross to whichever API instance holds a socket over the Redis adapter.
+   */
+  gateway: SocketGateway;
 }
 
-export function buildTradeDeps({ db, redis, config, logger }: TradesModuleOptions): TradeDeps {
+export function buildTradeDeps({
+  db,
+  redis,
+  config,
+  logger,
+}: Omit<TradesModuleOptions, 'gateway'>): TradeDeps {
   if (!config.identity.hmacPepper)
     throw new Error('IDENTITY_HMAC_PEPPER is required to build the trades module');
   const accessor = createConfigAccessor(db, redis, logger);
@@ -167,6 +186,20 @@ export function createTradesModule(options: TradesModuleOptions): KomtruModule {
           }
         },
       });
+      // T-068: who may join `trade:<code>`, and a push for every change a workspace tab shows. The
+      // authorizer is registered here, at start, so a process that never starts the module (a
+      // migration run) never claims the prefix; a second claim is a boot failure by design.
+      options.gateway.registerRoomAuthorizer(
+        TRADE_ROOM_PREFIX,
+        tradeRoomAuthorizer({ parties: postgresTradeParties(options.db) }),
+      );
+      for (const push of TRADE_PUSHES) {
+        ctx.events.subscribe({
+          name: push.subscriber,
+          event: push.event,
+          handler: pushHandler(options.gateway, ctx.logger, push),
+        });
+      }
       return Promise.resolve();
     },
   });
