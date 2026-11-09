@@ -56,3 +56,15 @@ Defaults chosen where the spec is silent (none involve money):
 6. A rejection from the queue uses `REVIEW_DECLINED`; a confirmed duplicate uses `DUPLICATE_IDENTITY` (both new rejection codes).
 7. Case SLAs and priority: `HIGH` for duplicates, `NORMAL` otherwise, SLA from T-107's `SLA_HOURS` table.
 8. Approvals expire after 24 h (T-037's `APPROVAL_TTL_HOURS`), unchanged.
+
+## Review (2026-11-09, Sonnet) — open items for the fixer
+
+Saved at the review phase by the build manager (weekly usage reserve). Next: fixer.
+
+MUST-FIX
+
+1. `infrastructure/postgres/review.ts:99-113`: the 30-day rejection counter races. Concurrent rejections either fire twice or never fire (`=== 2`). Take `pg_advisory_xact_lock(hashtext('trust:rejections:'||userId))` before counting, or give the event a unique key per user and window.
+2. `infrastructure/postgres/review.ts:65` with `services/review.service.ts:155-166`: when `firstUserId` is null, a case is created without a flag, so `decideReview` can decide a duplicate through the plain queue with no dual approval. For CAC this is a real gap, because the unique index is per user. Block on the `duplicateIdentity` fact, or always create the flag.
+3. Tests: exactly-2 firing under concurrency; a third rejection not firing; `parkForReview` redelivery idempotency (one case, one flag, one event); CLEAR_DUPLICATE approval replay, expiry and payload mismatch (an approval for flag A used on flag B, and one used twice).
+
+SHOULD-FIX 4. `duplicate.service.ts:96-173`: call `consumeApproval` first in the CLEARED branch; test that a failed consume leaves the state unchanged. 5. `duplicate.service.ts:103-117`: an ESCALATED flag can be resolved by the same actor. Enforce the escalated owner or senior role, and test it. 6. `review-effects.ts:210-218`: confirm the level dropped by `releaseFirstOwner` for CAC versus NIN/BVN, and re-check the first account's current state before revoking. 7. `review.ts:106-109`: count with `decidedAt >= now() - 30d` and exclude the current request id explicitly. 8. `review.service.ts:104`: the list `total` must use the same joined query as `items`. 9. Migration 0042: make the T-039 erasure scrub cover `duplicate_identity_flags.identifier_hash`, and document the user ids that have no FK. 10. `admin.routes.ts:120-131`: document or test that CLEAR_DUPLICATE needs both `verification.override` and `duplicate_flag.resolve`. Verify that `retryable: true` mutating POSTs replay the stored result. 11. `review.service.ts:277`: put `userId` in the LEVEL override payload.
