@@ -5,11 +5,11 @@ after every run. The run-by-run history is [`manager/RUN_LOG.md`](manager/RUN_LO
 behind it is [`BUILD_PLAN.md`](BUILD_PLAN.md).
 
 ```
-MVP   █████████████████·················  55/112  (49%)
-Total ███████████·······················  55/168  (33%)
+MVP   █████████████████·················  56/112  (50%)
+Total ███████████·······················  56/168  (33%)
 ```
 
-57 MVP tickets left, 56 deferred past it.
+56 MVP tickets left, 56 deferred past it.
 
 ## By epic
 
@@ -22,7 +22,7 @@ Total ███████████····················�
 | 04-files-notify-config | 7    | 7     |
 | 05-trust               | 3    | 3     |
 | 06-merchant-search     | 0    | 3     |
-| 07-trades              | 2    | 9     |
+| 07-trades              | 3    | 9     |
 | 08-ledger              | 3    | 8     |
 | 09-disputes            | 0    | 2     |
 | 10-logistics           | 0    | 3     |
@@ -47,7 +47,7 @@ Total ███████████····················�
 | Ticket | Title                                                             | MVP |
 | ------ | ----------------------------------------------------------------- | --- |
 | T-029  | Isolate the integration suite's shared Redis and queues           | yes |
-| T-064  | Fulfilment: ship step, delivery signals, deadlines                | yes |
+| T-065  | Inspection and completion                                         | yes |
 | T-073  | Payout accounts, preferences and payouts                          | yes |
 | T-074  | Release and settlement                                            | yes |
 | T-075  | Refunds                                                           | yes |
@@ -81,7 +81,6 @@ Total ███████████····················�
 | T-056  | Listings lifecycle, images and stock                                      | yes |
 | T-057  | Search and discovery (M19)                                                | yes |
 | T-063  | Orders and multi-item trades (M9)                                         | yes |
-| T-064  | Fulfilment: ship step, delivery signals, deadlines                        | yes |
 | T-065  | Inspection and completion                                                 | yes |
 | T-066  | Post-funding cancellation and can't-fulfil refunds                        | yes |
 | T-068  | Trade realtime, notifications and deep links                              | yes |
