@@ -116,6 +116,32 @@ describe.runIf(infraEnabled)('trust admin routes (T-052)', () => {
     expect((await viewer.post(`/v1/admin/kyc/queue/${requestId}/assign`).send({})).status).toBe(403);
   });
 
+  it('needs verification.override to ask for a clearance and duplicate_flag.resolve to carry it out', async () => {
+    const flagId = randomUUID();
+    const resolveOnly = request(appFor((await staff(['duplicate_flag.resolve'])).actor));
+    expect(
+      (await resolveOnly.post('/v1/admin/kyc/overrides').send({ kind: 'CLEAR_DUPLICATE', flagId })).status,
+    ).toBe(403);
+
+    const overrideOnly = request(appFor((await staff(['verification.override'])).actor));
+    expect(
+      (
+        await overrideOnly
+          .post(`/v1/admin/kyc/duplicate-flags/${flagId}/resolve`)
+          .send({ resolution: 'CLEARED_FALSE_POSITIVE', approvalId: randomUUID() })
+      ).status,
+    ).toBe(403);
+    // Holding the permission gets past the gate; this flag does not exist, which is the 404 to see.
+    expect(
+      (
+        await overrideOnly
+          .post('/v1/admin/kyc/overrides')
+          .set('X-Admin-Reason', 'abandoned')
+          .send({ kind: 'CLEAR_DUPLICATE', flagId })
+      ).status,
+    ).toBe(404);
+  });
+
   it('serves the queue and an item with a labelled advisory', async () => {
     const requestId = await parked();
     const app = request(appFor((await staff(['verification.view'])).actor));

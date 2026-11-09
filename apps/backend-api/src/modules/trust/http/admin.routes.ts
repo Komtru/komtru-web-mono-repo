@@ -105,6 +105,12 @@ export function trustAdminRoutes(deps: TrustAdminDeps): RouteDefinition[] {
       handler: ({ query }) => admin.listFlagsHandler(deps, query),
     }),
 
+    // Clearing a duplicate is two routes and TWO permissions, by design: asking for the clearance is
+    // `verification.override` (POST /admin/kyc/overrides, dual approval through T-037), and carrying
+    // it out is `duplicate_flag.resolve` (this route, with the approved approvalId). A holder of only
+    // one of them can do neither half alone. Every route here is `retryable: true` where it mutates,
+    // so the platform's idempotency gate (platform/http/idempotency.ts, mount.ts) stores the first
+    // result under the Idempotency-Key and replays it on a retry; nothing returned carries a secret.
     defineRoute({
       method: 'post',
       path: '/admin/kyc/duplicate-flags/:id/resolve',

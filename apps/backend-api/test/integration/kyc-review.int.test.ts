@@ -27,6 +27,11 @@ import { infraEnabled } from '../support/db-urls.js';
 import { useTestDatabase } from '../support/db.js';
 import { insertUser } from '../modules/notify/support.js';
 import { grantRole, seedUser } from '../modules/identity/support.js';
+import { publishRejected, parkForReview } from '../../src/modules/trust/infrastructure/postgres/review.js';
+import { scrubErasedAccountFlags } from '../../src/modules/trust/infrastructure/postgres/erasure.js';
+import { verificationRequests } from '../../src/modules/trust/infrastructure/postgres/schema/requests.js';
+import { registerCase } from '../../src/modules/cases/index.js';
+import { reassignCase } from '../../src/modules/cases/services/case.service.js';
 import { decideApproval } from '../../src/modules/identity/services/approval.service.js';
 import {
   assignReview,
@@ -724,6 +729,410 @@ describe.runIf(infraEnabled)('trust against a real database', () => {
         reason: 'Document found to be forged',
       });
       expect(await levelOf(userId)).toBe('CONTACT_VERIFIED');
+    });
+  });
+
+  // --- review fixes (T-052 review items 1-11) ----------------------------------------------------
+
+  describe('repeated rejections under concurrency', () => {
+    /** Inserts a REJECTED request for `userId` and publishes through the real function, in one transaction. */
+    const rejectInTx = async (userId: string, gate: () => Promise<void>): Promise<void> => {
+      await database.db().transaction(async (tx) => {
+        const [row] = await tx
+          .insert(verificationRequests)
+          .values({
+            userId,
+            verificationType: 'NIN',
+            status: 'REJECTED',
+            targetLevel: 2,
+            attemptCount: 1,
+            decidedAt: new Date(),
+            rejectionReason: 'IDENTIFIER_NOT_FOUND',
+            expiresAt: new Date(Date.now() + 86_400_000),
+          })
+          .returning({ id: verificationRequests.id });
+        // Both rows are written, neither is committed: this is where an unlocked counter goes blind.
+        await gate();
+        await publishRejected(tx, {
+          payload: {
+            requestId: row?.id ?? '',
+            userId,
+            type: 'NIN',
+            reason: 'IDENTIFIER_NOT_FOUND',
+            attemptCount: 1,
+          },
+          aggregateType: 'verification_request',
+          aggregateId: row?.id ?? '',
+        });
+      });
+    };
+
+    const barrier = (parties: number): (() => Promise<void>) => {
+      let waiting = 0;
+      let release!: () => void;
+      const opened = new Promise<void>((resolve) => (release = resolve));
+      return async () => {
+        waiting += 1;
+        if (waiting === parties) release();
+        await opened;
+      };
+    };
+
+    it('fires exactly once when the second and the "first" rejection commit together', async () => {
+      const userId = await verifiedContactUser();
+      const gate = barrier(2);
+      await Promise.all([rejectInTx(userId, gate), rejectInTx(userId, gate)]);
+      expect(await eventCount('trust.verification.rejected')).toBe(2);
+      expect(await eventCount('trust.verification.repeated_rejection')).toBe(1);
+    });
+
+    it('fires exactly once when a second rejection races a third-party first, and a later third stays quiet', async () => {
+      const userId = await verifiedContactUser();
+      await rejectInTx(userId, () => Promise.resolve());
+      expect(await eventCount('trust.verification.repeated_rejection')).toBe(0);
+      await rejectInTx(userId, () => Promise.resolve());
+      expect(await eventCount('trust.verification.repeated_rejection')).toBe(1);
+      await rejectInTx(userId, () => Promise.resolve());
+      expect(await eventCount('trust.verification.repeated_rejection')).toBe(1);
+    });
+
+    it('does not count another user, and counts a rejection exactly at the window edge', async () => {
+      const userId = await verifiedContactUser();
+      const other = await verifiedContactUser();
+      await rejectInTx(other, () => Promise.resolve());
+      await rejectInTx(userId, () => Promise.resolve());
+      expect(await eventCount('trust.verification.repeated_rejection')).toBe(0);
+      // 29 days old is inside the window.
+      await owner().query(
+        `UPDATE trust.verification_requests SET decided_at = now() - interval '29 days' WHERE user_id = $1`,
+        [userId],
+      );
+      await rejectInTx(userId, () => Promise.resolve());
+      expect(await eventCount('trust.verification.repeated_rejection')).toBe(1);
+    });
+  });
+
+  describe('parking is idempotent', () => {
+    it('a redelivered job leaves one case, one flag and one detection event', async () => {
+      await identityVerifiedUser('1', RAW_NIN);
+      const second = await verifiedContactUser();
+      const submitted = await submitIdentifierCheck(serviceDeps(), {
+        userId: second,
+        type: 'NIN',
+        identifier: RAW_NIN,
+        firstName: FIRST_NAME,
+        lastName: LAST_NAME,
+      });
+      const job = { requestId: submitted.requestId, sealed: submitted.job.sealed };
+      await runIdentityCheck(jobDeps(), job);
+      await runIdentityCheck(jobDeps(), job);
+
+      expect(await caseFor(submitted.requestId)).toHaveLength(1);
+      expect(
+        Number((await one<{ n: string }>(`SELECT count(*) AS n FROM trust.duplicate_identity_flags`)).n),
+      ).toBe(1);
+      expect(await eventCount('trust.verification.duplicate_identity_detected')).toBe(1);
+    });
+
+    it('parkForReview twice writes one case and one flag', async () => {
+      const first = await identityVerifiedUser('1', RAW_NIN);
+      const second = await verifiedContactUser();
+      const requestId = await runNin(second);
+      const subject = {
+        id: requestId,
+        userId: second,
+        verificationType: 'NIN' as const,
+        attemptCount: 1,
+      };
+      const flag = await one<{ identifier_hash: Buffer }>(
+        `SELECT identifier_hash FROM trust.duplicate_identity_flags`,
+      );
+      await database
+        .db()
+        .transaction((tx) =>
+          parkForReview(tx, subject, { identifierHash: flag.identifier_hash, firstUserId: first }),
+        );
+      expect(await caseFor(requestId)).toHaveLength(1);
+      expect(
+        Number((await one<{ n: string }>(`SELECT count(*) AS n FROM trust.duplicate_identity_flags`)).n),
+      ).toBe(1);
+    });
+
+    it('a duplicate whose first owner is unknown cannot be decided from the plain queue', async () => {
+      const userId = await verifiedContactUser();
+      // A request parked as a duplicate whose first owner could not be read back: a case, but no flag.
+      const { id: requestId } = await one<{ id: string }>(
+        `INSERT INTO trust.verification_requests
+           (user_id, verification_type, status, target_level, attempt_count, expires_at)
+         VALUES ($1, 'NIN', 'MANUAL_REVIEW', 2, 1, now() + interval '1 day') RETURNING id`,
+        [userId],
+      );
+      await database
+        .db()
+        .transaction((tx) =>
+          parkForReview(
+            tx,
+            { id: requestId, userId, verificationType: 'NIN', attemptCount: 1 },
+            { identifierHash: Buffer.from('aa', 'hex'), firstUserId: null },
+          ),
+        );
+      expect(
+        Number((await one<{ n: string }>(`SELECT count(*) AS n FROM trust.duplicate_identity_flags`)).n),
+      ).toBe(0);
+      expect((await caseFor(requestId))[0]?.facts).toMatchObject({ duplicateIdentity: true });
+
+      const analyst = await staff();
+      await assignReview(database.db(), { actor: analyst, requestId });
+      expect(
+        await apiStatus(
+          decideReview(database.db(), { actor: analyst, requestId, outcome: 'APPROVE', reason: 'fine' }),
+        ),
+      ).toBe(409);
+      expect(await requestStatus(requestId)).toBe('MANUAL_REVIEW');
+    });
+  });
+
+  describe('the queue list', () => {
+    it('counts with the same joins as it lists', async () => {
+      const userId = await verifiedContactUser();
+      await runNin(userId, '22222222222');
+      // A case whose request no longer exists appears in neither items nor total.
+      await database.db().transaction((tx) =>
+        registerCase(tx, {
+          type: 'IDENTITY',
+          subjectType: 'verification_request',
+          subjectId: randomUUID(),
+          title: 'orphan',
+          facts: {},
+        }),
+      );
+      const list = await listKycQueue(database.db(), { page: 1, limit: 10 });
+      expect(list.items).toHaveLength(1);
+      expect(list.total).toBe(1);
+    });
+  });
+
+  describe('clearing a duplicate: approval handling and escalation', () => {
+    const pair = async (nin: string, suffix: string) => {
+      const first = await identityVerifiedUser(suffix, nin);
+      const second = await verifiedContactUser();
+      const requestId = await runNin(second, nin);
+      const flag = await one<{ id: string }>(
+        `SELECT id FROM trust.duplicate_identity_flags WHERE request_id = $1`,
+        [requestId],
+      );
+      return { first, second, requestId, flagId: flag.id };
+    };
+    const approvalFor = async (requester: { userId: string; roles: readonly string[] }, flagId: string) =>
+      (
+        await requestOverride(database.db(), {
+          actor: requester,
+          kind: 'CLEAR_DUPLICATE',
+          flagId,
+          reason: 'The first account was abandoned',
+        })
+      ).approvalId;
+    const approve = (approver: { userId: string; roles: readonly string[] }, approvalId: string) =>
+      decideApproval(
+        { db: database.db() },
+        { actor: approver, approvalId, decision: 'APPROVE', reason: 'Agreed' },
+      );
+    const clear = (actor: { userId: string; roles: readonly string[] }, flagId: string, approvalId: string) =>
+      resolveDuplicateFlag(database.db(), {
+        actor,
+        flagId,
+        resolution: 'CLEARED_FALSE_POSITIVE',
+        notes: 'Same person',
+        approvalId,
+      });
+    const untouched = async (requestId: string, first: string) => {
+      expect(await requestStatus(requestId)).toBe('MANUAL_REVIEW');
+      expect(
+        (await one<{ status: string }>(`SELECT status FROM trust.duplicate_identity_flags`)).status,
+      ).toBe('OPEN');
+      expect(await decisions(requestId)).toEqual([]);
+      expect((await caseFor(requestId))[0]?.state).not.toBe('DECIDED');
+      expect(await levelOf(first)).toBe('IDENTITY_VERIFIED');
+      expect(await eventCount('trust.verification.duplicate_flag_resolved')).toBe(0);
+    };
+
+    it('refuses an approval already spent, and changes nothing', async () => {
+      const { first, requestId, flagId } = await pair(RAW_NIN, '1');
+      const requester = await staff();
+      await assignReview(database.db(), { actor: requester, requestId });
+      const approvalId = await approvalFor(requester, flagId);
+      await approve(await staff(), approvalId);
+      await owner().query(`UPDATE identity.admin_action_approvals SET executed_at = now() WHERE id = $1`, [
+        approvalId,
+      ]);
+      expect(await apiStatus(clear(requester, flagId, approvalId))).toBe(409);
+      await untouched(requestId, first);
+    });
+
+    it('refuses an expired approval, and changes nothing', async () => {
+      const { first, requestId, flagId } = await pair(RAW_NIN, '1');
+      const requester = await staff();
+      await assignReview(database.db(), { actor: requester, requestId });
+      const approvalId = await approvalFor(requester, flagId);
+      await approve(await staff(), approvalId);
+      await owner().query(
+        `UPDATE identity.admin_action_approvals SET expires_at = now() - interval '1 minute' WHERE id = $1`,
+        [approvalId],
+      );
+      expect(await apiStatus(clear(requester, flagId, approvalId))).toBe(409);
+      await untouched(requestId, first);
+    });
+
+    it('refuses an approval whose payload names another flag, and changes nothing', async () => {
+      const { first, requestId, flagId } = await pair(RAW_NIN, '1');
+      const requester = await staff();
+      await assignReview(database.db(), { actor: requester, requestId });
+      const approvalId = await approvalFor(requester, flagId);
+      await approve(await staff(), approvalId);
+      await owner().query(
+        `UPDATE identity.admin_action_approvals SET payload = jsonb_set(payload, '{flagId}', to_jsonb($2::text))
+          WHERE id = $1`,
+        [approvalId, randomUUID()],
+      );
+      expect(await apiStatus(clear(requester, flagId, approvalId))).toBe(403);
+      await untouched(requestId, first);
+    });
+
+    it('refuses an approval for flag A used on flag B, and the approval then still serves A', async () => {
+      const a = await pair(RAW_NIN, '1');
+      const b = await pair('22222222225', '3');
+      const requester = await staff();
+      await assignReview(database.db(), { actor: requester, requestId: a.requestId });
+      await assignReview(database.db(), { actor: requester, requestId: b.requestId });
+      const approvalA = await approvalFor(requester, a.flagId);
+      await approve(await staff(), approvalA);
+
+      expect([403, 404]).toContain(await apiStatus(clear(requester, b.flagId, approvalA)));
+      expect(await requestStatus(b.requestId)).toBe('MANUAL_REVIEW');
+      expect(await levelOf(b.first)).toBe('IDENTITY_VERIFIED');
+
+      // Not burned by the refusal: it clears the flag it was signed for, once.
+      expect((await clear(requester, a.flagId, approvalA)).status).toBe('CLEARED_FALSE_POSITIVE');
+      expect(await apiStatus(clear(requester, b.flagId, approvalA))).toBeDefined();
+      expect(await requestStatus(b.requestId)).toBe('MANUAL_REVIEW');
+    });
+
+    it('leaves a still-open flag clearable after the erasure scrub removed its hash', async () => {
+      const { first, second, requestId, flagId } = await pair(RAW_NIN, '1');
+      await database.db().transaction((tx) => scrubErasedAccountFlags(tx, first));
+      const scrubbed = await one<{ len: number; notes: string | null }>(
+        `SELECT length(identifier_hash) AS len, resolution_notes AS notes FROM trust.duplicate_identity_flags`,
+      );
+      expect(scrubbed).toEqual({ len: 0, notes: null });
+      // Redelivery changes nothing and does not throw.
+      await database.db().transaction((tx) => scrubErasedAccountFlags(tx, first));
+
+      const requester = await staff();
+      await assignReview(database.db(), { actor: requester, requestId });
+      const approvalId = await approvalFor(requester, flagId);
+      await approve(await staff(), approvalId);
+      expect((await clear(requester, flagId, approvalId)).status).toBe('CLEARED_FALSE_POSITIVE');
+      const { rows } = await owner().query<{ user_id: string }>(
+        `SELECT user_id FROM trust.nin_verifications WHERE verified_at IS NOT NULL`,
+      );
+      expect(rows.map((r) => r.user_id)).toEqual([second]);
+    });
+
+    it('does not let whoever escalated a flag resolve it, unless senior, and lets a reassigned reviewer', async () => {
+      const { requestId, flagId } = await pair(RAW_NIN, '1');
+      const escalator = await staff();
+      await assignReview(database.db(), { actor: escalator, requestId });
+      await resolveDuplicateFlag(database.db(), {
+        actor: escalator,
+        flagId,
+        resolution: 'ESCALATED',
+        notes: 'Needs a senior look',
+      });
+      const confirm = (actor: { userId: string; roles: readonly string[] }) =>
+        resolveDuplicateFlag(database.db(), {
+          actor,
+          flagId,
+          resolution: 'CONFIRMED_DUPLICATE',
+          notes: 'Different people',
+        });
+      expect(await apiStatus(confirm(escalator))).toBe(403);
+      expect(await requestStatus(requestId)).toBe('MANUAL_REVIEW');
+
+      // A reviewer who has not been given the case cannot decide it either.
+      const other = await staff();
+      await grantRole(owner(), other.userId, 'SUPER_ADMIN', ['cases.manage']);
+      expect(await apiStatus(confirm(other))).toBeDefined();
+      expect(await requestStatus(requestId)).toBe('MANUAL_REVIEW');
+
+      const found = (await caseFor(requestId))[0];
+      await reassignCase(database.db(), {
+        actor: escalator,
+        caseId: found?.id ?? '',
+        toUserId: other.userId,
+        reason: 'Handing to the senior reviewer',
+      });
+      expect((await confirm(other)).status).toBe('CONFIRMED_DUPLICATE');
+      expect(await requestStatus(requestId)).toBe('REJECTED');
+    });
+
+    it('lets a senior role who escalated a flag resolve it', async () => {
+      const { requestId, flagId } = await pair(RAW_NIN, '1');
+      const { userId } = await seedUser(database.owner());
+      const senior = { userId, roles: ['SUPER_ADMIN'] as const };
+      await assignReview(database.db(), { actor: senior, requestId });
+      await resolveDuplicateFlag(database.db(), {
+        actor: senior,
+        flagId,
+        resolution: 'ESCALATED',
+        notes: 'Looking myself',
+      });
+      const resolved = await resolveDuplicateFlag(database.db(), {
+        actor: senior,
+        flagId,
+        resolution: 'CONFIRMED_DUPLICATE',
+        notes: 'Different people',
+      });
+      expect(resolved.status).toBe('CONFIRMED_DUPLICATE');
+    });
+
+    it('clearing a CAC duplicate releases the registration and leaves the first account its identity level', async () => {
+      const first = await identityVerifiedUser('1', RAW_NIN);
+      await runBusiness(first);
+      const second = await identityVerifiedUser('2', '22222222225');
+      const requestId = await runBusiness(second, RC_NUMBER);
+      const flag = await one<{ id: string }>(`SELECT id FROM trust.duplicate_identity_flags`);
+      const requester = await staff();
+      await assignReview(database.db(), { actor: requester, requestId });
+      const approvalId = await approvalFor(requester, flag.id);
+      await approve(await staff(), approvalId);
+      await clear(requester, flag.id, approvalId);
+
+      const { rows } = await owner().query<{ user_id: string }>(
+        `SELECT user_id FROM trust.business_verifications WHERE verified_at IS NOT NULL`,
+      );
+      expect(rows.map((r) => r.user_id)).toEqual([second]);
+      // Level 3 rested on the registration; the NIN and liveness behind level 2 are untouched.
+      expect(await levelOf(first)).toBe('IDENTITY_VERIFIED');
+    });
+  });
+
+  describe('override payloads', () => {
+    it('names the user in a LEVEL override, so the approval cannot be re-aimed', async () => {
+      const userId = await verifiedContactUser();
+      const requester = await staff();
+      const { approvalId } = await requestOverride(database.db(), {
+        actor: requester,
+        kind: 'LEVEL',
+        userId,
+        direction: 'GRANT',
+        toLevel: 2,
+        reason: 'In person',
+      });
+      const row = await one<{ payload: Record<string, unknown> }>(
+        `SELECT payload FROM identity.admin_action_approvals WHERE id = $1`,
+        [approvalId],
+      );
+      expect(row.payload).toEqual({ kind: 'LEVEL', userId, direction: 'GRANT', toLevel: 2 });
     });
   });
 });

@@ -159,35 +159,48 @@ export async function releaseFirstOwner(
   input: {
     type: 'NIN' | 'BVN' | 'CAC';
     firstUserId: string;
-    identifierHash: Buffer;
     conflictingRequestId: string;
     actorUserId: string;
     reason: string;
   },
 ): Promise<void> {
   const store = bindStore(tx);
+  // The hash comes from the conflicting request's own row, not from the flag: erasure scrubs the
+  // flag's copy (T-039), and an open flag must stay decidable afterwards.
   if (input.type === 'NIN') {
-    await tx
-      .update(ninVerifications)
-      .set({ verifiedAt: null })
-      .where(
-        and(
-          eq(ninVerifications.userId, input.firstUserId),
-          eq(ninVerifications.ninHash, input.identifierHash),
-          isNotNull(ninVerifications.verifiedAt),
-        ),
-      );
+    const [claimed] = await tx
+      .select({ hash: ninVerifications.ninHash })
+      .from(ninVerifications)
+      .where(eq(ninVerifications.requestId, input.conflictingRequestId));
+    if (claimed) {
+      await tx
+        .update(ninVerifications)
+        .set({ verifiedAt: null })
+        .where(
+          and(
+            eq(ninVerifications.userId, input.firstUserId),
+            eq(ninVerifications.ninHash, claimed.hash),
+            isNotNull(ninVerifications.verifiedAt),
+          ),
+        );
+    }
   } else if (input.type === 'BVN') {
-    await tx
-      .update(bvnVerifications)
-      .set({ verifiedAt: null })
-      .where(
-        and(
-          eq(bvnVerifications.userId, input.firstUserId),
-          eq(bvnVerifications.bvnHash, input.identifierHash),
-          isNotNull(bvnVerifications.verifiedAt),
-        ),
-      );
+    const [claimed] = await tx
+      .select({ hash: bvnVerifications.bvnHash })
+      .from(bvnVerifications)
+      .where(eq(bvnVerifications.requestId, input.conflictingRequestId));
+    if (claimed) {
+      await tx
+        .update(bvnVerifications)
+        .set({ verifiedAt: null })
+        .where(
+          and(
+            eq(bvnVerifications.userId, input.firstUserId),
+            eq(bvnVerifications.bvnHash, claimed.hash),
+            isNotNull(bvnVerifications.verifiedAt),
+          ),
+        );
+    }
   } else {
     const [claimed] = await tx
       .select({ rc: businessVerifications.cacRcNumber })
@@ -208,8 +221,19 @@ export async function releaseFirstOwner(
   }
 
   const revoke = { userId: input.firstUserId, actorType: 'KYC_ANALYST' as const, actorId: input.actorUserId };
+  // What is dropped depends on what the identifier was holding up, and is decided from the first
+  // account's facts AS THEY ARE NOW (after the release above), never from the flag's age:
+  //   CAC      -> level 3 rests on the registration, so the account falls back to level 2 (its NIN/BVN
+  //               and liveness are untouched), and only if it no longer earns level 3 some other way.
+  //   NIN/BVN  -> level 2 rests on a verified number plus liveness, so the account falls to level 1,
+  //               and only if it no longer earns level 2 (e.g. it still holds the other number).
+  // `revokeLevel` locks the user row and does nothing when the account is already at or below the
+  // target, so an account that has meanwhile been revoked or downgraded is left alone.
   if (input.type === 'CAC') {
-    await store.revokeLevel({ ...revoke, toLevel: IDENTITY_VERIFIED_LEVEL, reason: input.reason });
+    const business = await store.businessFacts(input.firstUserId);
+    if (!earnedBusinessLevel(business)) {
+      await store.revokeLevel({ ...revoke, toLevel: IDENTITY_VERIFIED_LEVEL, reason: input.reason });
+    }
     return;
   }
   const identity = await store.identityFacts(input.firstUserId);

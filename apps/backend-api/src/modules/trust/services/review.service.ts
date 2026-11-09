@@ -101,7 +101,19 @@ export async function listKycQueue(
       .orderBy(asc(caseIndex.slaDueAt), desc(caseIndex.caseNumber))
       .limit(input.limit)
       .offset((input.page - 1) * input.limit),
-    db.select({ n: count() }).from(caseIndex).where(where),
+    // The same joins as `items`: a case whose request is gone is in neither, so the total pages truthfully.
+    db
+      .select({ n: count() })
+      .from(caseIndex)
+      .innerJoin(
+        verificationRequests,
+        and(
+          eq(caseIndex.subjectType, REVIEW_SUBJECT_TYPE),
+          sql`${caseIndex.subjectId} = ${verificationRequests.id}::text`,
+        ),
+      )
+      .leftJoin(duplicateIdentityFlags, eq(duplicateIdentityFlags.requestId, verificationRequests.id))
+      .where(where),
   ]);
   return { items: rows.map(toItem), page: input.page, limit: input.limit, total: total[0]?.n ?? 0 };
 }
@@ -118,9 +130,12 @@ export async function getKycQueueItem(db: Db, requestId: string): Promise<KycQue
   return { ...toItem(row), advisory: await adviseOnCase(db, row.caseId) };
 }
 
-async function caseOf(db: Db, requestId: string): Promise<{ id: string; type: string }> {
+async function caseOf(
+  db: Db,
+  requestId: string,
+): Promise<{ id: string; type: string; facts: Record<string, unknown> }> {
   const [row] = await db
-    .select({ id: caseIndex.id, type: caseIndex.type })
+    .select({ id: caseIndex.id, type: caseIndex.type, facts: caseIndex.facts })
     .from(caseIndex)
     .where(and(eq(caseIndex.subjectType, REVIEW_SUBJECT_TYPE), eq(caseIndex.subjectId, requestId)));
   if (!row) throw new ApiError(404, 'NOT_FOUND', 'No such review item');
@@ -166,6 +181,17 @@ export async function decideReview(
     }
 
     const found = await caseOf(tx, request.id);
+    // A duplicate whose first owner could not be read back has a case but no flag to resolve, and so
+    // no dual approval to hold it. It must not be decidable as an ordinary review: deny until a
+    // person with the facts handles it outside the queue. (Deny by default; see the T-052 plan.)
+    if (found.facts.duplicateIdentity === true) {
+      throw new ApiError(
+        409,
+        'CONFLICT',
+        'This request is a duplicate identity with no flag to resolve',
+        'It cannot be decided from the queue; it needs a senior reviewer.',
+      );
+    }
     await decideCase(tx, {
       actor: input.actor,
       caseId: found.id,
@@ -208,7 +234,7 @@ export type OverrideRequest =
 /** The payload a second holder signs, and the one `consumeApproval` compares at execution. */
 export const overridePayload = (input: OverrideRequest): Record<string, unknown> =>
   input.kind === 'LEVEL'
-    ? { kind: 'LEVEL', direction: input.direction, toLevel: input.toLevel }
+    ? { kind: 'LEVEL', userId: input.userId, direction: input.direction, toLevel: input.toLevel }
     : { kind: 'CLEAR_DUPLICATE', flagId: input.flagId };
 
 /**

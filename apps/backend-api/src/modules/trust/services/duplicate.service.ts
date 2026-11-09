@@ -82,6 +82,9 @@ export interface ResolveFlagInput {
   policyCitation?: string | undefined;
 }
 
+/** Roles that may settle a flag they escalated themselves. Anyone else needs a different person to take over. */
+const SENIOR_ROLES: readonly string[] = ['SUPER_ADMIN', 'COMPLIANCE_OFFICER'];
+
 export async function resolveDuplicateFlag(db: Db, input: ResolveFlagInput): Promise<DuplicateFlagView> {
   if (input.resolution === 'CLEARED_FALSE_POSITIVE' && !input.approvalId) {
     throw new ApiError(
@@ -117,6 +120,32 @@ export async function resolveDuplicateFlag(db: Db, input: ResolveFlagInput): Pro
       await escalateCase(tx, { actor: input.actor, caseId: found.id, reason: input.notes });
       status = 'ESCALATED';
     } else {
+      // Escalating hands the flag to someone senior. If the person who escalated could simply decide
+      // it, escalation would be a no-op: the case's owner must now be somebody else (reassigned to
+      // them), unless the escalator is themselves senior.
+      if (
+        flag.status === 'ESCALATED' &&
+        flag.reviewedBy === input.actor.userId &&
+        !input.actor.roles.some((role) => SENIOR_ROLES.includes(role))
+      ) {
+        throw new ApiError(
+          403,
+          'FORBIDDEN',
+          'You do not have permission to do that',
+          'You escalated this flag; a different reviewer or a senior role must resolve it',
+        );
+      }
+      // The approval is spent first: a refused approval (replayed, expired, for another flag) must
+      // fail before anything else is written, so a failed consume leaves no decision behind.
+      if (input.resolution === 'CLEARED_FALSE_POSITIVE') {
+        await consumeApproval(tx, {
+          approvalId: input.approvalId ?? '',
+          action: 'VERIFICATION_OVERRIDE',
+          subjectUserId: flag.conflictingUserId,
+          expectedPayload: { kind: 'CLEAR_DUPLICATE', flagId: flag.id },
+          consumedBy: input.actor.userId,
+        });
+      }
       // Recorded as the case's decision first: it checks the reviewer took the case, and writes the
       // policy citation and the audit row that make the outcome explainable afterwards.
       await decideCase(tx, {
@@ -130,17 +159,9 @@ export async function resolveDuplicateFlag(db: Db, input: ResolveFlagInput): Pro
       if (input.resolution === 'CONFIRMED_DUPLICATE') {
         await rejectRequest(tx, request, 'DUPLICATE_IDENTITY');
       } else {
-        await consumeApproval(tx, {
-          approvalId: input.approvalId ?? '',
-          action: 'VERIFICATION_OVERRIDE',
-          subjectUserId: flag.conflictingUserId,
-          expectedPayload: { kind: 'CLEAR_DUPLICATE', flagId: flag.id },
-          consumedBy: input.actor.userId,
-        });
         await releaseFirstOwner(tx, {
           type: flag.identifierType as 'NIN' | 'BVN' | 'CAC',
           firstUserId: flag.firstUserId,
-          identifierHash: flag.identifierHash,
           conflictingRequestId: request.id,
           actorUserId: input.actor.userId,
           reason: `Duplicate cleared as a false positive: ${input.notes}`,

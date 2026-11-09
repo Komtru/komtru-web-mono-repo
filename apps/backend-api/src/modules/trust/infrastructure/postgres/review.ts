@@ -4,7 +4,7 @@
 //
 // Both write in the SAME transaction as the state change they describe (design §4.5), so a request
 // can never sit in MANUAL_REVIEW without a case a reviewer can see, and a rollback leaves neither.
-import { and, eq, gt, sql } from 'drizzle-orm';
+import { and, eq, gte, ne, sql } from 'drizzle-orm';
 import type { z } from 'zod';
 import { registerCase } from '../../../cases/index.js';
 import { publish, type PublishInput, type Tx } from '../../../../platform/events/publish.js';
@@ -96,6 +96,13 @@ export async function publishRejected(tx: Tx, options: RejectedOptions): Promise
     .where(eq(verificationRequests.id, requestId));
   if (own?.status !== 'REJECTED') return;
 
+  // One user's rejections are counted one transaction at a time. Without this two concurrent
+  // rejections each see only their own row (the other is uncommitted) and count 1, so neither fires;
+  // with it the second counts after the first has committed and sees 2. The lock is held to commit.
+  await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${`trust:rejections:${userId}`}))`);
+
+  // The OTHER rejections inside the window, then this one added explicitly: this request's own
+  // `decided_at` is not relied on to land inside (or outside) the window.
   const [row] = await tx
     .select({ n: sql<number>`count(*)::int` })
     .from(verificationRequests)
@@ -103,13 +110,14 @@ export async function publishRejected(tx: Tx, options: RejectedOptions): Promise
       and(
         eq(verificationRequests.userId, userId),
         eq(verificationRequests.status, 'REJECTED'),
-        gt(
+        ne(verificationRequests.id, requestId),
+        gte(
           verificationRequests.decidedAt,
           sql`now() - make_interval(days => ${REPEATED_REJECTION_WINDOW_DAYS})`,
         ),
       ),
     );
-  const count = row?.n ?? 0;
+  const count = (row?.n ?? 0) + 1;
   if (!isRepeatedRejection(count)) return;
 
   await publish(tx, verificationRepeatedRejection, {

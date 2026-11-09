@@ -18,6 +18,11 @@ export const duplicateIdentityFlags = trust.table(
     identifierType: verificationType('identifier_type').notNull(),
     /** The keyed HMAC (domain-separated per type); never the identifier itself (D1). */
     identifierHash: bytea('identifier_hash').notNull(),
+    // `first_user_id`, `conflicting_user_id` and `reviewed_by` have no foreign key, deliberately: they
+    // are soft references into identity.users (cross-schema, as everywhere in trust), and the flag is
+    // an audit record that must survive the account's anonymisation, which keeps the user row anyway.
+    // `identifier_hash` and `resolution_notes` are scrubbed on `identity.account.anonymised`
+    // (`erasure.ts`); the ids and the decision stay.
     /** The account that verified it first. */
     firstUserId: uuid('first_user_id').notNull(),
     /** The account that tried to verify the same identifier. */
