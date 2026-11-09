@@ -109,8 +109,13 @@ export const tradeUpdateSchema = z
     };
     if (v.kind === 'STATE_CHANGED') {
       need(v.status !== undefined, 'status', 'STATE_CHANGED carries the new status');
-      need(v.previousStatus !== undefined, 'previousStatus', 'STATE_CHANGED carries the previous status');
-      need(v.action !== undefined, 'action', 'STATE_CHANGED carries the action');
+      // `previousStatus` and `action` are left out when the change would name a review (a cleared hold): the
+      // room can hold the counterparty. A client does not read them, only `status`.
+      need(
+        (v.previousStatus === undefined) === (v.action === undefined),
+        'action',
+        'previousStatus and action are both present or both withheld',
+      );
     }
     if (v.kind === 'DELIVERY_OVERDUE')
       need(v.status !== undefined, 'status', 'DELIVERY_OVERDUE carries status');

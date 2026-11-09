@@ -8,6 +8,7 @@ import {
   TRADE_UPDATE_KINDS,
   tradeUpdateSchema,
 } from '@komtru/shared-types';
+import { pushDisposition } from '../../../../src/modules/trades/domain/visibility.js';
 import { describe, expect, it, vi } from 'vitest';
 import {
   TRADE_PUSHES,
@@ -50,6 +51,8 @@ describe('trade:updated wire contract', () => {
   it('parses a state change for every edge of the state machine', async () => {
     const push = TRADE_PUSHES[0]!;
     for (const [action, from, to] of transitionTriples()) {
+      // A change that would announce a review is not pushed at all, so there is nothing to parse.
+      if (pushDisposition(from, to) === 'WITHHOLD') continue;
       const [, , , payload] = await produce(push, {
         tradeId,
         tradeCode,

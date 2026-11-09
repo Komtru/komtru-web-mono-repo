@@ -3,10 +3,8 @@
 import type { Paginated, TradeActivityItem } from '@komtru/shared-types';
 import { sql } from 'drizzle-orm';
 import { cursorPage, type CursorKey } from '../../../platform/http/paginate.js';
-import { tradeNotFoundError } from '../domain/errors.js';
 import {
   ACTIVITY_EVENTS,
-  HIDDEN_FROM_COUNTERPARTY,
   readTradeActivityCursor,
   toActivityItem,
   tradeActivityCursor,
@@ -28,11 +26,10 @@ export async function listTradeActivity(
 
   return deps.db.transaction(async (tx) => {
     const trade = await loadTrade(tx, input.tradeId);
-    // The same rule as `GET /trades/:id`: a stranger and a missing trade look alike.
+    // The same door as `GET /trades/:id`: a stranger, a missing trade and a trade the counterparty may not see
+    // yet (domain/visibility.ts) all look alike.
     const role = requireParty(trade, input.userId);
     const isInitiator = trade.initiatorUserId === input.userId;
-    // What the counterparty must not know exists yet answers as a trade that is not there.
-    if (!isInitiator && HIDDEN_FROM_COUNTERPARTY.includes(trade.status)) throw tradeNotFoundError();
 
     const events = sql.join(
       ACTIVITY_EVENTS.map((event) => sql`${event}`),

@@ -153,6 +153,25 @@ describe('what only the proposer may see of a review', () => {
   });
 });
 
+describe('what a counterparty must not infer from a row', () => {
+  it('shows a cleared review as the proposer sending it, not as Komtru doing something', () => {
+    const item = toActivityItem(
+      state({ action: 'CLEAR_REVIEW', toStatus: 'AWAITING_ACCEPTANCE', actorType: 'STAFF' }),
+      buyer,
+    );
+    expect(item).toMatchObject({ kind: 'PROPOSAL_SENT', actor: 'OTHER_PARTY', toStatus: null });
+  });
+
+  it('never carries the hold in a status, even on a row that is not itself a review row', () => {
+    const claim = toActivityItem(
+      state({ action: 'CLAIM_INVITATION', toStatus: 'UNDER_PROPOSAL_REVIEW', actorType: 'SELLER' }),
+      buyer,
+    );
+    expect(claim?.toStatus).toBeNull();
+    expect(JSON.stringify(claim)).not.toContain('REVIEW');
+  });
+});
+
 describe('what a row exposes', () => {
   it('is exactly the published shape: no actor id, metadata or summary can ride along', () => {
     const item = toActivityItem(state(), buyer);
@@ -167,8 +186,9 @@ describe('what a row exposes', () => {
     ]);
   });
 
-  it('gives a state change its status and an activity row none', () => {
-    expect(toActivityItem(state(), buyer)?.toStatus).toBe('PENDING_PAYMENT');
+  it("gives the proposer a state change's status, anyone else none, and an activity row none", () => {
+    expect(toActivityItem(state(), initiator)?.toStatus).toBe('PENDING_PAYMENT');
+    expect(toActivityItem(state(), buyer)?.toStatus).toBeNull();
     expect(
       toActivityItem(
         state({ src: 'A', toStatus: 'FUNDED', action: null, event: 'EXTENSION_REQUESTED' }),

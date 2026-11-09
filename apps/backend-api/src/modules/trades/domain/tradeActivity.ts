@@ -36,16 +36,6 @@ export interface ActivityRow {
   event: string | null;
 }
 
-/**
- * A trade the counterparty must not learn exists yet: not sent, held for review, or turned back by it.
- * The trades list already hides these (M7 R1); the feed answers the same as a missing trade.
- */
-export const HIDDEN_FROM_COUNTERPARTY: readonly TradeStatus[] = [
-  'DRAFT',
-  'UNDER_PROPOSAL_REVIEW',
-  'REJECTED',
-];
-
 const ACTION_KIND: Record<TradeAction, TradeActivityKind | null> = {
   SEND: 'PROPOSAL_SENT',
   CLAIM_INVITATION: 'INVITATION_CLAIMED',
@@ -106,7 +96,16 @@ export function toActivityItem(row: ActivityRow, viewer: ActivityViewer): TradeA
   if (kind === null) return null;
 
   const byParty = row.actorType === 'BUYER' || row.actorType === 'SELLER';
-  const actor = byParty ? (row.actorType === viewer.role ? 'YOU' : 'OTHER_PARTY') : 'KOMTRU';
+  // A cleared review reads to the counterparty as the proposer sending it then: "Komtru sent it" would tell
+  // them a review happened.
+  const asProposer = !viewer.isInitiator && row.src === 'S' && row.action === 'CLEAR_REVIEW';
+  const actor = asProposer
+    ? 'OTHER_PARTY'
+    : byParty
+      ? row.actorType === viewer.role
+        ? 'YOU'
+        : 'OTHER_PARTY'
+      : 'KOMTRU';
   const reason =
     row.src === 'S' &&
     byParty &&
@@ -122,7 +121,9 @@ export function toActivityItem(row: ActivityRow, viewer: ActivityViewer): TradeA
     occurredAt: new Date(row.occurredAt).toISOString(),
     kind,
     actor,
-    toStatus: row.src === 'S' ? (row.toStatus as TradeStatus | null) : null,
+    // The raw status is only for the proposer: to anyone else a row's status can name the hold itself (the
+    // claim of an invitation made while a proposal was held, for one). The screens do not use it.
+    toStatus: row.src === 'S' && viewer.isInitiator ? (row.toStatus as TradeStatus | null) : null,
     reason,
   };
 }

@@ -31,9 +31,16 @@ const principal = (overrides: Partial<Principal> = {}): Principal => ({
   ...overrides,
 });
 
-const setup = (
-  parties: Record<string, TradeParties> = { [CODE]: { buyerUserId: BUYER, sellerUserId: SELLER } },
-) => {
+const trade = (over: Partial<TradeParties> = {}): TradeParties => ({
+  buyerUserId: BUYER,
+  sellerUserId: SELLER,
+  status: 'FUNDED',
+  previousStatus: 'PENDING_PAYMENT',
+  initiatorUserId: BUYER,
+  ...over,
+});
+
+const setup = (parties: Record<string, TradeParties> = { [CODE]: trade() }) => {
   const registry = createAuthorizerRegistry(testLogger);
   const lookup = vi.fn((code: string) => Promise.resolve(parties[code]));
   registry.register(TRADE_ROOM_PREFIX, tradeRoomAuthorizer({ parties: lookup }));
@@ -43,6 +50,31 @@ const setup = (
 };
 
 describe('trade room authorisation', () => {
+  describe('a proposal the counterparty may not know about yet', () => {
+    it.each([
+      ['held for review', { status: 'UNDER_PROPOSAL_REVIEW' as const, previousStatus: 'DRAFT' as const }],
+      [
+        'turned back by review',
+        { status: 'REJECTED' as const, previousStatus: 'UNDER_PROPOSAL_REVIEW' as const },
+      ],
+      [
+        'withdrawn while held',
+        { status: 'CANCELLED' as const, previousStatus: 'UNDER_PROPOSAL_REVIEW' as const },
+      ],
+    ])('refuses the counterparty a trade %s, and still admits the proposer', async (_name, state) => {
+      const { join } = setup({ [CODE]: trade({ ...state, initiatorUserId: BUYER }) });
+      expect(await join(principal({ userId: SELLER }))).toBe(false);
+      expect(await join(principal({ userId: BUYER }))).toBe(true);
+    });
+
+    it('admits the counterparty to a trade that was cancelled in the ordinary way', async () => {
+      const { join } = setup({
+        [CODE]: trade({ status: 'CANCELLED', previousStatus: 'AWAITING_ACCEPTANCE' }),
+      });
+      expect(await join(principal({ userId: SELLER }))).toBe(true);
+    });
+  });
+
   it('admits the buyer and the seller', async () => {
     const { join } = setup();
     expect(await join(principal({ userId: BUYER }))).toBe(true);
@@ -55,7 +87,7 @@ describe('trade room authorisation', () => {
   });
 
   it('refuses everyone on a trade whose counterparty has not claimed it yet', async () => {
-    const { join } = setup({ [CODE]: { buyerUserId: BUYER, sellerUserId: null } });
+    const { join } = setup({ [CODE]: trade({ sellerUserId: null }) });
     expect(await join(principal({ userId: STRANGER }))).toBe(false);
     expect(await join(principal({ userId: SELLER }))).toBe(false);
     expect(await join(principal({ userId: BUYER }))).toBe(true);
