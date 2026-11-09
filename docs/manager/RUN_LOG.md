@@ -401,3 +401,64 @@ cost and to find work to resume.
   left untouched and not committed.
 - Next: resume T-052 with a fixer (on `t-052-kyc-review-queue`), then merge it. The weekly limit resets
   2026-11-10 15:00 WAT; until then the 85% reserve leaves no room for a ticket cycle.
+
+## 2026-11-09 17:5x WAT — run summary (interactive, owner directed)
+
+- Usage: not measured. `get_usage` was unavailable in this session, so the budget gate in MANAGER.md
+  step 0 could not run. The owner directed the work, and the weekly reserve is theirs to spend.
+- Committed the owner's uncommitted work on `main` as five commits: the `POSTGRES_CA_CERT` bundle for
+  Postgres TLS (`platform/postgres-ssl.ts`, used by the pool, migrator, seeder and bootstrap script),
+  the backend env generator setting this monorepo's own topology instead of inheriting the old
+  stack's ports and origins, `pnpm env:apps` for the four frontend `.env.local` files, turbo `dev`
+  and `dev:worker` tasks behind `pnpm dev`, and the README and runbook for all of it. Verified first:
+  293 repo tests, 5 new postgres-ssl tests, `format:check`, forced lint and typecheck on backend-api.
+- Tickets: T-052 (merged), T-072 (merged).
+  - T-052 (Sonnet fixer): all 11 review items fixed in one commit. The 30-day repeated-rejection
+    counter now takes `pg_advisory_xact_lock(hashtext('trust:rejections:'||userId))` before counting,
+    proven by removing the lock and watching the new concurrency test fail with 0 events. A case whose
+    fact says `duplicateIdentity` but carries no flag is refused 409 instead of being decidable through
+    the plain queue without dual approval. `consumeApproval` runs first in the CLEARED branch; an
+    escalation can no longer be resolved by its escalator; erasure scrubs flag hashes through a new
+    `identity.account.anonymised` subscriber. On `main`: 3141 unit tests, format clean, migration
+    safety 43 migrations / 115 invariants / 0 errors.
+  - T-072 (Opus): the owner settled decision 1 — the buyer protection fee gets its own account.
+    `BUYER_PROTECTION_FEE_LIABILITY`, credit-normal, scoped by trade. Funding posts three lines, so
+    the trade's escrow liability balance is exactly the refundable item money and no service has to
+    subtract the T-047 snapshot. Two real defects found in the obvious migration: `ALTER TYPE … ADD
+VALUE` cannot work here at all (drizzle runs every pending migration in one transaction and a new
+    label is unusable in the transaction that adds it, so splitting across files does not help) —
+    `0044` rebuilds the type instead; and `drizzle-kit generate` silently drops
+    `ledger_accounts_key_unique` with the generated column, which would have left `ON CONFLICT
+(account_key)` with no arbiter and let two codepaths create separate accounts for one trade's
+    money without the balance invariant noticing. Branch verification: 264 files, 4824 tests, 0
+    failures; migration safety 45 migrations / 128 invariants / 0 errors, including the `forward`
+    check applying main-with-T-052 then 0043 and 0044 on top.
+- Migration numbering cost this branch two renumbers: it was cut before T-107, and T-052 took 0042
+  while T-072 was in flight. Final: T-052 `0042_trust_duplicate_flags`, T-072 `0043_ledger_payments`
+  and `0044_ledger_fee_liability_account`. A renumber is never a `git mv` — `journal-complete`
+  contiguity, `snapshot-chain` prevId and `journal-order` timestamps all have to move with it, and
+  the snapshots must be regenerated rather than renamed.
+- Verification gap, stated plainly: lint, typecheck and the 3218-test unit run are green on `main`
+  after both merges, and `migration:safety` is clean, but the full `KOMTRU_INFRA_TESTS=1` suite was
+  run on each branch, not on merged `main` — the owner stopped that run for time. Both merges were
+  conflict-free in source (only journal, snapshot and lock bookkeeping conflicted), so the risk is
+  low, but a full infra run on `main` is the first thing the next run should do.
+- Cleanup: removed all four worktrees and deleted eleven branches — nine already merged into `main`
+  (`t-029-infra-isolation` a862157, `t-038-staff-invitations` 9b35ee7, `t-041-avatars` c02142b,
+  `t-042-saved-addresses` a0bbedb, `t-046-location-catalog` 151a605, `t-061-proposal-flow` f0b8e8d,
+  `t-107-cases` 1c9a4ed, `t-111-email-otp-fallback` b7cbd57, `t-140-console-scaffold` 7f5abf8), plus
+  `wip/main-uncommitted-2026-10-15` f5bc7c4 (all four of its tickets are Done, the condition
+  MANAGER.md set for deleting it) and the two merged ticket branches. Those SHAs are here so anything
+  needed is recoverable from the reflog. MANAGER.md lost its two stale reconcile bullets. No stashes,
+  nothing prunable, clean tree.
+- T-029 was never in-flight: its worktree was empty and its branch already an ancestor of `main`. Its
+  status line is accurate — the namespacing and `eventually` diagnostic are merged, and the remainder
+  is still blocked on the owner's docker-compose go-ahead (12 parallel test databases at pool size 20
+  ask for up to 240 connections against `max_connections` 100, surfacing as a misleading
+  `password authentication failed`).
+- Open for the owner: the T-052 items (the resolution rule for a flag-less duplicate; whether "senior"
+  should stay SUPER_ADMIN/COMPLIANCE_OFFICER when `duplicate_flag.resolve` is granted only to
+  KYC_ANALYST; and that T-039 anonymisation still does not scrub `nin_verifications`/`bvn_verifications`
+  hashes, which wants its own ticket), and the T-029 compose change.
+- Next: a full infra run on `main`, then T-029 once the compose change is approved. T-072 unblocked
+  T-064, T-073, T-074 and T-075, so the ledger critical path is open.
