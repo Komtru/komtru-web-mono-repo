@@ -92,6 +92,11 @@
       "definition": "CREATE UNIQUE INDEX payment_attempts_provider_ref ON ledger.payment_attempts USING btree (provider, provider_reference) WHERE (provider_reference IS NOT NULL)"
     },
     {
+      "table": "trade.delivery_extension_requests",
+      "name": "delivery_extension_one_pending",
+      "definition": "CREATE UNIQUE INDEX delivery_extension_one_pending ON trade.delivery_extension_requests USING btree (deadline_id) WHERE (status = 'PENDING'::trade.delivery_extension_status)"
+    },
+    {
       "table": "trade.delivery_signals",
       "name": "delivery_signals_shipment_event",
       "definition": "CREATE UNIQUE INDEX delivery_signals_shipment_event ON trade.delivery_signals USING btree (trade_id, source, shipment_event_id) WHERE (shipment_event_id IS NOT NULL)"
@@ -379,9 +384,34 @@
       "definition": "CHECK (((status <> 'SUPPRESSED'::notify.notification_status) OR (failed_reason IS NOT NULL)))"
     },
     {
+      "table": "trade.delivery_extension_requests",
+      "name": "delivery_extension_answered",
+      "definition": "CHECK (((status = ANY (ARRAY['ACCEPTED'::trade.delivery_extension_status, 'DECLINED'::trade.delivery_extension_status])) = (responded_at IS NOT NULL)))"
+    },
+    {
+      "table": "trade.delivery_extension_requests",
+      "name": "delivery_extension_later",
+      "definition": "CHECK ((requested_due_at > current_due_at))"
+    },
+    {
       "table": "trade.escrow_action_requests",
       "name": "escrow_requests_amount_positive",
       "definition": "CHECK ((amount_minor > 0))"
+    },
+    {
+      "table": "trade.self_arranged_shipments",
+      "name": "self_arranged_phone_e164",
+      "definition": "CHECK ((driver_phone ~ '^\\+[1-9][0-9]{6,14}$'::text))"
+    },
+    {
+      "table": "trade.self_arranged_shipments",
+      "name": "self_arranged_plate_length",
+      "definition": "CHECK (((char_length(vehicle_plate) >= 3) AND (char_length(vehicle_plate) <= 14)))"
+    },
+    {
+      "table": "trade.self_arranged_shipments",
+      "name": "self_arranged_waybill_length",
+      "definition": "CHECK (((char_length(waybill_number) >= 3) AND (char_length(waybill_number) <= 60)))"
     },
     {
       "table": "trade.trade_deadlines",
@@ -594,6 +624,11 @@
       "table": "notify.notification_delivery_attempts",
       "name": "komtru_append_only",
       "definition": "[O] CREATE TRIGGER komtru_append_only BEFORE DELETE OR UPDATE ON notify.notification_delivery_attempts FOR EACH ROW EXECUTE FUNCTION platform.reject_mutation()"
+    },
+    {
+      "table": "trade.self_arranged_shipments",
+      "name": "komtru_append_only",
+      "definition": "[O] CREATE TRIGGER komtru_append_only BEFORE DELETE OR UPDATE ON trade.self_arranged_shipments FOR EACH ROW EXECUTE FUNCTION platform.reject_mutation()"
     },
     {
       "table": "trade.trade_activity",

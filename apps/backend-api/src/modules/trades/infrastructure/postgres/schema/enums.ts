@@ -147,3 +147,24 @@ export const tradeDeadlineStatus = trade.enum('trade_deadline_status', [
   'ELAPSED',
   'CANCELLED',
 ]);
+
+/**
+ * Where a funded trade is while it waits on a logistics company (design §6.2: a courier package at
+ * REQUESTED to PACKAGED keeps the trade FUNDED). m2 §7a's dormant value. T-064 owns the type and the
+ * column; T-087 is the only writer, when a company request is made.
+ */
+export const fulfilmentSubstate = trade.enum('fulfilment_substate', ['AWAITING_SHIPMENT']);
+
+/** DE1's three stated reasons for needing more time. */
+export const deliveryExtensionReason = trade.enum('delivery_extension_reason', [
+  'COURIER_PICKUP_DELAYED',
+  'RESTOCKING_ITEM',
+  'ADDRESS_OR_LOGISTICS_ISSUE',
+]);
+
+export const deliveryExtensionStatus = trade.enum('delivery_extension_status', [
+  'PENDING',
+  'ACCEPTED',
+  'DECLINED',
+  'CANCELLED',
+]);

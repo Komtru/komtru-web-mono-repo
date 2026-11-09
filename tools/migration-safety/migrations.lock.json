@@ -224,6 +224,11 @@
       "tag": "0044_ledger_fee_liability_account",
       "when": 1794243154216,
       "sha256": "de9f827b0f7710516b92fad5e27c379a1142d847a46464b14bfb69ab389ba2c4"
+    },
+    {
+      "tag": "0045_trade_fulfilment",
+      "when": 1794246834063,
+      "sha256": "b04c454164edf456745a77fc1e642e6a4569f8c8a12b790aa2998e2727e10a7a"
     }
   ]
 }
