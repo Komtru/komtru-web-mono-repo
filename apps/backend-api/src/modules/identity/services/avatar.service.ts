@@ -23,9 +23,11 @@ import {
   type AvatarFileRefusal,
   type AvatarFileView,
 } from '../domain/avatar.js';
+import type { PartyEnrichment } from '../domain/party/card.js';
 import { identityProfileAvatarChangedEvent } from '../domain/events.js';
 import { userProfiles } from '../infrastructure/postgres/schema/users.js';
 import { AUDIT_ACTIONS, writeAudit } from './audit.service.js';
+import type { PartyPorts } from './party.service.js';
 
 /** Who is looking: M20 decides access from this, so the avatar is signed for the viewer, not the owner. */
 export interface AvatarViewer {
@@ -347,6 +349,31 @@ export async function resolveAvatarUrls(
   }
   return out;
 }
+
+/**
+ * `PartyPorts.enrich` for the avatar alone: M7's completed-trade count (T-061) and M5's merchant name
+ * (T-055) have no module to come from yet and keep their defaults.
+ *
+ * Each owner is passed as their own viewer because `enrich` is not told who is looking. That is safe
+ * for PROFILE_PHOTO, which is PUBLIC (M20 allows any viewer); an avatar category that was not public
+ * would have to widen the port first.
+ */
+export const avatarEnrichment =
+  (deps: AvatarDeps): NonNullable<PartyPorts['enrich']> =>
+  async (tx, userIds) => {
+    const urls = await resolveAvatarUrls(
+      deps,
+      userIds,
+      (ownerUserId) => ({ userId: ownerUserId, scope: 'CONSUMER', roles: [] }),
+      tx,
+    );
+    return new Map(
+      [...urls].map(([userId, avatarUrl]): [string, PartyEnrichment] => [
+        userId,
+        { completedTrades: 0, merchantName: null, avatarUrl },
+      ]),
+    );
+  };
 
 // ---------------------------------------------------------------------------
 // Provider avatars

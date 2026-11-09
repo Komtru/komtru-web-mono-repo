@@ -162,6 +162,7 @@ export {
 import type { CityLookup } from './services/address.service.js';
 // T-041. `resolveAvatarUrls` is what a PartyCard's `enrich` calls; `importProviderAvatar` is T-034's.
 export {
+  avatarEnrichment,
   importProviderAvatar,
   removeAvatar,
   resolveAvatarUrl,
@@ -176,7 +177,7 @@ export {
   type ImportProviderAvatarOutcome,
   type ProviderImage,
 } from './services/avatar.service.js';
-import type { AvatarPorts } from './services/avatar.service.js';
+import { avatarEnrichment, type AvatarPorts } from './services/avatar.service.js';
 export {
   createCapabilityService,
   postgresBuyerFacts,
@@ -364,11 +365,15 @@ export function createIdentityAuth(options: IdentityAuthOptions): IdentityAuth {
     staffRequireMfa: config.identity.staffRequireMfa,
   };
 
-  // T-035. `enrich` is deliberately absent: M7's completed-trade count, M5's merchant name and
-  // M20's signed avatar URL have no module to come from yet, so every PartyCard carries zero trades,
-  // no merchant name and no avatar. See `PartyPorts.enrich` for the rule whoever supplies it must
-  // keep.
+  // T-035 / T-041. `enrich` supplies the avatar only: M7's completed-trade count (T-061) and M5's
+  // merchant name (T-055) still have no module to come from, so those two keep their defaults. It
+  // exists only when the registry wired the files ports. PROFILE_PHOTO is PUBLIC, so M20 allows any
+  // viewer; each owner is passed as their own viewer because `enrich` is not told who is looking, and
+  // that is harmless for a PUBLIC class (a non-public avatar category would have to widen the port).
+  const enrich = options.avatar ? avatarEnrichment({ db, logger, ports: options.avatar }) : undefined;
+
   const party: PartyControllerDeps = {
+    ...(enrich ? { enrich } : {}),
     db,
     budget: createLookupBudget({ redis, logger }),
     hasher: account.otpHasher,
