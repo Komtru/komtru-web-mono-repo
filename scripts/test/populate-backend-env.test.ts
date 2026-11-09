@@ -50,11 +50,38 @@ describe('buildBackendEnv — local target', () => {
     expect(valueOf(text, 'MAILJET_SANDBOX')).toBe('true');
   });
 
+  it('names no CA bundle, because the Docker stack speaks plain TCP', () => {
+    expect(valueOf(text, 'POSTGRES_CA_CERT')).toBe('');
+  });
+
+  // The source is the OLD backend's env, so its frontend topology describes the old stack: port
+  // 3000 for the API, origins on 3000/7820/5501, no base URLs at all. Copied verbatim, the API
+  // listens where no frontend looks and refuses the origins they actually call from.
+  it("listens on this monorepo's API port, not the old stack's", () => {
+    expect(valueOf(text, 'PORT')).toBe('7813');
+  });
+
+  it("allows the origins this monorepo's frontends actually run on", () => {
+    const origins = 'http://localhost:3001,http://localhost:3002,http://localhost:3003,http://localhost:3004';
+    expect(valueOf(text, 'ALLOWED_ORIGINS')).toBe(origins);
+    expect(valueOf(text, 'SOCKET_CORS_ORIGINS')).toBe(origins);
+  });
+
+  it('fills the base URLs the old env left empty, so emailed links resolve', () => {
+    expect(valueOf(text, 'APP_WEB_BASE_URL')).toBe('http://localhost:3001');
+    expect(valueOf(text, 'APP_STAFF_WEB_BASE_URL')).toBe('http://localhost:3002');
+  });
+
+  it('sends OAuth and passkey callbacks to the consumer app, not to port 3000', () => {
+    expect(valueOf(text, 'OAUTH_REDIRECT_BASE_URL')).toBe('http://localhost:3001');
+    expect(valueOf(text, 'WEBAUTHN_ORIGINS')).toBe('http://localhost:3001');
+    expect(valueOf(text, 'WEBAUTHN_RP_ID')).toBe('localhost');
+  });
+
   it('keeps every other key and value unchanged', () => {
     expect(valueOf(text, 'ENCRYPTION_KEY')).toBe('fixture0encryption0key0value0aaaabbbbccccdddd');
     expect(valueOf(text, 'MAILJET_API_KEY')).toBe('fixture-mailjet-key-value');
     expect(valueOf(text, 'PAYSTACK_SECRET_KEY')).toBe('fixture-paystack-secret-value');
-    expect(valueOf(text, 'PORT')).toBe('7813');
   });
 
   it('copies quoted values byte for byte so JSON and escaped keys survive', () => {
@@ -104,6 +131,29 @@ describe('buildBackendEnv — rds target', () => {
 
   it('never targets the old komtru_dev database', () => {
     expect(text).not.toMatch(/\/komtru_dev\b/);
+  });
+
+  /**
+   * `--target rds` moves the database, not the developer. The process still runs on a laptop, so
+   * everything that makes a run local stays local: the old env's Redis is the old stack's
+   * (port 6379), and its Mailjet switch is a server's, which would email real people from a laptop.
+   */
+  it('still uses the local Docker Redis, not the port the old stack ran on', () => {
+    expect(valueOf(text, 'REDIS_URL')).toBe('redis://localhost:56379');
+  });
+
+  it('still refuses to send real email', () => {
+    expect(valueOf(text, 'MAILJET_SANDBOX')).toBe('true');
+  });
+
+  /**
+   * RDS presents a chain rooted in the Amazon RDS CA, which Node does not trust, so a verified
+   * connection needs the bundle named in the same file as the URL. Leaving it to NODE_EXTRA_CA_CERTS
+   * makes a working setup depend on which shell started the process.
+   */
+  it('names the CA bundle the RDS connection has to verify against', () => {
+    expect(valueOf(text, 'POSTGRES_CA_CERT')).toMatch(/\.komtru\/certs\/rds-global-bundle\.pem$/);
+    expect(valueOf(text, 'POSTGRES_CA_CERT')?.startsWith('/')).toBe(true);
   });
 });
 
