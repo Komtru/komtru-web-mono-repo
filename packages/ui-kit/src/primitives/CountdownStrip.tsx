@@ -22,11 +22,11 @@ export function CountdownStrip({
   return (
     <p
       className={cx(
-        'mb-[14px] flex items-center gap-[8px] rounded-md bg-surface-secondary px-[12px] py-[9px] text-[12px] font-semibold text-midnight-text',
+        'mb-[14px] flex items-center gap-[8px] rounded-md bg-warning-soft px-[12px] py-[9px] text-[12px] font-semibold text-warning-on-soft',
         className,
       )}
     >
-      <span aria-hidden className="h-[16px] w-[16px] shrink-0 stroke-slate">
+      <span aria-hidden className="h-[16px] w-[16px] shrink-0 stroke-current">
         {CLOCK}
       </span>
       {children}

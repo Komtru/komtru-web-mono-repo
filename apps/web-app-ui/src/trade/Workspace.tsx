@@ -55,6 +55,13 @@ import {
   type WorkspaceTab,
 } from './workspace-state';
 
+const TAB_TITLE: Record<WorkspaceTab, string> = {
+  overview: 'Trade',
+  terms: 'Agreed Terms',
+  activity: 'Trade Activity',
+  actions: 'Trade Actions',
+};
+
 /**
  * The trade, from the agreement onward: the one screen every later trade feature renders a tab or a sheet
  * inside. It is ONE surface for both people. The trade says which side the reader is (`yourRole`), and the words
@@ -79,19 +86,35 @@ export function Workspace({
   const counterparty = trade.counterparty;
   const name = counterparty === undefined || counterparty === null ? undefined : partyName(counterparty);
 
+  const overview = tab === 'overview';
+  // The overview is the trade itself, headed by its code; the other tabs are views of it with their own titles
+  // (as the reference draws them) and a way back to it.
+
   return (
     <ScreenColumn>
-      <ScreenHeader title={trade.tradeCode} backHref="/trades" />
-      <TradeRow
-        amount={trade.terms === null ? '—' : nairaShort(trade.terms.itemAmountMinor)}
-        status={standing.chip}
-        {...(name === undefined
-          ? {}
-          : { counterparty: { name, initials: initialsOf(name.replace(/^@/, '')) } })}
-        {...(trade.terms === null ? {} : { sub: itemTitle(trade.terms.itemSpec) })}
-        {...(standing.stage === undefined ? {} : { stage: standing.stage })}
-        className="mb-[14px]"
+      <ScreenHeader
+        title={overview ? trade.tradeCode : TAB_TITLE[tab]}
+        backHref={overview ? '/trades' : tabHref(trade.id, 'overview')}
+        backLabel={overview ? 'Back to your trades' : 'Back to the trade'}
       />
+      {overview && (
+        <TradeRow
+          amount={trade.terms === null ? '—' : nairaShort(trade.terms.itemAmountMinor)}
+          status={standing.chip}
+          {...(name === undefined && trade.terms === null
+            ? {}
+            : {
+                counterparty: {
+                  name: [trade.terms === null ? undefined : itemTitle(trade.terms.itemSpec), name]
+                    .filter((part): part is string => part !== undefined)
+                    .join(' · '),
+                  initials: initialsOf((name ?? itemTitle(trade.terms?.itemSpec)).replace(/^@/, '')),
+                },
+              })}
+          {...(standing.stage === undefined ? {} : { stage: standing.stage })}
+          className="mb-[14px]"
+        />
+      )}
       <TabNav aria-label="Trade views" items={tabItems(trade.id)} current={tab} />
       {tab === 'overview' && <Overview trade={trade} status={status} role={role} />}
       {tab === 'terms' && <TermsTab trade={trade} />}
@@ -165,14 +188,14 @@ function MoneyRows({ trade, role, held }: BodyProps & { held: string }): React.J
       <TermList aria-label="Money">
         {role === 'BUYER' ? (
           <>
-            <TermRow label="You paid">{naira(fees.buyerTotalMinor)}</TermRow>
+            <TermRow label="You paid">{nairaShort(fees.buyerTotalMinor)}</TermRow>
             <TermRow label="Seller payout">{held}</TermRow>
           </>
         ) : (
           <>
-            <TermRow label="Protected funds">Confirmed · {naira(fees.itemAmountMinor)}</TermRow>
+            <TermRow label="Protected funds">Confirmed · {nairaShort(fees.itemAmountMinor)}</TermRow>
             <TermRow label="Your payout">
-              {naira(fees.sellerProceedsMinor)} · {held}
+              {nairaShort(fees.sellerProceedsMinor)} · {held}
             </TermRow>
           </>
         )}
@@ -404,10 +427,10 @@ function Inspection({ trade, role }: BodyProps): React.JSX.Element {
   return (
     <>
       {buyer ? (
-        <NoteBanner title="Inspect the item">
+        <WarnBanner title="Inspect the item">
           Compare what you received with the agreed terms. You can accept the item, report an issue or ask for
           more time.
-        </NoteBanner>
+        </WarnBanner>
       ) : (
         <NoteBanner title="The buyer is inspecting the item">
           If the window passes with no issue reported, the payment is released to you automatically.
@@ -488,7 +511,7 @@ function Settlement({ trade, role }: BodyProps): React.JSX.Element {
       <TermList aria-label="Financial outcome">
         <TermRow label="Status">
           Processing
-          {fees === null ? '' : ` · ${naira(buyer ? fees.itemAmountMinor : fees.sellerProceedsMinor)}`}
+          {fees === null ? '' : ` · ${nairaShort(buyer ? fees.itemAmountMinor : fees.sellerProceedsMinor)}`}
         </TermRow>
         <TermRow label="Trade outcome">Completed</TermRow>
         <TermRow label="Payment instruction">Release to seller</TermRow>
@@ -510,8 +533,8 @@ function TradeComplete({ trade, role }: BodyProps): React.JSX.Element {
     fees === null
       ? 'Both sides honoured the agreement in full.'
       : role === 'BUYER'
-        ? `${naira(fees.itemAmountMinor)} released${seller === undefined ? '' : ` to ${seller}`}. Both sides honoured the agreement in full.`
-        : `${naira(fees.sellerProceedsMinor)} released to you. Both sides honoured the agreement in full.`;
+        ? `${nairaShort(fees.itemAmountMinor)} released${seller === undefined ? '' : ` to ${seller}`}. Both sides honoured the agreement in full.`
+        : `${nairaShort(fees.sellerProceedsMinor)} released to you. Both sides honoured the agreement in full.`;
   return (
     <>
       <StatusHero tone="success" as="h2" title="Trade complete">

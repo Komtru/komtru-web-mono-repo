@@ -95,7 +95,8 @@ describe('one workspace for both people', () => {
     show();
     await screen.findByText('Funds protected');
     expect(screen.getByText('₦452,000')).toBeTruthy();
-    expect(screen.getByText('Amaka B.')).toBeTruthy();
+    // The item and the counterparty share the summary card's one line, as the reference draws them.
+    expect(screen.getByText('Apple iPhone 13 Pro · Amaka B.')).toBeTruthy();
     expect(screen.getByRole('progressbar', { name: 'Trade progress' }).getAttribute('aria-valuetext')).toBe(
       'Shipped',
     );
@@ -112,6 +113,37 @@ describe('one workspace for both people', () => {
     serve(tradeView({ status: 'AWAITING_ACCEPTANCE', awaiting: 'YOU', yourRole: 'SELLER' }));
     show('activity');
     expect(await screen.findByText('Accept trade request')).toBeTruthy();
+  });
+});
+
+describe('the tabs are views of the trade, not other screens', () => {
+  it.each([
+    ['terms', 'Agreed Terms'],
+    ['activity', 'Trade Activity'],
+    ['actions', 'Trade Actions'],
+  ] as const)(
+    'titles the %s tab "%s", with a way back to the trade and no second summary card',
+    async (tab, title) => {
+      serve(workspaceTrade('FUNDED', 'BUYER'));
+      show(tab);
+      expect(await screen.findByRole('heading', { level: 1, name: title })).toBeTruthy();
+      expect(screen.getByRole('link', { name: 'Back to the trade' }).getAttribute('href')).toBe(
+        `/trade/${id(1)}`,
+      );
+      expect(screen.queryByRole('progressbar')).toBeNull();
+      // Still the same navigation, so each view is one tap from the others.
+      expect(screen.getByRole('navigation', { name: 'Trade views' })).toBeTruthy();
+    },
+  );
+
+  it('heads the overview with the trade code and goes back to the list', async () => {
+    serve(workspaceTrade('FUNDED', 'BUYER'));
+    show();
+    await screen.findByRole('heading', { level: 1, name: 'KMT-9042800-NG' });
+    for (const link of screen.getAllByRole('link', { name: 'Back to your trades' })) {
+      expect(link.getAttribute('href')).toBe('/trades');
+    }
+    expect(screen.getByRole('progressbar')).toBeTruthy();
   });
 });
 
@@ -134,7 +166,7 @@ describe('funds protected (CWT-02)', () => {
     expect(await screen.findByText('Ship by · 12 Nov · 10:00')).toBeTruthy();
     const money = screen.getByLabelText('Money');
     expect(within(money).getByText('Protected funds').nextElementSibling?.textContent).toBe(
-      'Confirmed · ₦452,000.00',
+      'Confirmed · ₦452,000',
     );
     expect(within(money).getByText('Your payout').nextElementSibling?.textContent).toContain(
       'held, not yet released',
@@ -147,7 +179,7 @@ describe('funds protected (CWT-02)', () => {
     show();
     expect(await screen.findByText('The seller ships by · 12 Nov · 10:00')).toBeTruthy();
     expect(within(screen.getByLabelText('Money')).getByText('You paid').nextElementSibling?.textContent).toBe(
-      '₦458,780.00',
+      '₦458,780',
     );
     expect(screen.queryByText("Marking the item shipped isn't in the app yet.")).toBeNull();
   });
@@ -303,14 +335,14 @@ describe('disputed, settlement and completion (CWT-05, CWT-06, Customer-5)', () 
     show();
     expect(await screen.findByText('Settlement is processing')).toBeTruthy();
     expect(screen.getByText(/not yet a completed payout/)).toBeTruthy();
-    expect(screen.getByText('Status').nextElementSibling?.textContent).toBe('Processing · ₦452,000.00');
+    expect(screen.getByText('Status').nextElementSibling?.textContent).toBe('Processing · ₦452,000');
   });
 
   it('celebrates a settled trade to the buyer with who was paid, and to the seller with what they got', async () => {
     serve(workspaceTrade('SETTLED', 'BUYER'));
     const buyer = show();
     expect(await screen.findByRole('heading', { name: 'Trade complete' })).toBeTruthy();
-    expect(screen.getByText(/₦452,000.00 released to Amaka B\./)).toBeTruthy();
+    expect(screen.getByText(/₦452,000 released to Amaka B\./)).toBeTruthy();
     expect(screen.queryByRole('link', { name: /review/i })).toBeNull();
     buyer.unmount();
 
@@ -320,7 +352,7 @@ describe('disputed, settlement and completion (CWT-05, CWT-06, Customer-5)', () 
       }),
     );
     show();
-    expect(await screen.findByText(/₦440,000.00 released to you\./)).toBeTruthy();
+    expect(await screen.findByText(/₦440,000 released to you\./)).toBeTruthy();
   });
 
   it.each([
