@@ -8,6 +8,9 @@
     "node": ">=22.12 <23"
   },
   "scripts": {
+    "dev": "turbo run dev dev:worker",
+    "dev:api": "turbo run dev dev:worker --filter=@komtru/backend-api",
+    "dev:web": "turbo run dev --filter=@komtru/web-app-ui --filter=@komtru/operations-app",
     "build": "turbo run build",
     "lint": "turbo run lint",
     "typecheck": "turbo run typecheck",
