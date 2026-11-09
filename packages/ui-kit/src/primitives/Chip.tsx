@@ -1,7 +1,7 @@
 import { cx } from './cx.js';
 
 /** The five states the reference's `.chip` carries, each with its own soft/on-soft pair. */
-export type ChipTone = 'protected' | 'awaiting' | 'risk' | 'resolved' | 'verified';
+export type ChipTone = 'protected' | 'awaiting' | 'risk' | 'resolved' | 'verified' | 'verifying';
 
 const TONES: Record<ChipTone, string> = {
   protected: 'text-success-on-soft bg-success-soft',
@@ -9,6 +9,8 @@ const TONES: Record<ChipTone, string> = {
   risk: 'text-risk-on-soft bg-risk-soft',
   resolved: 'text-success-on-soft bg-success-soft',
   verified: 'text-success-on-soft bg-success-soft',
+  /** `.chip.verifying`: waiting on a check, not on the other party. */
+  verifying: 'text-info-on-soft bg-info-soft',
 };
 
 export interface ChipProps extends React.HTMLAttributes<HTMLSpanElement> {
