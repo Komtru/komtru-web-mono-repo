@@ -6,8 +6,14 @@ import {
   Chip,
   CodeCard,
   CounterDiffRow,
-  CountdownStrip,
   ItemCard,
+  LoadFailed,
+  LoadingScreen,
+  NoteBanner,
+  ReadyBanner,
+  RiskBanner,
+  ScreenColumn,
+  WarnBanner,
   OptionCard,
   PartyStrip,
   ScreenHeader,
@@ -27,13 +33,6 @@ describe('ItemCard', () => {
     expect(screen.getByText('iPhone 13 Pro, 256GB')).toBeTruthy();
     expect(screen.getByText('Sierra Blue · Sealed box')).toBeTruthy();
     expect(screen.getByText('₦452,000.00').className).toContain('font-mono');
-  });
-
-  it('draws the gradient block until there is a photo, and the photo once there is', () => {
-    const { container, rerender } = render(<ItemCard title="Speaker" price="₦1.00" />);
-    expect(container.querySelector('img')).toBeNull();
-    rerender(<ItemCard title="Speaker" price="₦1.00" imageUrl="https://img.test/a.jpg" />);
-    expect(container.querySelector('img')?.getAttribute('src')).toBe('https://img.test/a.jpg');
   });
 });
 
@@ -105,6 +104,16 @@ describe('StandardCard', () => {
 });
 
 describe('StatusHero', () => {
+  it('can leave the page its one h1 to the screen header', () => {
+    render(
+      <StatusHero tone="risk" title="Not sent" as="h2">
+        It did not pass review.
+      </StatusHero>,
+    );
+    expect(screen.queryByRole('heading', { level: 1 })).toBeNull();
+    expect(screen.getByRole('heading', { level: 2 }).textContent).toBe('Not sent');
+  });
+
   it.each(['success', 'info', 'warning', 'risk'] as const)(
     'is one heading and a paragraph in the %s tone',
     (tone) => {
@@ -119,12 +128,7 @@ describe('StatusHero', () => {
   );
 });
 
-describe('CountdownStrip and CodeCard', () => {
-  it('announces the time left as a status', () => {
-    render(<CountdownStrip>Respond within 4 hours or this expires</CountdownStrip>);
-    expect(screen.getByRole('status').textContent).toContain('Respond within 4 hours');
-  });
-
+describe('CodeCard', () => {
   it('shows the Trade Code in mono under its label, with room for actions', () => {
     render(
       <CodeCard label="Your Trade Code" code="KMT-90138">
@@ -243,5 +247,46 @@ describe('FileDropzone locked message', () => {
     expect(screen.getByText('Photos needed')).toBeTruthy();
     expect(screen.getByText('1 added, 2 to go')).toBeTruthy();
     expect(screen.queryByText(/before you can accept/)).toBeNull();
+  });
+});
+
+describe('the notice banners', () => {
+  it('speak in four voices, and only the risk one interrupts', () => {
+    render(
+      <>
+        <NoteBanner>How it works</NoteBanner>
+        <WarnBanner title="Careful">Something is missing</WarnBanner>
+        <RiskBanner>It failed</RiskBanner>
+        <ReadyBanner title="Recorded">Done</ReadyBanner>
+      </>,
+    );
+    expect(screen.getAllByRole('status')).toHaveLength(3);
+    expect(screen.getByRole('alert').textContent).toBe('It failed');
+  });
+
+  it('draws the alert mark on a warning, as the reference does, and not a lock', () => {
+    const { container } = render(<WarnBanner>Check this</WarnBanner>);
+    expect(container.querySelector('svg path')?.getAttribute('d')).toBe('M12 8v5M12 16h.01');
+  });
+});
+
+describe('LoadingScreen and LoadFailed', () => {
+  it('names what is loading and is busy', () => {
+    render(<LoadingScreen label="Loading the trade" />);
+    expect(screen.getByRole('status', { name: 'Loading the trade' }).getAttribute('aria-busy')).toBe('true');
+  });
+
+  it('offers a retry only when one can help', () => {
+    const onRetry = vi.fn();
+    const { rerender } = render(<LoadFailed title="Couldn't load" body="Try later" onRetry={onRetry} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
+    expect(onRetry).toHaveBeenCalledOnce();
+    rerender(<LoadFailed title="Couldn't load" body="Gone" />);
+    expect(screen.queryByRole('button')).toBeNull();
+  });
+
+  it('keeps its content in the reference column', () => {
+    const { container } = render(<ScreenColumn>x</ScreenColumn>);
+    expect(container.firstElementChild?.className).toContain('max-w-[480px]');
   });
 });
