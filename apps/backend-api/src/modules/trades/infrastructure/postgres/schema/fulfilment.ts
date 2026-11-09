@@ -5,7 +5,14 @@
 import { sql } from 'drizzle-orm';
 import { check, index, integer, jsonb, text, timestamp, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
 import { trade } from './columns.js';
-import { deliverySignalSource, tradeActorType, tradeDeadlineKind, tradeDeadlineStatus } from './enums.js';
+import {
+  deliveryExtensionReason,
+  deliveryExtensionStatus,
+  deliverySignalSource,
+  tradeActorType,
+  tradeDeadlineKind,
+  tradeDeadlineStatus,
+} from './enums.js';
 import { trades } from './trades.js';
 
 export const deliverySignals = trade.table(
@@ -67,5 +74,78 @@ export const tradeDeadlines = trade.table(
     index('trade_deadlines_due_idx')
       .on(table.dueAt)
       .where(sql`${table.status} = 'PENDING'`),
+  ],
+);
+
+/**
+ * X2's evidence for a shipment the seller arranged themselves (the permanent "arrange my own
+ * shipping" option). Append-only: a waybill that can be edited after the fact is not evidence, and a
+ * dispute (T-080) reads this row. One per trade, so a replayed request cannot add a second.
+ */
+export const selfArrangedShipments = trade.table(
+  'self_arranged_shipments',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    // restrict, not cascade: the table is append-only, so a cascaded delete would be refused by the
+    // trigger anyway. Say so.
+    tradeId: uuid('trade_id')
+      .notNull()
+      .references(() => trades.id, { onDelete: 'restrict' }),
+    waybillNumber: text('waybill_number').notNull(),
+    /** files.file_records(id): the photo of the waybill receipt. A soft reference (design §4.2). */
+    receiptFileId: uuid('receipt_file_id').notNull(),
+    /** E.164. */
+    driverPhone: text('driver_phone').notNull(),
+    vehiclePlate: text('vehicle_plate').notNull(),
+    shippedByUserId: uuid('shipped_by_user_id').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex('self_arranged_shipments_trade').on(table.tradeId),
+    // One photo is evidence for one shipment; the service checks first for a good error, this is the
+    // guard two concurrent shipments cannot both pass.
+    uniqueIndex('self_arranged_receipt_file').on(table.receiptFileId),
+    check('self_arranged_waybill_length', sql`char_length(${table.waybillNumber}) BETWEEN 3 AND 60`),
+    check('self_arranged_phone_e164', sql`${table.driverPhone} ~ '^\\+[1-9][0-9]{6,14}$'`),
+    check('self_arranged_plate_length', sql`char_length(${table.vehiclePlate}) BETWEEN 3 AND 14`),
+  ],
+);
+
+/**
+ * DE1/DE2: the seller asks for more time on a delivery deadline, the buyer answers. The deadline row
+ * itself only moves on acceptance; this row is the evidence of who asked, why, and who agreed.
+ */
+export const deliveryExtensionRequests = trade.table(
+  'delivery_extension_requests',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    tradeId: uuid('trade_id')
+      .notNull()
+      .references(() => trades.id, { onDelete: 'cascade' }),
+    deadlineId: uuid('deadline_id')
+      .notNull()
+      .references(() => tradeDeadlines.id, { onDelete: 'cascade' }),
+    requestedByUserId: uuid('requested_by_user_id').notNull(),
+    reason: deliveryExtensionReason('reason').notNull(),
+    note: text('note'),
+    /** The deadline as it stood when asked, kept so the buyer's screen shows the same "from". */
+    currentDueAt: timestamp('current_due_at', { withTimezone: true }).notNull(),
+    requestedDueAt: timestamp('requested_due_at', { withTimezone: true }).notNull(),
+    status: deliveryExtensionStatus('status').notNull().default('PENDING'),
+    respondedByUserId: uuid('responded_by_user_id'),
+    respondedAt: timestamp('responded_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    check('delivery_extension_later', sql`${table.requestedDueAt} > ${table.currentDueAt}`),
+    check(
+      'delivery_extension_answered',
+      sql`(${table.status} IN ('ACCEPTED', 'DECLINED')) = (${table.respondedAt} IS NOT NULL)`,
+    ),
+    // One open question per deadline: the buyer is never asked twice at once.
+    uniqueIndex('delivery_extension_one_pending')
+      .on(table.deadlineId)
+      .where(sql`${table.status} = 'PENDING'`),
+    index('delivery_extension_trade_idx').on(table.tradeId, table.createdAt.desc().nullsFirst()),
   ],
 );
