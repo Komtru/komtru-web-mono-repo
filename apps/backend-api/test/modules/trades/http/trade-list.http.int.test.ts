@@ -1,4 +1,4 @@
-/* eslint-disable @typescript-eslint/no-unsafe-member-access -- supertest bodies and raw `pg` rows are untyped in assertions */
+/* eslint-disable @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-assignment -- supertest bodies and raw `pg` rows are untyped in assertions */
 // `GET /trades` and `GET /trades/by-code/:code` through the platform's route mounting, against a real
 // database and the real rate-limit gate. Skipped unless KOMTRU_INFRA_TESTS=1.
 //
