@@ -13,7 +13,12 @@ import {
   type ApiClient,
   type AuthSession,
 } from '@komtru/api-client';
-import { RealtimeProvider, retryProblemAware, type SocketFactory } from '@komtru/api-client/react';
+import {
+  ApiClientProvider,
+  RealtimeProvider,
+  retryProblemAware,
+  type SocketFactory,
+} from '@komtru/api-client/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import type { AppConfig } from '../config.js';
@@ -108,7 +113,14 @@ export function KomtruProviders({
 
   const value = useMemo<KomtruContextValue>(() => ({ client, session }), [client, session]);
 
-  const tree = <KomtruContext.Provider value={value}>{children}</KomtruContext.Provider>;
+  // The same client under both contexts: `@komtru/api-client/react`'s hooks (`useAddresses`, `useStates`,
+  // the trade hooks) read `ApiClientProvider`, and this package's `useApiClient` reads `KomtruContext`.
+  // Without the inner provider an app could call one family of hooks or the other, never both.
+  const tree = (
+    <KomtruContext.Provider value={value}>
+      <ApiClientProvider client={client}>{children}</ApiClientProvider>
+    </KomtruContext.Provider>
+  );
 
   return (
     <QueryClientProvider client={queries}>

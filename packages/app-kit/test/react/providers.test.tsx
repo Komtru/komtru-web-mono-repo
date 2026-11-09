@@ -6,6 +6,7 @@ import {
   type AuthSession,
   type SocketLike,
 } from '@komtru/api-client';
+import { useApiClient as useQueryHooksClient } from '@komtru/api-client/react';
 import { QueryClient } from '@tanstack/react-query';
 import { cleanup, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -81,6 +82,19 @@ describe('KomtruProviders', () => {
     );
     expect(seen.length).toBeGreaterThanOrEqual(2);
     expect(new Set(seen).size).toBe(1);
+  });
+
+  it("is the client `@komtru/api-client/react`'s hooks use too, so an app can call both families", () => {
+    let fromKit: unknown;
+    let fromApiClient: unknown;
+    function Probe() {
+      fromKit = useApiClient();
+      fromApiClient = useQueryHooksClient();
+      return null;
+    }
+    renderWith({}, <Probe />);
+    expect(fromApiClient).toBeDefined();
+    expect(fromApiClient).toBe(fromKit);
   });
 
   it('seeds the token store from the server-rendered session before the first child renders', () => {
