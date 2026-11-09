@@ -55,6 +55,12 @@ export interface FileDropzoneProps {
   onAdd?: (files: File[]) => void;
   /** Takes an attachment back off. Without it a wrong photo is permanent. */
   onRemove?: (id: string) => void;
+  /**
+   * What the locked banner says when the gate is not met. The default is W1's: the seller cannot
+   * accept sight-unseen. A screen where the gate guards a different step (sending a proposal) says
+   * so here rather than leaving the person reading about a step they are not on.
+   */
+  locked?: { title: string; message: (attached: number, missing: number) => string };
   className?: string;
 }
 
@@ -72,6 +78,7 @@ export function FileDropzone({
   accept = 'image/*,video/*',
   onAdd,
   onRemove,
+  locked,
   className,
 }: FileDropzoneProps): React.JSX.Element {
   const [dragging, setDragging] = useState(false);
@@ -81,10 +88,12 @@ export function FileDropzone({
   return (
     <div className={cx('mb-[14px]', className)}>
       {!satisfied && (
-        <Banner tone="warning" title="Accept is locked">
-          {media.length === 0
-            ? 'Attach at least one photo or video showing the item in your possession before you can accept.'
-            : `Attach ${String(missing)} more showing the item in your possession before you can accept.`}
+        <Banner tone="warning" title={locked?.title ?? 'Accept is locked'}>
+          {locked !== undefined
+            ? locked.message(media.length, missing)
+            : media.length === 0
+              ? 'Attach at least one photo or video showing the item in your possession before you can accept.'
+              : `Attach ${String(missing)} more showing the item in your possession before you can accept.`}
         </Banner>
       )}
       <ul className={cx('mb-[14px] grid gap-[8px]', SLOT_GRIDS[slots])}>

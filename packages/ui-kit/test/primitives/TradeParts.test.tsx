@@ -10,6 +10,8 @@ import {
   ItemCard,
   OptionCard,
   PartyStrip,
+  ScreenHeader,
+  FileDropzone,
   SectionLabel,
   StandardCard,
   StatusHero,
@@ -206,5 +208,40 @@ describe('ActionStack and the verifying chip', () => {
   it('draws verifying in the info pair', () => {
     render(<Chip tone="verifying">Verification needed</Chip>);
     expect(screen.getByText('Verification needed').className).toContain('bg-info-soft');
+  });
+});
+
+describe('ScreenHeader', () => {
+  it('is the page heading with a named way back', () => {
+    render(<ScreenHeader title="Start Trade" backHref="/browse" />);
+    expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('Start Trade');
+    expect(screen.getByRole('link', { name: 'Back' }).getAttribute('href')).toBe('/browse');
+  });
+
+  it('leaves the heading to the hero when asked, and has no link without a place to go', () => {
+    render(<ScreenHeader title="Terms agreed" as="p" />);
+    expect(screen.queryByRole('heading')).toBeNull();
+    expect(screen.queryByRole('link')).toBeNull();
+  });
+});
+
+describe('FileDropzone locked message', () => {
+  it("says what the screen that uses it says, not W1's, and keeps W1's as the default", () => {
+    const { rerender } = render(<FileDropzone label="Add photos" media={[]} requiredCount={3} />);
+    expect(screen.getByText(/before you can accept/)).toBeTruthy();
+    rerender(
+      <FileDropzone
+        label="Add photos"
+        media={[{ id: 'a' }]}
+        requiredCount={3}
+        locked={{
+          title: 'Photos needed',
+          message: (have, missing) => `${String(have)} added, ${String(missing)} to go`,
+        }}
+      />,
+    );
+    expect(screen.getByText('Photos needed')).toBeTruthy();
+    expect(screen.getByText('1 added, 2 to go')).toBeTruthy();
+    expect(screen.queryByText(/before you can accept/)).toBeNull();
   });
 });

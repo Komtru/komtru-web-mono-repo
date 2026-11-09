@@ -57,6 +57,7 @@ describe('@komtru/ui-kit', () => {
       'PublicShell',
       'QueuedActionNote',
       'ResponsiveAppShell',
+      'ScreenHeader',
       'SectionLabel',
       'Select',
       'SettingsGroup',
