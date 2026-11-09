@@ -7,5 +7,6 @@ export * from './client-context.js';
 export * from './geo.js';
 export * from './query.js';
 export * from './realtime.js';
+export * from './trades.js';
 export type { RealtimeConnection, SocketLike } from '../realtime/connection.js';
 export { attachRealtime } from '../realtime/connection.js';
