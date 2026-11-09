@@ -462,6 +462,84 @@ describe('komtruAuthRoute, with the second step', () => {
   });
 });
 
+const challengeId = '9b2f4c1e-7a3d-4e5b-8c6f-1d0a2b3c4e5f';
+
+describe('verify', () => {
+  const verify = (body: unknown = { challengeId, code: '482390' }) => post(body);
+  const verified = { verified: true, nextStep: 'SET_PASSWORD', ...session, user: { id: 'u1' } };
+  const reset = {
+    verified: true,
+    nextStep: 'SET_PASSWORD',
+    resetToken: 'cid.secret',
+    expiresAt: 4_000_000_000_000,
+  };
+
+  it('opens the session a proved channel signs in to, and keeps the refresh token in the cookie', async () => {
+    // Screen E3: the backend answers a verified phone with a session, so this call has to land
+    // here and not on the backend directly — or the refresh token would reach the browser.
+    backend.reply(200, verified);
+    const response = await handlers.verify(verify());
+    expect(backend.calls[0]).toMatchObject({
+      path: '/auth/verify-otp',
+      body: { challengeId, code: '482390' },
+    });
+    expect(response.status).toBe(200);
+    expect(cookiesOf(response).join(';')).toContain('komtru_rt=rt-1');
+    const body = (await response.json()) as Record<string, unknown>;
+    expect(body).not.toHaveProperty('refreshToken');
+    expect(body).toMatchObject({ accessToken: 'at-1', nextStep: 'SET_PASSWORD', user: { id: 'u1' } });
+  });
+
+  it('passes a reset token through with no cookie, because a reset code is not a sign-in', async () => {
+    backend.reply(200, { ...reset, internal: 'leak' });
+    const response = await handlers.verify(verify());
+    expect(response.status).toBe(200);
+    expect(cookiesOf(response)).toEqual([]);
+    expect(await response.json()).toEqual(reset);
+  });
+
+  it('refuses a reset answer that carries a session beside it', async () => {
+    backend.reply(200, { ...reset, accessToken: 'at-1' });
+    expect((await handlers.verify(verify())).status).toBe(502);
+  });
+
+  it('passes a wrong code through with the attempts left, for screen E3b', async () => {
+    backend.reply(422, { code: 'OTP_INVALID', attemptsRemaining: 2 });
+    const response = await handlers.verify(verify());
+    expect(response.status).toBe(422);
+    expect(await response.json()).toMatchObject({ code: 'OTP_INVALID', attemptsRemaining: 2 });
+    expect(cookiesOf(response)).toEqual([]);
+  });
+
+  it("revokes a session that is not this app's scope", async () => {
+    backend.reply(200, verified);
+    const response = await staffHandlers.verify(verify());
+    expect(response.status).toBe(403);
+    expect(backend.calls.map((call) => call.path)).toEqual(['/auth/verify-otp', '/auth/logout']);
+  });
+
+  it('refuses a body that is not a verification', async () => {
+    expect((await handlers.verify(verify({ code: '482390' }))).status).toBe(422);
+    expect(backend.calls).toEqual([]);
+  });
+
+  it('limits guesses per challenge, whatever the address', async () => {
+    const via = (ip: string) => ({ 'x-forwarded-for': ip });
+    for (let n = 0; n < 10; n += 1) {
+      backend.reply(422, { code: 'OTP_INVALID' });
+      await handlers.verify(post({ challengeId, code: '111111' }, via(`10.0.1.${String(n)}`)));
+    }
+    expect((await handlers.verify(post({ challengeId, code: '222222' }, via('10.0.1.99')))).status).toBe(429);
+  });
+
+  it('is served by the catch-all', async () => {
+    backend.reply(200, reset);
+    const route = komtruAuthRoute({ config: configFor('CONSUMER'), sealer, fetch: backend.fetch });
+    const response = await route(verify(), { params: Promise.resolve({ action: ['verify'] }) });
+    expect(response.status).toBe(200);
+  });
+});
+
 describe('the browser-only guard', () => {
   const bare = (headers: Record<string, string>, body: unknown = { identifier: 'a@b.c', password: 'x' }) =>
     new Request('https://app.komtru.com/api/auth/x', { method: 'POST', headers, body: JSON.stringify(body) });
