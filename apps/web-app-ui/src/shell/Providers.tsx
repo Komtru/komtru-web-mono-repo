@@ -41,9 +41,10 @@ export function Providers({ children }: { children: React.ReactNode }): React.JS
   return (
     <KomtruProviders
       config={{ apiUrl: config.apiUrl, socketUrl: config.socketUrl }}
-      // T-111 resolves the real session in the layout from the refresh cookie. Until the entry
-      // screens exist there is nothing to resolve, and `null` is the honest answer rather than a
-      // placeholder token every query would fail with.
+      // `null` at first paint on purpose. The refresh cookie is scoped to `/api/auth`, so no page can
+      // read it: the first call goes out without a token, gets its 401, and the client refreshes
+      // through the same-origin route handler and retries. The entry screens hand the client the
+      // token directly the moment sign-in or a verified code opens the session (T-111).
       session={null}
       onSessionEnded={onSessionEnded}
     >

@@ -30,6 +30,30 @@ const KEYS = {
 };
 
 const memory = new Map<string, string>();
+const listeners = new Set<() => void>();
+
+/** For `useSyncExternalStore`: every write in this tab re-renders whoever reads a draft. */
+export const subscribeDrafts = (listener: () => void): (() => void) => {
+  listeners.add(listener);
+  return () => {
+    listeners.delete(listener);
+  };
+};
+
+const notify = (): void => {
+  for (const listener of listeners) listener();
+};
+
+/** The stored string itself: a stable snapshot, where a parsed object would be new on every read. */
+const rawOf = (key: string): string | null => {
+  let raw: string | null | undefined;
+  try {
+    raw = storage()?.getItem(key);
+  } catch {
+    raw = undefined;
+  }
+  return raw ?? memory.get(key) ?? null;
+};
 
 const storage = (): Storage | null => {
   try {
@@ -39,14 +63,7 @@ const storage = (): Storage | null => {
   }
 };
 
-const read = <T>(key: string, valid: (value: unknown) => value is T): T | null => {
-  let raw: string | null | undefined;
-  try {
-    raw = storage()?.getItem(key);
-  } catch {
-    raw = undefined;
-  }
-  raw ??= memory.get(key) ?? null;
+const parse = <T>(raw: string | null, valid: (value: unknown) => value is T): T | null => {
   if (raw === null) return null;
   try {
     const value: unknown = JSON.parse(raw);
@@ -64,6 +81,7 @@ const write = (key: string, value: unknown): void => {
   } catch {
     // The in-memory copy carries this tab through the flow.
   }
+  notify();
 };
 
 const remove = (key: string): void => {
@@ -73,6 +91,7 @@ const remove = (key: string): void => {
   } catch {
     // Nothing to clear.
   }
+  notify();
 };
 
 const isObject = (value: unknown): value is Record<string, unknown> =>
@@ -88,28 +107,30 @@ const isSentCode = (value: unknown): value is SentCode =>
   typeof value.delivered === 'boolean' &&
   typeof value.sentAt === 'number';
 
-export const signUpDraft = {
-  read: (): SignUpDraft | null => read(KEYS.signUp, isSignUp),
-  write: (draft: SignUpDraft): void => {
-    write(KEYS.signUp, draft);
-  },
-  clear: (): void => {
-    remove(KEYS.signUp);
-  },
-};
+/** One remembered value: read it, parse a snapshot of it, write it, forget it. */
+export interface DraftStore<T> {
+  read: () => T | null;
+  raw: () => string | null;
+  parse: (raw: string | null) => T | null;
+  write: (value: T) => void;
+  clear: () => void;
+}
 
-const sentCode = (key: string) => ({
-  read: (): SentCode | null => read(key, isSentCode),
-  write: (code: SentCode): void => {
-    write(key, code);
+const store = <T>(key: string, valid: (value: unknown) => value is T): DraftStore<T> => ({
+  read: () => parse(rawOf(key), valid),
+  raw: () => rawOf(key),
+  parse: (raw) => parse(raw, valid),
+  write: (value) => {
+    write(key, value);
   },
-  clear: (): void => {
+  clear: () => {
     remove(key);
   },
 });
 
-export const signUpCode = sentCode(KEYS.signUpCode);
-export const resetCode = sentCode(KEYS.resetCode);
+export const signUpDraft = store(KEYS.signUp, isSignUp);
+export const signUpCode = store(KEYS.signUpCode, isSentCode);
+export const resetCode = store(KEYS.resetCode, isSentCode);
 
 /** Everything the way in remembered, for when it is finished or a different person picks up the phone. */
 export function clearEntryDrafts(): void {
