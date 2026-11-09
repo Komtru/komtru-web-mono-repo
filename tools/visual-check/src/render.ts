@@ -140,12 +140,25 @@ export async function shootBuilt(
     await page.waitForLoadState('networkidle', { timeout: 5_000 }).catch(() => undefined);
     await settle(page, options.injectFonts ?? true);
     if (options.contentSelector === undefined) return { png: await page.screenshot(), ...size };
-    const box = await page.locator(options.contentSelector).first().boundingBox();
+    const locator = page.locator(options.contentSelector).first();
+    const box = await locator.boundingBox();
     if (box === null) throw new Error(`Nothing on ${url} matches --content ${options.contentSelector}`);
+    // A shot that starts below the top needs that much more page under it. A short screen would leave
+    // the clip hanging off the bottom of the document, so the viewport grows to hold it.
+    const needed = Math.ceil(box.y) + size.height;
+    if (needed > size.height) {
+      await page.setViewportSize({ width: size.width, height: needed });
+      await settle(page, false);
+    }
     // Not the box's own width: the compared size is the reference's, and the content may be narrower.
     const png = await page.screenshot({
       fullPage: true,
-      clip: { x: 0, y: Math.max(0, Math.floor(box.y)), width: size.width, height: size.height },
+      clip: {
+        x: 0,
+        y: Math.max(0, Math.floor((await locator.boundingBox())?.y ?? box.y)),
+        width: size.width,
+        height: size.height,
+      },
     });
     return { png, ...size };
   } finally {
