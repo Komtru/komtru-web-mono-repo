@@ -4,7 +4,7 @@ import { act, cleanup, render, screen, waitFor } from '@testing-library/react';
 import { useState } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { RealtimeProvider } from '../../src/react/realtime.js';
-import { isStalePush, PUSH_SKEW_ALLOWANCE_MS, useTradeLive } from '../../src/react/tradeLive.js';
+import { FALLBACK_POLL_MS, useTradeLive } from '../../src/react/tradeLive.js';
 import { tradeKeys } from '../../src/react/trades.js';
 import { fakeSocket } from '../support/fake-socket.js';
 
@@ -259,14 +259,51 @@ describe('a push is a signal to refetch, never data', () => {
     await waitFor(() => expect(screen.getByTestId(`status-${A.id}`).textContent).toBe('FUNDED'));
   });
 
-  it('ignores a push older than the last read, which a redelivery or an out-of-order push would be', async () => {
+  it('reads again for a push whose time is long past, because a read is idempotent and a skipped push can hide a change', async () => {
     const { fake } = await connected();
-    const old = new Date(Date.now() - 10 * PUSH_SKEW_ALLOWANCE_MS).toISOString();
+    server[A.id] = 'SHIPPED';
     act(() => {
-      fake.fire('trade:updated', push({ occurredAt: old }));
+      fake.fire('trade:updated', push({ occurredAt: '2020-01-01T00:00:00.000Z' }));
     });
-    await settle();
-    expect(reads).not.toHaveBeenCalled();
+    await waitFor(() => expect(screen.getByTestId(`status-${A.id}`).textContent).toBe('SHIPPED'));
+  });
+
+  describe.each([
+    ['ten minutes fast', 10 * 60_000],
+    ['ten minutes slow', -10 * 60_000],
+    ['a day fast', 24 * 3_600_000],
+  ])('on a device clock that is %s', (_name, skew) => {
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it('still reads on every push, joins every room on connect, and reads again on reconnect', async () => {
+      // Only the clock is skewed; timers stay real so the screen can settle.
+      vi.useFakeTimers({ toFake: ['Date'], now: Date.now() + skew });
+      const serverNow = () => new Date(Date.now() - skew).toISOString();
+      const { fake } = await connected();
+
+      server[A.id] = 'SHIPPED';
+      act(() => {
+        fake.fire('trade:updated', push({ occurredAt: serverNow() }));
+      });
+      await waitFor(() => expect(screen.getByTestId(`status-${A.id}`).textContent).toBe('SHIPPED'));
+
+      // A second change, a moment after the read just made: the server's time is still before this device's.
+      server[A.id] = 'INSPECTION';
+      act(() => {
+        fake.fire('trade:updated', push({ occurredAt: serverNow(), status: 'INSPECTION' }));
+      });
+      await waitFor(() => expect(screen.getByTestId(`status-${A.id}`).textContent).toBe('INSPECTION'));
+
+      const joined = fake.joins().length;
+      server[A.id] = 'COMPLETED';
+      act(() => {
+        fake.fire('connect');
+      });
+      await waitFor(() => expect(fake.joins()).toHaveLength(joined + 1));
+      await waitFor(() => expect(screen.getByTestId(`status-${A.id}`).textContent).toBe('COMPLETED'));
+    });
   });
 
   it('refetches for a push newer than the last read', async () => {
@@ -320,17 +357,102 @@ describe('a push is a signal to refetch, never data', () => {
   });
 });
 
-describe('isStalePush', () => {
-  const now = Date.now();
-  it('is never stale before anything has been read', () => {
-    expect(isStalePush({ occurredAt: new Date(now - 1e9).toISOString() }, undefined)).toBe(false);
-    expect(isStalePush({ occurredAt: new Date(now - 1e9).toISOString() }, 0)).toBe(false);
+describe('when nothing is pushing the trade to this device', () => {
+  afterEach(() => {
+    vi.useRealTimers();
   });
-  it('is stale only when older than the last read by more than the skew allowance', () => {
-    expect(isStalePush({ occurredAt: new Date(now - PUSH_SKEW_ALLOWANCE_MS - 1).toISOString() }, now)).toBe(
-      true,
-    );
-    expect(isStalePush({ occurredAt: new Date(now - 1000).toISOString() }, now)).toBe(false);
-    expect(isStalePush({ occurredAt: new Date(now + 1000).toISOString() }, now)).toBe(false);
+  const pollRead = async (fake: ReturnType<typeof fakeSocket>, connectIt: boolean, refuse = false) => {
+    server = { [A.id]: 'FUNDED' };
+    if (refuse) fake.answerJoins(() => ({ joined: false, reason: 'FORBIDDEN' }));
+    mount(fake, [A]);
+    await waitFor(() => expect(screen.getByTestId(`status-${A.id}`).textContent).toBe('FUNDED'));
+    if (connectIt) {
+      await connect(fake);
+      await waitFor(() => expect(fake.joins()).toHaveLength(1));
+    }
+    await settle();
+    reads.mockClear();
+  };
+  const tick = async () => {
+    vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
+  };
+
+  it('reads on a timer before the socket has connected, which is also what happens with no socket URL', async () => {
+    const fake = fakeSocket();
+    // Fake timers are installed before mounting so the interval is the fake one.
+    await tick();
+    server = { [A.id]: 'FUNDED' };
+    mount(fake, [A]);
+    await act(async () => {
+      await Promise.resolve();
+    });
+    reads.mockClear();
+    server[A.id] = 'SHIPPED';
+    await act(async () => {
+      vi.advanceTimersByTime(FALLBACK_POLL_MS + 10);
+    });
+    await waitFor(() => expect(reads).toHaveBeenCalledWith(A.id));
+  });
+
+  it('reads on a timer for a room the gateway refused', async () => {
+    await tick();
+    const fake = fakeSocket();
+    server = { [A.id]: 'FUNDED' };
+    fake.answerJoins(() => ({ joined: false, reason: 'FORBIDDEN' }));
+    mount(fake, [A]);
+    // The mount's async connect and the join's answer are settled by hand: fake timers stop `waitFor` polling.
+    await act(async () => {
+      for (let i = 0; i < 10; i += 1) await Promise.resolve();
+    });
+    act(() => {
+      fake.fire('connect');
+    });
+    await act(async () => {
+      for (let i = 0; i < 10; i += 1) await Promise.resolve();
+    });
+    expect(screen.getByTestId('refused').textContent).toBe(A.code);
+    reads.mockClear();
+    await act(async () => {
+      vi.advanceTimersByTime(FALLBACK_POLL_MS + 10);
+    });
+    await act(async () => {
+      for (let i = 0; i < 5; i += 1) await Promise.resolve();
+    });
+    expect(reads).toHaveBeenCalledWith(A.id);
+  });
+
+  it('does not poll while connected and joined: the push channel is doing the work', async () => {
+    await tick();
+    const fake = fakeSocket();
+    await pollRead(fake, true);
+    await act(async () => {
+      vi.advanceTimersByTime(FALLBACK_POLL_MS * 3);
+    });
+    await settle();
+    expect(reads).not.toHaveBeenCalled();
+  });
+
+  it('starts polling again when the connection drops, and stops when it comes back', async () => {
+    await tick();
+    const fake = fakeSocket();
+    await pollRead(fake, true);
+    act(() => {
+      fake.fire('disconnect');
+    });
+    await act(async () => {
+      vi.advanceTimersByTime(FALLBACK_POLL_MS + 10);
+    });
+    await waitFor(() => expect(reads).toHaveBeenCalled());
+    act(() => {
+      fake.fire('connect');
+    });
+    await waitFor(() => expect(fake.joins()).toHaveLength(2));
+    await settle();
+    reads.mockClear();
+    await act(async () => {
+      vi.advanceTimersByTime(FALLBACK_POLL_MS * 3);
+    });
+    await settle();
+    expect(reads).not.toHaveBeenCalled();
   });
 });

@@ -22,6 +22,7 @@ import {
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import {
   createContext,
+  useCallback,
   useContext,
   useEffect,
   useMemo,
@@ -138,6 +139,14 @@ export function KomtruProviders({
     () => client.tokens?.session()?.accessToken ?? '',
     () => '',
   );
+  // The gateway asks for a fresh token when the one it has lapses. The HTTP client refreshes lazily, so a screen
+  // that only listens would never make the request that does it; this is that request.
+  const refreshSocketToken = useCallback(async (): Promise<string | null> => {
+    const tokens = client.tokens;
+    if (tokens === undefined) return null;
+    const next = await tokens.refreshOnce(tokens.read().generation);
+    return next.accessToken;
+  }, [client]);
   const follow = socketToken === undefined && socketFollowsSession;
   const liveToken = socketToken ?? (follow ? heldToken : undefined);
 
@@ -159,6 +168,7 @@ export function KomtruProviders({
         // tree is never remounted when the first token arrives: the provider simply connects then.
         <RealtimeProvider
           token={liveToken}
+          refreshToken={refreshSocketToken}
           url={config.socketUrl}
           {...(resyncQueryKeys ? { resyncQueryKeys } : {})}
           {...(connect ? { connect } : {})}

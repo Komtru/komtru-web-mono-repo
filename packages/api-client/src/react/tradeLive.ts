@@ -7,8 +7,12 @@
 //   * Rooms are lost on every disconnect, and a push the server could not deliver is never replayed. So on EVERY
 //     `connect` (the first and each reconnect) every open trade's room is joined again, and once the join is
 //     answered the trade is refetched: whatever happened while the socket was down is only recoverable that way.
-//   * A push whose `occurredAt` is not after the last completed read of that trade is dropped: it is already in
-//     what is on screen (pushes can be redelivered and can arrive out of order).
+//   * Every push causes a read, whatever its `occurredAt`. An earlier version dropped a push older than the last
+//     read, comparing the SERVER's time with this device's clock; a device a few minutes fast then dropped every
+//     push and the screen silently stopped updating. A read is idempotent and TanStack Query shares one in
+//     flight, so a redelivered or out-of-order push costs at most one extra GET and can never hide a change.
+//   * Where there is no live connection (no socket URL, not connected yet, dropped, or a room refused), the
+//     trade is read on a timer instead, so a screen never depends on a push it will not get.
 import {
   TRADE_ROOM_PREFIX,
   TRADE_UPDATED_EVENT,
@@ -27,25 +31,12 @@ export interface LiveTrade {
   code: string;
 }
 
-/**
- * Server and device clocks disagree. A push is dropped only when it is older than the last read by more than
- * this, so a modest skew costs one redundant refetch and never a missed update. A device clock more than this
- * far ahead of the server can still hide a push; the refetch on every reconnect and the periodic one bound it.
- */
-export const PUSH_SKEW_ALLOWANCE_MS = 60_000;
+/** How often a trade is read while nothing is pushing it to this device. */
+export const FALLBACK_POLL_MS = 30_000;
 
 /** `{ joined: true }` and nothing else is a join. Any other answer, or none, is not. */
 const isJoined = (ack: unknown): boolean =>
   typeof ack === 'object' && ack !== null && (ack as { joined?: unknown }).joined === true;
-
-/** Whether a push is already reflected in what was last read. Pure, so the rule is testable alone. */
-export function isStalePush(
-  update: Pick<TradeUpdate, 'occurredAt'>,
-  lastReadAt: number | undefined,
-): boolean {
-  if (lastReadAt === undefined || lastReadAt === 0) return false;
-  return Date.parse(update.occurredAt) <= lastReadAt - PUSH_SKEW_ALLOWANCE_MS;
-}
 
 /** What is refetched for one trade: its own reads (trade, activity, deadline, inspection) and every list. */
 export function refetchTrade(queryClient: QueryClient, id: string): void {
@@ -54,7 +45,7 @@ export function refetchTrade(queryClient: QueryClient, id: string): void {
 }
 
 export interface TradeLive {
-  /** Codes whose room the gateway refused. The screen still works, by refetching when it is shown. */
+  /** Codes whose room the gateway refused. They are read on a timer instead (see `FALLBACK_POLL_MS`). */
   refused: readonly string[];
 }
 
@@ -118,10 +109,6 @@ export function useTradeLive(trades: readonly LiveTrade[]): TradeLive {
       if (!parsed.success) return;
       const trade = latest.current.find((candidate) => candidate.code === parsed.data.tradeCode);
       if (!trade) return;
-      const read =
-        queryClient.getQueryState(tradeKeys.one(trade.id))?.dataUpdatedAt ??
-        queryClient.getQueryState(tradeKeys.list('ALL'))?.dataUpdatedAt;
-      if (isStalePush(parsed.data, read)) return;
       refetchTrade(queryClient, trade.id);
     };
 
@@ -136,6 +123,19 @@ export function useTradeLive(trades: readonly LiveTrade[]): TradeLive {
       socket.off(TRADE_UPDATED_EVENT, onUpdate);
     };
   }, [socket, rooms, queryClient]);
+
+  // The fallback: read on a timer while the push channel is not delivering. `refused` is a room the gateway
+  // said no to; `connected` is false with no socket URL, before the first connection and after a drop.
+  const polling = !connected || refused.length > 0;
+  useEffect(() => {
+    if (!polling) return undefined;
+    const timer = setInterval(() => {
+      for (const trade of latest.current) refetchTrade(queryClient, trade.id);
+    }, FALLBACK_POLL_MS);
+    return () => {
+      clearInterval(timer);
+    };
+  }, [polling, queryClient]);
 
   return { refused };
 }

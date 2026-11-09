@@ -229,6 +229,78 @@ describe('a token that changes while connected', () => {
     expect(connect).not.toHaveBeenCalled();
 
     view.rerender(tree('minted'));
-    await waitFor(() => expect(connect).toHaveBeenCalledWith('http://socket.test', 'minted'));
+    await waitFor(() =>
+      expect(connect).toHaveBeenCalledWith('http://socket.test', 'minted', expect.any(Function)),
+    );
+  });
+});
+
+describe('a token that lapses on a screen that is only listening', () => {
+  const mount = (refreshToken?: () => Promise<string | null>, token = 'first') => {
+    const fake = fakeRoomSocket();
+    const connect = vi.fn((_url: string, _token: string, _latest?: () => string) => fake.socket);
+    const queryClient = new QueryClient();
+    const tree = (t: string) => (
+      <QueryClientProvider client={queryClient}>
+        <RealtimeProvider
+          token={t}
+          url="http://socket.test"
+          connect={connect}
+          {...(refreshToken ? { refreshToken } : {})}
+        >
+          <ConnectionBadge />
+        </RealtimeProvider>
+      </QueryClientProvider>
+    );
+    const view = render(tree(token));
+    return { fake, connect, rerender: (t: string) => view.rerender(tree(t)) };
+  };
+
+  it('hands the connection a way to read the NEWEST token, so a reconnect does not present the first', async () => {
+    const { fake, connect, rerender } = mount();
+    await waitFor(() => expect(connect).toHaveBeenCalled());
+    const latest = connect.mock.calls[0]![2]!;
+    expect(latest()).toBe('first');
+    rerender('second');
+    expect(latest()).toBe('second');
+    void fake;
+  });
+
+  it('answers the gateway asking for a fresh token by refreshing one and sending it, with no request involved', async () => {
+    const refresh = vi.fn(() => Promise.resolve('fresh'));
+    const { fake } = mount(refresh);
+    await waitFor(() => expect(screen.getByTestId('has-socket').textContent).toBe('yes'));
+    fake.fire('auth:refresh');
+    await waitFor(() => expect(fake.socket.emit).toHaveBeenCalledWith('auth:token', { token: 'fresh' }));
+    expect(refresh).toHaveBeenCalledTimes(1);
+  });
+
+  it('sends the fresh token to a later reconnect too, not the stale one it opened with', async () => {
+    const { fake, connect } = mount(() => Promise.resolve('fresh'));
+    await waitFor(() => expect(connect).toHaveBeenCalled());
+    const latest = connect.mock.calls[0]![2]!;
+    fake.fire('auth:refresh');
+    await waitFor(() => expect(latest()).toBe('fresh'));
+  });
+
+  it.each([
+    ['the session is over', () => Promise.resolve(null)],
+    ['the refresh fails', () => Promise.reject(new Error('offline'))],
+  ])('sends nothing and does not throw when %s', async (_name, refresh) => {
+    const { fake } = mount(refresh);
+    await waitFor(() => expect(screen.getByTestId('has-socket').textContent).toBe('yes'));
+    fake.fire('auth:refresh');
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(fake.socket.emit).not.toHaveBeenCalled();
+  });
+
+  it('does nothing when the app gave no way to refresh', async () => {
+    const { fake } = mount();
+    await waitFor(() => expect(screen.getByTestId('has-socket').textContent).toBe('yes'));
+    expect(() => {
+      fake.fire('auth:refresh');
+    }).not.toThrow();
+    expect(fake.socket.emit).not.toHaveBeenCalled();
   });
 });

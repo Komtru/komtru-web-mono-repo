@@ -1,4 +1,4 @@
-/* eslint-disable @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-assignment -- supertest bodies are untyped in assertions */
+/* eslint-disable @typescript-eslint/no-unsafe-member-access -- supertest bodies are untyped in assertions */
 // A proposal held for review (or turned back, or withdrawn while held) is invisible to the counterparty on EVERY
 // door, not just the list: the read, the code lookup, the actions, the feed, the list and the room. The
 // reviewer found a bound counterparty could read it, see the proposer's address and CANCEL a review in

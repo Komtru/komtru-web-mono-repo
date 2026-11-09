@@ -160,7 +160,7 @@ describe('KomtruProviders', () => {
     const connect = vi.fn().mockResolvedValue(socket);
     renderWith({ socketToken: 'socket-1', connect }, <span>page</span>);
     await waitFor(() => expect(connect).toHaveBeenCalledTimes(1));
-    expect(connect.mock.calls[0]).toEqual(['https://api.komtru.com', 'socket-1']);
+    expect(connect.mock.calls[0]?.slice(0, 2)).toEqual(['https://api.komtru.com', 'socket-1']);
   });
 
   describe('following the session', () => {
@@ -181,7 +181,7 @@ describe('KomtruProviders', () => {
         client!.tokens!.set(session);
       });
       await waitFor(() => expect(connect).toHaveBeenCalledTimes(1));
-      expect(connect.mock.calls[0]).toEqual(['https://api.komtru.com', 'at-1']);
+      expect(connect.mock.calls[0]?.slice(0, 2)).toEqual(['https://api.komtru.com', 'at-1']);
 
       // A later refresh is sent to the gateway on the same connection.
       const forwarded = vi.spyOn(socket, 'emit');
@@ -190,6 +190,38 @@ describe('KomtruProviders', () => {
       });
       await waitFor(() => expect(forwarded).toHaveBeenCalledWith('auth:token', { token: 'at-2' }));
       expect(connect).toHaveBeenCalledTimes(1);
+    });
+
+    it('answers the gateway asking for a new token by refreshing through the client and sending it', async () => {
+      const socket = fakeSocket();
+      const connect = vi.fn().mockResolvedValue(socket);
+      const fresh: AuthSession = { ...session, accessToken: 'at-refreshed' };
+      const fetchMock = vi.fn(() => Promise.resolve(new Response(JSON.stringify(fresh), { status: 200 })));
+      vi.stubGlobal('fetch', fetchMock);
+      try {
+        let client: ReturnType<typeof useApiClient> | undefined;
+        function Probe() {
+          client = useApiClient();
+          return null;
+        }
+        renderWith({ socketFollowsSession: true, connect }, <Probe />);
+        act(() => {
+          client!.tokens!.set(session);
+        });
+        await waitFor(() => expect(connect).toHaveBeenCalledTimes(1));
+        const forwarded = vi.spyOn(socket, 'emit');
+        // A screen that only listens makes no request; the gateway's `auth:refresh` is what must refresh.
+        act(() => {
+          socket.emit('auth:refresh');
+        });
+        await waitFor(() => expect(fetchMock).toHaveBeenCalled());
+        await waitFor(() => expect(forwarded).toHaveBeenCalledWith('auth:token', { token: 'at-refreshed' }));
+        // And a later reconnect presents that token, not the one the socket opened with.
+        const latest = connect.mock.calls[0]![2] as () => string;
+        expect(latest()).toBe('at-refreshed');
+      } finally {
+        vi.unstubAllGlobals();
+      }
     });
 
     it('does not remount the app when the first token arrives', async () => {
@@ -228,7 +260,7 @@ describe('KomtruProviders', () => {
 
       renderWith({ session, socketToken: 'given', socketFollowsSession: true, connect }, <span>page</span>);
       await waitFor(() => expect(connect).toHaveBeenCalledTimes(1));
-      expect(connect.mock.calls[0]).toEqual(['https://api.komtru.com', 'given']);
+      expect(connect.mock.calls[0]?.slice(0, 2)).toEqual(['https://api.komtru.com', 'given']);
     });
   });
 

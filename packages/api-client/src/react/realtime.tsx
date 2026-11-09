@@ -38,19 +38,34 @@ export interface SocketContextValue {
 
 const SocketContext = createContext<SocketContextValue>({ socket: null, connected: false });
 
-export type SocketFactory = (url: string, token: string) => SocketLike | Promise<SocketLike>;
+/**
+ * `token` is the one to connect with; `latestToken` reads the newest at any later time. A connection that
+ * reconnects (after a drop, or a server restart) must present the token that is current THEN, not the one it
+ * first connected with: by then that one has expired, and the reconnect would fail for good.
+ */
+export type SocketFactory = (
+  url: string,
+  token: string,
+  latestToken?: () => string,
+) => SocketLike | Promise<SocketLike>;
 
 /**
  * Imported inside the effect, never at module scope: an app that renders this file on the server
  * (every Next app does, to produce the client reference) must not pull socket.io-client into Node.
  */
-const defaultConnect: SocketFactory = async (url, token) => {
+const defaultConnect: SocketFactory = async (url, token, latestToken) => {
   const { io } = (await import('socket.io-client')) as unknown as {
     io: (url: string, options: unknown) => SocketLike;
   };
-  // `forceNew` because socket.io caches one Manager per URL and only honours `auth` when the socket
-  // is first created: without it, a reminted token would reconnect carrying the expired one.
-  return io(url, { auth: { token }, forceNew: true });
+  // `forceNew` because socket.io caches one Manager per URL and only honours `auth` when the socket is first
+  // created. `auth` is a function, which socket.io calls on EVERY handshake (the first and each reconnect), so
+  // a reconnect carries the newest token and not the one this socket was opened with.
+  return io(url, {
+    auth: (give: (data: { token: string }) => void) => {
+      give({ token: latestToken?.() ?? token });
+    },
+    forceNew: true,
+  });
 };
 
 export interface SocketProviderProps {
@@ -60,6 +75,12 @@ export interface SocketProviderProps {
   /** Invalidated on every reconnect. Omit to invalidate everything, which is the safe default. */
   resyncQueryKeys?: readonly (readonly unknown[])[];
   connect?: SocketFactory;
+  /**
+   * Produces a fresh access token, or `null` when the session is over. Called when the gateway says the
+   * token has lapsed (`auth:refresh`): a screen that is only listening makes no request, so nothing else
+   * would refresh it, and the gateway would revoke the socket. The result is sent back as `auth:token`.
+   */
+  refreshToken?: () => Promise<string | null>;
   children: ReactNode;
 }
 
@@ -68,6 +89,7 @@ export function SocketProvider({
   url,
   resyncQueryKeys,
   connect = defaultConnect,
+  refreshToken,
   children,
 }: SocketProviderProps) {
   const queryClient = useQueryClient();
@@ -83,6 +105,8 @@ export function SocketProvider({
   // it) on each refresh.
   const tokenRef = useRef(token);
   tokenRef.current = token;
+  const refresher = useRef(refreshToken);
+  refresher.current = refreshToken;
   const connectedWith = useRef<string | null>(null);
 
   const target = url ?? process.env.NEXT_PUBLIC_SOCKET_URL;
@@ -95,7 +119,7 @@ export function SocketProvider({
 
     void (async () => {
       const connectedToken = tokenRef.current;
-      const opened = await connect(target, connectedToken);
+      const opened = await connect(target, connectedToken, () => tokenRef.current);
       // Unmounted while the socket.io module was still loading: close it rather than leaking it.
       if (cancelled) {
         opened.disconnect();
@@ -115,6 +139,20 @@ export function SocketProvider({
           }
           for (const queryKey of keys) void queryClient.invalidateQueries({ queryKey });
         },
+      });
+      // "Your token has lapsed; send a fresh one or you will be disconnected." Answer it by refreshing, not by
+      // waiting for some request to do so: an idle screen makes none.
+      connection.on('auth:refresh', () => {
+        const refresh = refresher.current;
+        if (!refresh) return;
+        void refresh()
+          .then((fresh) => {
+            if (fresh === null || fresh === '' || cancelled) return;
+            tokenRef.current = fresh;
+            connectedWith.current = fresh;
+            opened.emit('auth:token', { token: fresh });
+          })
+          .catch(() => undefined);
       });
       setSocket(opened);
     })();

@@ -72,7 +72,7 @@ describe('trade pushes', () => {
       const push = TRADE_PUSHES.find((p) => p.event === tradeStateChangedEvent)!;
       const emitToRoom = vi.fn();
       const payload = tradeStateChangedEvent.payload.parse({
-        ...SAMPLES['trades.trade.state_changed'],
+        ...(SAMPLES['trades.trade.state_changed'] as object),
         from,
         to,
         action,
