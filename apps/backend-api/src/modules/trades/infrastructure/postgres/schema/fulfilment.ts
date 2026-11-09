@@ -9,6 +9,7 @@ import {
   deliveryExtensionReason,
   deliveryExtensionStatus,
   deliverySignalSource,
+  inspectionExtensionStatus,
   tradeActorType,
   tradeDeadlineKind,
   tradeDeadlineStatus,
@@ -147,5 +148,67 @@ export const deliveryExtensionRequests = trade.table(
       .on(table.deadlineId)
       .where(sql`${table.status} = 'PENDING'`),
     index('delivery_extension_trade_idx').on(table.tradeId, table.createdAt.desc().nullsFirst()),
+  ],
+);
+
+/**
+ * BEI1/BEI2: the buyer asks the seller for more inspection time, the seller answers. The deadline row
+ * itself only moves on acceptance; this row is the evidence of who asked, how much, and who agreed.
+ * One row per inspection deadline, ever: a request that was declined or lapsed cannot be repeated,
+ * and two concurrent requests cannot both land. "Once" is enforced here, not only in the service.
+ */
+export const inspectionExtensionRequests = trade.table(
+  'inspection_extension_requests',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    tradeId: uuid('trade_id')
+      .notNull()
+      .references(() => trades.id, { onDelete: 'cascade' }),
+    deadlineId: uuid('deadline_id')
+      .notNull()
+      .references(() => tradeDeadlines.id, { onDelete: 'cascade' }),
+    requestedByUserId: uuid('requested_by_user_id').notNull(),
+    extraHours: integer('extra_hours').notNull(),
+    note: text('note'),
+    /** The deadline as it stood when asked, so the seller's screen shows the same "from". */
+    currentDueAt: timestamp('current_due_at', { withTimezone: true }).notNull(),
+    requestedDueAt: timestamp('requested_due_at', { withTimezone: true }).notNull(),
+    status: inspectionExtensionStatus('status').notNull().default('PENDING'),
+    respondedByUserId: uuid('responded_by_user_id'),
+    respondedAt: timestamp('responded_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    check('inspection_extension_hours_positive', sql`${table.extraHours} > 0`),
+    check('inspection_extension_later', sql`${table.requestedDueAt} > ${table.currentDueAt}`),
+    check(
+      'inspection_extension_answered',
+      sql`(${table.status} IN ('ACCEPTED', 'DECLINED')) = (${table.respondedAt} IS NOT NULL)`,
+    ),
+    uniqueIndex('inspection_extension_once').on(table.deadlineId),
+    index('inspection_extension_trade_idx').on(table.tradeId, table.createdAt.desc().nullsFirst()),
+  ],
+);
+
+/**
+ * Z5's explicit acknowledgement: the buyer was shown that release is final and said so. Append-only
+ * (the trigger in migration 0046), one per trade, and a dispute reads it as evidence. A trade that
+ * auto-completed (AR1) has none, which is the difference between the two routes.
+ */
+export const inspectionAcknowledgements = trade.table(
+  'inspection_acknowledgements',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    tradeId: uuid('trade_id')
+      .notNull()
+      .references(() => trades.id, { onDelete: 'restrict' }),
+    buyerUserId: uuid('buyer_user_id').notNull(),
+    /** Which wording was on screen, so the evidence says what the buyer agreed to. */
+    statementCode: text('statement_code').notNull(),
+    acknowledgedAt: timestamp('acknowledged_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex('inspection_acknowledgements_trade').on(table.tradeId),
+    check('inspection_ack_statement_length', sql`char_length(${table.statementCode}) BETWEEN 1 AND 60`),
   ],
 );

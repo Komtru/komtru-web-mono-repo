@@ -170,3 +170,13 @@ export const deliveryExtensionStatus = trade.enum('delivery_extension_status', [
   // The original date passed with the buyer silent: the request no longer blocks the deadline.
   'LAPSED',
 ]);
+
+/** BEI1/BEI2: the buyer's request for more inspection time and where it stands. */
+export const inspectionExtensionStatus = trade.enum('inspection_extension_status', [
+  'PENDING',
+  'ACCEPTED',
+  'DECLINED',
+  'CANCELLED',
+  // The original window passed with the seller silent: the request no longer holds the trade back.
+  'LAPSED',
+]);
