@@ -519,3 +519,10 @@ VALUE` cannot work here at all (drizzle runs every pending migration in one tran
 - Next: the remaining **Backend done, UI outstanding** features, F-026 (seller fulfilment) and F-027 (deliver,
   inspect, release), both in web-app-ui, so run one at a time or pair one with a console or backend feature.
   F-044 and F-045 wait on their dependencies. Also the full `KOMTRU_INFRA_TESTS=1` run on `main`.
+
+## 2026-11-11 00:23 WAT — run summary
+
+- skipped: budget (5h 83%, week 12%). est≈29 (median of recent feature costs), so 5h + est > 90.
+- Capacity: 0. No in-flight worktrees or branches to resume.
+- Next: unchanged. F-026 or F-027 (Backend done, UI outstanding, both web-app-ui, one at a time), and the full
+  `KOMTRU_INFRA_TESTS=1` run on `main`. The 5-hour window resets at 02:29 WAT.
