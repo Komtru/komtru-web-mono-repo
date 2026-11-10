@@ -62,6 +62,14 @@ describe('the trades module', () => {
     expect(subscription.event.version).toBe(1);
   });
 
+  it('subscribes to the ledger funding escrow, to move the trade to FUNDED (F-024)', async () => {
+    const subscribe = vi.fn();
+    await module().start?.({ events: { subscribe }, logger: testLogger } as never);
+    const subscription = subscribe.mock.calls.find(([s]) => s.name === 'trades.on-escrow-funded')![0];
+    expect(subscription.event.eventType).toBe('ledger.payment.escrow_funded');
+    expect(subscription.event.version).toBe(1);
+  });
+
   it('subscribes to state changes to open the delivery deadline on funding', async () => {
     const subscribe = vi.fn();
     await module().start?.({ events: { subscribe }, logger: testLogger } as never);

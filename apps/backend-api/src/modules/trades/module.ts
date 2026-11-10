@@ -25,8 +25,9 @@ import { deliveryDeadlineJob } from './jobs/deliveryDeadline.job.js';
 import { graceDeadlineJob } from './jobs/graceDeadline.job.js';
 import { inspectionDeadlineJob } from './jobs/inspectionDeadline.job.js';
 import { inspectionReminderJob } from './jobs/inspectionReminder.job.js';
-import { ledgerEscrowReleasedEvent } from './domain/ledgerEvents.js';
+import { ledgerEscrowFundedEvent, ledgerEscrowReleasedEvent } from './domain/ledgerEvents.js';
 import { openDeliveryDeadline } from './services/deadline.service.js';
+import { fundTrade } from './services/funding.service.js';
 import { settleTrade } from './services/inspectionDeadline.service.js';
 import { noDisputes, type InspectionDeps } from './services/inspectionPorts.js';
 import { noLogisticsCompanies, noParkCoverage, type FulfilmentDeps } from './services/fulfilmentPorts.js';
@@ -178,6 +179,27 @@ export function createTradesModule(options: TradesModuleOptions): KomtruModule {
         handler: async ({ payload }, tx) => {
           if (payload.to !== 'FUNDED') return;
           await openDeliveryDeadline(fulfilment, tx, payload.tradeId);
+        },
+      });
+      // F-024: the ledger has escrowed the buyer's payment: PENDING_PAYMENT -> FUNDED, in the event's own
+      // transaction. A trade that ended before the money arrived is reported, not retried: the money is then
+      // for manual review (T-072 decision 8), and a retry cannot fund a cancelled trade.
+      ctx.events.subscribe({
+        name: 'trades.on-escrow-funded',
+        event: ledgerEscrowFundedEvent,
+        handler: async ({ payload }, tx) => {
+          const outcome = await fundTrade(tx, {
+            tradeId: payload.tradeId,
+            paymentAttemptId: payload.paymentAttemptId,
+            journalEntryId: payload.journalEntryId,
+            reference: payload.reference,
+          });
+          if (outcome === 'IGNORED' || outcome === 'UNKNOWN_TRADE') {
+            ctx.logger.warn(
+              { tradeId: payload.tradeId, paymentAttemptId: payload.paymentAttemptId, outcome },
+              'trades: escrow funding not applied; the payment needs review',
+            );
+          }
         },
       });
       // The ledger has released the escrow: COMPLETED -> SETTLED. It runs in the event's own
