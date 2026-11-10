@@ -23,6 +23,7 @@ import {
   Skeleton,
   StatusHero,
 } from '@komtru/ui-kit';
+import { isFundedTradeStatus } from '@komtru/shared-types';
 import { useQueryClient } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
 import { isProblem, naira, nairaShort, partyName, problemMessage, whenLabel } from '../format';
@@ -30,19 +31,9 @@ import { channelsFor, paystackCheckout, type Checkout, type PayMethod } from './
 
 export type { Checkout } from './checkout';
 
-/** Every status a trade can be in once its escrow is funded. */
-const FUNDED_OR_LATER = new Set([
-  'FUNDED',
-  'SHIPPED',
-  'UNCONFIRMED_DELIVERY',
-  'INSPECTION',
-  'DISPUTED',
-  'COMPLETED',
-  'SETTLED',
-  'RESOLVED_REFUNDED',
-  'RESOLVED_RELEASED',
-  'CANCELLED_REFUNDED',
-]);
+/** How often, and how many times, V3 reads the trade again while the platform moves it to FUNDED. */
+export const TRADE_FOLLOW_MS = 3000;
+const TRADE_FOLLOW_LIMIT = 10;
 
 const tradeHref = (id: string) => `/trade/${id}`;
 
@@ -68,10 +59,11 @@ export function FundTrade({
   const view = trade.data;
   const buyer = view?.yourRole === 'BUYER';
   const payable =
-    view !== undefined && (view.status === 'PENDING_PAYMENT' || FUNDED_OR_LATER.has(view.status));
-  const payment = usePaymentStatus(id, buyer && payable);
+    view !== undefined && (view.status === 'PENDING_PAYMENT' || isFundedTradeStatus(view.status));
+  // Read for the buyer whatever the trade's status: money can have arrived for a trade that has since ended.
+  const payment = usePaymentStatus(id, buyer);
 
-  if (trade.isPending || (buyer && payable && payment.isPending)) {
+  if (trade.isPending || (buyer && payment.isPending)) {
     return (
       <Frame title="Fund & Protect" back={tradeHref(id)}>
         <LoadingScreen label="Loading the payment" />
@@ -88,7 +80,6 @@ export function FundTrade({
     );
   }
   if (!buyer) return <NothingToPay id={id} why="Only the buyer pays for a trade." />;
-  if (!payable) return <NothingToPay id={id} why="This trade isn't waiting for payment." />;
   if (payment.isError || payment.data === undefined) {
     return (
       <LoadFailed
@@ -96,6 +87,16 @@ export function FundTrade({
         body={problemMessage(payment.error, 'Check your connection and try again.')}
         onRetry={() => void payment.refetch()}
       />
+    );
+  }
+  if (!payable) {
+    // Money the platform holds for a trade that is no longer waiting for it goes to the team (T-072 decision
+    // 8, F-024's review signal); the buyer is told it is being checked, never that nothing was paid.
+    const held = payment.data.displayState === 'CONFIRMED' || payment.data.displayState === 'UNDER_REVIEW';
+    return held ? (
+      <UnderReview trade={trade.data} />
+    ) : (
+      <NothingToPay id={id} why="This trade isn't waiting for payment." />
     );
   }
   return <Funding trade={trade.data} payment={payment.data} checkout={checkout} via={via} />;
@@ -120,13 +121,22 @@ function Funding({
   const [opened, setOpened] = useState(false);
   const [problem, setProblem] = useState<string | undefined>(undefined);
   const state = payment.displayState;
-  const funded = FUNDED_OR_LATER.has(trade.status);
+  const funded = isFundedTradeStatus(trade.status);
 
-  // The money is held: the trade follows on the platform (PENDING_PAYMENT → FUNDED), so read it again.
+  // The money is held and the platform moves the trade to FUNDED moments later (the trades subscriber to the
+  // ledger's event). Read the trade again until it has, a bounded number of times; the push does the rest.
   useEffect(() => {
-    if (state === 'CONFIRMED' && !funded) {
+    if (state !== 'CONFIRMED' || funded) return undefined;
+    let reads = 0;
+    const timer = setInterval(() => {
+      reads += 1;
+      if (reads > TRADE_FOLLOW_LIMIT) {
+        clearInterval(timer);
+        return;
+      }
       void queryClient.invalidateQueries({ queryKey: tradeKeys.one(trade.id), exact: true });
-    }
+    }, TRADE_FOLLOW_MS);
+    return () => clearInterval(timer);
   }, [state, funded, queryClient, trade.id]);
 
   const onConfirm = () => {
@@ -140,9 +150,13 @@ function Funding({
     checkout
       .open(
         { ...setup, channels: channelsFor(method, setup.channels) },
-        { onSuccess: onConfirm, onClose: () => setOpened(true) },
+        {
+          onSuccess: onConfirm,
+          onClose: () => setOpened(true),
+          onError: () =>
+            setProblem("Paystack couldn't take this payment. Try again, or choose another way to pay."),
+        },
       )
-      .then(() => setOpened(true))
       .catch(() => setProblem("Paystack's checkout didn't open. Check your connection and try again."));
   };
 
@@ -154,8 +168,11 @@ function Funding({
         onSuccess: (answer) => openCheckout(answer.inline),
         onError: (error) => {
           if (isProblem(error, 'CONFLICT')) {
-            // Already paid for: the status says so, and the screen follows it.
+            // Already paid for, or a payment in flight: re-read, and say so in case the status has not moved.
             void queryClient.invalidateQueries({ queryKey: tradeKeys.one(trade.id) });
+            setProblem(
+              "This trade has already been paid for, or a payment is in progress. We've reloaded where it stands.",
+            );
             return;
           }
           setProblem(problemMessage(error, "We couldn't start the payment. Try again."));
@@ -181,7 +198,9 @@ function Funding({
   const busy = initiate.isPending || confirm.isPending;
   const notice = problem === undefined ? null : <RiskBanner>{problem}</RiskBanner>;
 
-  if (state === 'CONFIRMED' || funded) return <Protected trade={trade} payment={payment} />;
+  if (state === 'CONFIRMED' || funded) {
+    return <Protected trade={trade} payment={payment} funded={funded} />;
+  }
   if (state === 'UNDER_REVIEW') return <UnderReview trade={trade} />;
   if (state === 'VERIFYING') return <Verifying trade={trade} />;
   if (state === 'NOT_CONFIRMED') {
@@ -202,7 +221,12 @@ function Funding({
 
   if (step === 'transfer') {
     return (
-      <Frame title="Bank Transfer" back={`${tradeHref(trade.id)}/fund`} backLabel="Back to payment methods">
+      <Frame
+        title="Bank Transfer"
+        back={tradeHref(trade.id)}
+        onBack={() => setStep('choose')}
+        backLabel="Back to payment methods"
+      >
         <div className="mb-[14px] rounded-lg bg-komtru-midnight p-[20px] text-pure-white">
           <p className="mb-[8px] text-[10px] uppercase tracking-[.08em] text-[rgba(255,255,255,.55)]">
             Transfer exactly
@@ -348,17 +372,32 @@ function NotConfirmed({
 }
 
 /** V3: the money is held; the moment that unlocks the seller's dispatch. */
-function Protected({ trade, payment }: { trade: TradeView; payment: PaymentStatus }): React.JSX.Element {
+function Protected({
+  trade,
+  payment,
+  funded,
+}: {
+  trade: TradeView;
+  payment: PaymentStatus;
+  funded: boolean;
+}): React.JSX.Element {
   const attempt = payment.attempt;
   const amount = attempt?.amountMinor ?? trade.fees?.buyerTotalMinor;
   const seller = trade.counterparty ? partyName(trade.counterparty) : 'The seller';
   return (
     <Frame title="Fund & Protect" back={tradeHref(trade.id)}>
       <StatusHero tone="success" as="h2" title="Funds protected" className="pt-[32px]">
-        {amount === undefined ? 'Your payment' : nairaShort(amount)} is now held in escrow. {seller} is told
-        it&apos;s safe to dispatch.
+        {amount === undefined ? 'Your payment' : nairaShort(amount)} is now held in escrow.{' '}
+        {funded
+          ? `${seller} is told it's safe to dispatch.`
+          : `${seller} will be told it's safe to dispatch as soon as the trade updates.`}
       </StatusHero>
-      {attempt !== null && (
+      {payment.displayState === 'UNDER_REVIEW' && (
+        <NoteBanner>
+          Another payment for this trade is being checked by our team. You don&apos;t need to pay again.
+        </NoteBanner>
+      )}
+      {attempt !== null && attempt.displayState === 'CONFIRMED' && (
         <ReadyBanner
           title={attempt.confirmedAt === null ? 'Confirmed' : `Confirmed ${whenLabel(attempt.confirmedAt)}`}
         >
@@ -407,17 +446,24 @@ function NothingToPay({ id, why }: { id: string; why: string }): React.JSX.Eleme
 function Frame({
   title,
   back,
+  onBack,
   backLabel = 'Back to the trade',
   children,
 }: {
   title: string;
   back: string;
+  /** A step back inside this screen (V2 → V1) instead of leaving it. */
+  onBack?: () => void;
   backLabel?: string;
   children: React.ReactNode;
 }): React.JSX.Element {
   return (
     <ScreenColumn>
-      <ScreenHeader title={title} backHref={back} backLabel={backLabel} />
+      {onBack === undefined ? (
+        <ScreenHeader title={title} backHref={back} backLabel={backLabel} />
+      ) : (
+        <ScreenHeader title={title} onBack={onBack} backLabel={backLabel} />
+      )}
       {children}
     </ScreenColumn>
   );

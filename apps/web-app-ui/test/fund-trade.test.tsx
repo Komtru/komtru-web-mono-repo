@@ -4,7 +4,8 @@
 import { ProblemError, type PaystackInline } from '@komtru/api-client';
 import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { FundTrade, type Checkout } from '../src/trade/funding/FundTrade';
+import { PAYMENT_POLL_MS } from '@komtru/api-client/react';
+import { FundTrade, TRADE_FOLLOW_MS, type Checkout } from '../src/trade/funding/FundTrade';
 import { expectNoAxeViolations } from './axe';
 import {
   SHELL_RULES,
@@ -68,7 +69,7 @@ const problem = (code: string, httpStatus: number, detail?: string) =>
 /** A checkout that records what it was opened with and lets the test finish or close it. */
 const fakeCheckout = () => {
   const opened: PaystackInline[] = [];
-  let handlers: { onSuccess: () => void; onClose: () => void } | undefined;
+  let handlers: Parameters<Checkout['open']>[1] | undefined;
   const checkout: Checkout = {
     open: (setup, h) => {
       opened.push(setup);
@@ -81,6 +82,7 @@ const fakeCheckout = () => {
     opened,
     succeed: () => handlers?.onSuccess(),
     close: () => handlers?.onClose(),
+    fail: () => handlers?.onError(),
   };
 };
 
@@ -93,7 +95,7 @@ beforeEach(() => {
 const serve = (
   payment: unknown,
   more: Record<string, unknown> = {},
-  trade = workspaceTrade('PENDING_PAYMENT'),
+  trade: unknown = workspaceTrade('PENDING_PAYMENT'),
 ) =>
   answerWith(api.call, {
     'GET /trades/:id': trade,
@@ -199,13 +201,46 @@ describe('V2: bank transfer', () => {
     expect(await screen.findByText('Confirming your payment')).toBeTruthy();
   });
 
-  it('opens straight on the transfer step from its own address, with a way back to the methods', async () => {
+  it('opens straight on the transfer step from its own address, and steps back to the methods', async () => {
     serve(status('NONE'));
     renderWithApi(api.call, <FundTrade id={id(1)} checkout={fake.checkout} via="transfer" />);
     expect(await screen.findByRole('heading', { level: 1, name: 'Bank Transfer' })).toBeTruthy();
-    expect(screen.getByRole('link', { name: 'Back to payment methods' }).getAttribute('href')).toBe(
-      `/trade/${id(1)}/fund`,
-    );
+    fireEvent.click(screen.getByRole('button', { name: 'Back to payment methods' }));
+    expect(await screen.findByLabelText('What you pay')).toBeTruthy();
+    expect(screen.getByRole('heading', { level: 1, name: 'Fund & Protect' })).toBeTruthy();
+  });
+
+  it('steps back from the transfer step to the methods it came from', async () => {
+    serve(status('NONE'));
+    show();
+    fireEvent.click(await screen.findByLabelText(/Debit card or USSD/));
+    fireEvent.click(screen.getByLabelText(/Bank transfer/));
+    fireEvent.click(screen.getByRole('button', { name: 'Continue with bank transfer' }));
+    expect(await screen.findByRole('heading', { level: 1, name: 'Bank Transfer' })).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Back to payment methods' }));
+    expect(await screen.findByLabelText('What you pay')).toBeTruthy();
+    expect(screen.getByLabelText<HTMLInputElement>(/Bank transfer/).checked).toBe(true);
+  });
+
+  it('says so when Paystack cannot take the payment, and lets the buyer try again', async () => {
+    serve(status('NONE'), { 'POST /trades/:code/payment/initiate': initiated() });
+    show();
+    fireEvent.click(await screen.findByRole('button', { name: 'Continue with bank transfer' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Show account details' }));
+    await waitFor(() => expect(fake.opened).toHaveLength(1));
+    fake.fail();
+    expect(await screen.findByText(/Paystack couldn't take this payment/)).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'I have sent the funds' })).toBeNull();
+    expect(screen.getByRole('button', { name: 'Show account details' })).toBeTruthy();
+  });
+
+  it('says the trade is already being paid for when the platform refuses a second payment', async () => {
+    serve(status('NONE'), { 'POST /trades/:code/payment/initiate': problem('CONFLICT', 409) });
+    show();
+    fireEvent.click(await screen.findByRole('button', { name: 'Continue with bank transfer' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Show account details' }));
+    expect(await screen.findByText(/already been paid for, or a payment is in progress/)).toBeTruthy();
+    expect(fake.opened).toHaveLength(0);
   });
 
   it('never adds a channel the platform did not offer', async () => {
@@ -227,6 +262,26 @@ describe('AB3: verifying', () => {
     expect(within(loader as HTMLElement).getByText(/usually under 30 seconds/)).toBeTruthy();
     expect(screen.queryByRole('button', { name: /pay|transfer/i })).toBeNull();
     await expectNoAxeViolations(container, SHELL_RULES);
+  });
+});
+
+describe('AB3 to V3: polling', () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('asks again while verifying, moves on to V3 once confirmed, then stops asking', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    let answer = 'VERIFYING';
+    serve(() => status(answer));
+    show();
+    expect(await screen.findByText('Confirming your payment')).toBeTruthy();
+    answer = 'CONFIRMED';
+    await vi.advanceTimersByTimeAsync(PAYMENT_POLL_MS + 50);
+    expect(await screen.findByRole('heading', { level: 2, name: 'Funds protected' })).toBeTruthy();
+    const asked = callsTo(api.call, 'GET', '/trades/:code/payment/status').length;
+    await vi.advanceTimersByTimeAsync(PAYMENT_POLL_MS * 3);
+    expect(callsTo(api.call, 'GET', '/trades/:code/payment/status')).toHaveLength(asked);
   });
 });
 
@@ -260,6 +315,31 @@ describe('AB4: not confirmed', () => {
   });
 });
 
+describe('AB4: when the platform refuses', () => {
+  it('shows why checking again failed', async () => {
+    serve(status('NOT_CONFIRMED'), {
+      'POST /trades/:code/payment/confirm': problem('RATE_LIMITED', 429),
+    });
+    show();
+    fireEvent.click(await screen.findByRole('button', { name: "I've sent it — check again" }));
+    expect(await screen.findByText('Too many tries. Wait a minute and try again.')).toBeTruthy();
+  });
+
+  it.each([
+    [
+      'a refusal within the grace period',
+      problem('CONFLICT', 409, 'A payment on this trade may still land.'),
+    ],
+    ['an error', problem('INTERNAL', 500)],
+  ])('stays on AB4 and says why after %s to start again', async (_, refusal) => {
+    serve(status('NOT_CONFIRMED'), { 'POST /trades/:code/payment/initiate': refusal });
+    show();
+    fireEvent.click(await screen.findByRole('button', { name: 'Start the payment again' }));
+    expect(await screen.findByRole('alert')).toBeTruthy();
+    expect(screen.getByRole('heading', { level: 2, name: "We couldn't confirm this payment" })).toBeTruthy();
+  });
+});
+
 describe('V3: funds protected', () => {
   it('confirms the amount held, when, and the reference, and leads back to the trade', async () => {
     serve(status('CONFIRMED'));
@@ -272,6 +352,28 @@ describe('V3: funds protected', () => {
       `/trade/${id(1)}`,
     );
     await expectNoAxeViolations(container, SHELL_RULES);
+  });
+
+  it('keeps reading the trade until the platform has moved it to funded, and then says the seller is told', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    let trade = workspaceTrade('PENDING_PAYMENT');
+    serve(status('CONFIRMED'), {}, () => trade);
+    show();
+    expect(await screen.findByText(/will be told it's safe to dispatch/)).toBeTruthy();
+    trade = workspaceTrade('FUNDED');
+    await vi.advanceTimersByTimeAsync(TRADE_FOLLOW_MS + 50);
+    expect(await screen.findByText(/is told it's safe to dispatch/)).toBeTruthy();
+    const reads = callsTo(api.call, 'GET', '/trades/:id').length;
+    await vi.advanceTimersByTimeAsync(TRADE_FOLLOW_MS * 3);
+    expect(callsTo(api.call, 'GET', '/trades/:id')).toHaveLength(reads);
+    vi.useRealTimers();
+  });
+
+  it('notes a second payment under review on a trade that is already funded', async () => {
+    serve(status('UNDER_REVIEW'), {}, workspaceTrade('FUNDED'));
+    show();
+    expect(await screen.findByRole('heading', { level: 2, name: 'Funds protected' })).toBeTruthy();
+    expect(screen.getByText(/Another payment for this trade is being checked/)).toBeTruthy();
   });
 
   it('is what a trade already funded shows', async () => {
@@ -290,6 +392,28 @@ describe('everything else', () => {
     ).toBeTruthy();
     expect(screen.getByText(/You don't need to pay again/)).toBeTruthy();
     expect(screen.queryByRole('button')).toBeNull();
+  });
+
+  it.each(['CONFIRMED', 'UNDER_REVIEW'])(
+    'holds a trade that ended with a %s payment for review rather than saying it was never paid',
+    async (displayState) => {
+      serve(status(displayState), {}, workspaceTrade('CANCELLED'));
+      show();
+      expect(
+        await screen.findByRole('heading', { level: 2, name: "We're checking this payment" }),
+      ).toBeTruthy();
+      expect(screen.queryByText("This trade isn't waiting for payment.")).toBeNull();
+    },
+  );
+
+  it('says when the payment cannot be read, and reads it again on request', async () => {
+    let fail = true;
+    serve(() => (fail ? new Error('offline') : status('NONE')));
+    show();
+    expect(await screen.findByText("Couldn't read the payment")).toBeTruthy();
+    fail = false;
+    fireEvent.click(screen.getByRole('button', { name: /try again/i }));
+    expect(await screen.findByLabelText('What you pay')).toBeTruthy();
   });
 
   it('does not offer the seller a way to pay, and never asks the platform', async () => {

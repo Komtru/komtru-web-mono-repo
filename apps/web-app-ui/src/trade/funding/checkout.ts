@@ -7,8 +7,10 @@ import type { PaystackInline } from '@komtru/api-client';
 export interface CheckoutHandlers {
   /** Paystack says the payment went through. Only a cue to ask the platform. */
   onSuccess: () => void;
-  /** The buyer closed the checkout, or it failed to start. A transfer may still be on its way. */
+  /** The buyer closed the checkout. A transfer may still be on its way. */
   onClose: () => void;
+  /** Paystack reported an error: nothing was taken, and the buyer is told so and can try again. */
+  onError: () => void;
 }
 
 export interface Checkout {
@@ -52,8 +54,13 @@ function loadInline(): Promise<PaystackPopConstructor> {
     script.async = true;
     script.onload = () => {
       const pop = popFromWindow();
-      if (pop === undefined) reject(new Error('Paystack Inline did not load'));
-      else resolve(pop);
+      if (pop !== undefined) {
+        resolve(pop);
+        return;
+      }
+      // Forget the failed load, so the next tap fetches the script again instead of failing for good.
+      loading = undefined;
+      reject(new Error('Paystack Inline did not load'));
     };
     script.onerror = () => {
       loading = undefined;
@@ -66,7 +73,7 @@ function loadInline(): Promise<PaystackPopConstructor> {
 
 /** Paystack Inline v2, loaded on first use. */
 export const paystackCheckout: Checkout = {
-  open: async (setup, { onSuccess, onClose }) => {
+  open: async (setup, { onSuccess, onClose, onError }) => {
     const PaystackPop = await loadInline();
     new PaystackPop().newTransaction({
       key: setup.key,
@@ -77,7 +84,7 @@ export const paystackCheckout: Checkout = {
       channels: setup.channels,
       onSuccess: () => onSuccess(),
       onCancel: () => onClose(),
-      onError: () => onClose(),
+      onError: () => onError(),
     });
   },
 };
