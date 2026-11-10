@@ -75,6 +75,28 @@ describe('People, the verification queue (OP-05)', () => {
     expect(within(table).getByText('Business registration (CAC)')).toBeTruthy();
   });
 
+  it('keeps loading pages while "Waiting over 24h" is on, so the answer is the whole queue and not the first page', async () => {
+    answerWith(api.call, {
+      'GET /admin/me': staff(VIEWER_ONLY),
+      [`GET ${QUEUE}`]: (input: { query?: Record<string, unknown> }) =>
+        input.query?.page === 2
+          ? {
+              items: [queueItem(8, { verificationType: 'CAC', caseType: 'KYB', submittedAt: HOURS_AGO(30) })],
+              page: 2,
+              limit: 1,
+              total: 2,
+            }
+          : { items: [queueItem(1, { submittedAt: HOURS_AGO(2) })], page: 1, limit: 1, total: 2 },
+    });
+    renderWithQuery(<PeopleQueue />);
+    await screen.findByRole('table', { name: 'Verification queue' });
+    fireEvent.click(screen.getByRole('button', { name: 'Waiting over 24h' }));
+    expect(await screen.findByText('Business registration (CAC)')).toBeTruthy();
+    expect(callsTo(api.call, QUEUE).some(([, input]) => input.query?.page === 2)).toBe(true);
+    const table = screen.getByRole('table', { name: 'Verification queue' });
+    expect(within(table).getAllByRole('row').slice(1)).toHaveLength(1);
+  });
+
   it('loads further pages by page number until the total is reached', async () => {
     answerWith(api.call, {
       'GET /admin/me': staff(VIEWER_ONLY),

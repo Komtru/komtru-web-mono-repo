@@ -11,7 +11,7 @@
 import type { DuplicateFlag, KycQueueItem } from '@komtru/api-client';
 import { Button, Chip, DataTable, EmptyState, FilterBar, Skeleton, type DataColumn } from '@komtru/ui-kit';
 import Link from 'next/link';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { agoLabel } from '../cases/format';
 import { useStaffViewer } from '../shell/viewer';
 import {
@@ -128,7 +128,12 @@ function Queue(): React.JSX.Element {
   const [kind, setKind] = useState<Kind>('all');
   const platformType = kind === 'IDENTITY' || kind === 'KYB' ? kind : undefined;
   const result = useKycQueue(platformType, true);
-  // Over-a-day is a screen filter on what has loaded: the queue has no age filter.
+  // Over-a-day is a screen filter: the queue has no age filter. A filter that only read the first page
+  // would answer "none" while the old ones sat on page two, so it keeps loading until the queue ends.
+  const { hasMore, loadingMore, loadMore } = result;
+  useEffect(() => {
+    if (kind === 'over-a-day' && hasMore && !loadingMore) loadMore();
+  }, [kind, hasMore, loadingMore, loadMore]);
   const now = new Date();
   const rows =
     kind === 'over-a-day'
