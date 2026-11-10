@@ -116,18 +116,6 @@ export function useKycItem(requestId: string, enabled: boolean) {
   });
 }
 
-/** One flag by its request: the flags list is the only read the platform offers, so the item's flag is found in it. */
-export function useFlagForRequest(requestId: string, flagId: string | null, enabled: boolean) {
-  const flags = useDuplicateFlags(enabled && flagId !== null);
-  const flag = flags.rows.find((row) => row.id === flagId || row.requestId === requestId);
-  return {
-    flag,
-    loading: flags.loading && flagId !== null,
-    hasMore: flags.hasMore,
-    loadMore: flags.loadMore,
-  };
-}
-
 /** A staff action in the identity area. After any attempt the lists, the item and the case are stale. */
 export function useKycAction<Vars, Output>(
   run: (client: ReturnType<typeof useApiClient>, vars: Vars) => Promise<Output>,

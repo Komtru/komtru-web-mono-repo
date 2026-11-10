@@ -60,3 +60,25 @@ const FLAG_LABELS: Record<DuplicateFlagStatus, string> = {
 export const flagStatusLabel = (status: DuplicateFlagStatus): string => FLAG_LABELS[status];
 
 export const FLAG_OPEN: readonly DuplicateFlagStatus[] = ['OPEN', 'ESCALATED'];
+
+/** "Due in 3h", "Due in 1d 2h" or "Overdue": the case clock, from the one date the review queue carries. */
+export function dueLabel(slaDueAt: string, now: Date = new Date()): { label: string; overdue: boolean } {
+  const minutes = Math.floor((new Date(slaDueAt).getTime() - now.getTime()) / 60_000);
+  if (minutes <= 0) return { label: 'Overdue', overdue: true };
+  const days = Math.floor(minutes / 1440);
+  const hours = Math.floor((minutes % 1440) / 60);
+  const rest = minutes % 60;
+  if (days > 0) return { label: hours > 0 ? `Due in ${days}d ${hours}h` : `Due in ${days}d`, overdue: false };
+  if (hours > 0)
+    return { label: rest > 0 ? `Due in ${hours}h ${rest}m` : `Due in ${hours}h`, overdue: false };
+  return { label: `Due in ${rest}m`, overdue: false };
+}
+
+/** A fact the owning module wrote, in the words an analyst would use. Anything unlisted is humanised. */
+const FACT_LABELS: Record<string, string> = {
+  verificationType: 'Kind of check',
+  reason: 'Why it needs a person',
+  attemptCount: 'Attempts so far',
+  duplicateIdentity: 'Already verified on another account',
+};
+export const evidenceLabel = (key: string): string => FACT_LABELS[key] ?? humanise(key);

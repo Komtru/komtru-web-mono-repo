@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
+  dueLabel,
+  evidenceLabel,
   flagStatusLabel,
   isBusiness,
   providerResult,
@@ -50,5 +52,19 @@ describe('identity review wording', () => {
   it('words every flag status', () => {
     expect(flagStatusLabel('CLEARED_FALSE_POSITIVE')).toBe('Cleared as a false positive');
     expect(flagStatusLabel('CONFIRMED_DUPLICATE')).toBe('Confirmed duplicate');
+  });
+});
+
+describe('the review clock and evidence wording', () => {
+  it('words the time left, and overdue once it has gone', () => {
+    expect(dueLabel('2026-11-10T15:00:00.000Z', NOW)).toEqual({ label: 'Due in 3h', overdue: false });
+    expect(dueLabel('2026-11-11T14:00:00.000Z', NOW)).toEqual({ label: 'Due in 1d 2h', overdue: false });
+    expect(dueLabel('2026-11-10T12:20:00.000Z', NOW)).toEqual({ label: 'Due in 20m', overdue: false });
+    expect(dueLabel('2026-11-10T11:00:00.000Z', NOW)).toEqual({ label: 'Overdue', overdue: true });
+  });
+
+  it('names the facts the review case carries', () => {
+    expect(evidenceLabel('attemptCount')).toBe('Attempts so far');
+    expect(evidenceLabel('someNewFact')).toBe('Some new fact');
   });
 });
