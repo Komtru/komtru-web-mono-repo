@@ -6,7 +6,8 @@
 //   verification.review    take and decide an item
 //   duplicate_flag.view    the flags
 //   duplicate_flag.resolve resolve one (clearing also needs a dual-approved `VERIFICATION_OVERRIDE`)
-//   verification.override  ask for a clearance; a different holder approves it
+//   verification.override  ask for a clearance; a different holder approves it (the backend's own
+//                          execute route for level overrides is not called from the console)
 //
 // The advisory has one fixed label and is a read. A decision body is the outcome and the analyst's own
 // words: there is no member an advisory could ride in on.
@@ -67,6 +68,33 @@ export const duplicateFlagSchema = z.object({
 });
 export type DuplicateFlag = z.infer<typeof duplicateFlagSchema>;
 
+/**
+ * Why a verification said no. Mirrors the backend's closed taxonomy
+ * (`apps/backend-api/src/modules/trust/domain/rejection.ts`); a test compares the two.
+ */
+export const REJECTION_CODES = [
+  'ID_NOT_FOUND',
+  'ID_NAME_MISMATCH',
+  'ID_DOB_MISMATCH',
+  'ID_IMAGE_UNCLEAR',
+  'LIVENESS_FAILED',
+  'LIVENESS_NO_IDENTIFIER',
+  'CAC_NOT_FOUND',
+  'CAC_INACTIVE',
+  'CAC_OFFICER_MISMATCH',
+  'BANK_ACCOUNT_NOT_FOUND',
+  'BANK_NAME_MISMATCH',
+  'ADDRESS_PROOF_UNREADABLE',
+  'SOCIAL_HANDLE_NOT_FOUND',
+  'SOCIAL_CHALLENGE_NOT_FOUND',
+  'SOCIAL_HANDLE_TAKEN',
+  'PROVIDER_UNAVAILABLE',
+  'DUPLICATE_IDENTITY',
+  'REVIEW_DECLINED',
+  'NEEDS_HUMAN_REVIEW',
+] as const;
+export type RejectionCode = (typeof REJECTION_CODES)[number];
+
 const pageQuery = z.object({
   page: z.int().min(1).optional(),
   limit: z.int().min(1).max(100).optional(),
@@ -119,6 +147,8 @@ export const decideKycItem = defineEndpoint({
       outcome: z.enum(['APPROVE', 'REJECT']),
       reason,
       policyCitation: z.string().trim().min(1).max(200).optional(),
+      /** What the person is told on a rejection. The backend defaults to `REVIEW_DECLINED`. */
+      rejectionCode: z.enum(REJECTION_CODES).optional(),
     }),
     response: z.object({ requestId: z.uuid(), status: z.string() }),
   },
@@ -162,6 +192,40 @@ export const requestVerificationOverride = defineEndpoint({
   schema: {
     body: z.strictObject({ kind: z.literal('CLEAR_DUPLICATE'), flagId: z.uuid(), reason }),
     response: z.object({ approvalId: z.uuid(), expiresAt: iso }),
+  },
+});
+
+export const APPROVAL_STATES = ['PENDING', 'APPROVED', 'EXECUTED', 'REJECTED', 'EXPIRED'] as const;
+export type ApprovalState = (typeof APPROVAL_STATES)[number];
+
+export const approvalSchema = z.object({
+  id: z.uuid(),
+  action: z.string(),
+  state: z.enum(APPROVAL_STATES),
+  subjectUserId: z.uuid(),
+  requestedBy: z.uuid(),
+  approvedBy: z.uuid().nullable(),
+  reason: z.string(),
+  requestedAt: iso,
+  approvedAt: iso.nullable(),
+  executedAt: iso.nullable(),
+  expiresAt: iso,
+  rejectedAt: iso.nullable(),
+});
+export type Approval = z.infer<typeof approvalSchema>;
+
+/**
+ * Two-step actions by state. The backend shows each caller only the approvals for actions whose
+ * permission they hold, and, like every admin read, wants a reason it records in the audit log.
+ */
+export const listApprovals = defineEndpoint({
+  method: 'get',
+  path: '/admin/approvals',
+  scope: 'STAFF',
+  paginated: 'page',
+  schema: {
+    query: pageQuery.extend({ status: z.enum(APPROVAL_STATES).optional(), reason }),
+    response: pagedSchema(approvalSchema),
   },
 });
 

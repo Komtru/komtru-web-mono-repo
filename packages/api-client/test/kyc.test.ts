@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { describe, expect, it, vi } from 'vitest';
 import { createApiClient } from '../src/client.js';
 import {
@@ -5,8 +6,10 @@ import {
   assignKycItem,
   decideKycItem,
   getKycItem,
+  listApprovals,
   listDuplicateFlags,
   listKycQueue,
+  REJECTION_CODES,
   requestVerificationOverride,
   resolveDuplicateFlag,
 } from '../src/kyc.js';
@@ -153,5 +156,49 @@ describe('the KYC review endpoints', () => {
       body: { reason: 'Seen it' },
     });
     expect(out.state).toBe('APPROVED');
+  });
+
+  it('takes a rejection code, and only one the backend knows', () => {
+    const body = decideKycItem.schema.body as NonNullable<typeof decideKycItem.schema.body>;
+    expect(
+      body.safeParse({ outcome: 'REJECT', reason: 'x', rejectionCode: 'ID_NAME_MISMATCH' }).success,
+    ).toBe(true);
+    expect(body.safeParse({ outcome: 'REJECT', reason: 'x', rejectionCode: 'because' }).success).toBe(false);
+  });
+
+  it('keeps its rejection codes in step with the backend taxonomy', () => {
+    const source = readFileSync(
+      new URL('../../../apps/backend-api/src/modules/trust/domain/rejection.ts', import.meta.url),
+      'utf8',
+    );
+    const block = /export const REJECTION_CODES = \[([\s\S]*?)\] as const/.exec(source)?.[1] ?? '';
+    const backend = [...block.matchAll(/^\s*'([A-Z_]+)',/gm)].map((match) => match[1]);
+    expect([...REJECTION_CODES]).toEqual(backend);
+  });
+
+  it('lists approvals by state with the reason the platform audits the read under', async () => {
+    const row = {
+      id: id(9),
+      action: 'VERIFICATION_OVERRIDE',
+      state: 'PENDING',
+      subjectUserId: id(3),
+      requestedBy: id(7),
+      approvedBy: null,
+      reason: 'Two people, one BVN typo',
+      requestedAt: '2026-11-10T08:00:00.000Z',
+      approvedAt: null,
+      executedAt: null,
+      expiresAt: '2026-11-11T08:00:00.000Z',
+      rejectedAt: null,
+    };
+    const { client, urls } = clientFor({ items: [row], page: 1, limit: 50, total: 1 });
+    const page = await client.call(listApprovals, {
+      query: { status: 'PENDING', reason: 'Reviewing a clearance', limit: 50 },
+    });
+    expect(urls[0]).toContain('/admin/approvals?');
+    expect(urls[0]).toContain('status=PENDING');
+    expect(urls[0]).toContain('reason=Reviewing');
+    expect(page.items[0]?.requestedBy).toBe(id(7));
+    expect(listApprovals).toMatchObject({ method: 'get', scope: 'STAFF', paginated: 'page' });
   });
 });
