@@ -31,6 +31,7 @@ Same definition of done as Epic 13, applied to desktop and tablet reference fram
 
 - **Screens (v2):** OP-05, OP-06; KYC queue and duplicate-identity flags use the same case layout
 - **Depends on:** T-141, T-052, T-190
+- **Status:** In progress (2026-11-10), awaiting review and merge. Built as the console half of feature F-051; plan and design notes in `docs/superpowers/plans/2026-11-10-f-051-identity-review.md`, visual-check deviations in `docs/ui-review/T-144/`. Needed a backend addition, `GET /admin/me` (F-051).
 
 ### T-154 — Merchant certification review
 
