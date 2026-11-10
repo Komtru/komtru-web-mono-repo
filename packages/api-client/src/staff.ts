@@ -1,11 +1,9 @@
 // The staff-facing endpoints the TrustOps console (T-140) calls: who the signed-in staff member is,
 // and the staff invitation acceptance that happens before they have a staff session at all.
 //
-// **`getStaffMe` is the client's half of a route the backend does not have yet.** T-037 gave staff
-// sign-in and the permission check, but nothing returns the caller's own roles and permissions, and
-// a console that hides sidebar items by permission has to know them. Until the identity module
-// grows `GET /admin/me`, the console's viewer has no permissions and shows no sections: denying by
-// default is the safe way for a missing route to fail.
+// `getStaffMe` is `GET /admin/me` (F-051): any live STAFF session may read its own id, display name,
+// live roles and effective permission codes. The console hides sidebar items and controls by them; the
+// backend still decides every call.
 //
 // Acceptance and TOTP enrolment are **CONSUMER** routes (T-038, T-031): a staff role is granted to
 // an existing account, and that account proves its address and sets up a second factor as itself,

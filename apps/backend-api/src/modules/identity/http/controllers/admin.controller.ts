@@ -14,6 +14,7 @@ import {
   type ApprovalDeps,
 } from '../../services/approval.service.js';
 import { AUDIT_ACTIONS } from '../../services/audit.service.js';
+import { getStaffMe } from '../../services/staff-me.service.js';
 import { auditStaff, grantRole, revokeRole, type StaffActor } from '../../services/rbac.service.js';
 import {
   changeUserStatus,
@@ -304,4 +305,11 @@ export async function approvalsHandler(
     });
   });
   return result;
+}
+
+/** F-051: the signed-in staff member, their live roles and effective permissions. No reason: it is yourself. */
+export function staffMeHandler(deps: AdminControllerDeps, { actor }: Pick<Ctx, 'actor'>) {
+  const principal = actor.principal;
+  if (principal === null) requireUserId(actor, SIGN_IN);
+  return getStaffMe(deps.db, principal as NonNullable<typeof principal>);
 }

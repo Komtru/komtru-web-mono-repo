@@ -129,10 +129,11 @@ export function useCaseCounts() {
   });
 }
 
-export function useCaseDetail(id: string) {
+export function useCaseDetail(id: string, enabled = true) {
   const client = useApiClient();
   return useQuery({
     queryKey: casesKeys.detail(id),
+    enabled,
     queryFn: ({ signal }) => client.call(getCase, { params: { id } }, { signal }),
   });
 }

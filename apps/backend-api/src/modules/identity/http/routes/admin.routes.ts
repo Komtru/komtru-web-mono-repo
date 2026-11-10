@@ -15,6 +15,7 @@ import {
   revokeAllHandler,
   revokeRoleHandler,
   searchUsersHandler,
+  staffMeHandler,
   statusHandler,
   userDetailHandler,
   type AdminControllerDeps,
@@ -42,6 +43,7 @@ import {
   roleParams,
   searchQuery,
   statusBody,
+  staffMeResponse,
   statusResponse,
   userDetailResponse,
   userIdParams,
@@ -54,6 +56,18 @@ const STAFF_WRITE_BUDGET = { points: 30, durationSeconds: 60, by: ['user' as con
 
 export function adminRoutes(deps: AdminControllerDeps): RouteDefinition[] {
   return [
+    // No permission, on purpose: any live STAFF session may read its own roles and permissions, and
+    // that is how the console learns what to show. Access is still decided per route.
+    defineRoute({
+      method: 'get',
+      path: '/admin/me',
+      scope: 'STAFF',
+      summary: 'The signed-in staff member, their roles and permissions',
+      rateLimit: STAFF_BUDGET,
+      schema: { response: staffMeResponse },
+      handler: ({ actor }) => staffMeHandler(deps, { actor }),
+    }),
+
     defineRoute({
       method: 'get',
       path: '/admin/users',
