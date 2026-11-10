@@ -1,11 +1,13 @@
 // Design §6.2, edge by edge. The machine is the product's safety rail: a jump it allows by accident
 // is money moving at the wrong moment, so every edge is asserted individually rather than by
 // rewriting the map in the test.
+import { FUNDED_TRADE_STATUSES } from '@komtru/shared-types';
 import { describe, expect, it } from 'vitest';
 import {
   TRADE_ACTIONS,
   TRADE_STATUSES,
   TERMINAL_STATUSES,
+  FUNDED_OR_LATER,
   canTransition,
   isTerminal,
   isTransitionAllowed,
@@ -142,5 +144,30 @@ describe('canTransition', () => {
       }
     }
     expect([...seen].sort()).toEqual([...TRADE_STATUSES].sort());
+  });
+});
+
+describe('FUNDED_OR_LATER (F-024)', () => {
+  it('is FUNDED and every status the machine can reach from it, derived rather than listed', () => {
+    expect([...FUNDED_OR_LATER].sort()).toEqual(
+      [
+        'FUNDED',
+        'SHIPPED',
+        'UNCONFIRMED_DELIVERY',
+        'INSPECTION',
+        'COMPLETED',
+        'SETTLED',
+        'DISPUTED',
+        'RESOLVED_REFUNDED',
+        'RESOLVED_RELEASED',
+        'CANCELLED_REFUNDED',
+      ].sort(),
+    );
+    expect(FUNDED_OR_LATER.has('PENDING_PAYMENT')).toBe(false);
+    expect(FUNDED_OR_LATER.has('CANCELLED')).toBe(false);
+  });
+
+  it('is the set clients read from shared-types', () => {
+    expect([...FUNDED_OR_LATER].sort()).toEqual([...FUNDED_TRADE_STATUSES].sort());
   });
 });

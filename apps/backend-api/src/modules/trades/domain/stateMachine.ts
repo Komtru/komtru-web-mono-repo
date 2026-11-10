@@ -91,6 +91,30 @@ export const TERMINAL_STATUSES: readonly TradeStatus[] = TRADE_STATUSES.filter((
 
 export const isTerminal = (status: TradeStatus): boolean => TERMINAL_STATUSES.includes(status);
 
+/** Every status reachable from `start` by any chain of actions, `start` included. */
+const reachableFrom = (start: TradeStatus): ReadonlySet<TradeStatus> => {
+  const seen = new Set<TradeStatus>([start]);
+  const queue: TradeStatus[] = [start];
+  for (let from = queue.shift(); from !== undefined; from = queue.shift()) {
+    for (const action of TRADE_ACTIONS) {
+      for (const to of canTransition(action, from)) {
+        if (!seen.has(to)) {
+          seen.add(to);
+          queue.push(to);
+        }
+      }
+    }
+  }
+  return seen;
+};
+
+/**
+ * F-024: the statuses of a trade that has been paid for — FUNDED and everything the machine can reach from it.
+ * Derived, so a status added after FUNDED is counted without anyone remembering to list it. Clients read the
+ * same set as `FUNDED_TRADE_STATUSES` from shared-types; a test pins the two together.
+ */
+export const FUNDED_OR_LATER: ReadonlySet<TradeStatus> = reachableFrom('FUNDED');
+
 /** Every edge, as (action, from, to) triples — the form the SQL generator and the parity test use. */
 export const transitionTriples = (): [TradeAction, TradeStatus, TradeStatus][] =>
   TRADE_ACTIONS.flatMap((action) =>

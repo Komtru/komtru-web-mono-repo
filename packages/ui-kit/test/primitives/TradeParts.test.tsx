@@ -226,6 +226,14 @@ describe('ScreenHeader', () => {
     expect(screen.getByRole('link', { name: 'Back' }).getAttribute('href')).toBe('/browse');
   });
 
+  it('goes back within the screen when given a handler instead of a place', () => {
+    const onBack = vi.fn();
+    render(<ScreenHeader title="Bank Transfer" onBack={onBack} backLabel="Back to payment methods" />);
+    expect(screen.queryByRole('link')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Back to payment methods' }));
+    expect(onBack).toHaveBeenCalledOnce();
+  });
+
   it('leaves the heading to the hero when asked, and has no link without a place to go', () => {
     render(<ScreenHeader title="Terms agreed" as="p" />);
     expect(screen.queryByRole('heading')).toBeNull();

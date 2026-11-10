@@ -106,9 +106,14 @@ describe('what can be done', () => {
       .map((row) => row.id);
 
   it.each(WORKSPACE_STATUSES.flatMap((status) => ROLES.map((role) => [status, role] as const)))(
-    'offers only what is real for %s as the %s: reading the terms, and withdrawing before payment',
+    'offers only what is real for %s as the %s: reading the terms, funding, and withdrawing before payment',
     (status, role) => {
-      const expected = status === 'PENDING_PAYMENT' ? ['view-terms', 'cancel'] : ['view-terms'];
+      const expected =
+        status !== 'PENDING_PAYMENT'
+          ? ['view-terms']
+          : role === 'BUYER'
+            ? ['view-terms', 'fund', 'cancel']
+            : ['view-terms', 'cancel'];
       expect(live(status, role).sort()).toEqual(expected.sort());
     },
   );
@@ -131,6 +136,10 @@ describe('what can be done', () => {
       tradeActions(status, role, ID).map((row) => row.id);
     expect(ids('PENDING_PAYMENT', 'BUYER')).toContain('fund');
     expect(ids('PENDING_PAYMENT', 'SELLER')).not.toContain('fund');
+    expect(tradeActions('PENDING_PAYMENT', 'BUYER', ID).find((row) => row.id === 'fund')).toMatchObject({
+      availability: 'live',
+      href: `/trade/${ID}/fund`,
+    });
     expect(ids('FUNDED', 'SELLER')).toContain('ship');
     expect(ids('FUNDED', 'BUYER')).not.toContain('ship');
     expect(ids('INSPECTION', 'BUYER')).toEqual(

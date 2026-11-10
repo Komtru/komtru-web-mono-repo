@@ -48,6 +48,7 @@ describe('the trades module surface', () => {
       'sweepInspectionDeadlines',
       'sweepGraceDeadlines',
       'settleTrade',
+      'fundTrade',
       'tradeCompletedEvent',
       'noDisputes',
     ]) {
