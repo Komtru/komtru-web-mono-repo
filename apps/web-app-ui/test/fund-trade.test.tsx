@@ -199,6 +199,15 @@ describe('V2: bank transfer', () => {
     expect(await screen.findByText('Confirming your payment')).toBeTruthy();
   });
 
+  it('opens straight on the transfer step from its own address, with a way back to the methods', async () => {
+    serve(status('NONE'));
+    renderWithApi(api.call, <FundTrade id={id(1)} checkout={fake.checkout} via="transfer" />);
+    expect(await screen.findByRole('heading', { level: 1, name: 'Bank Transfer' })).toBeTruthy();
+    expect(screen.getByRole('link', { name: 'Back to payment methods' }).getAttribute('href')).toBe(
+      `/trade/${id(1)}/fund`,
+    );
+  });
+
   it('never adds a channel the platform did not offer', async () => {
     serve(status('NONE'), { 'POST /trades/:code/payment/initiate': initiated(['card']) });
     show();

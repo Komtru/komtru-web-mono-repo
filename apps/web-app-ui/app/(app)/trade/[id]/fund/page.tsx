@@ -14,17 +14,20 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
  */
 export default async function FundTradePage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>;
+  searchParams: Promise<{ via?: string | string[] }>;
 }): Promise<React.JSX.Element> {
   const { id } = await params;
+  const { via } = await searchParams;
   if (!UUID.test(id)) notFound();
   const viewer = await resolveViewer();
   const mode = await resolveMode(viewer);
 
   return (
     <AppShell tab="trades" viewer={viewer} mode={mode}>
-      <FundTrade id={id} />
+      <FundTrade id={id} {...(via === 'transfer' ? { via } : {})} />
     </AppShell>
   );
 }

@@ -57,9 +57,12 @@ const tradeHref = (id: string) => `/trade/${id}`;
 export function FundTrade({
   id,
   checkout = paystackCheckout,
+  via,
 }: {
   id: string;
   checkout?: Checkout;
+  /** `?via=transfer`: open on V2, the reference's `/fund/transfer`. */
+  via?: 'transfer';
 }): React.JSX.Element {
   const trade = useTrade(id);
   const view = trade.data;
@@ -95,22 +98,24 @@ export function FundTrade({
       />
     );
   }
-  return <Funding trade={trade.data} payment={payment.data} checkout={checkout} />;
+  return <Funding trade={trade.data} payment={payment.data} checkout={checkout} via={via} />;
 }
 
 function Funding({
   trade,
   payment,
   checkout,
+  via,
 }: {
   trade: TradeView;
   payment: PaymentStatus;
   checkout: Checkout;
+  via: 'transfer' | undefined;
 }): React.JSX.Element {
   const queryClient = useQueryClient();
   const initiate = useInitiatePayment(trade.id);
   const confirm = useConfirmPayment(trade.id);
-  const [step, setStep] = useState<'choose' | 'transfer'>('choose');
+  const [step, setStep] = useState<'choose' | 'transfer'>(via ?? 'choose');
   const [method, setMethod] = useState<PayMethod>('transfer');
   const [opened, setOpened] = useState(false);
   const [problem, setProblem] = useState<string | undefined>(undefined);
