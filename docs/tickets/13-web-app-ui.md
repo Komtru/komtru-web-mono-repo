@@ -82,6 +82,7 @@ One app for every consumer with no buyer or seller views (design C22, §6.3), pl
 - **Screens (v2):** V1, V2, V3, AB3, AB4
 - **Depends on:** T-072, T-116, T-110, T-190
 - **Known deviations (pre-approved by design §5):** V1 omits the "Logistics fee" line (C7, Q5); V2 uses Paystack pay-with-transfer (C8, Q6). Fee lines and totals come from the trade's fee snapshot via the API; the app never computes them.
+- **Status:** Done (2026-11-10). Plan: `docs/superpowers/plans/2026-11-10-f-024-fund-escrow.md`. Review: 13 items fixed. Also added the backend `fundTrade` subscriber (PENDING_PAYMENT → FUNDED on `ledger.payment.escrow_funded`), with late, unknown or mismatched funding held for review via `trades.funding.review_required`. Visual-check deviations in `docs/ui-review/T-117/`.
 
 ### T-118 — Delivery, pickup PIN and inspection
 

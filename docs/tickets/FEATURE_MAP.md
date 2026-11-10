@@ -358,10 +358,10 @@ list a trade.
 
 - **Journey:** Fund & protect
 - **Actor:** buyer
-- **Absorbs:** T-072 (done), T-117 (todo)
+- **Absorbs:** T-072 (done), T-117 (done)
 - **Backend scope:** Funding a trade: escrow hold, the Buyer Protection Fee, pay-with-transfer and the funding state transitions. Already built (T-072).
 - **Frontend scope:** Escrow Funding (V1, V2, V3) and its loading and failure states (AB3, AB4). _5 v2 screens._
-- **Status:** Backend done, UI outstanding
+- **Status:** Done
 - **Depends on:** F-022
 - **MVP:** yes
 - **Note:** The clearest case of the problem this document fixes: money can be held in escrow over HTTP today and no one can pay it in.
@@ -1106,7 +1106,7 @@ Every ticket in `docs/tickets/`, in id order, with the feature that absorbs it.
 | T-068 | Trade realtime, notifications and deep links                              | Not started   | F-022   | Not started                  |
 | T-070 | Double-entry ledger core                                                  | Done          | F-009   | Done                         |
 | T-071 | Provider adapter and Paystack                                             | Done          | F-009   | Done                         |
-| T-072 | Funding a trade                                                           | Done          | F-024   | Backend done, UI outstanding |
+| T-072 | Funding a trade                                                           | Done          | F-024   | Done                         |
 | T-073 | Payout accounts, preferences and payouts                                  | Not started   | F-037   | Not started                  |
 | T-074 | Release and settlement                                                    | Done          | F-027   | Backend done, UI outstanding |
 | T-075 | Refunds                                                                   | Not started   | F-030   | Not started                  |
@@ -1139,7 +1139,7 @@ Every ticket in `docs/tickets/`, in id order, with the feature that absorbs it.
 | T-114 | Seller profile and Trust Passport                                         | Not started   | F-016   | Not started                  |
 | T-115 | Create and propose a trade                                                | Not started   | F-017   | Not started                  |
 | T-116 | Buyer trade core and canonical trade detail                               | Not started   | F-022   | Not started                  |
-| T-117 | Escrow funding                                                            | Not started   | F-024   | Backend done, UI outstanding |
+| T-117 | Escrow funding                                                            | Done          | F-024   | Done                         |
 | T-118 | Delivery, pickup PIN and inspection                                       | Not started   | F-027   | Backend done, UI outstanding |
 | T-119 | Cancellation and refunds                                                  | Not started   | F-030   | Not started                  |
 | T-120 | Disputes (buyer and seller)                                               | Not started   | F-032   | Not started                  |

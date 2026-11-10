@@ -7,11 +7,11 @@ behind it is [`BUILD_PLAN.md`](BUILD_PLAN.md). The unit of work is the feature, 
 thing in an app.
 
 ```
-MVP   ██████████························  16/52   (31%)
-Total ███████···························  16/80   (20%)
+MVP   ███████████·······················  17/52   (33%)
+Total ███████···························  17/80   (21%)
 ```
 
-36 MVP features left, 28 deferred past it.
+35 MVP features left, 28 deferred past it.
 
 ## Backend done, UI outstanding
 
@@ -19,7 +19,6 @@ The engine exists and only the UI is missing, so these are the highest-value wor
 
 | Feature | Title                                                  | Journey                  | MVP |
 | ------- | ------------------------------------------------------ | ------------------------ | --- |
-| F-024   | Fund escrow                                            | Fund & protect           | yes |
 | F-026   | Accept, prove, prepare and ship an item                | Fulfil & dispatch        | yes |
 | F-027   | Confirm delivery, inspect, complete and release        | Deliver & inspect        | yes |
 | F-044   | Account basics, addresses, documents and system states | Account, trust & support | yes |
@@ -34,7 +33,7 @@ The engine exists and only the UI is missing, so these are the highest-value wor
 | Home & discover                         | 0    | 2     | 0        | 2         |
 | Propose & agree                         | 1    | 5     | 1        | 3         |
 | The trade workspace                     | 1    | 2     | 1        | 2         |
-| Fund & protect                          | 0    | 2     | 0        | 1         |
+| Fund & protect                          | 1    | 2     | 1        | 1         |
 | Fulfil & dispatch                       | 0    | 1     | 0        | 1         |
 | Deliver & inspect                       | 0    | 3     | 0        | 3         |
 | Issues & resolution                     | 0    | 7     | 0        | 6         |
@@ -63,6 +62,7 @@ The engine exists and only the UI is missing, so these are the highest-value wor
 | F-078   | Definition-of-done audit and first push              | Launch & assurance (not a user journey) | yes |
 | F-014   | Sign in with Google, Apple or Facebook               | Arrive & verify                         |     |
 | F-020   | Verify a phone IMEI before proposing                 | Propose & agree                         |     |
+| F-025   | Top up and pay from a Komtru Wallet                  | Fund & protect                          |     |
 | F-047   | Message the other party                              | Account, trust & support                |     |
 | F-048   | Raise and resolve a support ticket                   | Account, trust & support                |     |
 | F-052   | Fraud signals and restrictions                       | TrustOps console                        |     |
@@ -111,11 +111,11 @@ The same work counted per ticket. Useful for the detail in `docs/tickets/`, not 
 it counts backend and frontend layers separately, which is how the build drifted.
 
 ```
-MVP   ███████████████████···············  62/109  (57%)
-Total █████████████·····················  62/168  (37%)
+MVP   ████████████████████··············  63/109  (58%)
+Total █████████████·····················  63/168  (38%)
 ```
 
-47 MVP tickets left, 59 deferred past it.
+46 MVP tickets left, 59 deferred past it.
 
 ### Tickets in progress
 
@@ -131,7 +131,6 @@ Total █████████████·················�
 | T-073  | Payout accounts, preferences and payouts                                  | yes |
 | T-075  | Refunds                                                                   | yes |
 | T-112  | First-time onboarding                                                     | yes |
-| T-117  | Escrow funding                                                            | yes |
 | T-194  | Trade workspace supporting screens: funding, terms, agreement and payment | yes |
 | T-195  | Trade workspace supporting screens: delivery and evidence                 | yes |
 | T-197  | Proof media: capture, check and compare                                   | yes |
@@ -172,7 +171,6 @@ Total █████████████·················�
 | T-112  | First-time onboarding                                                     | yes |
 | T-113  | Home and discovery                                                        | yes |
 | T-114  | Seller profile and Trust Passport                                         | yes |
-| T-117  | Escrow funding                                                            | yes |
 | T-118  | Delivery, pickup PIN and inspection                                       | yes |
 | T-119  | Cancellation and refunds                                                  | yes |
 | T-120  | Disputes (buyer and seller)                                               | yes |
