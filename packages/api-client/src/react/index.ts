@@ -5,6 +5,7 @@
 export * from './addresses.js';
 export * from './client-context.js';
 export * from './geo.js';
+export * from './payments.js';
 export * from './query.js';
 export * from './realtime.js';
 export * from './tradeLive.js';
