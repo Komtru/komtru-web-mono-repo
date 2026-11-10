@@ -15,6 +15,7 @@ export * from './entry.js';
 export * from './files.js';
 export * from './geo.js';
 export * from './idempotency.js';
+export * from './kyc.js';
 export * from './pagination.js';
 export * from './parties.js';
 export * from './problems.js';
