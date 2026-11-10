@@ -7,11 +7,11 @@ behind it is [`BUILD_PLAN.md`](BUILD_PLAN.md). The unit of work is the feature, 
 thing in an app.
 
 ```
-MVP   ██████████························  15/52   (29%)
-Total ██████····························  15/80   (19%)
+MVP   ██████████························  16/52   (31%)
+Total ███████···························  16/80   (20%)
 ```
 
-37 MVP features left, 28 deferred past it.
+36 MVP features left, 28 deferred past it.
 
 ## Backend done, UI outstanding
 
@@ -24,7 +24,6 @@ The engine exists and only the UI is missing, so these are the highest-value wor
 | F-027   | Confirm delivery, inspect, complete and release        | Deliver & inspect        | yes |
 | F-044   | Account basics, addresses, documents and system states | Account, trust & support | yes |
 | F-045   | Verify yourself, and close or recover an account       | Account, trust & support | yes |
-| F-051   | Review identity and KYC                                | TrustOps console         | yes |
 
 ## By journey
 
@@ -42,7 +41,7 @@ The engine exists and only the UI is missing, so these are the highest-value wor
 | Complete & grow                         | 0    | 3     | 0        | 1         |
 | Sell on Komtru                          | 0    | 4     | 0        | 3         |
 | Account, trust & support                | 0    | 5     | 0        | 3         |
-| TrustOps console                        | 2    | 11    | 2        | 3         |
+| TrustOps console                        | 3    | 11    | 3        | 3         |
 | Park network                            | 0    | 5     | 0        | 0         |
 | Logistics partner                       | 0    | 2     | 0        | 0         |
 | Desktop & tablet journeys               | 0    | 8     | 0        | 6         |
@@ -112,11 +111,11 @@ The same work counted per ticket. Useful for the detail in `docs/tickets/`, not 
 it counts backend and frontend layers separately, which is how the build drifted.
 
 ```
-MVP   ███████████████████···············  61/109  (56%)
-Total ████████████······················  61/168  (36%)
+MVP   ███████████████████···············  62/109  (57%)
+Total █████████████·····················  62/168  (37%)
 ```
 
-48 MVP tickets left, 59 deferred past it.
+47 MVP tickets left, 59 deferred past it.
 
 ### Tickets in progress
 
@@ -133,7 +132,6 @@ Total ████████████···················
 | T-075  | Refunds                                                                   | yes |
 | T-112  | First-time onboarding                                                     | yes |
 | T-117  | Escrow funding                                                            | yes |
-| T-144  | Identity review                                                           | yes |
 | T-194  | Trade workspace supporting screens: funding, terms, agreement and payment | yes |
 | T-195  | Trade workspace supporting screens: delivery and evidence                 | yes |
 | T-197  | Proof media: capture, check and compare                                   | yes |
@@ -184,7 +182,6 @@ Total ████████████···················
 | T-124  | Seller payouts                                                            | yes |
 | T-126  | Trust, account and settings                                               | yes |
 | T-143  | Disputes                                                                  | yes |
-| T-144  | Identity review                                                           | yes |
 | T-154  | Merchant certification review                                             | yes |
 | T-180  | End-to-end critical paths                                                 | yes |
 | T-182  | Security review                                                           | yes |
