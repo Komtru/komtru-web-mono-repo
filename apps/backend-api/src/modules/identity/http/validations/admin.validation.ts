@@ -151,3 +151,14 @@ export const approvalListResponse = pagedSchema(
     rejectedAt: z.date().nullable(),
   }),
 );
+
+export const staffMeResponse = z.object({
+  user: z.object({
+    id: z.uuid(),
+    publicId: z.string(),
+    displayName: z.string().nullable(),
+    username: z.string().nullable(),
+  }),
+  roles: z.array(z.object({ code: z.string(), name: z.string() })),
+  permissions: z.array(z.string()),
+});
