@@ -37,6 +37,27 @@ export const TRADE_STATUSES = [
 export const tradeStatusSchema = z.enum(TRADE_STATUSES);
 export type TradeStatus = z.infer<typeof tradeStatusSchema>;
 
+/**
+ * Every status a trade can be in once its escrow is funded: FUNDED and everything reachable from it. A
+ * trade here has been paid for. The backend derives the same set from its state machine and a test
+ * pins the two together, so a status added to the machine cannot be missed here.
+ */
+export const FUNDED_TRADE_STATUSES = [
+  'FUNDED',
+  'SHIPPED',
+  'UNCONFIRMED_DELIVERY',
+  'INSPECTION',
+  'COMPLETED',
+  'SETTLED',
+  'DISPUTED',
+  'RESOLVED_REFUNDED',
+  'RESOLVED_RELEASED',
+  'CANCELLED_REFUNDED',
+] as const satisfies readonly TradeStatus[];
+
+export const isFundedTradeStatus = (status: string): boolean =>
+  (FUNDED_TRADE_STATUSES as readonly string[]).includes(status);
+
 export const TRADE_ACTIONS = [
   'SEND',
   'CLAIM_INVITATION',

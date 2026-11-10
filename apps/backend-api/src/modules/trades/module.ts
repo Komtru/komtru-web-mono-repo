@@ -182,22 +182,17 @@ export function createTradesModule(options: TradesModuleOptions): KomtruModule {
         },
       });
       // F-024: the ledger has escrowed the buyer's payment: PENDING_PAYMENT -> FUNDED, in the event's own
-      // transaction. A trade that ended before the money arrived is reported, not retried: the money is then
-      // for manual review (T-072 decision 8), and a retry cannot fund a cancelled trade.
+      // transaction. Money the trade will not take is recorded for review inside fundTrade (an outbox event and
+      // an activity row, committed with the claim) and logged here too; a retry cannot fund a cancelled trade.
       ctx.events.subscribe({
         name: 'trades.on-escrow-funded',
         event: ledgerEscrowFundedEvent,
         handler: async ({ payload }, tx) => {
-          const outcome = await fundTrade(tx, {
-            tradeId: payload.tradeId,
-            paymentAttemptId: payload.paymentAttemptId,
-            journalEntryId: payload.journalEntryId,
-            reference: payload.reference,
-          });
-          if (outcome === 'IGNORED' || outcome === 'UNKNOWN_TRADE') {
+          const outcome = await fundTrade(tx, payload);
+          if (outcome !== 'FUNDED' && outcome !== 'ALREADY_FUNDED') {
             ctx.logger.warn(
               { tradeId: payload.tradeId, paymentAttemptId: payload.paymentAttemptId, outcome },
-              'trades: escrow funding not applied; the payment needs review',
+              'trades: escrow funding not applied; held for review',
             );
           }
         },
