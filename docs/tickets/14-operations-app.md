@@ -31,7 +31,7 @@ Same definition of done as Epic 13, applied to desktop and tablet reference fram
 
 - **Screens (v2):** OP-05, OP-06; KYC queue and duplicate-identity flags use the same case layout
 - **Depends on:** T-141, T-052, T-190
-- **Status:** Done (2026-11-10). Plan: `docs/superpowers/plans/2026-11-10-f-051-identity-review.md`. Built as the console half of feature **F-051**. `@komtru/api-client` gained `kyc.ts` (the eight `/admin/kyc/*` routes plus `approveApproval`). OP-05 is `/identity` (verification queue) and `/identity/flags`; OP-06 is `/identity/[requestId]` on the `CaseLayout`, with the advisory as prose that never fills or is sent with the decision. Every control is drawn only for the permission the backend enforces (`verification.view|review`, `duplicate_flag.view|resolve`, `verification.override`, `cases.view|manage`). A flagged request is settled through its flag: confirm, escalate, or clear as three steps (ask, a second person approves, then clear with that approval). The queue carries no names or provider wording (T-050), so "Who" and "Provider result" show the check and the states the queue holds; deviations in `docs/ui-review/T-144/`. Not built: merchant applications (T-154), an approvals inbox (T-150, so the second approver pastes the approval number), and the visual check ran against a fixture API because `GET /admin/me` still does not exist in the backend.
+- **Status:** In progress (2026-11-10), awaiting review and merge. Built as the console half of feature F-051; plan and design notes in `docs/superpowers/plans/2026-11-10-f-051-identity-review.md`, visual-check deviations in `docs/ui-review/T-144/`. Needed a backend addition, `GET /admin/me` (F-051).
 
 ### T-154 — Merchant certification review
 

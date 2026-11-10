@@ -684,10 +684,10 @@ list a trade.
 
 - **Journey:** TrustOps console
 - **Actor:** staff/TrustOps
-- **Absorbs:** T-052 (done), T-144 (done)
+- **Absorbs:** T-052 (done), T-144 (todo)
 - **Backend scope:** Duplicate identity detection and the KYC review queue. Already built (T-052).
 - **Frontend scope:** TrustOps · 02 · People & network identity review, OP-05 and OP-06. _2 v2 screens._
-- **Status:** Done
+- **Status:** Backend done, UI outstanding
 - **Depends on:** none
 - **MVP:** yes
 
@@ -1091,7 +1091,7 @@ Every ticket in `docs/tickets/`, in id order, with the feature that absorbs it.
 | T-049 | Trade Standards by category                                               | Done          | F-017   | Not started                  |
 | T-050 | Verification core: NIN/BVN, liveness, levels                              | Done          | F-045   | Backend done, UI outstanding |
 | T-051 | Business verification, bank name-match, address, social proof             | Done          | F-040   | Not started                  |
-| T-052 | Duplicate identity detection and KYC review queue                         | Done          | F-051   | Done                         |
+| T-052 | Duplicate identity detection and KYC review queue                         | Done          | F-051   | Backend done, UI outstanding |
 | T-055 | Merchant applications and certification                                   | Not started   | F-040   | Not started                  |
 | T-056 | Listings lifecycle, images and stock                                      | Not started   | F-041   | Not started                  |
 | T-057 | Search and discovery (M19)                                                | Not started   | F-015   | Not started                  |
@@ -1158,7 +1158,7 @@ Every ticket in `docs/tickets/`, in id order, with the feature that absorbs it.
 | T-141 | Work queue and universal case                                             | Done          | F-050   | Done                         |
 | T-142 | Trade proposals                                                           | Not started   | F-021   | Not started                  |
 | T-143 | Disputes                                                                  | Not started   | F-035   | Not started                  |
-| T-144 | Identity review                                                           | Done          | F-051   | Done                         |
+| T-144 | Identity review                                                           | Not started   | F-051   | Backend done, UI outstanding |
 | T-145 | Fraud signals and restrictions                                            | Not started   | F-052   | Not started                  |
 | T-146 | Settlement operations                                                     | Not started   | F-053   | Not started                  |
 | T-147 | Park applications, registration and lifecycle                             | Not started   | F-060   | Not started                  |
