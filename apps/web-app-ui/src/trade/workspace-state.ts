@@ -93,6 +93,9 @@ export const tabTitle = (tab: WorkspaceTab): string =>
 export const tabHref = (tradeId: string, tab: WorkspaceTab): string =>
   tab === 'overview' ? `/trade/${tradeId}` : `/trade/${tradeId}/${tab}`;
 
+/** Where the buyer pays into escrow (F-024). Its own route, not a tab: it is a flow, not a view of the trade. */
+export const fundHref = (tradeId: string): string => `/trade/${tradeId}/fund`;
+
 export const tabItems = (tradeId: string) =>
   WORKSPACE_TAB_DEFS.map((tab) => ({ id: tab.id, label: tab.label, href: tabHref(tradeId, tab.id) }));
 
@@ -132,8 +135,8 @@ const FUNDS_HELD: readonly WorkspaceStatus[] = [
  * facts, whichever of the two people is reading, in their own words.
  *
  * Only what is real is `live`: reading the agreed terms and activity, and withdrawing before payment (the
- * platform lets either party cancel an agreed trade nobody has paid for). Everything else names the feature
- * that will own it. SEAM(F-024 funding, F-026 shipping, F-027 inspection, F-030 cancellation after payment,
+ * platform lets either party cancel an agreed trade nobody has paid for), and the buyer's funding (F-024). Everything else names the feature
+ * that will own it. SEAM(F-026 shipping, F-027 inspection, F-030 cancellation after payment,
  * F-032 disputes): turn a `later` row into a `live` one when the flow exists, and nothing else here changes.
  */
 export function tradeActions(status: WorkspaceStatus, role: TradeRole, tradeId: string): TradeActionRow[] {
@@ -154,7 +157,13 @@ export function tradeActions(status: WorkspaceStatus, role: TradeRole, tradeId: 
   switch (status) {
     case 'PENDING_PAYMENT':
       if (buyer)
-        later('fund', 'Fund trade · Buyer', "Paying isn't in the app yet. Nothing has been taken from you.");
+        rows.push({
+          id: 'fund',
+          title: 'Fund trade · Buyer',
+          description: 'Pay into escrow. Komtru holds the money until you confirm delivery.',
+          availability: 'live',
+          href: fundHref(tradeId),
+        });
       break;
     case 'FUNDED':
       if (!buyer) later('ship', 'Ship the item · Seller', "Marking the item shipped isn't in the app yet.");

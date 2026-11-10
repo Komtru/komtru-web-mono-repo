@@ -63,7 +63,7 @@ export function stateCopy(status: WorkspaceStatus, role: TradeRole, ctx: CopyCon
           body: `Version ${String(ctx.version ?? 1)} · accepted by buyer and seller. Payment hasn't been made.`,
         },
         nextStep: buyer
-          ? "The next step is for you to fund the trade. Payment isn't available in the app yet, so there's nothing to do here until it is."
+          ? 'The next step is for you to fund the trade. Komtru holds the money until you confirm delivery.'
           : "The next step is for the buyer to fund the trade. You'll be told when they have.",
       };
     case 'FUNDED':

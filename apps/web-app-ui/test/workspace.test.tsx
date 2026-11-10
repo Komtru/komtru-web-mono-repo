@@ -148,14 +148,32 @@ describe('the tabs are views of the trade, not other screens', () => {
 });
 
 describe('agreed, awaiting funding (CWT-01)', () => {
-  it('keeps the agreement screen and offers no payment control, because funding is a later feature', async () => {
+  it('keeps the agreement screen and leads the buyer to fund the trade (F-024)', async () => {
     serve(workspaceTrade('PENDING_PAYMENT', 'BUYER'));
     show();
     expect(await screen.findByRole('heading', { name: 'Terms agreed' })).toBeTruthy();
     expect(screen.getByText('Awaiting funding')).toBeTruthy();
-    expect(screen.getByText(/Payment isn't available in the app yet/)).toBeTruthy();
-    expect(screen.queryByRole('button', { name: /pay|fund/i })).toBeNull();
+    expect(screen.getByRole('link', { name: 'Fund this trade' }).getAttribute('href')).toBe(
+      `/trade/${id(1)}/fund`,
+    );
+    expect(screen.queryByText(/Payment isn't available in the app yet/)).toBeNull();
+  });
+
+  it('offers the seller no way to pay, only what happens next', async () => {
+    serve(workspaceTrade('PENDING_PAYMENT', 'SELLER'));
+    show();
+    expect(await screen.findByText(/The next step is for the buyer to fund the trade/)).toBeTruthy();
     expect(screen.queryByRole('link', { name: /pay|fund/i })).toBeNull();
+    expect(screen.queryByRole('button', { name: /pay|fund/i })).toBeNull();
+  });
+
+  it('lists funding as a live action for the buyer', async () => {
+    serve(workspaceTrade('PENDING_PAYMENT', 'BUYER'));
+    show('actions');
+    const list = await screen.findByRole('list', { name: 'Actions on this trade' });
+    const fund = within(list).getByRole('link', { name: /Fund trade · Buyer/ });
+    expect(fund.getAttribute('href')).toBe(`/trade/${id(1)}/fund`);
+    expect(within(list).queryByText(/Paying isn't in the app yet/)).toBeNull();
   });
 });
 
