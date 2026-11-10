@@ -64,6 +64,44 @@ const serve = (permissions: string[], it = item(), extra: Record<string, unknown
     ...extra,
   });
 
+const APPROVER = id(901);
+const APPROVAL = id(909);
+
+const approval = (over: Record<string, unknown> = {}) => ({
+  id: APPROVAL,
+  action: 'VERIFICATION_OVERRIDE',
+  state: 'PENDING',
+  subjectUserId: id(301),
+  requestedBy: ME,
+  approvedBy: null,
+  reason: 'Two people, one typo',
+  requestedAt: '2026-11-10T08:00:00.000Z',
+  approvedAt: null,
+  executedAt: null,
+  expiresAt: '2099-11-11T08:00:00.000Z',
+  rejectedAt: null,
+  ...over,
+});
+
+/** `GET /admin/approvals` answers by the state asked for; a state with nothing in it is an empty page. */
+const approvalsFor = (byState: Record<string, unknown[]>) => ({
+  'GET /admin/approvals': (input: { query?: Record<string, unknown> }) => {
+    const items = byState[String(input.query?.status)] ?? [];
+    return { items, page: 1, limit: 50, total: items.length };
+  },
+});
+
+/** The same screen, drawn for someone other than `ME`. */
+const serveAs = (
+  viewerId: string,
+  permissions: string[],
+  it = item(),
+  extra: Record<string, unknown> = {},
+) => {
+  const me = staff(permissions);
+  serve(permissions, it, { 'GET /admin/me': { ...me, user: { ...me.user, id: viewerId } }, ...extra });
+};
+
 const owned = { ownerUserId: ME, state: 'INVESTIGATING' };
 
 beforeEach(() => {
@@ -272,20 +310,14 @@ describe('Verification case with a duplicate flag', () => {
     });
   });
 
-  it('clears a false positive in three steps: ask, a second person approves, then clear with that approval', async () => {
-    const approval = id(900 + 9);
+  it('asks for a second approver, and the person who asked cannot approve their own request', async () => {
     serve([...RESOLVER, 'verification.override'], item(FLAGGED), {
-      [`POST ${OVERRIDES}`]: { approvalId: approval, expiresAt: '2026-11-11T10:00:00.000Z' },
-      [`POST ${APPROVE}`]: { approvalId: approval, action: 'VERIFICATION_OVERRIDE', state: 'APPROVED' },
-      [`POST ${RESOLVE}`]: flagBody,
+      [`POST ${OVERRIDES}`]: { approvalId: APPROVAL, expiresAt: '2099-11-11T10:00:00.000Z' },
+      ...approvalsFor({ PENDING: [approval()] }),
     });
     renderWithQuery(<VerificationCase requestId={REQUEST} />);
     const panel = await screen.findByRole('region', { name: 'Resolve the duplicate flag' });
-    const clear = within(panel).getByRole<HTMLButtonElement>('button', { name: 'Clear the flag' });
-    // No approval, no clearing: the button itself says so.
     fireEvent.change(within(panel).getByLabelText('Reason'), { target: { value: 'Two people, one typo' } });
-    expect(clear.disabled).toBe(true);
-
     fireEvent.click(within(panel).getByRole('button', { name: 'Ask for a second approver' }));
     await waitFor(() => expect(callsTo(api.call, OVERRIDES)).toHaveLength(1));
     expect(callsTo(api.call, OVERRIDES)[0]?.[1].body).toEqual({
@@ -293,23 +325,102 @@ describe('Verification case with a duplicate flag', () => {
       flagId: id(401),
       reason: 'Two people, one typo',
     });
-    expect(await within(panel).findByText(approval)).toBeTruthy();
-    expect(within(panel).getByLabelText<HTMLInputElement>('Approval number').value).toBe(approval);
 
-    fireEvent.click(within(panel).getByRole('button', { name: 'Approve this clearance' }));
+    // The request is listed from the platform, not remembered from a pasted number, and it is theirs.
+    const approvals = await screen.findByRole('region', { name: 'Clearance approvals' });
+    expect(await within(approvals).findByText(/You asked for this/)).toBeTruthy();
+    expect(within(approvals).queryByRole('button', { name: 'Approve this clearance' })).toBeNull();
+    expect(callsTo(api.call, APPROVE)).toHaveLength(0);
+  });
+
+  it('lets a different holder of verification.override approve it, without owning the case or reviewing', async () => {
+    serveAs(APPROVER, ['verification.view', 'duplicate_flag.view', 'verification.override'], item(FLAGGED), {
+      [`POST ${APPROVE}`]: { approvalId: APPROVAL, action: 'VERIFICATION_OVERRIDE', state: 'APPROVED' },
+      ...approvalsFor({ PENDING: [approval()] }),
+    });
+    renderWithQuery(<VerificationCase requestId={REQUEST} />);
+    const approvals = await screen.findByRole('region', { name: 'Clearance approvals' });
+    expect(await within(approvals).findByText('Two people, one typo')).toBeTruthy();
+    const button = within(approvals).getByRole('button', { name: 'Approve this clearance' });
+    expect((button as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.change(within(approvals).getByLabelText('Reason for approving'), {
+      target: { value: 'Checked both accounts' },
+    });
+    fireEvent.click(button);
     await waitFor(() => expect(callsTo(api.call, APPROVE)).toHaveLength(1));
     expect(callsTo(api.call, APPROVE)[0]?.[1]).toMatchObject({
-      params: { approvalId: approval },
-      body: { reason: 'Two people, one typo' },
+      params: { approvalId: APPROVAL },
+      body: { reason: 'Checked both accounts' },
     });
+    // The list is read under a reason the platform audits, for pending and approved clearances alike.
+    const reads = callsTo(api.call, '/admin/approvals').map(([, input]) => input.query);
+    expect(reads.every((query) => typeof query?.reason === 'string' && query.reason !== '')).toBe(true);
+  });
 
+  it('clears the flag with an approved clearance picked from the list, never typed', async () => {
+    serve([...RESOLVER, 'verification.override'], item(FLAGGED), {
+      [`POST ${RESOLVE}`]: flagBody,
+      ...approvalsFor({ APPROVED: [approval({ state: 'APPROVED', approvedBy: APPROVER })] }),
+    });
+    renderWithQuery(<VerificationCase requestId={REQUEST} />);
+    const panel = await screen.findByRole('region', { name: 'Resolve the duplicate flag' });
+    const clear = within(panel).getByRole<HTMLButtonElement>('button', { name: 'Clear the flag' });
+    fireEvent.change(within(panel).getByLabelText('Reason'), { target: { value: 'Two people, one typo' } });
+    expect(clear.disabled).toBe(true);
+    expect(within(panel).queryByLabelText('Approval number')).toBeNull();
+
+    const picker = await within(panel).findByLabelText('Approved clearance');
+    await waitFor(() => expect(within(picker).getAllByRole('option').length).toBeGreaterThan(1));
+    fireEvent.change(picker, { target: { value: APPROVAL } });
     await waitFor(() => expect(clear.disabled).toBe(false));
     fireEvent.click(clear);
     await waitFor(() => expect(callsTo(api.call, RESOLVE)).toHaveLength(1));
     expect(callsTo(api.call, RESOLVE)[0]?.[1].body).toEqual({
       resolution: 'CLEARED_FALSE_POSITIVE',
       reason: 'Two people, one typo',
-      approvalId: approval,
+      approvalId: APPROVAL,
+    });
+  });
+
+  it('offers no approver surface, and never lists approvals, without verification.override', async () => {
+    serve(RESOLVER, item(FLAGGED));
+    renderWithQuery(<VerificationCase requestId={REQUEST} />);
+    await screen.findByRole('region', { name: 'Resolve the duplicate flag' });
+    expect(screen.queryByRole('region', { name: 'Clearance approvals' })).toBeNull();
+    expect(callsTo(api.call, '/admin/approvals')).toHaveLength(0);
+  });
+
+  it('does not offer to escalate a flag that is already escalated, and explains the senior-role refusal', async () => {
+    const refuse = () => {
+      throw Object.assign(Object.create(ProblemError.prototype) as Error, { status: 403 });
+    };
+    serve(RESOLVER, item({ ...FLAGGED, duplicateFlagStatus: 'ESCALATED' }), { [`POST ${RESOLVE}`]: refuse });
+    renderWithQuery(<VerificationCase requestId={REQUEST} />);
+    const panel = await screen.findByRole('region', { name: 'Resolve the duplicate flag' });
+    expect(within(panel).queryByRole('button', { name: 'Escalate' })).toBeNull();
+    fireEvent.change(within(panel).getByLabelText('Reason'), { target: { value: 'Same BVN' } });
+    fireEvent.click(within(panel).getByRole('button', { name: 'Confirm duplicate' }));
+    expect(
+      await screen.findByText(/you escalated this flag.*different reviewer or a senior role/i),
+    ).toBeTruthy();
+  });
+
+  it('sends the rejection code the analyst picks, defaulting to review declined', async () => {
+    serve(ANALYST, item(owned), { [`POST ${DECIDE}`]: { requestId: REQUEST, status: 'REJECTED' } });
+    renderWithQuery(<VerificationCase requestId={REQUEST} />);
+    await screen.findByText(ADVISORY.suggestion);
+    expect(screen.queryByLabelText('What the person is told')).toBeNull();
+    fireEvent.click(screen.getByRole('radio', { name: /Reject/ }));
+    const picker = screen.getByLabelText<HTMLSelectElement>('What the person is told');
+    expect(picker.value).toBe('REVIEW_DECLINED');
+    fireEvent.change(picker, { target: { value: 'ID_NAME_MISMATCH' } });
+    fireEvent.change(screen.getByLabelText('Reason'), { target: { value: 'Name differs' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Record decision' }));
+    await waitFor(() => expect(callsTo(api.call, DECIDE)).toHaveLength(1));
+    expect(callsTo(api.call, DECIDE)[0]?.[1].body).toEqual({
+      outcome: 'REJECT',
+      reason: 'Name differs',
+      rejectionCode: 'ID_NAME_MISMATCH',
     });
   });
 
@@ -329,9 +440,10 @@ describe('Verification case with a duplicate flag', () => {
   });
 
   it('has no axe violations', async () => {
-    serve([...RESOLVER, 'verification.override'], item(FLAGGED));
+    serve([...RESOLVER, 'verification.override'], item(FLAGGED), approvalsFor({ PENDING: [approval()] }));
     const { container } = renderWithQuery(<VerificationCase requestId={REQUEST} />);
     await screen.findByRole('region', { name: 'Resolve the duplicate flag' });
+    await screen.findByText(/You asked for this/);
     await expectNoAxeViolations(container, SHELL_RULES);
   });
 });

@@ -9,13 +9,17 @@ import {
   assignKycItem,
   decideKycItem,
   getKycItem,
+  listApprovals,
   listDuplicateFlags,
   listKycQueue,
   requestVerificationOverride,
   resolveDuplicateFlag,
+  type Approval,
+  type ApprovalState,
   type DuplicateFlag,
   type DuplicateFlagStatus,
   type KycQueueItem,
+  type RejectionCode,
 } from '@komtru/api-client';
 import { useApiClient } from '@komtru/app-kit/react';
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -28,6 +32,7 @@ export const kycKeys = {
   queue: (type: 'IDENTITY' | 'KYB' | undefined) => ['kyc', 'queue', type ?? 'all'] as const,
   flags: (status: DuplicateFlagStatus | undefined) => ['kyc', 'flags', status ?? 'all'] as const,
   item: (requestId: string) => ['kyc', 'item', requestId] as const,
+  approvals: (state: ApprovalState, userId: string) => ['kyc', 'approvals', state, userId] as const,
 };
 
 export interface PagedResult<T> {
@@ -116,6 +121,35 @@ export function useKycItem(requestId: string, enabled: boolean) {
   });
 }
 
+/**
+ * The clearances for one user's flag, by state, read from the platform. The platform shows a caller
+ * only the approvals for actions whose permission they hold, and records why they looked, so the
+ * reason is the case the person is reading. A clearance is a `VERIFICATION_OVERRIDE` on the user
+ * whose request the flag holds, and has not run out.
+ */
+export function useClearances(state: ApprovalState, userId: string, caseNumber: string, enabled: boolean) {
+  const client = useApiClient();
+  return useQuery({
+    queryKey: kycKeys.approvals(state, userId),
+    enabled,
+    queryFn: async ({ signal }): Promise<Approval[]> => {
+      const page = await client.call(
+        listApprovals,
+        { query: { status: state, reason: `Reviewing duplicate-identity case ${caseNumber}`, limit: PAGE } },
+        { signal },
+      );
+      const now = Date.now();
+      return page.items.filter(
+        (row) =>
+          row.action === 'VERIFICATION_OVERRIDE' &&
+          row.subjectUserId === userId &&
+          new Date(row.expiresAt).getTime() > now,
+      );
+    },
+    refetchInterval: REFRESH_MS,
+  });
+}
+
 /** A staff action in the identity area. After any attempt the lists, the item and the case are stale. */
 export function useKycAction<Vars, Output>(
   run: (client: ReturnType<typeof useApiClient>, vars: Vars) => Promise<Output>,
@@ -137,7 +171,13 @@ export const kycCalls = {
     client.call(assignKycItem, { params: { requestId }, body: {} }),
   decide: (
     client: ReturnType<typeof useApiClient>,
-    vars: { requestId: string; outcome: 'APPROVE' | 'REJECT'; reason: string; policyCitation?: string },
+    vars: {
+      requestId: string;
+      outcome: 'APPROVE' | 'REJECT';
+      reason: string;
+      policyCitation?: string;
+      rejectionCode?: RejectionCode;
+    },
   ) =>
     client.call(decideKycItem, {
       params: { requestId: vars.requestId },
@@ -145,6 +185,7 @@ export const kycCalls = {
         outcome: vars.outcome,
         reason: vars.reason,
         ...(vars.policyCitation === undefined ? {} : { policyCitation: vars.policyCitation }),
+        ...(vars.rejectionCode === undefined ? {} : { rejectionCode: vars.rejectionCode }),
       },
     }),
   resolve: (

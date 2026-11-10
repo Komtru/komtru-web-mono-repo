@@ -17,7 +17,10 @@
 // own wording, the document images and the applicant's history. Each is held out of the review
 // queue on purpose (T-050, D1) or belongs to a later ticket (merchant documents are T-154).
 import {
+  ProblemError,
+  REJECTION_CODES,
   reassignCase,
+  type RejectionCode,
   type CaseDetail as CaseDetailData,
   type CaseTrailEntry,
   type KycQueueDetail,
@@ -32,6 +35,7 @@ import {
   EmptyState,
   Field,
   OptionCard,
+  Select,
   Skeleton,
   TextField,
   TrustTrail,
@@ -44,12 +48,16 @@ import { useCaseAction, useCaseDetail, useCaseTrail } from '../cases/hooks';
 import { failureMessage, humanise, ownerLabel, priorityLabel, trailLabel, whenLabel } from '../cases/format';
 import { useStaffViewer } from '../shell/viewer';
 import { dueLabel, evidenceLabel, isBusiness, shortUser, verificationLabel } from './format';
-import { kycCalls, useKycAction, useKycItem } from './hooks';
+import { kycCalls, useClearances, useKycAction, useKycItem } from './hooks';
 import { IdentityFrame } from './shared';
 
 const PANEL = 'mb-[16px] rounded-lg border border-solid border-border-hairline bg-surface-elevated p-[20px]';
 const SMALL = 'w-auto!';
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const DEFAULT_REJECTION: RejectionCode = 'REVIEW_DECLINED';
+/** A duplicate is settled through its flag, and "needs a person" is not a rejection. */
+const OFFERED_REJECTIONS = REJECTION_CODES.filter(
+  (code) => code !== 'DUPLICATE_IDENTITY' && code !== 'NEEDS_HUMAN_REVIEW',
+);
 
 const present = (value: string): boolean => value.trim() !== '';
 
@@ -278,6 +286,7 @@ function Ownership({
 function DecisionForm({ item }: { item: KycQueueDetail }): React.JSX.Element {
   const [outcome, setOutcome] = useState<'APPROVE' | 'REJECT' | null>(null);
   const [reason, setReason] = useState('');
+  const [code, setCode] = useState<RejectionCode>(DEFAULT_REJECTION);
   const decide = useKycAction(kycCalls.decide);
   const complete = outcome !== null && present(reason);
   return (
@@ -305,13 +314,26 @@ function DecisionForm({ item }: { item: KycQueueDetail }): React.JSX.Element {
           >
             Reject
           </OptionCard>
+          {outcome === 'REJECT' && (
+            <Select
+              label="What the person is told"
+              value={code}
+              onChange={(event) => setCode(event.target.value as RejectionCode)}
+              options={OFFERED_REJECTIONS.map((value) => ({ value, label: humanise(value) }))}
+            />
+          )}
           <TextArea label="Reason" value={reason} onChange={setReason} />
           <Button
             type="button"
             disabled={!complete || decide.isPending}
             onClick={() => {
               if (outcome !== null) {
-                decide.mutate({ requestId: item.requestId, outcome, reason: reason.trim() });
+                decide.mutate({
+                  requestId: item.requestId,
+                  outcome,
+                  reason: reason.trim(),
+                  ...(outcome === 'REJECT' && code !== DEFAULT_REJECTION ? { rejectionCode: code } : {}),
+                });
               }
             }}
           >
@@ -333,15 +355,16 @@ function FlagResolution({
 }): React.JSX.Element | null {
   const flagId = item.duplicateFlagId;
   const [reason, setReason] = useState('');
-  const [approval, setApproval] = useState('');
+  const [approvalId, setApprovalId] = useState('');
   const resolve = useKycAction(kycCalls.resolve);
   const ask = useKycAction(kycCalls.askClearance);
-  const approve = useKycAction(kycCalls.approve);
+  const approved = useClearances('APPROVED', item.userId, item.caseNumber, canOverride && flagId !== null);
   if (flagId === null) return null;
 
-  const approvalOk = UUID.test(approval.trim());
-  const busy = resolve.isPending || ask.isPending || approve.isPending;
-  const clearance = ask.data?.approvalId;
+  const busy = resolve.isPending || ask.isPending;
+  const usable = approved.data ?? [];
+  const escalated = item.duplicateFlagStatus === 'ESCALATED';
+  const refused = resolve.error instanceof ProblemError && resolve.error.status === 403;
 
   return (
     <DecisionPanel
@@ -362,80 +385,167 @@ function FlagResolution({
             >
               Confirm duplicate
             </Button>
-            <Button
-              type="button"
-              variant="secondary"
-              disabled={!present(reason) || busy}
-              onClick={() => resolve.mutate({ flagId, resolution: 'ESCALATED', reason: reason.trim() })}
-              className={SMALL}
-            >
-              Escalate
-            </Button>
-          </div>
-
-          <div className="mt-[8px] grid gap-[8px] border-t border-solid border-border-hairline pt-[12px]">
-            <b className="text-[12.5px]">Clear as a false positive</b>
-            {canOverride && (
+            {!escalated && (
               <Button
                 type="button"
                 variant="secondary"
                 disabled={!present(reason) || busy}
-                onClick={() =>
-                  ask.mutate(
-                    { flagId, reason: reason.trim() },
-                    { onSuccess: (result) => setApproval(result.approvalId) },
-                  )
-                }
+                onClick={() => resolve.mutate({ flagId, resolution: 'ESCALATED', reason: reason.trim() })}
                 className={SMALL}
               >
-                Ask for a second approver
+                Escalate
               </Button>
             )}
-            {clearance !== undefined && (
-              <p className="text-[12px] text-slate">
-                Approval <span className="font-mono">{clearance}</span> is waiting for a second person to
-                approve it, until {whenLabel(ask.data?.expiresAt ?? '')}.
-              </p>
-            )}
-            <TextField
-              label="Approval number"
-              value={approval}
-              maxLength={36}
-              onChange={(event) => setApproval(event.target.value)}
-            />
-            {canOverride && (
-              <Button
-                type="button"
-                variant="secondary"
-                disabled={!approvalOk || !present(reason) || busy}
-                onClick={() => approve.mutate({ approvalId: approval.trim(), reason: reason.trim() })}
-                className={SMALL}
-              >
-                Approve this clearance
-              </Button>
-            )}
-            <Button
-              type="button"
-              disabled={!approvalOk || !present(reason) || busy}
-              onClick={() =>
-                resolve.mutate({
-                  flagId,
-                  resolution: 'CLEARED_FALSE_POSITIVE',
-                  reason: reason.trim(),
-                  approvalId: approval.trim(),
-                })
-              }
-              className={SMALL}
-            >
-              Clear the flag
-            </Button>
           </div>
-          <ErrorLine error={resolve.error} what="resolve the flag" />
+
+          <div className="mt-[8px] grid gap-[8px] border-t border-solid border-border-hairline pt-[12px]">
+            <b className="text-[12.5px]">Clear as a false positive</b>
+            {!canOverride ? (
+              <p className="text-[12px] text-slate">
+                Clearing needs a second approver, and asking for one needs the verification override
+                permission, which your role does not include.
+              </p>
+            ) : (
+              <>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  disabled={!present(reason) || busy}
+                  onClick={() => ask.mutate({ flagId, reason: reason.trim() })}
+                  className={SMALL}
+                >
+                  Ask for a second approver
+                </Button>
+                {ask.data !== undefined && (
+                  <p className="text-[12px] text-slate">
+                    Asked. A different holder approves it under “Clearance approvals”; then it appears below
+                    to clear the flag with.
+                  </p>
+                )}
+                <Select
+                  label="Approved clearance"
+                  value={approvalId}
+                  onChange={(event) => setApprovalId(event.target.value)}
+                  options={[
+                    {
+                      value: '',
+                      label: usable.length === 0 ? 'None approved yet' : 'Choose an approved clearance',
+                    },
+                    ...usable.map((row) => ({
+                      value: row.id,
+                      label: `${row.reason} (approved ${row.approvedAt === null ? '' : whenLabel(row.approvedAt)})`,
+                    })),
+                  ]}
+                />
+                <Button
+                  type="button"
+                  disabled={approvalId === '' || !present(reason) || busy}
+                  onClick={() =>
+                    resolve.mutate({
+                      flagId,
+                      resolution: 'CLEARED_FALSE_POSITIVE',
+                      reason: reason.trim(),
+                      approvalId,
+                    })
+                  }
+                  className={SMALL}
+                >
+                  Clear the flag
+                </Button>
+              </>
+            )}
+          </div>
+          {refused && escalated ? (
+            <Banner tone="risk" className="mt-[10px]">
+              You escalated this flag, so a different reviewer or a senior role must resolve it. Reassign the
+              case to them.
+            </Banner>
+          ) : (
+            <ErrorLine error={resolve.error} what="resolve the flag" />
+          )}
           <ErrorLine error={ask.error} what="ask for a second approver" />
-          <ErrorLine error={approve.error} what="approve that clearance" />
         </>
       }
     />
+  );
+}
+
+/**
+ * The second half of a clearance, for anyone holding `verification.override` on a flagged case, owner
+ * or not. The requests come from the platform's own list, so nobody pastes an id and a second person
+ * sees what they are being asked to approve. The backend refuses self-approval (T-037); the screen
+ * says so rather than offering a button that can only fail.
+ */
+function ClearanceApprovals({
+  item,
+  viewerId,
+}: {
+  item: KycQueueDetail;
+  viewerId: string | undefined;
+}): React.JSX.Element {
+  const [reason, setReason] = useState('');
+  const pending = useClearances('PENDING', item.userId, item.caseNumber, true);
+  const approve = useKycAction(kycCalls.approve);
+  const rows = pending.data ?? [];
+
+  return (
+    <Panel heading="Clearance approvals">
+      {pending.isError ? (
+        <p className="text-[12px] text-slate">
+          The clearance requests did not load. Reload the page to try again.
+        </p>
+      ) : pending.isPending ? (
+        <p role="status" className="text-[12px] text-slate">
+          Loading the clearance requests…
+        </p>
+      ) : rows.length === 0 ? (
+        <p className="text-[12px] text-slate">
+          Nobody is waiting on a second approver for this flag. A clearance asked for by a colleague appears
+          here for you to approve.
+        </p>
+      ) : (
+        <>
+          <ul className="m-0 mb-[12px] list-none p-0">
+            {rows.map((row) => (
+              <li
+                key={row.id}
+                className="border-b border-solid border-border-hairline py-[10px] text-[12.5px] last:border-b-0"
+              >
+                <b className="block">{row.reason}</b>
+                <span className="text-[11px] text-slate">
+                  Asked by {ownerLabel(row.requestedBy, viewerId)} · {whenLabel(row.requestedAt)} · expires{' '}
+                  {whenLabel(row.expiresAt)}
+                </span>
+                {row.requestedBy === viewerId ? (
+                  <p className="mt-[6px] text-[12px] text-slate">
+                    You asked for this. A different holder must approve it.
+                  </p>
+                ) : (
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    disabled={!present(reason) || approve.isPending}
+                    onClick={() => approve.mutate({ approvalId: row.id, reason: reason.trim() })}
+                    className={`${SMALL} mt-[8px]`}
+                  >
+                    Approve this clearance
+                  </Button>
+                )}
+              </li>
+            ))}
+          </ul>
+          {rows.some((row) => row.requestedBy !== viewerId) && (
+            <TextField
+              label="Reason for approving"
+              value={reason}
+              maxLength={1000}
+              onChange={(event) => setReason(event.target.value)}
+            />
+          )}
+        </>
+      )}
+      <ErrorLine error={approve.error} what="approve that clearance" />
+    </Panel>
   );
 }
 
@@ -582,17 +692,22 @@ export function VerificationCase({ requestId }: { requestId: string }): React.JS
           </>
         }
         decision={
-          <Decision
-            item={item}
-            detail={caseData}
-            viewerId={viewerId}
-            can={{
-              review: permissions.has('verification.review'),
-              resolve: permissions.has('duplicate_flag.resolve'),
-              override: permissions.has('verification.override'),
-              manage: permissions.has('cases.manage'),
-            }}
-          />
+          <>
+            <Decision
+              item={item}
+              detail={caseData}
+              viewerId={viewerId}
+              can={{
+                review: permissions.has('verification.review'),
+                resolve: permissions.has('duplicate_flag.resolve'),
+                override: permissions.has('verification.override'),
+                manage: permissions.has('cases.manage'),
+              }}
+            />
+            {permissions.has('verification.override') &&
+              (item.duplicateFlagStatus === 'OPEN' || item.duplicateFlagStatus === 'ESCALATED') &&
+              !finished && <ClearanceApprovals item={item} viewerId={viewerId} />}
+          </>
         }
       />
     );
