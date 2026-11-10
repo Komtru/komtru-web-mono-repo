@@ -110,6 +110,20 @@ cost and to find work to resume.
 - Q3 (wallet) still blocks T-131.
 - ~~Disputes in the MVP?~~ Answered 2026-11-06: yes. T-120, T-196, T-199, T-200 and the new T-221 are in the MVP.
 
+- **F-051 identity review console** (merged 2026-11-10; details in `docs/superpowers/plans/2026-11-10-f-051-identity-review.md`):
+  - Which role should hold `verification.override`, so it can approve duplicate-flag clearances? The console offers
+    "Approve this clearance" to any holder, and the backend enforces it.
+  - Should the KYC decide route have a "request more information" outcome? Today it takes only approve or reject,
+    so analysts ask for evidence on the universal case instead.
+- **F-024 escrow funding** (merged 2026-11-10; details in `docs/superpowers/plans/2026-11-10-f-024-fund-escrow.md`):
+  - Money that lands on a cancelled, expired, unknown or amount-mismatched trade is not refunded. It publishes
+    `trades.funding.review_required` and writes an internal activity row, but nothing consumes the event yet.
+    Should it open a case automatically, and should T-076 reconciliation own it?
+  - The reference has no drawing for a payment under review. It is built as a plain "We're checking this payment"
+    screen. Should design draw it?
+  - Should the trade view return the Buyer Protection Fee rate, so V1 can print "(1.5%)" as drawn? Today it shows
+    only the amount.
+
 ## 2026-11-06 13:45 WAT — setup (interactive session, not a manager run)
 
 - Plan: Pro. Usage at setup: 5h 58%, week 32%.
@@ -483,3 +497,25 @@ VALUE` cannot work here at all (drizzle runs every pending migration in one tran
 - Next: after the weekly reset, if those sessions are no longer active, review and merge F-017 and F-022
   (they are in different apps/modules, and only F-022 adds a migration). Then the full `KOMTRU_INFRA_TESTS=1`
   run on `main` that is still owed.
+
+## 2026-11-10 22:27 WAT — run summary
+
+- Usage at start: 5h 1%, week 0%. At end: 5h 68%, week 10%.
+- Capacity: 2 (est 22, est_week 3). Features: F-051 (merged, Done), F-024 (merged, Done). Both were
+  **Backend done, UI outstanding**. They ran in parallel in separate apps; neither added a migration.
+- F-051 (sonnet): OP-05 queue and flags, plus the OP-06 verification case in operations-app. The review found
+  the console unusable against the real API, because `GET /admin/me` did not exist. The fixer added it to the
+  backend identity module (no migration) and a clearance-approval panel for `verification.override` holders who
+  don't own the case, because self-approval is refused. Review: 9 items fixed.
+- F-024 (opus, money): V1/V2/V3/AB3/AB4 in web-app-ui, plus a backend gap closed: no code moved a paid trade
+  from PENDING_PAYMENT to FUNDED. `fundTrade` now subscribes to `ledger.payment.escrow_funded`. It is idempotent
+  and checks the amount, and late or mismatched money goes to review, never auto-refunded. Review: 13 items fixed.
+  Paystack Inline is untested against a real Paystack account.
+- Verification: package build, then lint, typecheck and test for backend-api, api-client, web-app-ui, ui-kit,
+  shared-types and operations-app (22/22) on each branch and again on `main` after each merge. Format check clean.
+  The fixers ran `KOMTRU_INFRA_TESTS=1` on their branches. The manager's runs on `main` were the default suite,
+  so the full infra run on `main` is still owed.
+- Feature costs, together: 5h-cost=67 week-cost=10, so about 34 and 5 each. F-024 cost the most (opus).
+- Next: the remaining **Backend done, UI outstanding** features, F-026 (seller fulfilment) and F-027 (deliver,
+  inspect, release), both in web-app-ui, so run one at a time or pair one with a console or backend feature.
+  F-044 and F-045 wait on their dependencies. Also the full `KOMTRU_INFRA_TESTS=1` run on `main`.
