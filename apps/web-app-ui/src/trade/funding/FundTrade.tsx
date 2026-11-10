@@ -300,9 +300,9 @@ function Verifying({ trade }: { trade: TradeView }): React.JSX.Element {
         body="Checking with Paystack — usually under 30 seconds, occasionally up to 2 minutes on a busy network."
       />
       <div aria-hidden className="mt-[28px]">
-        <Skeleton width="w80" className="h-[16px]" />
-        <Skeleton width="w60" className="h-[16px]" />
-        <Skeleton width="w40" className="mb-0 h-[16px]" />
+        <Skeleton width="w80" className="mb-[8px] h-[16px]" />
+        <Skeleton width="w60" className="mb-[8px] h-[16px]" />
+        <Skeleton width="w40" className="h-[16px]" />
       </div>
       <p className="mt-[20px] text-center text-[11.5px] leading-[1.5] text-trust-gray">
         You can leave this page. The trade updates as soon as the payment is confirmed.
