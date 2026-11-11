@@ -106,14 +106,16 @@ describe('what can be done', () => {
       .map((row) => row.id);
 
   it.each(WORKSPACE_STATUSES.flatMap((status) => ROLES.map((role) => [status, role] as const)))(
-    'offers only what is real for %s as the %s: reading the terms, funding, and withdrawing before payment',
+    'offers only what is real for %s as the %s: reading the terms, funding, shipping, and withdrawing before payment',
     (status, role) => {
       const expected =
-        status !== 'PENDING_PAYMENT'
-          ? ['view-terms']
-          : role === 'BUYER'
-            ? ['view-terms', 'fund', 'cancel']
-            : ['view-terms', 'cancel'];
+        status === 'FUNDED' && role === 'SELLER'
+          ? ['view-terms', 'ship']
+          : status !== 'PENDING_PAYMENT'
+            ? ['view-terms']
+            : role === 'BUYER'
+              ? ['view-terms', 'fund', 'cancel']
+              : ['view-terms', 'cancel'];
       expect(live(status, role).sort()).toEqual(expected.sort());
     },
   );

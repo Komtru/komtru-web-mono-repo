@@ -96,6 +96,9 @@ export const tabHref = (tradeId: string, tab: WorkspaceTab): string =>
 /** Where the buyer pays into escrow (F-024). Its own route, not a tab: it is a flow, not a view of the trade. */
 export const fundHref = (tradeId: string): string => `/trade/${tradeId}/fund`;
 
+/** Where the seller ships a funded trade (F-026). Its own route: a flow, not a view of the trade. */
+export const shipHref = (tradeId: string): string => `/trade/${tradeId}/ship`;
+
 export const tabItems = (tradeId: string) =>
   WORKSPACE_TAB_DEFS.map((tab) => ({ id: tab.id, label: tab.label, href: tabHref(tradeId, tab.id) }));
 
@@ -166,7 +169,14 @@ export function tradeActions(status: WorkspaceStatus, role: TradeRole, tradeId: 
         });
       break;
     case 'FUNDED':
-      if (!buyer) later('ship', 'Ship the item · Seller', "Marking the item shipped isn't in the app yet.");
+      if (!buyer)
+        rows.push({
+          id: 'ship',
+          title: 'Ship the item · Seller',
+          description: 'Say how it is going and give the waybill, receipt photo, driver phone and plate.',
+          availability: 'live',
+          href: shipHref(tradeId),
+        });
       later(
         'cancel-after-payment',
         'Ask to cancel · Either party',

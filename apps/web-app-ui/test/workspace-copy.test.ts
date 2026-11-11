@@ -28,8 +28,8 @@ describe('what the workspace says, for each side', () => {
     },
   );
 
-  it('keeps the seams to the side that would act: only the seller is told shipping is missing', () => {
-    expect(stateCopy('FUNDED', 'SELLER').seam).toBe(notYet('Marking the item shipped'));
+  it('keeps the seams to the side that would act: shipping is built, so neither side is told it is missing', () => {
+    expect(stateCopy('FUNDED', 'SELLER').seam).toBeUndefined();
     expect(stateCopy('FUNDED', 'BUYER').seam).toBeUndefined();
     expect(stateCopy('UNCONFIRMED_DELIVERY', 'BUYER', ctx).seam).toBe(notYet('Confirming delivery'));
     expect(stateCopy('UNCONFIRMED_DELIVERY', 'SELLER', ctx).seam).toBeUndefined();
