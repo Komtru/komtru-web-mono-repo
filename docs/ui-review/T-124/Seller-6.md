@@ -16,6 +16,6 @@
 **Real differences (intended, and why)**
 
 - A **Payout account** row (the default account, opening AB6) and a **Payout schedule** line are added between the balance card and the history: the reference has no way into AB6 or to see the mode, and the platform's summary carries both.
-- **Schedule** opens a bottom sheet with the platform's five modes (When I withdraw, After each sale, Daily, Weekly, Monday, Monthly, 1st) rather than a screen; the reference draws only the button. No time of day is promised: the 09:00 sweep is a backend default, not a stated rule.
+- **Schedule** opens a bottom sheet with the platform's five modes (When I withdraw, After each sale, Daily, Weekly on Monday, Monthly on the 1st) rather than a screen; the reference draws only the button. No time of day is promised: the 09:00 sweep is a backend default, not a stated rule.
 - The heading is a page `h1` (19px) in the content, not the reference's `.scr-logo-row` with the profile icon, which the shell's top bar already carries.
 - A history row that has not arrived adds its state after the date (`· On its way`, `· Didn’t go through`); a completed one reads as the reference. Withdraw is a disabled button while payouts are paused or the balance is zero, with a pause banner above the card.
