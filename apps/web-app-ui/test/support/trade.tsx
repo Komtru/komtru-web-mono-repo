@@ -18,7 +18,11 @@ export interface CallInput {
   query?: Record<string, unknown>;
   body?: unknown;
 }
-export type CallFn = (endpoint: CallEndpoint, input?: CallInput) => Promise<unknown>;
+export type CallFn = (
+  endpoint: CallEndpoint,
+  input?: CallInput,
+  options?: { idempotencyKey?: string },
+) => Promise<unknown>;
 
 export const id = (n: number): string => `0190b0a0-0000-7000-8000-${String(n).padStart(12, '0')}`;
 
