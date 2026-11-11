@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 // F-037 (AB5): withdraw. The balance, the fee and every refusal are the platform's; one withdrawal is one key.
 import { ProblemError } from '@komtru/api-client';
+import { focusManager } from '@tanstack/react-query';
 import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { Withdraw } from '../src/payouts/Withdraw';
@@ -16,7 +17,10 @@ beforeEach(() => {
   api.call.mockReset();
   router.push.mockReset();
 });
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  focusManager.setFocused(undefined);
+});
 
 const problem = (code: string, status = 409) =>
   new ProblemError(
@@ -59,12 +63,13 @@ describe('Withdraw (AB5)', () => {
       'GET /me/payouts/summary': summary(),
       'GET /me/payout-accounts': accounts(payoutAccount()),
     });
-    renderWithApi(api.call, <Withdraw />);
+    const { container } = renderWithApi(api.call, <Withdraw />);
     await screen.findByDisplayValue('1,200,000');
     fireEvent.click(screen.getByRole('button', { name: '₦200,000' }));
     expect(withdrawButton().textContent).toBe('Withdraw ₦200,000');
     fireEvent.change(amountField(), { target: { value: '1300000' } });
-    expect(screen.getByText(/That’s more than your available balance/)).toBeTruthy();
+    expect(screen.getByRole('alert').textContent).toContain('That’s more than your available balance');
+    await expectNoAxeViolations(container, SHELL_RULES);
     expect(withdrawButton().disabled).toBe(true);
     fireEvent.change(amountField(), { target: { value: '0' } });
     expect(withdrawButton().disabled).toBe(true);
@@ -193,6 +198,37 @@ describe('Withdraw (AB5)', () => {
     fireEvent.click(withdrawButton());
     await waitFor(() => expect(router.push).toHaveBeenCalled());
     expect(keyOf(1)?.idempotencyKey).toBe(keyOf(0)?.idempotencyKey);
+  });
+
+  it('falls back to the first verified account when the chosen one goes away', async () => {
+    let list = [
+      payoutAccount({ id: ACCOUNT_ID }),
+      payoutAccount({
+        id: OTHER_ACCOUNT_ID,
+        isDefault: false,
+        bankName: 'Access Bank',
+        accountNumberMasked: '******1234',
+      }),
+    ];
+    answerWith(api.call, {
+      'GET /me/payouts/summary': summary(),
+      'GET /me/payout-accounts': () => ({ accounts: list }),
+      'POST /me/payouts': payout({ status: 'REQUESTED' }),
+    });
+    renderWithApi(api.call, <Withdraw />);
+    const radios = await screen.findAllByRole('radio');
+    fireEvent.click(radios[1]!);
+    list = [list[0]!, payoutAccount({ id: '0190b0a0-0000-7000-8000-000000000024', isDefault: false })];
+    // Coming back to the tab reads the accounts again, as the app does.
+    focusManager.setFocused(false);
+    focusManager.setFocused(true);
+    await waitFor(() => expect(screen.getAllByRole<HTMLInputElement>('radio')[0]?.checked).toBe(true));
+    fireEvent.click(withdrawButton());
+    await waitFor(() => expect(router.push).toHaveBeenCalled());
+    expect(callsTo(api.call, 'POST', '/me/payouts')[0]?.body).toEqual({
+      amountMinor: '120000000',
+      payoutAccountId: ACCOUNT_ID,
+    });
   });
 
   it('words a pause and a missing account, and offers the way to add one', async () => {

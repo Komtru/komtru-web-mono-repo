@@ -104,7 +104,8 @@ function WithdrawForm({
   const amount = amountMinor === undefined ? undefined : BigInt(amountMinor);
   const tooMuch = amount !== undefined && amount > available;
   const valid = amount !== undefined && amount > 0n && !tooMuch;
-  const account = accounts.find((candidate) => candidate.id === accountId);
+  // The chosen account, or the first one if it has gone (removed elsewhere, or no longer verified).
+  const account = accounts.find((candidate) => candidate.id === accountId) ?? accounts[0];
   const ready = valid && account !== undefined && !held && !withdraw.isPending;
 
   const choose = (minor: string) => {
@@ -169,8 +170,8 @@ function WithdrawForm({
             id="withdraw-available"
             className={cx('mt-[6px] text-[11px]', tooMuch ? 'text-risk' : 'text-trust-gray')}
           >
-            {tooMuch ? 'That’s more than your available balance. ' : ''}Available:{' '}
-            {nairaShort(availableMinor)}
+            {tooMuch && <span role="alert">That’s more than your available balance. </span>}
+            Available: {nairaShort(availableMinor)}
           </p>
         </div>
         <div className="mb-[18px] flex gap-[8px]">
@@ -210,7 +211,7 @@ function WithdrawForm({
                   type="radio"
                   name="payout-account"
                   value={option.id}
-                  checked={option.id === accountId}
+                  checked={option.id === account?.id}
                   onChange={() => setAccountId(option.id)}
                   className="peer sr-only"
                 />
@@ -220,7 +221,7 @@ function WithdrawForm({
                   sub={[option.accountName, option.isDefault ? 'Your payout account' : null]
                     .filter(Boolean)
                     .join(' · ')}
-                  selected={option.id === accountId}
+                  selected={option.id === account?.id}
                   className="peer-focus-visible:outline-[2.5px] peer-focus-visible:outline-offset-[2px] peer-focus-visible:outline-trust-indigo"
                 />
               </label>
