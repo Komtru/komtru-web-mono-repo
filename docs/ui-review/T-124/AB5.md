@@ -19,3 +19,4 @@
 - The info banner does not say "usually arrives within 2 hours, always within 24 — no fee": neither is a platform rule. It states the platform's own `payoutFeeMinor` ("No payout fee is charged" while it is zero, the fee otherwise) and that the receipt follows the money. The banner is therefore taller.
 - The account sub-line is the name the bank resolved (`accountName`), not a trading name. With more than one verified account the rows become radios, the payout account first.
 - The Withdraw button sits in the flow, not pinned above the tab bar.
+- Not a deviation, checked: the amount starts at the whole available balance with **All** pressed, because the reference draws exactly that (`1,200,000`, `All` selected, `Withdraw ₦1,200,000`).
