@@ -29,7 +29,7 @@ import {
   ScreenHeader,
 } from '@komtru/ui-kit';
 import { useRouter } from 'next/navigation';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { naira, problemMessage } from '../format';
 import { About, ItemAndDelivery, Sent, Terms } from './BuyerStages';
 import { Agreement, BUYER_STAGES, StageHeader } from './parts';
@@ -74,6 +74,7 @@ export function BuyerStart({
   const cancel = useCancelTrade();
   const addresses = useAddresses();
 
+  const inFlight = useRef(false);
   const [stage, setStage] = useState(0);
   const [who, setWho] = useState(counterparty);
   const [looked, setLooked] = useState<Looked | undefined>(undefined);
@@ -176,7 +177,7 @@ export function BuyerStart({
       if (!canBuy) return;
     }
     if (stage === 1) {
-      if (mode === 'COURIER' && addressId === null) return;
+      if (addressId === null) return;
       if (mode === 'PARK' && (parkId === '' || !phoneOk)) return;
     }
     setTried(false);
@@ -184,7 +185,10 @@ export function BuyerStart({
   };
 
   const submit = async () => {
+    // Synchronous, unlike `busy`: two taps before React re-renders must not make two drafts.
+    if (inFlight.current) return;
     if (standard === undefined || kobo === undefined || party === undefined || addressId === null) return;
+    inFlight.current = true;
     setProblem(undefined);
     setBusy(true);
     try {
@@ -227,6 +231,7 @@ export function BuyerStart({
     } catch (error) {
       setProblem(problemMessage(error, "We couldn't send that request. Check the details and try again."));
     } finally {
+      inFlight.current = false;
       setBusy(false);
     }
   };

@@ -59,12 +59,27 @@ export function detectCategory(
 type Spec = Record<string, unknown>;
 const isWaiting = (value: unknown): boolean => value === SELLER_TO_CONFIRM;
 
+/**
+ * Item fields whose key is one of the request's own reserved keys. A category defining one would have the seller's
+ * answer overwrite (or be overwritten by) the delivery commitments, so such a standard cannot be used.
+ */
+export const collidingKeys = (standard: Pick<TradeStandard, 'itemSpecFields'>): string[] =>
+  standard.itemSpecFields
+    .map((field) => field.key)
+    .filter((key) => (REQUEST_KEYS as readonly string[]).includes(key));
+
+function assertNoCollision(keys: readonly string[]): void {
+  const hit = keys.filter((key) => (REQUEST_KEYS as readonly string[]).includes(key));
+  if (hit.length > 0) throw new Error(`item fields collide with reserved request keys: ${hit.join(', ')}`);
+}
+
 /** The specification a buyer's request is created with. */
 export function requestSpec(
   standard: Pick<TradeStandard, 'itemSpecFields'>,
   title: string,
   extra: Spec = {},
 ): Spec {
+  assertNoCollision(standard.itemSpecFields.map((field) => field.key));
   const spec: Spec = { requestedItem: title.trim() };
   for (const field of standard.itemSpecFields) {
     if (field.required) spec[field.key] = SELLER_TO_CONFIRM;
@@ -100,6 +115,7 @@ export interface SellerAnswer {
  * delivery choice (mode, Park, phone) is kept.
  */
 export function completedSpec(request: Spec, answer: SellerAnswer): Spec {
+  assertNoCollision(Object.keys(answer.fields));
   const next: Spec = { ...request };
   for (const key of waitingKeys(request)) delete next[key];
   const named = Object.entries(answer.fields).some(

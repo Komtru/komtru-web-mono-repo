@@ -453,3 +453,116 @@ describe('accessibility', () => {
     await expectNoAxeViolations(view.container, SHELL_RULES);
   });
 });
+
+describe('Park request submit', () => {
+  const parks = [{ id: 'park-jos', name: 'Jos Central Park', detail: 'Terminus area · Open today' }];
+
+  it('creates the Park request with its Park, phone and the buyer address on file', async () => {
+    answerWith(api.call, handlers());
+    renderWithApi(api.call, <BuyerStart parkEnabled parks={parks} />);
+    await aboutStage();
+    press('Continue');
+    fireEvent.click(await screen.findByRole('radio', { name: /Park/ }));
+    await waitFor(() => {
+      expect(screen.getByRole<HTMLInputElement>('radio', { name: /Home/ }).checked).toBe(true);
+    });
+    fireEvent.click(screen.getByRole('radio', { name: /Jos Central Park/ }));
+    type('Phone', '0803 221 4471');
+    press('Continue');
+    await screen.findByText('Trade terms');
+    press('Review');
+    await screen.findByText('Park · Jos Central Park');
+    press('Send Trade proposal');
+    expect(await screen.findByText('Sent to TechEdge NG')).toBeTruthy();
+    expect(callsTo(api.call, 'POST', '/trades')[0]?.body).toMatchObject({
+      addressId: id(1),
+      itemSpec: {
+        deliveryMode: 'PARK',
+        parkId: 'park-jos',
+        parkName: 'Jos Central Park',
+        contactPhone: '0803 221 4471',
+      },
+    });
+  });
+
+  it('does not let a Park request past stage two without an address', async () => {
+    answerWith(api.call, handlers({ 'GET /me/addresses': page([]) }));
+    renderWithApi(api.call, <BuyerStart parkEnabled parks={parks} />);
+    await aboutStage();
+    press('Continue');
+    fireEvent.click(await screen.findByRole('radio', { name: /Park/ }));
+    fireEvent.click(screen.getByRole('radio', { name: /Jos Central Park/ }));
+    type('Phone', '0803 221 4471');
+    press('Continue');
+    expect(await screen.findByText('Choose an address to carry on.')).toBeTruthy();
+    expect(screen.queryByText('Trade terms')).toBeNull();
+  });
+});
+
+describe('sending once', () => {
+  it('makes one draft however fast Send is pressed', async () => {
+    let release: (value: unknown) => void = () => undefined;
+    const slow = new Promise((resolve) => {
+      release = resolve;
+    });
+    answerWith(api.call, handlers());
+    const answer = api.call.getMockImplementation() as CallFn;
+    api.call.mockImplementation((endpoint, input, options) =>
+      endpoint.method.toUpperCase() === 'POST' && endpoint.path === '/trades'
+        ? slow.then(() => answer(endpoint, input, options))
+        : answer(endpoint, input, options),
+    );
+    renderWithApi(api.call, <BuyerStart />);
+    await toReview();
+    const send = screen.getByRole('button', { name: 'Send Trade proposal' });
+    fireEvent.click(send);
+    fireEvent.click(send);
+    fireEvent.click(send);
+    release(undefined);
+    expect(await screen.findByText('Sent to TechEdge NG')).toBeTruthy();
+    expect(callsTo(api.call, 'POST', '/trades')).toHaveLength(1);
+    expect(callsTo(api.call, 'POST', '/trades/:id/send')).toHaveLength(1);
+  });
+
+  it('still makes the new draft when withdrawing the old one fails', async () => {
+    let sends = 0;
+    answerWith(
+      api.call,
+      handlers({
+        'POST /trades/:id/send': () => {
+          sends += 1;
+          return sends === 1 ? problem('INTERNAL', 500) : sent;
+        },
+        'POST /trades/:id/cancel': problem('INTERNAL', 500),
+      }),
+    );
+    renderWithApi(api.call, <BuyerStart />);
+    await toReview();
+    press('Send Trade proposal');
+    await screen.findByText(/We couldn't send that request/);
+    press('Edit');
+    type('Agreed price', '460,000');
+    press('Continue');
+    await screen.findByText('How should this item get to you?');
+    press('Continue');
+    await screen.findByText('Trade terms');
+    press('Review');
+    press('Send Trade proposal');
+    expect(await screen.findByText('Sent to TechEdge NG')).toBeTruthy();
+    expect(callsTo(api.call, 'POST', '/trades/:id/cancel')).toHaveLength(1);
+    expect(callsTo(api.call, 'POST', '/trades')).toHaveLength(2);
+  });
+});
+
+describe('moving between stages', () => {
+  it('moves focus to the rail that names the new stage', async () => {
+    answerWith(api.call, handlers());
+    renderWithApi(api.call, <BuyerStart />);
+    await aboutStage();
+    press('Continue');
+    await screen.findByText('How should this item get to you?');
+    await waitFor(() => {
+      expect(document.activeElement).toBe(screen.getByRole('list', { name: 'Start a Trade, step 2 of 4' }));
+    });
+  });
+});

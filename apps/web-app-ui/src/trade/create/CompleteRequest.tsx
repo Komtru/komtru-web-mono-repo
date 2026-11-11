@@ -32,7 +32,7 @@ import { isProblem, naira, problemMessage, proofNeeds } from '../format';
 import { ProofUpload } from '../ProofUpload';
 import { Agreement, StageHeader } from './parts';
 import { readRequest } from './read';
-import { allowedPromises, completedSpec, isRequestSpec } from './request';
+import { allowedPromises, collidingKeys, completedSpec, isRequestSpec } from './request';
 
 const SELLER_STAGES = ['Item details', 'Delivery', 'Review'] as const;
 const CONDITIONS = ['Brand new', 'Used · like new', 'Used · good'] as const;
@@ -119,7 +119,19 @@ function Completion({ trade }: { trade: TradeView }): React.JSX.Element {
     runPreview({ role: 'SELLER', categoryCode: category, itemAmountMinor: amountMinor });
   }, [category, amountMinor, runPreview]);
 
-  if (standard.isPending && trade.standardVersionId !== null) {
+  if (trade.standardVersionId === null) {
+    // Nothing to retry: this trade has no standard to read, and asking again will not give it one.
+    return (
+      <ScreenColumn>
+        <ScreenHeader title="Item Details" backHref={`/trade/${trade.id}`} />
+        <LoadFailed
+          title="This request can't be completed here"
+          body="It has no trade category attached, so we can't tell what details it needs. Contact support."
+        />
+      </ScreenColumn>
+    );
+  }
+  if (standard.isPending) {
     return (
       <ScreenColumn>
         <ScreenHeader title="Item Details" backHref={`/trade/${trade.id}`} />
@@ -140,6 +152,17 @@ function Completion({ trade }: { trade: TradeView }): React.JSX.Element {
     );
   }
   const spec = standard.data;
+  if (collidingKeys(spec).length > 0) {
+    return (
+      <ScreenColumn>
+        <ScreenHeader title="Item Details" backHref={`/trade/${trade.id}`} />
+        <LoadFailed
+          title="This category can't be completed here"
+          body="Its item details clash with the delivery fields. Contact support."
+        />
+      </ScreenColumn>
+    );
+  }
 
   const needs = proofNeeds(spec.proofMedia);
   const proofMet = counts.photos >= needs.photos && (!needs.video || counts.videos >= 1);
@@ -172,7 +195,17 @@ function Completion({ trade }: { trade: TradeView }): React.JSX.Element {
   };
 
   const submit = () => {
-    if (addressId === null) return;
+    // Checked again here, not only at each Continue: Edit can change an earlier stage after a later one passed.
+    if (!itemOk) {
+      setTried(true);
+      setStage(0);
+      return;
+    }
+    if (!deliveryOk || addressId === null) {
+      setTried(true);
+      setStage(1);
+      return;
+    }
     setProblem(undefined);
     counter.mutate(
       {

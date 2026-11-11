@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   SELLER_TO_CONFIRM,
   allowedPromises,
+  collidingKeys,
   completedSpec,
   detectCategory,
   isRequestSpec,
@@ -88,5 +89,22 @@ describe('delivery promises', () => {
 describe('Park delivery', () => {
   it('is off until a Park catalogue exists', () => {
     expect(parkAvailable()).toBe(false);
+  });
+});
+
+describe('reserved keys', () => {
+  const clashing = { itemSpecFields: [{ key: 'deliveryMode', label: 'Mode', required: true }] };
+  it('finds an item field that is one of the request keys', () => {
+    expect(collidingKeys(clashing)).toEqual(['deliveryMode']);
+    expect(collidingKeys(electronics)).toEqual([]);
+  });
+  it('refuses to build or complete a spec over one', () => {
+    expect(() => requestSpec(clashing, 'Phone')).toThrow(/reserved/);
+    expect(() =>
+      completedSpec(requestSpec(electronics, 'Phone'), {
+        fields: { deliveryPartner: 'x' },
+        delivery: { mode: 'COURIER', chargeMinor: '1', promise: '1-3' },
+      }),
+    ).toThrow(/reserved/);
   });
 });

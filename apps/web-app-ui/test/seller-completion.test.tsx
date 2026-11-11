@@ -461,3 +461,92 @@ describe('CT-B10 Review & accept', () => {
     });
   });
 });
+
+describe('completing a request: edges', () => {
+  it('says there is nothing to complete once the seller has already sent it back', async () => {
+    answerWith(api.call, handlers(asSeller(doneSpec, { awaiting: 'COUNTERPARTY' })));
+    renderWithApi(api.call, <CompleteRequest id={id(1)} />);
+    expect(await screen.findByText(/nothing for you to complete/)).toBeTruthy();
+    expect(screen.queryByLabelText('Brand')).toBeNull();
+  });
+
+  it('refuses a trade with no standard, and offers no retry', async () => {
+    answerWith(api.call, handlers(asSeller(openSpec, { standardVersionId: null })));
+    renderWithApi(api.call, <CompleteRequest id={id(1)} />);
+    expect(await screen.findByText("This request can't be completed here")).toBeTruthy();
+    expect(screen.queryByRole('button', { name: /try again/i })).toBeNull();
+  });
+
+  it('refuses a category whose item fields clash with the delivery fields', async () => {
+    const clash = {
+      ...standardsPage().items[0],
+      itemSpecFields: [{ key: 'deliveryPromise', label: 'Promise', required: true }],
+    };
+    answerWith(api.call, handlers(asSeller(), { 'GET /config/trade-standards/versions/:id': clash }));
+    renderWithApi(api.call, <CompleteRequest id={id(1)} />);
+    expect(await screen.findByText("This category can't be completed here")).toBeTruthy();
+  });
+
+  it('holds the seller at delivery when the category allows no promise', async () => {
+    const short = { ...standardsPage().items[0], deliveryDeadlineDays: 2 };
+    answerWith(
+      api.call,
+      handlers(asSeller(), { ...upload, 'GET /config/trade-standards/versions/:id': short }),
+    );
+    const view = renderWithApi(api.call, <CompleteRequest id={id(1)} />);
+    await itemStage(view.container);
+    await screen.findByLabelText('Delivery partner');
+    type('Delivery partner', 'SwiftDrop');
+    type(/Delivery charge/, '2,500');
+    press('Review');
+    expect(await screen.findByText('Choose when you will deliver.')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Confirm & send to buyer' })).toBeNull();
+  });
+
+  it('reads the latest request after a conflict and keeps the seller on the review', async () => {
+    answerWith(
+      api.call,
+      handlers(asSeller(), {
+        ...upload,
+        'POST /trades/:id/counter': problem('CONFLICT', 409),
+      }),
+    );
+    const view = renderWithApi(api.call, <CompleteRequest id={id(1)} />);
+    await itemStage(view.container);
+    await screen.findByLabelText('Delivery partner');
+    await waitFor(() => {
+      expect(screen.getByRole<HTMLInputElement>('radio', { name: /Home/ }).checked).toBe(true);
+    });
+    type('Delivery partner', 'SwiftDrop');
+    type(/Delivery charge/, '2,500');
+    fireEvent.click(screen.getByRole('radio', { name: '5–7 days' }));
+    press('Review');
+    press('Confirm & send to buyer');
+    expect(await screen.findByText(/The terms changed while you were looking/)).toBeTruthy();
+    await waitFor(() => {
+      expect(callsTo(api.call, 'GET', '/trades/:id').length).toBeGreaterThan(1);
+    });
+    expect(router.push).not.toHaveBeenCalled();
+    expect(screen.getByRole('button', { name: 'Confirm & send to buyer' })).toBeTruthy();
+  });
+
+  it('has no axe violations on the item and delivery stages, Courier and Park', async () => {
+    answerWith(api.call, handlers(asSeller(), upload));
+    const first = renderWithApi(api.call, <CompleteRequest id={id(1)} />);
+    await screen.findByLabelText('Brand');
+    await expectNoAxeViolations(first.container, SHELL_RULES);
+    await itemStage(first.container);
+    await screen.findByLabelText('Delivery partner');
+    await expectNoAxeViolations(first.container, SHELL_RULES);
+    first.unmount();
+    uploads = 0;
+    api.call.mockReset();
+
+    const spec = { ...openSpec, deliveryMode: 'PARK', parkName: 'Jos Central Park', contactPhone: '0803' };
+    answerWith(api.call, handlers(asSeller(spec), upload));
+    const park = renderWithApi(api.call, <CompleteRequest id={id(1)} />);
+    await itemStage(park.container);
+    await screen.findByText(/collect at a Park/);
+    await expectNoAxeViolations(park.container, SHELL_RULES);
+  });
+});

@@ -262,7 +262,7 @@ export function ItemAndDelivery(props: {
           <AddressPicker label="Your address on file" value={props.addressId} onChange={props.setAddressId} />
         </>
       )}
-      {props.tried && props.mode === 'COURIER' && props.addressId === null && (
+      {props.tried && props.addressId === null && (
         <p role="alert" className="mb-[12px] text-[12px] font-semibold text-risk-on-soft">
           Choose an address to carry on.
         </p>

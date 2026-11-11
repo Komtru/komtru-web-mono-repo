@@ -3,6 +3,7 @@
 // What the buyer's four stages and the seller's three share: the stage header and the agreement preview that
 // CT-B4, CT-B9 and CT-B10 draw the same way ("both parties see the same agreement").
 import { TermList, TermRow } from '@komtru/ui-kit';
+import { useEffect, useRef } from 'react';
 import { hoursLabel, naira } from '../format';
 import { promiseLabel } from './request';
 
@@ -22,10 +23,23 @@ export function StageHeader({
   current: number;
   heading: string;
 }): React.JSX.Element {
+  // Moving to another stage moves focus to the rail, which names it, so a keyboard or screen-reader user is told
+  // where they are instead of being left on a button that no longer exists.
+  const rail = useRef<HTMLOListElement>(null);
+  const first = useRef(true);
+  useEffect(() => {
+    if (first.current) {
+      first.current = false;
+      return;
+    }
+    rail.current?.focus();
+  }, [current]);
   return (
     <ol
+      ref={rail}
+      tabIndex={-1}
       aria-label={`${heading}, step ${String(current + 1)} of ${String(stages.length)}`}
-      className="m-0 mb-[18px] flex list-none gap-[6px] p-0"
+      className="m-0 mb-[18px] flex list-none gap-[6px] p-0 outline-none"
     >
       {stages.map((stage, index) => (
         <li
