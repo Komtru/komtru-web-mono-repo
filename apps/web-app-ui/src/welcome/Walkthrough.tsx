@@ -47,10 +47,10 @@ export function Walkthrough({ step }: { step: '1' | '2' | '3' }): React.JSX.Elem
     >
       <WalkthroughArt step={step} />
       <div className="px-[12px] text-center">
-        <h2 className="mb-[8px] text-[20px] font-semibold">{copy.title}</h2>
-        <p className="text-[13px] leading-[1.6] text-slate">{copy.body}</p>
+        <h2 className="mb-[10px] text-[20px] font-semibold leading-[1.3]">{copy.title}</h2>
+        <p className="mx-auto max-w-[260px] text-[13px] leading-[1.6] text-slate">{copy.body}</p>
       </div>
-      <div className="mt-auto pt-[24px]">
+      <div className="mt-auto pb-[90px] pt-[24px]">
         <Dots at={POSITION[step]} />
       </div>
     </WelcomeFrame>

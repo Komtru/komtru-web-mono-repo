@@ -38,6 +38,7 @@ export function DoneScreen(): React.JSX.Element {
 
   return (
     <WelcomeFrame
+      flush
       footer={
         entering ? (
           <Button type="submit" form="welcome-code">
@@ -74,7 +75,7 @@ export function DoneScreen(): React.JSX.Element {
           </svg>
         </div>
         <h2 className="mb-[6px] text-[19px] font-semibold">
-          {name === null ? 'You’re all set' : `You’re all set, ${name}`}
+          {name === null ? "You're all set" : `You're all set, ${name}`}
         </h2>
         <p className="mb-[16px] text-[12.5px] leading-[1.5] text-slate">
           Start your first protected Trade, or find one a seller already sent you.

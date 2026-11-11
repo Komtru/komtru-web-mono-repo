@@ -8,15 +8,18 @@ export function WelcomeFrame({
   children,
   footer,
   footerRow = false,
+  flush = false,
 }: {
   children: React.ReactNode;
   footer: React.ReactNode;
   /** OB1–OB3 put Skip and Next side by side; OB4 and OB5 stack their two actions. */
   footerRow?: boolean;
+  /** OB4 and OB5 start at the top of the screen; the walkthrough's drawings are pushed down 36px. */
+  flush?: boolean;
 }): React.JSX.Element {
   return (
     <main className="mx-auto flex min-h-dvh w-full max-w-[480px] flex-col">
-      <div className="flex flex-1 flex-col px-[16px] pt-[36px]">{children}</div>
+      <div className={`flex flex-1 flex-col px-[16px] ${flush ? '' : 'pt-[36px]'}`}>{children}</div>
       <StickyFooter className={footerRow ? 'flex-row gap-[10px]' : undefined}>{footer}</StickyFooter>
     </main>
   );

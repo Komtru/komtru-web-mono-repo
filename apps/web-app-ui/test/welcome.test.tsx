@@ -77,7 +77,7 @@ describe('OB4 notifications', () => {
   it('says what it will and will not notify about, with Allow first and Not now second', async () => {
     stubNotification('default');
     const { container } = renderWithApi(api.call, <NotificationsScreen />);
-    expect(screen.getByRole('heading', { level: 2, name: 'Don’t miss a status change' })).toBeTruthy();
+    expect(screen.getByRole('heading', { level: 2, name: "Don't miss a status change" })).toBeTruthy();
     expect(screen.getByText(/disputes and fraud alerts, later in Settings/)).toBeTruthy();
     const buttons = screen.getAllByRole('button').map((b) => b.textContent);
     expect(buttons).toEqual(['Allow notifications', 'Not now']);
@@ -144,7 +144,7 @@ describe('OB4 notifications', () => {
   it('says so when the browser cannot show notifications, and still lets the person on', async () => {
     vi.stubGlobal('Notification', undefined);
     renderWithApi(api.call, <NotificationsScreen />);
-    expect(await screen.findByText(/doesn’t support notifications/i)).toBeTruthy();
+    expect(await screen.findByText(/doesn't support notifications/i)).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Continue' }));
     expect(router.push).toHaveBeenCalledWith('/welcome/done');
   });
@@ -154,7 +154,7 @@ describe('OB5 all set', () => {
   it('greets by first name, marks the walkthrough done and offers the two first actions', async () => {
     rememberFirstName('Amaka Obi');
     const { container } = render(<DoneScreen />);
-    expect(await screen.findByRole('heading', { level: 2, name: 'You’re all set, Amaka' })).toBeTruthy();
+    expect(await screen.findByRole('heading', { level: 2, name: "You're all set, Amaka" })).toBeTruthy();
     expect(
       screen.getByText(/Start your first protected Trade, or find one a seller already sent you/),
     ).toBeTruthy();
@@ -166,7 +166,7 @@ describe('OB5 all set', () => {
 
   it('has no name to say when none was kept', () => {
     render(<DoneScreen />);
-    expect(screen.getByRole('heading', { level: 2, name: 'You’re all set' })).toBeTruthy();
+    expect(screen.getByRole('heading', { level: 2, name: "You're all set" })).toBeTruthy();
   });
 
   it('Enter a Trade Code opens a code field that goes to that trade', () => {

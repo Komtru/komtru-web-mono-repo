@@ -32,13 +32,13 @@ export const WELCOME_STEPS: readonly WelcomeStep[] = [
   {
     key: 'notifications',
     path: '/welcome/notifications',
-    title: 'Don’t miss a status change',
-    body: 'We’ll only notify you about things that actually need your attention — payment protected, item shipped, inspection deadlines. You choose the channel for everything except disputes and fraud alerts, later in Settings.',
+    title: "Don't miss a status change",
+    body: "We'll only notify you about things that actually need your attention — payment protected, item shipped, inspection deadlines. You choose the channel for everything except disputes and fraud alerts, later in Settings.",
   },
   {
     key: 'done',
     path: '/welcome/done',
-    title: 'You’re all set',
+    title: "You're all set",
     body: 'Start your first protected Trade, or find one a seller already sent you.',
   },
 ];

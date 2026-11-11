@@ -18,9 +18,9 @@ type Blocked = 'denied' | 'unsupported';
 
 const BLOCKED_COPY: Record<Blocked, string> = {
   denied:
-    'Notifications are blocked in your browser, so we can’t switch them on from here. You can allow them in your browser’s site settings, and choose how you’re told about each thing later in Settings.',
+    "Notifications are blocked in your browser, so we can't switch them on from here. You can allow them in your browser's site settings, and choose how you're told about each thing later in Settings.",
   unsupported:
-    'This browser doesn’t support notifications. You can still follow every trade in Komtru, and choose how you’re told about each thing later in Settings.',
+    "This browser doesn't support notifications. You can still follow every trade in Komtru, and choose how you're told about each thing later in Settings.",
 };
 
 /**
@@ -62,6 +62,7 @@ export function NotificationsScreen({
 
   return (
     <WelcomeFrame
+      flush
       footer={
         blocked === undefined ? (
           <>
