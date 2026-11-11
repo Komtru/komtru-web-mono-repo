@@ -46,6 +46,7 @@ export * from './domain/journal.js';
 export * from './domain/events.js';
 export * from './domain/funding.js';
 export * from './domain/release.js';
+export * from './domain/payouts.js';
 export * from './infrastructure/postgres/schema/index.js';
 export {
   findAccountId,
