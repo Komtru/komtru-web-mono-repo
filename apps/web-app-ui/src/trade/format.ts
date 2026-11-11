@@ -1,6 +1,7 @@
 // What a proposal screen says and how it says it. Pure functions, so the wording rules are tested
 // without a DOM. Money arrives as a digit string of kobo and is only ever formatted here, never summed.
 import { ProblemError } from '@komtru/api-client';
+import { REQUEST_KEYS, SELLER_TO_CONFIRM } from './create/request';
 import { isWorkspaceStatus, workspaceStanding } from './workspace-state';
 import {
   formatNaira,
@@ -70,19 +71,20 @@ export const platformWords = (error: unknown, fallback: string): string =>
     ? error.problem.detail
     : problemMessage(error, fallback);
 
-/** The name a trade's item goes by: brand and model when the category asks for them, else the category. */
+/** The name a trade's item goes by: brand and model when the category asks for them, else the buyer's own words. */
 export function itemTitle(spec: unknown, fallback = 'Item'): string {
   const record = asRecord(spec);
   const named = ['brand', 'model', 'name', 'item']
     .map((key) => text(record[key]))
     .filter((value): value is string => value !== undefined);
-  return named.length > 0 ? named.join(' ') : fallback;
+  if (named.length > 0) return named.join(' ');
+  return text(record.requestedItem) ?? fallback;
 }
 
 /** The second line under the title: whatever else the person described, in the order they typed it. */
 export function itemSub(spec: unknown): string | undefined {
   const record = asRecord(spec);
-  const skip = new Set(['brand', 'model', 'name', 'item']);
+  const skip = new Set(['brand', 'model', 'name', 'item', ...REQUEST_KEYS]);
   const rest = Object.entries(record)
     .filter(([key]) => !skip.has(key))
     .map(([, value]) => text(value))
@@ -95,8 +97,9 @@ const asRecord = (value: unknown): Record<string, unknown> =>
     ? (value as Record<string, unknown>)
     : {};
 
+/** A value the person said. A field still waiting on the seller (`SELLER_TO_CONFIRM`) is not something anyone said. */
 const text = (value: unknown): string | undefined =>
-  typeof value === 'string' && value.trim() !== ''
+  typeof value === 'string' && value.trim() !== '' && value !== SELLER_TO_CONFIRM
     ? value.trim()
     : typeof value === 'number'
       ? String(value)

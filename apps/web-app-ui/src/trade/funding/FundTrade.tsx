@@ -27,6 +27,8 @@ import { isFundedTradeStatus } from '@komtru/shared-types';
 import { useQueryClient } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
 import { isProblem, naira, nairaShort, partyName, problemMessage, whenLabel } from '../format';
+import { isRequestSpec } from '../create/request';
+import { readRequest } from '../create/read';
 import { channelsFor, paystackCheckout, type Checkout, type PayMethod } from './checkout';
 
 export type { Checkout } from './checkout';
@@ -61,7 +63,18 @@ export function FundTrade({
   const payable =
     view !== undefined && (view.status === 'PENDING_PAYMENT' || isFundedTradeStatus(view.status));
   // Read for the buyer whatever the trade's status: money can have arrived for a trade that has since ended.
-  const payment = usePaymentStatus(id, buyer);
+  // A request the seller has not completed has nothing to fund yet, whatever its status says.
+  const incomplete = view !== undefined && isRequestSpec(view.terms?.itemSpec);
+  const payment = usePaymentStatus(id, buyer && !incomplete);
+
+  if (incomplete) {
+    return (
+      <NothingToPay
+        id={id}
+        why="The seller hasn't confirmed the item details yet, so there is nothing to pay."
+      />
+    );
+  }
 
   if (trade.isPending || (buyer && payment.isPending)) {
     return (
@@ -218,6 +231,7 @@ function Funding({
   const fees = trade.fees;
   if (fees === null) return <NothingToPay id={trade.id} why="This trade has no agreed amount to pay yet." />;
   const total = payment.attempt?.amountMinor ?? fees.buyerTotalMinor;
+  const deliveryCharge = readRequest(trade).deliveryChargeMinor;
 
   if (step === 'transfer') {
     return (
@@ -267,6 +281,12 @@ function Funding({
           {naira(fees.buyerTotalMinor)}
         </FeeRow>
       </dl>
+      {deliveryCharge !== undefined && (
+        <p className="-mt-[8px] mb-[16px] text-[11.5px] leading-[1.5] text-slate">
+          The seller&apos;s delivery charge of {naira(deliveryCharge)} is paid to the seller outside Komtru
+          protection and is not part of this total.
+        </p>
+      )}
       <fieldset className="m-0 border-0 p-0">
         <legend className="p-0">
           <SectionLabel as="p">Choose how to pay</SectionLabel>

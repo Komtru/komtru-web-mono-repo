@@ -32,6 +32,9 @@ import { ClaimPanel } from './ClaimPanel';
 import { ShareTrade } from './ShareTrade';
 import { isProblem, proofNeeds, problemMessage } from './format';
 import { BACK_TO_TRADES, ConfirmSheet, ItemSummary, PartyHeader, TermsRows } from './parts';
+import { ReviewAccept } from './create/ReviewAccept';
+import { isRequestShaped, isRequestSpec } from './create/request';
+import { SellerRequest } from './create/SellerRequest';
 import { ProofUpload } from './ProofUpload';
 import { Workspace } from './workspace/Workspace';
 import { isWorkspaceStatus, type WorkspaceTab } from './workspace-state';
@@ -83,7 +86,21 @@ function TradeState({ trade, tab }: { trade: TradeView; tab: WorkspaceTab }): Re
     case 'PENDING_COUNTERPARTY':
       return mine ? <WaitingOnThem trade={trade} /> : <ClaimInvitation trade={trade} />;
     case 'AWAITING_ACCEPTANCE':
-      return trade.awaiting === 'YOU' ? <AnswerProposal trade={trade} /> : <WaitingOnThem trade={trade} />;
+      if (trade.awaiting !== 'YOU') return <WaitingOnThem trade={trade} />;
+      // A buyer's request (F-018) has its own two screens: the seller completing it, then the buyer reviewing it.
+      if (
+        trade.initiatorRole === 'BUYER' &&
+        trade.yourRole === 'SELLER' &&
+        isRequestSpec(trade.terms?.itemSpec)
+      )
+        return <SellerRequest trade={trade} />;
+      if (
+        trade.initiatorRole === 'BUYER' &&
+        trade.yourRole === 'BUYER' &&
+        isRequestShaped(trade.terms?.itemSpec)
+      )
+        return <ReviewAccept trade={trade} />;
+      return <AnswerProposal trade={trade} />;
     case 'DECLINED':
     case 'CANCELLED':
     case 'EXPIRED':

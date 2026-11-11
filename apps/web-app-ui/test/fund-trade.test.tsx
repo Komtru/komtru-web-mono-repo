@@ -105,6 +105,45 @@ const serve = (
 
 const show = () => renderWithApi(api.call, <FundTrade id={id(1)} checkout={fake.checkout} />);
 
+describe('a buyer request the seller has not completed', () => {
+  const terms = (itemSpec: Record<string, unknown>) => ({
+    ...workspaceTrade('PENDING_PAYMENT').terms,
+    itemSpec,
+  });
+
+  it('cannot reach funding: no payment is read or started', async () => {
+    serve(
+      status('NONE'),
+      {},
+      workspaceTrade('PENDING_PAYMENT', 'BUYER', {
+        terms: terms({ requestedItem: 'iPhone', brand: 'Seller to confirm', deliveryMode: 'COURIER' }),
+      }),
+    );
+    show();
+    expect(await screen.findByText(/hasn't confirmed the item details yet/)).toBeTruthy();
+    expect(screen.queryByLabelText('What you pay')).toBeNull();
+    expect(callsTo(api.call, 'GET', '/trades/:code/payment/status')).toHaveLength(0);
+    expect(callsTo(api.call, 'POST', '/trades/:code/payment/initiate')).toHaveLength(0);
+    for (const link of screen.getAllByRole('link', { name: 'Back to the trade' })) {
+      expect(link.getAttribute('href')).toBe(`/trade/${id(1)}`);
+    }
+  });
+
+  it('says the seller delivery charge is outside Komtru protection and not in the total', async () => {
+    serve(
+      status('NONE'),
+      {},
+      workspaceTrade('PENDING_PAYMENT', 'BUYER', {
+        terms: terms({ brand: 'Apple', deliveryMode: 'COURIER', deliveryChargeMinor: '250000' }),
+      }),
+    );
+    show();
+    expect(
+      await screen.findByText(/delivery charge of ₦2,500.00 is paid to the seller outside Komtru protection/),
+    ).toBeTruthy();
+  });
+});
+
 describe('V1: choose how to pay', () => {
   it('itemises the trade’s own fee snapshot and offers transfer, then card', async () => {
     serve(status('NONE'));
