@@ -45,12 +45,12 @@ Seller-started trades (F-019) keep the existing I3 screen; only the Buy mode of 
 
 ## Steps (each committed when green)
 
-1. [ ] Plan (this file).
-2. [ ] Pure request logic (`create/request.ts`): detection, waiting spec, promises, parsing. Tests first.
-3. [ ] Buyer start CT-B1 to CT-B5 and the Buy-mode route.
-4. [ ] Seller request CT-B6 and completion CT-B7 to CT-B9, with the `/trade/[id]/complete` route.
-5. [ ] Buyer review and accept CT-B10, wired into the trade screen.
-6. [ ] Visual check against the v2 master (`docs/ui-review/T-192/`).
+1. [done] Plan (this file).
+2. [done] Pure request logic (`create/request.ts`): detection, waiting spec, promises, parsing. Tests first.
+3. [done] Buyer start CT-B1 to CT-B5 and the Buy-mode route.
+4. [done] Seller request CT-B6 and completion CT-B7 to CT-B9, with the `/trade/[id]/complete` route.
+5. [done] Buyer review and accept CT-B10, wired into the trade screen.
+6. [done] Visual check against the v2 master (`docs/ui-review/T-192/`).
 7. [ ] Verification: packages build, lint, typecheck, test for web-app-ui and api-client, `format:check`.
 
 ## Owner questions
