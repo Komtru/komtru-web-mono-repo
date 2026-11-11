@@ -52,7 +52,7 @@ describe('the delivery, inspection and release endpoints (T-064, T-065)', () => 
   });
 
   it('releases only with the explicit acknowledgement in the body', () => {
-    const body = acceptInspection.schema.body;
+    const body = acceptInspection.schema.body!;
     expect(body.safeParse({ acknowledged: true }).success).toBe(true);
     expect(body.safeParse({ acknowledged: false }).success).toBe(false);
     expect(body.safeParse({}).success).toBe(false);
