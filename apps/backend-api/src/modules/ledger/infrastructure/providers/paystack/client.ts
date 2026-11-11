@@ -49,6 +49,7 @@ import {
   TransferNotFoundError,
   type VerifiedTransferView,
 } from '../../../domain/payouts.js';
+import { RefundNotFoundError, type VerifiedRefundView } from '../../../domain/refunds.js';
 import { parsePaystackEvent } from './events.js';
 import { verifyPaystackSignature } from './signature.js';
 
@@ -152,6 +153,7 @@ async function call(options: PaystackClientOptions, spec: CallSpec): Promise<Pay
       error instanceof ApiError ||
       error instanceof ChargeNotFoundError ||
       error instanceof TransferNotFoundError ||
+      error instanceof RefundNotFoundError ||
       error instanceof AccountNotResolvableError
     ) {
       throw error;
@@ -576,6 +578,48 @@ export const initiateRefund = async (
   );
 
   return { providerRefundId: response.id, status: mapRefundStatus(response.status) };
+};
+
+const fetchRefundResponse = z.object({
+  id: z.union([z.string().min(1), z.number().int()]).transform(String),
+  status: z.string().min(1),
+  amount: z.number().int().nonnegative(),
+  currency: z.string().min(1),
+});
+
+/**
+ * The re-check T-075 resolves a refund on (`GET /refund/:id`): a `refund.*` webhook's status is never
+ * trusted on its own, exactly as a charge's or a transfer's is not (m8 §7). Addressed by the provider's
+ * own refund id, because Paystack's Refund API accepts no reference of ours.
+ *
+ * Not a `PaymentProviderAdapter` method, for the same reason `verifyTransfer` is not. An id Paystack
+ * has no record of is `RefundNotFoundError` — unlike a transfer, that is NEVER proof the refund was not
+ * made, because the id came from Paystack in the first place; the dispatch service hands it to a person.
+ */
+export const verifyRefund = async (
+  options: PaystackClientOptions,
+  providerRefundId: string,
+): Promise<VerifiedRefundView> => {
+  const response = await data(
+    options,
+    {
+      operation: 'refund.fetch',
+      method: 'GET',
+      path: `/refund/${encodeURIComponent(providerRefundId)}`,
+      idempotent: true,
+      recognise: (status, body) =>
+        (status === 400 || status === 404 || status === 200) && mentionsNotFound(body)
+          ? new RefundNotFoundError(providerRefundId)
+          : undefined,
+    },
+    fetchRefundResponse,
+  );
+  return {
+    providerRefundId: response.id,
+    status: response.status,
+    amountMinor: response.amount,
+    currency: response.currency,
+  };
 };
 
 /**

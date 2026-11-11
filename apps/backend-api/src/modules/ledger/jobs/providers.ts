@@ -5,10 +5,12 @@
 // `infrastructure/providerRegistry.ts` is what lets the registry stay the single lookup point for every
 // caller while the network code stays inside a job.
 import type { VerifiedTransferView } from '../domain/payouts.js';
+import type { VerifiedRefundView } from '../domain/refunds.js';
 import { createProviderRegistry, type ProviderRegistry } from '../infrastructure/providerRegistry.js';
 import {
   createPaystackAdapter,
   verifyCharge,
+  verifyRefund,
   verifyTransfer,
   type PaystackClientOptions,
   type VerifiedCharge,
@@ -32,3 +34,9 @@ export const transferVerifier =
   (options: PaystackClientOptions) =>
   (reference: string): Promise<VerifiedTransferView> =>
     verifyTransfer(options, reference);
+
+/** The refund record lookup (T-075), for the refund jobs. Wired here for the same reason as `chargeVerifier`. */
+export const refundVerifier =
+  (options: PaystackClientOptions) =>
+  (providerRefundId: string): Promise<VerifiedRefundView> =>
+    verifyRefund(options, providerRefundId);

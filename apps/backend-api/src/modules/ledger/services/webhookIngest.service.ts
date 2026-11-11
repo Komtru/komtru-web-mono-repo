@@ -291,12 +291,18 @@ export interface ProcessDeliveryDeps extends SettleDeps {
    * transfer events are recorded and left for the payout sweep.
    */
   resolvePayout?: (payoutId: string) => Promise<string>;
+  /**
+   * T-075: finds the refund a `refund.*` event is about and resolves it on the provider's own record
+   * (`resolveRefundEvent`). Only the charge reference and the provider's refund id are read from the
+   * body. Absent, refund events are recorded and left for the refund sweep.
+   */
+  resolveRefund?: (event: { chargeReference: string; providerRefundId: string }) => Promise<string>;
 }
 
 /**
  * The job behind `POST /webhooks/paystack`. Charge events are re-verified and settled; transfer
- * events settle their payout on transfer verify (T-073); refund events are recorded and left for
- * T-075, which has nothing in flight to match them against yet. A delivery is marked processed only once its outcome is committed.
+ * events settle their payout on transfer verify (T-073); refund events resolve their refund on the
+ * provider's refund record (T-075). A delivery is marked processed only once its outcome is committed.
  */
 export async function processDelivery(deps: ProcessDeliveryDeps, webhookId: bigint): Promise<string> {
   const delivery = await findDelivery(deps.db, webhookId);
@@ -339,6 +345,25 @@ export async function processDelivery(deps: ProcessDeliveryDeps, webhookId: bigi
     // that fails, or a payout still pending, leaves the delivery unprocessed for the retry.
     const outcome = await deps.resolvePayout(payoutId);
     await markDeliveryProcessed(deps.db, webhookId, outcome === 'MISSING' ? 'unknown reference' : null);
+    return outcome === 'MISSING' ? 'UNKNOWN_REFERENCE' : outcome;
+  }
+  if (
+    event.type === 'refund.pending' ||
+    event.type === 'refund.processing' ||
+    event.type === 'refund.processed' ||
+    event.type === 'refund.failed'
+  ) {
+    if (!deps.resolveRefund) {
+      await markDeliveryProcessed(deps.db, webhookId, `ignored: ${event.type} has no handler here`);
+      return 'ignored';
+    }
+    // The body names the refund; the provider's refund record decides what became of it. A fetch that
+    // fails leaves the delivery unprocessed for the retry.
+    const outcome = await deps.resolveRefund({
+      chargeReference: event.reference,
+      providerRefundId: event.providerRefundId,
+    });
+    await markDeliveryProcessed(deps.db, webhookId, outcome === 'MISSING' ? 'unknown refund' : null);
     return outcome === 'MISSING' ? 'UNKNOWN_REFERENCE' : outcome;
   }
   if (event.type !== 'charge.succeeded' && event.type !== 'charge.failed') {

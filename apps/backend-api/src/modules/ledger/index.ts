@@ -12,11 +12,16 @@ import type { Db } from '../../db/index.js';
 import type { QueueFactory } from '../../platform/queue/factory.js';
 import type { Logger } from '../../platform/logger.js';
 import { defineModule, type ModuleContext } from '../../platform/module.js';
-import { tradeStateChangedEvent } from '../trades/index.js';
+import { tradeRefundRequestedEvent, tradeStateChangedEvent } from '../trades/index.js';
 import { findBankNameMatchFor } from '../trust/index.js';
 import { createEncryption } from '../../platform/crypto/encryption.js';
 import { createHmacHasher } from '../../platform/crypto/hmac.js';
-import { paymentEscrowReleasedEvent, payoutRequestedEvent } from './domain/events.js';
+import {
+  paymentEscrowRefundedEvent,
+  paymentEscrowReleasedEvent,
+  payoutRequestedEvent,
+} from './domain/events.js';
+import type { VerifiedRefundView } from './domain/refunds.js';
 import type { VerifiedTransferView } from './domain/payouts.js';
 import { payoutRoutes } from './http/payoutRoutes.js';
 import {
@@ -39,6 +44,17 @@ import { createRedisBankListCache, type BankListCache } from './infrastructure/b
 import type { ProviderRegistry } from './infrastructure/providerRegistry.js';
 import { paymentRoutes } from './http/routes.js';
 import { releaseEscrow } from './services/release.service.js';
+import { decideRefund } from './services/refund.service.js';
+import { resolveRefundEvent, type RefundDispatchDeps } from './services/refundDispatch.service.js';
+import {
+  enqueueProcessRefund,
+  PROCESS_REFUND_QUEUE,
+  processRefundJob,
+  REFUND_JOB_ATTEMPTS,
+  REFUND_JOB_BACKOFF_MS,
+  sweepInFlightRefunds,
+  type ProcessRefundJob,
+} from './jobs/refund.job.js';
 import { webhookRoutes } from './http/webhookRoutes.js';
 import type { VerifiedChargeView } from './domain/funding.js';
 import {
@@ -54,7 +70,7 @@ import {
   type ProcessPaymentWebhookJob,
   type VerifyChargeJob,
 } from './jobs/funding.job.js';
-import { chargeVerifier, paymentProviders, transferVerifier } from './jobs/providers.js';
+import { chargeVerifier, paymentProviders, refundVerifier, transferVerifier } from './jobs/providers.js';
 import { refreshBankList } from './jobs/refresh-bank-list.job.js';
 import {
   resolveAccountNameJob,
@@ -150,6 +166,13 @@ export { PROCESS_PAYMENT_WEBHOOK_QUEUE, VERIFY_CHARGE_QUEUE };
 // Paying a seller out (T-073).
 export { PROCESS_PAYOUT_QUEUE, VERIFY_PAYOUT_ACCOUNT_QUEUE };
 
+// Refunding a buyer (T-075).
+export { PROCESS_REFUND_QUEUE };
+
+/** Every five minutes: re-drives refunds whose dispatch was lost or that the provider went quiet on. */
+export const SWEEP_REFUNDS_CRON = '*/5 * * * *';
+export const SWEEP_REFUNDS_SCHEDULE = 'ledger.sweep-refunds';
+
 /** Every five minutes: re-drives payouts and payout accounts whose job was lost. */
 export const SWEEP_PAYOUTS_CRON = '*/5 * * * *';
 export const SWEEP_PAYOUTS_SCHEDULE = 'ledger.sweep-payouts';
@@ -175,6 +198,7 @@ interface LedgerDeps {
   publicKey: string | undefined;
   verify: (reference: string) => Promise<VerifiedChargeView>;
   verifyTransfer: (reference: string) => Promise<VerifiedTransferView>;
+  verifyRefund: (providerRefundId: string) => Promise<VerifiedRefundView>;
   /** Absent without ENCRYPTION_KEY and IDENTITY_HMAC_PEPPER: payout accounts then answer 503. */
   crypto: PayoutAccountCrypto | undefined;
 }
@@ -222,6 +246,7 @@ const buildDeps = (ctx: {
     publicKey: ctx.config.paystack.publicKey,
     verify: chargeVerifier(paystack),
     verifyTransfer: transferVerifier(paystack),
+    verifyRefund: refundVerifier(paystack),
     crypto: payoutCrypto(ctx.config, ctx.logger),
   };
 };
@@ -251,6 +276,17 @@ const dispatchDeps = (): PayoutDispatchDeps => {
   };
 };
 
+const refundDispatchDeps = (): RefundDispatchDeps => {
+  const d = started();
+  const adapter = d.registry.getAdapter('PAYSTACK');
+  return {
+    db: d.db,
+    logger: d.logger,
+    initiateRefund: (input) => adapter.initiateRefund(input),
+    verifyRefund: d.verifyRefund,
+  };
+};
+
 const accountJobDeps = () => {
   const d = started();
   const crypto = d.crypto;
@@ -276,6 +312,8 @@ const fundingJobDeps = () => {
     verify: d.verify,
     parse: (rawBody: Buffer) => adapter.parseWebhookEvent(rawBody),
     resolvePayout: (payoutId: string) => resolvePayout(dispatchDeps(), payoutId),
+    resolveRefund: (event: { chargeReference: string; providerRefundId: string }) =>
+      resolveRefundEvent(refundDispatchDeps(), { provider: 'PAYSTACK', ...event }),
   };
 };
 
@@ -346,6 +384,13 @@ export const ledgerModule = defineModule({
       process: async (data: ProcessPayoutJob, job, token) =>
         await processPayoutJob(dispatchDeps(), data, job, token),
     },
+    {
+      name: PROCESS_REFUND_QUEUE,
+      attempts: REFUND_JOB_ATTEMPTS,
+      backoffMs: REFUND_JOB_BACKOFF_MS,
+      process: async (data: ProcessRefundJob, job, token) =>
+        await processRefundJob(refundDispatchDeps(), data, job, token),
+    },
   ],
   schedules: [
     {
@@ -378,6 +423,19 @@ export const ledgerModule = defineModule({
           logger: d.logger,
           enqueuePayout: (payoutId) => enqueueProcessPayout(d.queues, payoutId, { deduplicate: false }),
           enqueueAccount: (id) => enqueueVerifyPayoutAccount(d.queues, id, { deduplicate: false }),
+        });
+      },
+    },
+    {
+      name: SWEEP_REFUNDS_SCHEDULE,
+      cron: SWEEP_REFUNDS_CRON,
+      description: 'Re-drives refunds whose dispatch never ran or that the provider went quiet on.',
+      handler: async () => {
+        const d = started();
+        await sweepInFlightRefunds({
+          db: d.db,
+          logger: d.logger,
+          enqueue: (refundId) => enqueueProcessRefund(d.queues, refundId, { deduplicate: false }),
         });
       },
     },
@@ -440,6 +498,40 @@ export const ledgerModule = defineModule({
         } else {
           ctx.logger.info(line, 'ledger: settled a completed trade');
         }
+      },
+    });
+
+    // T-075: a trade asks for its escrow back (an approved cancellation, a seller who cannot fulfil,
+    // an overdue delivery). The decision posts in the bus's own claim transaction, so the journal, the
+    // refund row, the trade's FOR SHARE lock and the escrow_refunded event commit together or not at
+    // all. Every refusal returns — a hold, a trade that moved on, books that do not match the snapshot
+    // — because none is fixed by retrying; `decideRefund` logs each one at the level it deserves. A
+    // lost connection, or the database's own cumulative guard refusing, propagates and is retried.
+    ctx.events.subscribe({
+      name: 'ledger.on-refund-requested',
+      event: tradeRefundRequestedEvent,
+      handler: async ({ payload, eventId, correlationId }, tx) => {
+        const result = await decideRefund(
+          tx,
+          { logger: ctx.logger },
+          {
+            tradeId: payload.tradeId,
+            reason: payload.reason,
+            causationId: eventId,
+            ...(correlationId ? { correlationId } : {}),
+          },
+        );
+        ctx.logger.info({ tradeId: payload.tradeId, outcome: result.outcome }, 'ledger: refund requested');
+      },
+    });
+
+    // The refund row and its decision commit with this event; the dispatch is queued only after that
+    // commit, so the job never looks for a refund that is not there yet.
+    ctx.events.subscribe({
+      name: 'ledger.on-escrow-refunded',
+      event: paymentEscrowRefundedEvent,
+      handler: async ({ payload }) => {
+        await enqueueProcessRefund(started().queues, payload.refundId);
       },
     });
 
