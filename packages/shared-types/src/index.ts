@@ -10,4 +10,5 @@ export * from './geo.js';
 export * from './ids.js';
 export * from './money.js';
 export * from './pagination.js';
+export * from './payouts.js';
 export * from './trades.js';

@@ -28,6 +28,21 @@ export {
  * and should not have to acquire one. M6 answers "does the name match"; M8 owns the account.
  */
 export { readBankNameMatch } from './services/bankMatch.service.js';
+import type { Db } from '../../db/index.js';
+import type { HmacHasher } from '../../platform/crypto/hmac.js';
+import { bindStore } from './infrastructure/postgres/bind-store.js';
+import { readBankNameMatch } from './services/bankMatch.service.js';
+import type { BankNameMatchRecord } from './infrastructure/postgres/store.js';
+/**
+ * `readBankNameMatch` against the database, for a caller that holds a `Db` and not a trust store.
+ * The narrow reader T-073 needs: exporting `bindStore` instead would hand every module the whole
+ * trust store, writes included.
+ */
+export const findBankNameMatchFor = (
+  db: Db,
+  hasher: HmacHasher,
+  input: { userId: string; bankCode: string; accountNumber: string },
+): Promise<BankNameMatchRecord | undefined> => readBankNameMatch(bindStore(db), hasher, input);
 export type { BankNameMatchRecord } from './infrastructure/postgres/store.js';
 /** What VF1 and BVR1 render, so a consumer can describe a stored code without re-deriving the copy. */
 export { describeRejection, isRejectionCode, type RejectionReason } from './domain/rejection.js';

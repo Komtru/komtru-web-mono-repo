@@ -2,6 +2,7 @@
 import { randomUUID } from 'node:crypto';
 import request from 'supertest';
 import { afterAll, describe, expect, it, vi } from 'vitest';
+import { koboSchema } from '@komtru/shared-types';
 import { z } from 'zod';
 import { createApp } from '../../../src/app.js';
 import { loadConfig } from '../../../src/config/env.js';
@@ -105,6 +106,38 @@ describe.runIf(infraEnabled)('idempotency', () => {
     expect(first.headers[REPLAYED_HEADER.toLowerCase()]).toBeUndefined();
     expect(second.headers[REPLAYED_HEADER.toLowerCase()]).toBe('true');
     expect((await rows()).rows).toHaveLength(1);
+  });
+
+  it('keys a body whose money decodes to bigint, telling two amounts apart', async () => {
+    const handler = vi.fn(() => Promise.resolve({ id: randomUUID() }));
+    const gate = createIdempotencyGate({ db: t.db(), redis, logger, lockWaitMs: 500 });
+    const app = createApp({
+      config,
+      logger,
+      mountV1: mountRoutes(
+        [
+          defineRoute({
+            method: 'post',
+            path: '/withdrawals',
+            scope: 'CONSUMER',
+            summary: 'Withdraw',
+            retryable: true,
+            status: 201,
+            schema: { body: z.object({ amountMinor: koboSchema }), response: z.object({ id: z.uuid() }) },
+            handler,
+          }),
+        ],
+        { logger, idempotency: gate, resolveActor: () => Promise.resolve(signedIn) },
+      ),
+    });
+    const key = randomUUID();
+    const send = (amountMinor: string) =>
+      request(app).post('/v1/withdrawals').set(IDEMPOTENCY_HEADER, key).send({ amountMinor });
+
+    expect((await send('20000')).status).toBe(201);
+    expect((await send('20000')).status).toBe(201);
+    expect((await send('20001')).status).toBe(422);
+    expect(handler).toHaveBeenCalledTimes(1);
   });
 
   it('answers 422 when the same key arrives with a different body', async () => {

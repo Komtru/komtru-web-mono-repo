@@ -15,7 +15,12 @@ export const DEFAULT_BACKOFF_MS = 2_000;
 export interface QueueDefinition<T = unknown> {
   /** `module.queue-name`, e.g. `notify.sms`. */
   name: string;
-  process(data: T, job: Job<T>): Promise<unknown>;
+  /**
+   * `token` is the worker's lock token for this attempt, which BullMQ needs to move the job (for
+   * example `job.moveToDelayed(at, token)` followed by throwing `DelayedError`, to wait without
+   * spending an attempt).
+   */
+  process(data: T, job: Job<T>, token?: string): Promise<unknown>;
   attempts?: number;
   /** First retry delay; doubles per attempt. */
   backoffMs?: number;
@@ -175,7 +180,7 @@ export function createQueueFactory({
   const consume = <T>(definition: QueueDefinition<T>): Worker<T> => {
     define(definition);
     // autorun off: nothing is consumed until the process has finished starting (see run()).
-    const worker = new Worker<T>(definition.name, (job) => definition.process(job.data, job), {
+    const worker = new Worker<T>(definition.name, (job, token) => definition.process(job.data, job, token), {
       autorun: false,
       connection: connection('worker'),
       prefix,

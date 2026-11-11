@@ -5,3 +5,4 @@ export * from './enums.js';
 export * from './accounts.js';
 export * from './journal.js';
 export * from './payments.js';
+export * from './payouts.js';

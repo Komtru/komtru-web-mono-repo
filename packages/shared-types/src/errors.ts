@@ -80,6 +80,14 @@ export const PROBLEM_CODES = [
   // T-042. A user already holds the most live delivery addresses one account may keep; the client
   // says "archive one first" rather than the generic conflict copy.
   'ADDRESS_LIMIT_REACHED',
+  /**
+   * T-073. The three refusals of a withdrawal or a payout preference that each send the seller to a
+   * different place: add a verified bank account (`PAYOUT_ACCOUNT_REQUIRED`), withdraw less
+   * (`INSUFFICIENT_BALANCE`), or contact support because risk has stopped payouts (`PAYOUT_HELD`).
+   */
+  'PAYOUT_ACCOUNT_REQUIRED',
+  'INSUFFICIENT_BALANCE',
+  'PAYOUT_HELD',
   // Deliberately NOT added: `TOO_MANY_REQUESTS`. `RATE_LIMITED` above is already this platform's
   // 429, used by the route limiter, by identity's party-lookup budget and by the OTP resend
   // throttle, and it already carries `retryAfter` as an extension member. The social-proof

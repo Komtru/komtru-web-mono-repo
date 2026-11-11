@@ -3,7 +3,8 @@
 // Two halves meet here: T-070's chart of accounts, journal and balances — the ledger never transitions
 // a trade and never computes a fee, amounts arrive already computed from the trade's snapshot
 // (design §6.5) — and T-071's provider layer, the adapter interface, the Paystack implementation,
-// the registry and its jobs. Funding, the webhook route and the payouts are T-072 and T-073.
+// the registry and its jobs. Funding and the webhook route are T-072; payouts (accounts, preferences,
+// withdrawals, the automatic sweep and holds) are T-073.
 import { UnrecoverableError } from 'bullmq';
 import type { Redis } from 'ioredis';
 import type { AppConfig } from '../../config/env.js';
@@ -12,6 +13,27 @@ import type { QueueFactory } from '../../platform/queue/factory.js';
 import type { Logger } from '../../platform/logger.js';
 import { defineModule, type ModuleContext } from '../../platform/module.js';
 import { tradeStateChangedEvent } from '../trades/index.js';
+import { findBankNameMatchFor } from '../trust/index.js';
+import { createEncryption } from '../../platform/crypto/encryption.js';
+import { createHmacHasher } from '../../platform/crypto/hmac.js';
+import { paymentEscrowReleasedEvent, payoutRequestedEvent } from './domain/events.js';
+import type { VerifiedTransferView } from './domain/payouts.js';
+import { payoutRoutes } from './http/payoutRoutes.js';
+import {
+  enqueueProcessPayout,
+  enqueueVerifyPayoutAccount,
+  PAYOUT_JOB_ATTEMPTS,
+  PAYOUT_JOB_BACKOFF_MS,
+  PROCESS_PAYOUT_QUEUE,
+  processPayoutJob,
+  VERIFY_PAYOUT_ACCOUNT_QUEUE,
+  verifyPayoutAccountJob,
+  type ProcessPayoutJob,
+  type VerifyPayoutAccountJob,
+} from './jobs/payouts.job.js';
+import type { PayoutAccountCrypto } from './services/payoutAccount.service.js';
+import { resolvePayout, type PayoutDispatchDeps } from './services/payoutDispatch.service.js';
+import { payOutRelease, sweepAutoPayouts, sweepInFlightPayouts } from './services/payoutTriggers.service.js';
 import { IdempotencyKeyConflictError } from './domain/journal.js';
 import { createRedisBankListCache, type BankListCache } from './infrastructure/bankListCache.js';
 import type { ProviderRegistry } from './infrastructure/providerRegistry.js';
@@ -32,7 +54,7 @@ import {
   type ProcessPaymentWebhookJob,
   type VerifyChargeJob,
 } from './jobs/funding.job.js';
-import { chargeVerifier, paymentProviders } from './jobs/providers.js';
+import { chargeVerifier, paymentProviders, transferVerifier } from './jobs/providers.js';
 import { refreshBankList } from './jobs/refresh-bank-list.job.js';
 import {
   resolveAccountNameJob,
@@ -46,6 +68,7 @@ export * from './domain/journal.js';
 export * from './domain/events.js';
 export * from './domain/funding.js';
 export * from './domain/release.js';
+export * from './domain/payouts.js';
 export * from './infrastructure/postgres/schema/index.js';
 export {
   findAccountId,
@@ -78,6 +101,15 @@ export {
   type ReleaseResult,
 } from './services/release.service.js';
 export {
+  executePayout,
+  placePayoutHold,
+  releasePayoutHold,
+  type ExecutePayoutDeps,
+  type ExecutePayoutInput,
+  type ExecutePayoutResult,
+  type PlaceHoldInput,
+} from './services/payout.service.js';
+export {
   activeTradeHolds,
   lockTradeForRelease,
   type TradeForRelease,
@@ -107,6 +139,17 @@ export { RESOLVE_ACCOUNT_NAME_QUEUE, type ResolveAccountNameJob };
 // Funding a trade (T-072).
 export { PROCESS_PAYMENT_WEBHOOK_QUEUE, VERIFY_CHARGE_QUEUE };
 
+// Paying a seller out (T-073).
+export { PROCESS_PAYOUT_QUEUE, VERIFY_PAYOUT_ACCOUNT_QUEUE };
+
+/** Every five minutes: re-drives payouts and payout accounts whose job was lost. */
+export const SWEEP_PAYOUTS_CRON = '*/5 * * * *';
+export const SWEEP_PAYOUTS_SCHEDULE = 'ledger.sweep-payouts';
+
+/** 09:00 Africa/Lagos: working hours, after the 03:15 bank-list refresh (owner decision 5). */
+export const SWEEP_PAYOUTS_AUTO_CRON = '0 9 * * *';
+export const SWEEP_PAYOUTS_AUTO_SCHEDULE = 'ledger.sweep-payouts-auto';
+
 /** Every five minutes: re-queues signed deliveries whose first enqueue never ran. */
 export const SWEEP_PAYMENT_WEBHOOKS_CRON = '*/5 * * * *';
 export const SWEEP_PAYMENT_WEBHOOKS_SCHEDULE = 'ledger.sweep-payment-webhooks';
@@ -123,6 +166,9 @@ interface LedgerDeps {
   queues: QueueFactory;
   publicKey: string | undefined;
   verify: (reference: string) => Promise<VerifiedChargeView>;
+  verifyTransfer: (reference: string) => Promise<VerifiedTransferView>;
+  /** Absent without ENCRYPTION_KEY and IDENTITY_HMAC_PEPPER: payout accounts then answer 503. */
+  crypto: PayoutAccountCrypto | undefined;
 }
 
 /**
@@ -167,6 +213,49 @@ const buildDeps = (ctx: {
     queues: ctx.queues,
     publicKey: ctx.config.paystack.publicKey,
     verify: chargeVerifier(paystack),
+    verifyTransfer: transferVerifier(paystack),
+    crypto: payoutCrypto(ctx.config, ctx.logger),
+  };
+};
+
+/**
+ * The two secrets an account number is kept under — the platform encryption key and the identifier
+ * pepper trust already hashes bank accounts with. Missing either, payout accounts fail closed (503)
+ * rather than storing a number in the clear; everything else in the ledger still runs.
+ */
+const payoutCrypto = (config: AppConfig, logger: Logger): PayoutAccountCrypto | undefined => {
+  const pepper = config.identity.hmacPepper;
+  if (!config.crypto.encryptionKey || !pepper) {
+    logger.warn('ledger: ENCRYPTION_KEY or IDENTITY_HMAC_PEPPER is not set; payout accounts are unavailable');
+    return undefined;
+  }
+  return { encryption: createEncryption(config), hasher: createHmacHasher(pepper) };
+};
+
+const dispatchDeps = (): PayoutDispatchDeps => {
+  const d = started();
+  const adapter = d.registry.getAdapter('PAYSTACK');
+  return {
+    db: d.db,
+    logger: d.logger,
+    initiateTransfer: (input) => adapter.initiateTransfer(input),
+    verifyTransfer: d.verifyTransfer,
+  };
+};
+
+const accountJobDeps = () => {
+  const d = started();
+  const crypto = d.crypto;
+  // Thrown, so the job retries once the process is configured; the account stays pending meanwhile.
+  if (!crypto)
+    throw new Error('ledger: payout account verification needs ENCRYPTION_KEY and IDENTITY_HMAC_PEPPER');
+  return {
+    db: d.db,
+    logger: d.logger,
+    crypto,
+    adapter: d.registry.getAdapter('PAYSTACK'),
+    readNameMatch: (input: { userId: string; bankCode: string; accountNumber: string }) =>
+      findBankNameMatchFor(d.db, crypto.hasher, input),
   };
 };
 
@@ -178,6 +267,7 @@ const fundingJobDeps = () => {
     logger: d.logger,
     verify: d.verify,
     parse: (rawBody: Buffer) => adapter.parseWebhookEvent(rawBody),
+    resolvePayout: (payoutId: string) => resolvePayout(dispatchDeps(), payoutId),
   };
 };
 
@@ -202,6 +292,20 @@ export const ledgerModule = defineModule({
         enqueueDelivery: (webhookId) => enqueuePaymentWebhook(d.queues, webhookId),
       };
     }),
+    ...payoutRoutes(() => {
+      const d = started();
+      return {
+        banks: d.cache,
+        accounts: {
+          db: d.db,
+          crypto: d.crypto,
+          banks: d.cache,
+          logger: d.logger,
+          enqueueVerify: (payoutAccountId) => enqueueVerifyPayoutAccount(d.queues, payoutAccountId),
+        },
+        payouts: { db: d.db, logger: d.logger },
+      };
+    }),
   ],
   queues: [
     {
@@ -220,6 +324,19 @@ export const ledgerModule = defineModule({
       backoffMs: FUNDING_JOB_BACKOFF_MS,
       process: async (data: ProcessPaymentWebhookJob) =>
         await processPaymentWebhookJob(fundingJobDeps(), data),
+    },
+    {
+      name: VERIFY_PAYOUT_ACCOUNT_QUEUE,
+      attempts: PAYOUT_JOB_ATTEMPTS,
+      backoffMs: PAYOUT_JOB_BACKOFF_MS,
+      process: async (data: VerifyPayoutAccountJob) => await verifyPayoutAccountJob(accountJobDeps(), data),
+    },
+    {
+      name: PROCESS_PAYOUT_QUEUE,
+      attempts: PAYOUT_JOB_ATTEMPTS,
+      backoffMs: PAYOUT_JOB_BACKOFF_MS,
+      process: async (data: ProcessPayoutJob, job, token) =>
+        await processPayoutJob(dispatchDeps(), data, job, token),
     },
   ],
   schedules: [
@@ -240,6 +357,29 @@ export const ledgerModule = defineModule({
           logger: d.logger,
           enqueue: (webhookId) => enqueuePaymentWebhook(d.queues, webhookId, { deduplicate: false }),
         });
+      },
+    },
+    {
+      name: SWEEP_PAYOUTS_SCHEDULE,
+      cron: SWEEP_PAYOUTS_CRON,
+      description: 'Re-drives payouts and payout accounts whose job never ran or went quiet.',
+      handler: async () => {
+        const d = started();
+        await sweepInFlightPayouts({
+          db: d.db,
+          logger: d.logger,
+          enqueuePayout: (payoutId) => enqueueProcessPayout(d.queues, payoutId, { deduplicate: false }),
+          enqueueAccount: (id) => enqueueVerifyPayoutAccount(d.queues, id, { deduplicate: false }),
+        });
+      },
+    },
+    {
+      name: SWEEP_PAYOUTS_AUTO_SCHEDULE,
+      cron: SWEEP_PAYOUTS_AUTO_CRON,
+      description: 'Pays out the available balance of daily, weekly (Monday) and monthly (1st) sellers.',
+      handler: async () => {
+        const d = started();
+        await sweepAutoPayouts({ db: d.db, logger: d.logger });
       },
     },
   ],
@@ -292,6 +432,27 @@ export const ledgerModule = defineModule({
         } else {
           ctx.logger.info(line, 'ledger: settled a completed trade');
         }
+      },
+    });
+
+    // The payout row and its requested event commit together; this queues the dispatch only after
+    // that commit, so the job never looks for a payout that is not there yet.
+    ctx.events.subscribe({
+      name: 'ledger.on-payout-requested',
+      event: payoutRequestedEvent,
+      handler: async ({ payload }) => {
+        await enqueueProcessPayout(started().queues, payload.payoutId);
+      },
+    });
+
+    // AUTO_IMMEDIATE (T-073): the proceeds a release just credited, paid out in the same claim
+    // transaction that records the event as handled. A skip returns; a lost connection propagates
+    // and the bus retries, which is safe because the payout is keyed by the release journal.
+    ctx.events.subscribe({
+      name: 'ledger.on-escrow-released',
+      event: paymentEscrowReleasedEvent,
+      handler: async ({ payload }, tx) => {
+        await payOutRelease(tx, { logger: ctx.logger }, payload);
       },
     });
     return Promise.resolve();

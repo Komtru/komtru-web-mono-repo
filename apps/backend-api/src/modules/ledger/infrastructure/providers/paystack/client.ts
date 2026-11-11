@@ -44,6 +44,11 @@ import type {
   TransferRecipientResult,
 } from '../../../domain/providerAdapter.js';
 import { ChargeNotFoundError } from '../../../domain/funding.js';
+import {
+  AccountNotResolvableError,
+  TransferNotFoundError,
+  type VerifiedTransferView,
+} from '../../../domain/payouts.js';
 import { parsePaystackEvent } from './events.js';
 import { verifyPaystackSignature } from './signature.js';
 
@@ -143,7 +148,14 @@ async function call(options: PaystackClientOptions, spec: CallSpec): Promise<Pay
     }
     return envelope;
   } catch (error) {
-    if (error instanceof ApiError || error instanceof ChargeNotFoundError) throw error;
+    if (
+      error instanceof ApiError ||
+      error instanceof ChargeNotFoundError ||
+      error instanceof TransferNotFoundError ||
+      error instanceof AccountNotResolvableError
+    ) {
+      throw error;
+    }
     // Only the provider's own failures are translated. A TypeError from our code here is a bug, and
     // dressing it as a provider outage would hide it behind a retry and point the operator at Paystack.
     if (error instanceof ProviderHttpError) {
@@ -238,6 +250,11 @@ export const initializeCharge = async (
   };
 };
 
+const mentionsUnresolvable = (body: unknown): boolean => {
+  const message = (body as { message?: unknown } | null)?.message;
+  return typeof message === 'string' && /could\s+not\s+resolve\s+account/i.test(message);
+};
+
 const mentionsNotFound = (body: unknown): boolean => {
   const message = (body as { message?: unknown } | null)?.message;
   return typeof message === 'string' && /not\s*found/i.test(message);
@@ -319,6 +336,13 @@ export const resolveAccountName = async (
       // logging — which is why it goes here rather than into the path.
       path: `/bank/resolve?${query.toString()}`,
       idempotent: true,
+      // Only Paystack's "could not resolve account name" is a verdict on the account, and the job marks
+      // it FAILED. Every other refusal — a bad key, an unknown bank code, a bare `status: false` — is
+      // not about the account, so it stays an ApiError and the queue retries it.
+      recognise: (status, body) =>
+        (status === 400 || status === 422 || status === 200) && mentionsUnresolvable(body)
+          ? new AccountNotResolvableError(bankCode)
+          : undefined,
     },
     resolveAccountResponse,
   );
@@ -460,6 +484,52 @@ export const initiateTransfer = async (
   );
 
   return { providerTransferId: response.transfer_code, status: mapTransferStatus(response.status) };
+};
+
+const verifyTransferResponse = z.object({
+  reference: z.string().min(1),
+  status: z.string().min(1),
+  amount: z.number().int().nonnegative(),
+  currency: z.string().min(1),
+  transfer_code: z.string().min(1),
+});
+
+/**
+ * The re-check T-073 settles a payout on: a transfer webhook's status is never trusted on its own,
+ * exactly as a charge webhook is not (m8 §7, "or the transfer/refund equivalent").
+ *
+ * Not a `PaymentProviderAdapter` method, for the same reason `verifyCharge` is not: it is only ever
+ * called from inside this module, from a job that already knows the provider.
+ *
+ * A reference Paystack has never seen is `TransferNotFoundError`, not an outage: it is the proof a
+ * dispatch that timed out never reached the provider, and so may be sent again.
+ */
+export const verifyTransfer = async (
+  options: PaystackClientOptions,
+  reference: string,
+): Promise<VerifiedTransferView> => {
+  const response = await data(
+    options,
+    {
+      operation: 'transfer.verify',
+      method: 'GET',
+      path: `/transfer/verify/${encodeURIComponent(reference)}`,
+      idempotent: true,
+      recognise: (status, body) =>
+        (status === 400 || status === 404 || status === 200) && mentionsNotFound(body)
+          ? new TransferNotFoundError(reference)
+          : undefined,
+    },
+    verifyTransferResponse,
+  );
+
+  return {
+    reference: response.reference,
+    status: response.status,
+    amountMinor: response.amount,
+    currency: response.currency,
+    providerTransferId: response.transfer_code,
+  };
 };
 
 const createRefundResponse = z.object({

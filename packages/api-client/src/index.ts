@@ -20,6 +20,7 @@ export * from './kyc.js';
 export * from './pagination.js';
 export * from './parties.js';
 export * from './payments.js';
+export * from './payouts.js';
 export * from './problems.js';
 export * from './queue/memory-store.js';
 export * from './queue/retry-queue.js';

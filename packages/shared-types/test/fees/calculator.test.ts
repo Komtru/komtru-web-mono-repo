@@ -8,6 +8,7 @@ import {
   feeSnapshotSchema,
   snapshotFees,
   snapshotParkCashFee,
+  snapshotPayoutFee,
   type TradeFees,
 } from '../../src/fees/calculator.js';
 import { parseFeeSchedule, type FeeBand, type FeeSchedule } from '../../src/fees/schema.js';
@@ -253,5 +254,18 @@ describe('snapshotParkCashFee', () => {
       minMinor: '30000',
       maxMinor: '50000',
     });
+  });
+});
+
+describe('snapshotPayoutFee (T-073)', () => {
+  it('freezes the per-withdrawal fee with the schedule version it came from', () => {
+    expect(snapshotPayoutFee(committed, AT)).toEqual({
+      version: '2026-10-05.1',
+      currency: 'NGN',
+      takenAt: '2026-10-05T09:00:00.000Z',
+      amountMinor: 0n,
+    });
+    const charged = { ...committed, payoutFee: { amountMinor: 2_500n } };
+    expect(snapshotPayoutFee(charged, AT).amountMinor).toBe(2_500n);
   });
 });

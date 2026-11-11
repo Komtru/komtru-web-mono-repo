@@ -35,6 +35,11 @@ describe('@komtru/shared-types public surface', () => {
       'computeTradeFees',
       'snapshotFees',
       'snapshotParkCashFee',
+      'snapshotPayoutFee',
+      'payoutModeSchema',
+      'payoutStatusSchema',
+      'payoutTriggerSchema',
+      'payoutAccountStatusSchema',
       'feeSnapshotSchema',
     ]) {
       expect(sharedTypes, name).toHaveProperty(name);
