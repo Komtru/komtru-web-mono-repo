@@ -85,19 +85,20 @@ is what a reconciliation run can check per payout.
 
 ## Steps (each committed when green)
 
-**Status (2026-11-11, budget stop):** steps 1–4 are DONE and committed. **Next: step 5.** Steps 5–9 are not started.
+**Status (2026-11-11, second run):** steps 1–9 are DONE and committed. The backend layer of F-037 is complete;
+T-124 (the screens) is next and has not started.
 
 1. [done] Plan (this file).
 2. [done] Schema and migration `0048`, lock and invariants updated; schema integration tests.
 3. [done] Pure domain (`domain/payouts.ts`): journal lines per outcome, sweep due-ness by Lagos date, the
    transfer-status mapping, preference validation. Unit tests first.
 4. [done] `snapshotPayoutFee` in config; `verifyTransfer` in the Paystack client (stub-server test).
-5. [next] Repositories and `payoutAccount`, `payoutPreference`, `payout` services; integration tests including
+5. [done] Repositories and `payoutAccount`, `payoutPreference`, `payout` services; integration tests including
    concurrent withdrawals against one balance.
-6. Jobs: verify account, dispatch, verify payout, the two sweeps; webhook ingest for `transfer.*`.
-7. Routes under `/me/payout-accounts`, `/me/payout-preferences`, `/me/payouts`, plus `/payouts/banks`.
-8. `api-client` contracts (`payouts.ts`) and `shared-types` payout enums.
-9. Verification: lint, typecheck, test (forced), `format:check`, `migration:safety`.
+6. [done] Jobs: verify account, dispatch, verify payout, the two sweeps; webhook ingest for `transfer.*`.
+7. [done] Routes under `/me/payout-accounts`, `/me/payout-preferences`, `/me/payouts`, plus `/payouts/banks`.
+8. [done] `api-client` contracts (`payouts.ts`) and `shared-types` payout enums.
+9. [done] Verification: lint, typecheck, test (forced), `format:check`, `migration:safety`.
 
 ## Owner decisions (defaults applied, listed for the RUN_LOG)
 
@@ -135,3 +136,23 @@ is what a reconciliation run can check per payout.
 - T-051's `readBankNameMatch` needs a `findBankNameMatch` store; add a narrow reader export to the
   trust barrel rather than exporting `bindStore`.
 - Bank list route returns `{ banks }` (bounded reference data, not paginated).
+
+## As built (second run)
+
+- One dispatch job, `ledger.process-payout` {payoutId}, queued by the ledger's own subscriber to
+  `ledger.payout.requested` (so it never runs before the payout commits). `resolvePayout` is shared by
+  the job, the `transfer.*` webhook and the five-minute backstop `ledger.sweep-payouts`.
+- The skip event is `ledger.payout.auto_skipped` {trigger, reason}, covering AUTO_IMMEDIATE as well as
+  the sweep (the plan called it `sweep_skipped`). `ledger.payout.completed` announces each outcome.
+- Three new problem codes: `PAYOUT_ACCOUNT_REQUIRED`, `INSUFFICIENT_BALANCE`, `PAYOUT_HELD`.
+- Extra routes beyond the plan: `GET /me/payouts/summary` (available, in flight, fee, mode, held) and
+  `POST /me/payout-accounts/:id/default`, `DELETE /me/payout-accounts/:id` (disables; refused while an
+  automatic mode depends on it or a payout to it is in flight).
+- Safe defaults applied where no rule existed (listed for the owner): a payout whose account is no
+  longer VERIFIED at dispatch is returned to the balance like a held one; a verified transfer whose
+  reference, currency, amount or transfer code differs goes to NEEDS_REVIEW and posts nothing; a
+  SUCCEEDED payout that later verifies as `failed` is logged and left for a person; payout accounts
+  stuck pending are re-queued for 24 hours, then left for ops. Payout accounts answer 503 without
+  `ENCRYPTION_KEY` and `IDENTITY_HMAC_PEPPER`.
+- Open owner question: T-051 says FUZZY_MATCH "is not a pass, a human should look", but owner
+  decision 3's default accepts it for a payout account. Kept as planned; confirm or tighten.
