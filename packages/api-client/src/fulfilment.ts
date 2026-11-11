@@ -67,3 +67,12 @@ export const shipSelfArranged = defineEndpoint({
   retryable: true,
   schema: { params: tradeParams, body: selfArrangedBodySchema, response: tradeViewSchema },
 });
+
+/** The seller says the item arrived (SHIPPED only); the buyer is asked to confirm. Answers with the trade. */
+export const reportDelivered = defineEndpoint({
+  method: 'post',
+  path: '/trades/:id/report-delivered',
+  scope: 'CONSUMER',
+  retryable: true,
+  schema: { params: tradeParams, response: tradeViewSchema },
+});

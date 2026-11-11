@@ -4,7 +4,12 @@ import { cleanup, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createApiClient } from '../../src/client.js';
 import { ApiClientProvider } from '../../src/react/client-context.js';
-import { tradeKeys, useShipOptions, useShipSelfArranged } from '../../src/react/trades.js';
+import {
+  tradeKeys,
+  useReportDelivered,
+  useShipOptions,
+  useShipSelfArranged,
+} from '../../src/react/trades.js';
 
 const ID = '0190b0a0-0000-7000-8000-000000000001';
 const FILE = '0190b0a0-0000-7000-8000-000000000005';
@@ -93,5 +98,65 @@ describe('the ship step hooks', () => {
       expect(queryClient.getQueryData<{ status: string }>(tradeKeys.one(ID))?.status).toBe('SHIPPED');
     });
     expect(requests).toEqual([`POST /trades/${ID}/ship/self-arranged`]);
+  });
+
+  it('drop the ship options and refresh the activity once shipped', async () => {
+    const { queryClient, wrapper: Wrapper } = setup(() => json(shipped));
+    queryClient.setQueryData(tradeKeys.shipOptions(ID), { options: [] });
+    queryClient.setQueryData(tradeKeys.activity(ID), { pages: [] });
+    function Probe() {
+      const ship = useShipSelfArranged();
+      return (
+        <button
+          type="button"
+          onClick={() => {
+            ship.mutate({
+              id: ID,
+              waybillNumber: 'KT-883192',
+              receiptFileId: FILE,
+              driverPhone: '08012345678',
+              vehiclePlate: 'LSR 123 AB',
+            });
+          }}
+        >
+          ship
+        </button>
+      );
+    }
+    render(<Probe />, { wrapper: Wrapper });
+    screen.getByText('ship').click();
+    await waitFor(() => {
+      expect(queryClient.getQueryData(tradeKeys.shipOptions(ID))).toBeUndefined();
+    });
+    expect(queryClient.getQueryState(tradeKeys.activity(ID))?.isInvalidated).toBe(true);
+  });
+
+  it('report delivery writes the trade it answers with into the cache', async () => {
+    const {
+      requests,
+      queryClient,
+      wrapper: Wrapper,
+    } = setup(() => json({ ...shipped, status: 'UNCONFIRMED_DELIVERY' }));
+    function Probe() {
+      const report = useReportDelivered();
+      return (
+        <button
+          type="button"
+          onClick={() => {
+            report.mutate(ID);
+          }}
+        >
+          report
+        </button>
+      );
+    }
+    render(<Probe />, { wrapper: Wrapper });
+    screen.getByText('report').click();
+    await waitFor(() => {
+      expect(queryClient.getQueryData<{ status: string }>(tradeKeys.one(ID))?.status).toBe(
+        'UNCONFIRMED_DELIVERY',
+      );
+    });
+    expect(requests).toEqual([`POST /trades/${ID}/report-delivered`]);
   });
 });

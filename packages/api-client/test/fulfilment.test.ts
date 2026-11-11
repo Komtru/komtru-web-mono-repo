@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { createApiClient } from '../src/client.js';
-import { getShipOptions, shipOptionsSchema, shipSelfArranged } from '../src/fulfilment.js';
+import { getShipOptions, reportDelivered, shipOptionsSchema, shipSelfArranged } from '../src/fulfilment.js';
 
 const id = (n: number) => `0190b0a0-0000-7000-8000-${String(n).padStart(12, '0')}`;
 const json = (body: unknown) =>
@@ -46,6 +46,12 @@ describe('the ship step endpoints (T-064)', () => {
       method: 'get',
       path: '/trades/:id/ship-options',
       scope: 'CONSUMER',
+    });
+    expect(reportDelivered).toMatchObject({
+      method: 'post',
+      path: '/trades/:id/report-delivered',
+      scope: 'CONSUMER',
+      retryable: true,
     });
     expect(shipSelfArranged).toMatchObject({
       method: 'post',

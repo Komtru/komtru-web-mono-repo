@@ -22,7 +22,7 @@ import {
   sendTrade,
   type TradeView,
 } from '../trades.js';
-import { getShipOptions, shipSelfArranged } from '../fulfilment.js';
+import { getShipOptions, reportDelivered, shipSelfArranged } from '../fulfilment.js';
 import { ProblemError } from '../problems.js';
 import { nextPageParam } from '../pagination.js';
 import type { TradeListState } from '@komtru/shared-types';
@@ -142,12 +142,28 @@ export function useShipOptions(id: string, enabled = true) {
   });
 }
 
-/** Marks the trade shipped with the seller's own arrangement; the trade it answers with is written to the cache. */
-export const useShipSelfArranged = () =>
-  useTradeMutation(
-    (client, { id, ...body }: { id: string } & EndpointInput<typeof shipSelfArranged>['body']) =>
+/**
+ * Marks the trade shipped with the seller's own arrangement; the trade it answers with is written to the cache.
+ * The ship options are gone once it has shipped, and the activity feed has a new row.
+ */
+export function useShipSelfArranged() {
+  const client = useApiClient();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, ...body }: { id: string } & EndpointInput<typeof shipSelfArranged>['body']) =>
       client.call(shipSelfArranged, { params: { id }, body }),
-  );
+    onSuccess: (trade) => {
+      queryClient.setQueryData(tradeKeys.one(trade.id), trade);
+      queryClient.removeQueries({ queryKey: tradeKeys.shipOptions(trade.id) });
+      void queryClient.invalidateQueries({ queryKey: tradeKeys.activity(trade.id) });
+      void queryClient.invalidateQueries({ queryKey: ['trades', 'list'] });
+    },
+  });
+}
+
+/** The seller reports the item delivered; the buyer is asked to confirm. */
+export const useReportDelivered = () =>
+  useTradeMutation((client, id: string) => client.call(reportDelivered, { params: { id } }));
 
 const LIST_PAGE = 20;
 
