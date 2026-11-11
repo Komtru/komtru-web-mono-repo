@@ -163,7 +163,7 @@ export function ReviewAccept({ trade }: { trade: TradeView }): React.JSX.Element
       <ConfirmSheet
         open={declining}
         title="Decline these terms"
-        confirm="Decline"
+        confirm="Decline terms"
         pending={decline.isPending}
         onConfirm={onDecline}
         onClose={() => {
