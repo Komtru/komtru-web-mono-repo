@@ -7,11 +7,11 @@ behind it is [`BUILD_PLAN.md`](BUILD_PLAN.md). The unit of work is the feature, 
 thing in an app.
 
 ```
-MVP   ████████████······················  19/52   (37%)
-Total ████████··························  19/80   (24%)
+MVP   █████████████·····················  20/52   (38%)
+Total ████████··························  20/80   (25%)
 ```
 
-33 MVP features left, 28 deferred past it.
+32 MVP features left, 28 deferred past it.
 
 ## Backend done, UI outstanding
 
@@ -28,7 +28,7 @@ The engine exists and only the UI is missing, so these are the highest-value wor
 | Journey                                 | Done | Total | MVP done | MVP total |
 | --------------------------------------- | ---- | ----- | -------- | --------- |
 | Platform (not a user journey)           | 9    | 10    | 9        | 10        |
-| Arrive & verify                         | 2    | 4     | 2        | 3         |
+| Arrive & verify                         | 3    | 4     | 3        | 3         |
 | Home & discover                         | 0    | 2     | 0        | 2         |
 | Propose & agree                         | 1    | 5     | 1        | 3         |
 | The trade workspace                     | 1    | 2     | 1        | 2         |
@@ -50,7 +50,6 @@ The engine exists and only the UI is missing, so these are the highest-value wor
 | Feature | Title                                                | Journey                                 | MVP |
 | ------- | ---------------------------------------------------- | --------------------------------------- | --- |
 | F-005   | Deterministic integration test suite                 | Platform (not a user journey)           | yes |
-| F-013   | First-time onboarding walkthrough                    | Arrive & verify                         | yes |
 | F-018   | Create a trade: buyer starts, seller completes       | Propose & agree                         | yes |
 | F-023   | Terms, agreement and payment detail in the workspace | The trade workspace                     | yes |
 | F-028   | Delivery and evidence in the workspace               | Deliver & inspect                       | yes |
@@ -72,7 +71,6 @@ The engine exists and only the UI is missing, so these are the highest-value wor
 | Feature | Title                                                           | Journey                                 | MVP |
 | ------- | --------------------------------------------------------------- | --------------------------------------- | --- |
 | F-005   | Deterministic integration test suite                            | Platform (not a user journey)           | yes |
-| F-013   | First-time onboarding walkthrough                               | Arrive & verify                         | yes |
 | F-015   | Home, search, categories and find-a-trade-by-code               | Home & discover                         | yes |
 | F-016   | View a seller's profile and Trust Passport                      | Home & discover                         | yes |
 | F-018   | Create a trade: buyer starts, seller completes                  | Propose & agree                         | yes |
@@ -108,11 +106,11 @@ The same work counted per ticket. Useful for the detail in `docs/tickets/`, not 
 it counts backend and frontend layers separately, which is how the build drifted.
 
 ```
-MVP   █████████████████████·············  66/109  (61%)
-Total █████████████·····················  66/168  (39%)
+MVP   █████████████████████·············  68/109  (62%)
+Total ██████████████····················  68/168  (40%)
 ```
 
-43 MVP tickets left, 59 deferred past it.
+41 MVP tickets left, 59 deferred past it.
 
 ### Tickets in progress
 
@@ -127,8 +125,6 @@ Total █████████████·················�
 | T-029  | Isolate the integration suite's shared Redis and queues                   | yes |
 | T-055  | Merchant applications and certification                                   | yes |
 | T-075  | Refunds                                                                   | yes |
-| T-112  | First-time onboarding                                                     | yes |
-| T-124  | Seller payouts                                                            | yes |
 | T-194  | Trade workspace supporting screens: funding, terms, agreement and payment | yes |
 | T-195  | Trade workspace supporting screens: delivery and evidence                 | yes |
 | T-197  | Proof media: capture, check and compare                                   | yes |
@@ -165,14 +161,12 @@ Total █████████████·················�
 | T-080  | Disputes core                                                             | yes |
 | T-081  | Evidence comparison and dispute read models                               | yes |
 | T-102  | Reputation and ratings (M12)                                              | yes |
-| T-112  | First-time onboarding                                                     | yes |
 | T-113  | Home and discovery                                                        | yes |
 | T-114  | Seller profile and Trust Passport                                         | yes |
 | T-119  | Cancellation and refunds                                                  | yes |
 | T-120  | Disputes (buyer and seller)                                               | yes |
 | T-121  | Apply for merchant certification                                          | yes |
 | T-122  | Shop and listings                                                         | yes |
-| T-124  | Seller payouts                                                            | yes |
 | T-126  | Trust, account and settings                                               | yes |
 | T-143  | Disputes                                                                  | yes |
 | T-154  | Merchant certification review                                             | yes |

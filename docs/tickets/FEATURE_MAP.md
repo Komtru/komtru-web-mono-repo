@@ -225,7 +225,7 @@ list a trade.
 - **Absorbs:** T-112 (todo)
 - **Backend scope:** None — uses the notification opt-in from F-007.
 - **Frontend scope:** First-Time Onboarding Walkthrough, OB1–OB5. _5 v2 screens._
-- **Status:** Not started
+- **Status:** Done
 - **Depends on:** none
 - **MVP:** yes
 
