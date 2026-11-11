@@ -524,6 +524,7 @@ list a trade.
 - **Depends on:** none
 - **MVP:** yes
 - **Progress note (2026-11-11):** T-073 (backend) merged; next: T-124 Seller Payouts UI (AB5, AB6, WF1, PR1, Seller-6) over the merged `/me/payout-accounts` and `/me/payouts` routes.
+- **Status (2026-11-11): in progress** — UI layer (T-124) implemented, reviewed and fixed on branch `f-037-payouts-ui` (17 commits, fixer verification green); next: manager merge verification and merge; open review items: none. Payouts row in Account is hidden until the viewer seam (`viewer.hasSold`) is filled.
 
 #### F-038 — Leave a review
 

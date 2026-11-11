@@ -119,6 +119,7 @@ Total █████████████·················�
 | Ticket | Title                                                   | MVP |
 | ------ | ------------------------------------------------------- | --- |
 | T-029  | Isolate the integration suite's shared Redis and queues | yes |
+| T-124  | Seller payouts                                          | yes |
 
 ### Tickets ready to start (MVP first)
 

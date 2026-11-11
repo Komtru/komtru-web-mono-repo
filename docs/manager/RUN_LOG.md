@@ -6,6 +6,10 @@ cost and to find work to resume.
 
 ## Waiting on the owner
 
+- **F-037 / T-124 payouts UI** (on branch `f-037-payouts-ui`, not merged yet; listed in `docs/superpowers/plans/2026-11-11-f-037-payouts-ui.md`):
+  - **new:** the Payouts row in Account shows only when `viewer.hasSold` is true, but `resolveViewer` still returns the anonymous viewer, so nothing links to `/account/payouts` yet. Should a feature fill the viewer seam before F-037 counts as Done?
+  - **new:** should PR1 offer "Download receipt (PDF)"? It needs a backend route, which does not exist yet.
+  - **new:** AB5 makes no arrival-time promise (the reference's "within 2 hours, always within 24" was dropped). Should it promise one, and from what source?
 - **F-037 / T-073 payout defaults** (merged to `main` 2026-11-11; listed in `docs/superpowers/plans/2026-11-11-f-037-payouts-backend.md`):
   - **new:** T-051 says a fuzzy name match "is not a pass", but decision 3 accepts it for a payout account. Decision 3 was kept. Should a fuzzy match hold the account for a person instead?
   - **new, safe defaults:** a payout to an account no longer verified, or one under a hold, is returned to the balance before any send. A transfer still not final after 24h goes to NEEDS_REVIEW. A mismatched verify (reference, amount, currency or transfer code) goes to NEEDS_REVIEW and nothing posts. A succeeded payout later verified as failed is only logged. A failed sweep payout keeps that day's sweep key, so its money goes out on the next due sweep. Payouts are NGN only;
@@ -597,3 +601,18 @@ VALUE` cannot work here at all (drizzle runs every pending migration in one tran
 - Next: F-037's T-124 Seller Payouts UI (web-app-ui; Backend done, UI outstanding). Pair it with a non-web-app-ui feature, or
   with F-044/F-045 only if those touch different areas. F-044 and F-045 are also Backend done, UI outstanding. The full
   `KOMTRU_INFRA_TESTS=1` run on `main` is still owed by the manager.
+
+## 2026-11-11 15:47 WAT — run summary
+
+- Usage at start: 5h 58%, week 32%. At end: 5h 88%, week 36%.
+- Capacity: 1 (est 29, est_week 4: 58 + 29 ≤ 90, 58 + 2×29 > 90). Features: F-037 UI layer (T-124), saved at fix, before merge.
+- F-037 UI (opus, money): Seller-6, AB5, AB6, WF1, PR1 under `/account/payouts/...` in web-app-ui, plus api-client payout hooks.
+  No backend change, no migration. Visual check in `docs/ui-review/T-124/` (deviations accepted). Review: 2 must-fix
+  (withdraw dropped its idempotency key after an ambiguous 408/409/5xx failure, risking a double payout; a failed
+  background refetch unmounted the form and lost the key) and 8 should-fix items, all fixed. Fixer verification: package
+  build, lint, typecheck and test for web-app-ui (618) and api-client (276), format check, all green.
+- Stopped at 88% of the 5-hour window before the merge phase. The branch is clean, 17 commits, nothing unverified.
+- Feature costs: F-037 UI (implement+review+fix) 5h-cost=30 week-cost=4.
+- Next: merge F-037 UI: package build, `turbo run lint typecheck test --force` in the worktree and on `main`, format check,
+  then merge and set the statuses. Whether F-037 is `Done` depends on the viewer-seam owner question (no link to the
+  screens yet). F-044 and F-045 remain Backend done, UI outstanding. The full `KOMTRU_INFRA_TESTS=1` run on `main` is still owed.
