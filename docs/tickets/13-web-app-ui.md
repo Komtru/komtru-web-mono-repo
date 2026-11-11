@@ -127,7 +127,7 @@ One app for every consumer with no buyer or seller views (design C22, §6.3), pl
 - **Screens (v2):** Seller-6, AB5, AB6, WF1, PR1
 - **Depends on:** T-073, T-110, T-190
 - **Notes:** Payouts live under Account and are available to anyone who has sold, not only merchants.
-- **Status (2026-11-11): in progress** — implemented, reviewed (2 must-fix, 8 should-fix) and all fixed on branch `f-037-payouts-ui`; next: merge verification and merge; open review items: none. Plan: docs/superpowers/plans/2026-11-11-f-037-payouts-ui.md.
+- **Status:** Done (2026-11-11). Plan: `docs/superpowers/plans/2026-11-11-f-037-payouts-ui.md`. Review: 10 items fixed (2 must-fix: the withdraw idempotency key is kept across ambiguous 408/409/5xx failures and background refetches). Screens Seller-6, AB5, AB6, WF1, PR1 under `/account/payouts`. The Account Payouts row shows only when `viewer.hasSold`, which waits on the viewer seam (owner question in RUN_LOG).
 
 ### T-125 — Seller insights
 
