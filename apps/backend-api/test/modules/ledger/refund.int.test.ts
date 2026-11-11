@@ -17,6 +17,11 @@ import { infraEnabled, testRedisEnv, testRedisUrl } from '../../support/db-urls.
 import { useTestDatabase } from '../../support/db.js';
 import { insertRow } from '../trades/support.js';
 import {
+  listMyRefunds,
+  listRefundsForTrade,
+} from '../../../src/modules/ledger/services/refundQuery.service.js';
+import { ApiError } from '../../../src/platform/errors.js';
+import {
   fundedTradeWithCharge,
   outboxOf,
   REFUND_FEE,
@@ -251,6 +256,46 @@ describe.runIf(infraEnabled)('deciding a refund (T-075)', () => {
       expect((await refund(trade, { scope: part })).outcome).toBe('REFUNDED');
       expect(refused(await refund(trade, { scope: part }))).toMatch(/less than/);
       expect(await balance(ESCROW(trade))).toBe(1n);
+    });
+  });
+  describe('reading refunds (CR3, SC2, GET /me/refunds)', () => {
+    it('shows a trade’s refund to both parties and to nobody else', async () => {
+      const trade = await fundedTradeWithCharge(t);
+      await refund(trade);
+      const asBuyer = await listRefundsForTrade(
+        { db: t.db() },
+        { userId: trade.buyer, tradeId: trade.tradeId },
+      );
+      expect(asBuyer.refunds).toEqual([
+        expect.objectContaining({
+          status: 'REQUESTED',
+          amountMinor: (ITEM + FEE).toString(),
+          feeAmountMinor: FEE.toString(),
+          buyerProtectionFeeTreatment: 'REFUND',
+        }),
+      ]);
+      const asSeller = await listRefundsForTrade(
+        { db: t.db() },
+        { userId: trade.seller, tradeId: trade.tradeId },
+      );
+      expect(asSeller.refunds).toHaveLength(1);
+      const stranger = await listRefundsForTrade(
+        { db: t.db() },
+        { userId: '0199a2b3-c4d5-7e6f-8a9b-0c1d2e3f4a55', tradeId: trade.tradeId },
+      ).catch((e: unknown) => e);
+      expect(stranger).toBeInstanceOf(ApiError);
+      expect((stranger as ApiError).status).toBe(404);
+    });
+
+    it('pages a buyer’s refunds, newest first', async () => {
+      const first = await fundedTradeWithCharge(t);
+      await refund(first);
+      const page = await listMyRefunds({ db: t.db() }, { userId: first.buyer, limit: 20 });
+      expect(page.items).toHaveLength(1);
+      expect(page.nextCursor).toBeNull();
+      expect((await listMyRefunds({ db: t.db() }, { userId: first.seller, limit: 20 })).items).toHaveLength(
+        0,
+      );
     });
   });
 });

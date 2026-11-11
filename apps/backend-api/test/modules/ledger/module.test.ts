@@ -40,6 +40,8 @@ describe('the ledger module', () => {
       'GET /me/payouts',
       'GET /me/payouts/:id',
       'POST /me/payouts',
+      'GET /trades/:id/refunds',
+      'GET /me/refunds',
     ]);
     const webhook = routes.find((r) => r.path === '/webhooks/paystack');
     expect(webhook?.scope).toBe('PUBLIC');

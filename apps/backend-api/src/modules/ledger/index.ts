@@ -24,6 +24,7 @@ import {
 import type { VerifiedRefundView } from './domain/refunds.js';
 import type { VerifiedTransferView } from './domain/payouts.js';
 import { payoutRoutes } from './http/payoutRoutes.js';
+import { refundRoutes } from './http/refundRoutes.js';
 import {
   enqueueProcessPayout,
   enqueueVerifyPayoutAccount,
@@ -352,6 +353,7 @@ export const ledgerModule = defineModule({
         payouts: { db: d.db, logger: d.logger },
       };
     }),
+    ...refundRoutes(() => ({ db: started().db })),
   ],
   queues: [
     {

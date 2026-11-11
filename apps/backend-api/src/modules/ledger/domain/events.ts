@@ -1,7 +1,7 @@
 // The ledger's domain events (design §4.3). Published through the outbox inside the transaction
 // that wrote the journal entry, so the posting and the announcement of it either both happen or
 // neither does — a consumer that sees this event can rely on the entry being readable.
-import { defineEvent, koboSchema } from '@komtru/shared-types';
+import { defineEvent, koboSchema, REFUND_FEE_TREATMENTS, REFUND_SCOPES } from '@komtru/shared-types';
 import { z } from 'zod';
 import { ENTRY_DIRECTIONS, LEDGER_ACCOUNT_TYPES, PAYMENT_PROVIDERS } from './accounts.js';
 
@@ -198,10 +198,6 @@ export const payoutAutoSkippedEvent = defineEvent(
     amountMinor: amountMinorSchema,
   }),
 );
-
-/** What became of the buyer protection fee on a refund (T-075, design §12 Q4). */
-export const REFUND_FEE_TREATMENTS = ['REFUND', 'RECOGNISE', 'RETAIN'] as const;
-export const REFUND_SCOPES = ['FULL', 'PARTIAL'] as const;
 
 /**
  * A refund was decided (M8 §9, T-075): the decision journal has posted and the refund row is written,
