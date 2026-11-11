@@ -384,10 +384,10 @@ list a trade.
 
 - **Journey:** Fulfil & dispatch
 - **Actor:** seller
-- **Absorbs:** T-064 (done), T-123 (todo)
+- **Absorbs:** T-064 (done), T-123 (done)
 - **Backend scope:** Fulfilment: the ship step, delivery signals and deadlines. Already built (T-064).
 - **Frontend scope:** Seller trade handling: Seller tabs (Seller-2, Seller-3), mandatory proof and counter-proposal (W1–W3, BR1), dispatch guard (SD1), Park waybill and handover OTP (X1, X2), Active Orders (AC8), seller pick (MI3). _11 v2 screens._
-- **Status:** Backend done, UI outstanding
+- **Status:** Done
 - **Depends on:** F-017, F-062 _(post-MVP)_, F-066 _(post-MVP)_
 - **MVP:** yes
 - **Note:** Its dependencies on logistics packages (F-066) and Park (F-062) are dropped for MVP: the seller marks shipped and supplies their own tracking.

@@ -119,6 +119,7 @@ One app for every consumer with no buyer or seller views (design C22, §6.3), pl
 - **Notes:** X2 lists Park first, then every enabled courier company, then "Arrange my own shipping" (m2 §10).
 - **Notes on Park:** choosing Park Hub Transit on X2 shows the same cash handling-fee notice so the seller can tell the buyer. Seller-side screens Seller-2, W1–W3, BR1, SD1, Seller-3, X1, X2, MI3 and AC8 are states of the shared trade detail and list, not a seller area.
 - **Notes on Park coverage:** X2 shows Park Hub Transit disabled with "Park isn't available in {city} yet" when the delivery or ships-from city has no live hub, and lists only that city's hubs when it does (design §7.8).
+- **Status:** Done (2026-11-11). Plan: `docs/superpowers/plans/2026-11-11-f-026-seller-fulfilment.md`. Review: 9 items fixed. Built: ship screen (Seller-3/X2 self-arranged: waybill, receipt photo, driver phone, plate, client-validated to the backend rules), X1 dispatch lock by status, Report delivery on the shipped state, AC8 Active Orders on `/orders`. Seller-2/W1–W3/BR1/SD1 were already built by F-017. Left out for MVP: MI3 (multi-item, F-080), Park and courier branches of X2 (F-062/F-066). Visual check: `docs/ui-review/T-123/`. The web phone check is lenient (backend uses libphonenumber).
 
 ### T-124 — Seller payouts
 

@@ -7,11 +7,11 @@ behind it is [`BUILD_PLAN.md`](BUILD_PLAN.md). The unit of work is the feature, 
 thing in an app.
 
 ```
-MVP   ███████████·······················  17/52   (33%)
-Total ███████···························  17/80   (21%)
+MVP   ████████████······················  18/52   (35%)
+Total ████████··························  18/80   (22%)
 ```
 
-35 MVP features left, 28 deferred past it.
+34 MVP features left, 28 deferred past it.
 
 ## Backend done, UI outstanding
 
@@ -19,7 +19,6 @@ The engine exists and only the UI is missing, so these are the highest-value wor
 
 | Feature | Title                                                  | Journey                  | MVP |
 | ------- | ------------------------------------------------------ | ------------------------ | --- |
-| F-026   | Accept, prove, prepare and ship an item                | Fulfil & dispatch        | yes |
 | F-027   | Confirm delivery, inspect, complete and release        | Deliver & inspect        | yes |
 | F-044   | Account basics, addresses, documents and system states | Account, trust & support | yes |
 | F-045   | Verify yourself, and close or recover an account       | Account, trust & support | yes |
@@ -34,7 +33,7 @@ The engine exists and only the UI is missing, so these are the highest-value wor
 | Propose & agree                         | 1    | 5     | 1        | 3         |
 | The trade workspace                     | 1    | 2     | 1        | 2         |
 | Fund & protect                          | 1    | 2     | 1        | 1         |
-| Fulfil & dispatch                       | 0    | 1     | 0        | 1         |
+| Fulfil & dispatch                       | 1    | 1     | 1        | 1         |
 | Deliver & inspect                       | 0    | 3     | 0        | 3         |
 | Issues & resolution                     | 0    | 7     | 0        | 6         |
 | Complete & grow                         | 0    | 3     | 0        | 1         |
@@ -111,11 +110,11 @@ The same work counted per ticket. Useful for the detail in `docs/tickets/`, not 
 it counts backend and frontend layers separately, which is how the build drifted.
 
 ```
-MVP   ████████████████████··············  63/109  (58%)
-Total █████████████·····················  63/168  (38%)
+MVP   ████████████████████··············  64/109  (59%)
+Total █████████████·····················  64/168  (38%)
 ```
 
-46 MVP tickets left, 59 deferred past it.
+45 MVP tickets left, 59 deferred past it.
 
 ### Tickets in progress
 
@@ -176,7 +175,6 @@ Total █████████████·················�
 | T-120  | Disputes (buyer and seller)                                               | yes |
 | T-121  | Apply for merchant certification                                          | yes |
 | T-122  | Shop and listings                                                         | yes |
-| T-123  | Seller trade handling and shipping                                        | yes |
 | T-124  | Seller payouts                                                            | yes |
 | T-126  | Trust, account and settings                                               | yes |
 | T-143  | Disputes                                                                  | yes |
