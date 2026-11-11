@@ -226,3 +226,24 @@ export function snapshotParkCashFee(schedule: FeeSchedule, takenAt: Date = new D
     maxMinor: wire(schedule.parkCashHandlingFee.maxMinor),
   };
 }
+
+/**
+ * The per-withdrawal `payout_fee` as a payout freezes it (T-073). A payout has no trade snapshot to
+ * read its fee from, so it takes its own when it is asked for and posts from that, never from the
+ * live file: a fee change after the request does not alter what the seller was told.
+ */
+export interface PayoutFeeSnapshot {
+  version: string;
+  currency: Currency;
+  takenAt: string;
+  amountMinor: Kobo;
+}
+
+export function snapshotPayoutFee(schedule: FeeSchedule, takenAt: Date = new Date()): PayoutFeeSnapshot {
+  return {
+    version: schedule.version,
+    currency: schedule.currency,
+    takenAt: takenAt.toISOString(),
+    amountMinor: schedule.payoutFee.amountMinor,
+  };
+}

@@ -7,6 +7,7 @@ import {
   getFeeSchedule,
   loadFeeSchedule,
   snapshotFees,
+  snapshotPayoutFee,
 } from '../../../src/modules/config/index.js';
 
 const REPO_ROOT = resolve(import.meta.dirname, '../../../../..');
@@ -58,6 +59,18 @@ describe('loadFeeSchedule', () => {
 describe('snapshotFees', () => {
   it('snapshots at the live schedule', () => {
     expect(snapshotFees(5_000_000n, 'CASUAL').amounts.buyerTotalMinor).toBe('5075000');
+  });
+});
+
+describe('snapshotPayoutFee (T-073)', () => {
+  it('freezes the live payout fee and the version it came from', () => {
+    const at = new Date('2026-11-11T09:00:00Z');
+    expect(snapshotPayoutFee(at)).toEqual({
+      version: getFeeSchedule().version,
+      currency: 'NGN',
+      takenAt: at.toISOString(),
+      amountMinor: getFeeSchedule().payoutFee.amountMinor,
+    });
   });
 });
 

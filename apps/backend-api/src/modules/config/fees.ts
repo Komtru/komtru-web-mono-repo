@@ -11,10 +11,12 @@ import {
   parseFeeSchedule,
   snapshotFees as snapshotTradeFees,
   snapshotParkCashFee as snapshotParkCash,
+  snapshotPayoutFee as snapshotPayout,
   type FeeSchedule,
   type FeeSnapshot,
   type Kobo,
   type ParkCashFeeSnapshot,
+  type PayoutFeeSnapshot,
   type SellerKind,
 } from '@komtru/shared-types';
 import { parse } from 'yaml';
@@ -83,3 +85,10 @@ export const snapshotParkCashFee = (takenAt?: Date): ParkCashFeeSnapshot =>
 /** The live schedule's snapshot, for a trade whose terms are being accepted now. */
 export const snapshotFees = (itemMinor: Kobo, sellerKind: SellerKind, takenAt?: Date): FeeSnapshot =>
   snapshotTradeFees(itemMinor, sellerKind, schedule, takenAt);
+
+/**
+ * The `payout_fee` as one payout freezes it (T-073). The ledger may not read the live schedule (the
+ * fee guard keeps it on snapshots), so this is the one sanctioned read of the payout fee, exactly as
+ * `snapshotParkCashFee` is the Park module's.
+ */
+export const snapshotPayoutFee = (takenAt?: Date): PayoutFeeSnapshot => snapshotPayout(schedule, takenAt);
