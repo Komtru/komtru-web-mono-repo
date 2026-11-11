@@ -83,6 +83,12 @@ export const waitingKeys = (spec: unknown): string[] =>
 /** A request still open for the seller: it holds the buyer's words and waits on at least one field. */
 export const isRequestSpec = (spec: unknown): boolean => waitingKeys(spec).length > 0;
 
+/** A trade that began as a buyer's request: it carries the delivery choice the request screens record. */
+export const isRequestShaped = (spec: unknown): boolean =>
+  typeof spec === 'object' &&
+  spec !== null &&
+  ((spec as Spec).deliveryMode === 'COURIER' || (spec as Spec).deliveryMode === 'PARK');
+
 export interface SellerAnswer {
   /** The item fields by key. Blank ones are left out; the platform refuses a required one that is missing. */
   fields: Record<string, string>;
