@@ -59,6 +59,7 @@ What changed, from [`screens-v2.tsv`](../design-reference/screens-v2.tsv) (437 s
 
 ### T-192 — Create a trade: buyer starts, seller completes
 
+- **Status notes (F-018):** screens built and unit/component tested with axe on every stage (plan: `docs/superpowers/plans/2026-11-11-f-018-create-trade.md`; visual check: `docs/ui-review/T-192/`). **E2E waived for now:** the repo has no end-to-end harness (no Playwright test project, config or CI job; `tools/visual-check` only drives screenshots), and F-018 may not touch the backend a real flow would need. The whole journey (buyer request, seller completion, buyer accept, refusal to fund an open request) is covered by jsdom component tests against a mocked client. Add the e2e spec when the e2e project exists.
 - **Depends on:** T-115, T-061, T-063, T-049, T-046, T-190
 - **Model:** sonnet
 - **Scope:** The first two stages of the four-stage model: the buyer starts a trade (About, Item and delivery for Courier or Park, Trade terms, Review and send, Sent) and the seller completes the request (details, item, delivery, confirm and send back), with the buyer's final review and accept (CT-B10). Definition of done as epic 13 (frontend-design per screen, ui-kit only, all states, e2e and axe).
