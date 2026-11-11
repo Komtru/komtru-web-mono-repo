@@ -28,3 +28,22 @@ card, the timeline) follow the reference. The scores come from the shell (header
 own bar and a pinned footer), from fields the platform's data asks for in place of the reference's fixed ones, and from
 three things the platform cannot yet say, none of which is drawn as fact: the seller's delivery charge in the total,
 approved delivery partners, and Park. See each screen's deviations.
+
+## Shell-masked re-run
+
+Rows above 100px (the reference's own top bar; our header and stage rail) and the last 110px (the pinned footer; the
+tab bar) were blanked on both sides and the diff re-taken. Content-only differing pixels, as a share of the whole frame:
+
+| Screen | Content only | Screen | Content only |
+| ------ | ------------ | ------ | ------------ |
+| CT-B1  | 3.79%        | CT-B6  | 6.42%        |
+| CT-B2  | 5.01%        | CT-B7  | 3.29%        |
+| CT-B3  | 5.24%        | CT-B8  | 3.96%        |
+| CT-B4  | 3.83%        | CT-B8P | 3.45%        |
+| CT-B5  | 6.63%        | CT-B9  | 4.16%        |
+| CT-B10 | 3.69%        |        |              |
+
+**Not at 2%, and not drift.** What remains is text: the reference's copy and fields differ from the platform's data by
+design (the category's own item fields, a typed partner and charge, the platform's Trade Code, no "98.7% fulfilment"
+or expiry line), and every line of text that wraps differently shifts all those below it. Spacing, type and colour
+follow the kit's tokens. The deviations are listed per screen.
