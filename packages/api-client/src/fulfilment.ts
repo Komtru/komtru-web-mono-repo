@@ -76,3 +76,68 @@ export const reportDelivered = defineEndpoint({
   retryable: true,
   schema: { params: tradeParams, response: tradeViewSchema },
 });
+
+/** The buyer says they have it (SHIPPED or UNCONFIRMED_DELIVERY): inspection starts. Answers with the trade. */
+export const confirmDelivery = defineEndpoint({
+  method: 'post',
+  path: '/trades/:id/confirm-delivery',
+  scope: 'CONSUMER',
+  retryable: true,
+  schema: { params: tradeParams, response: tradeViewSchema },
+});
+
+/** DE1: why a seller is late. The platform's own list; a screen words each one. */
+export const deliveryExtensionReasonSchema = z.enum([
+  'COURIER_PICKUP_DELAYED',
+  'RESTOCKING_ITEM',
+  'ADDRESS_OR_LOGISTICS_ISSUE',
+]);
+export type DeliveryExtensionReason = z.infer<typeof deliveryExtensionReasonSchema>;
+
+export const deliveryExtensionSchema = z.looseObject({
+  id: z.uuid(),
+  status: z.string(),
+  reason: z.string().optional(),
+  note: z.string().nullable().optional(),
+  currentDueAt: z.string().optional(),
+  requestedDueAt: z.string().optional(),
+});
+export type DeliveryExtension = z.infer<typeof deliveryExtensionSchema>;
+
+/** DE1: the seller asks the buyer for more time before the deadline passes. Once per deadline. */
+export const requestDeliveryExtension = defineEndpoint({
+  method: 'post',
+  path: '/trades/:id/delivery-extension',
+  scope: 'CONSUMER',
+  retryable: true,
+  schema: {
+    params: tradeParams,
+    body: z.object({
+      reason: deliveryExtensionReasonSchema,
+      /** An ISO instant, later than the current deadline. */
+      requestedDueAt: z.iso.datetime(),
+      note: z.string().trim().min(1).max(500).optional(),
+    }),
+    response: deliveryExtensionSchema,
+  },
+});
+
+const requestParams = z.object({ id: z.uuid(), requestId: z.uuid() });
+
+/** DE2: the buyer agrees to the new date. */
+export const acceptDeliveryExtension = defineEndpoint({
+  method: 'post',
+  path: '/trades/:id/delivery-extension/:requestId/accept',
+  scope: 'CONSUMER',
+  retryable: true,
+  schema: { params: requestParams, response: deliveryExtensionSchema },
+});
+
+/** DE2: the buyer declines; the original date stands. */
+export const declineDeliveryExtension = defineEndpoint({
+  method: 'post',
+  path: '/trades/:id/delivery-extension/:requestId/decline',
+  scope: 'CONSUMER',
+  retryable: true,
+  schema: { params: requestParams, response: deliveryExtensionSchema },
+});
