@@ -76,6 +76,7 @@ export function ReviewAccept({ trade }: { trade: TradeView }): React.JSX.Element
   const sub = itemSub(terms.itemSpec);
 
   const onAccept = () => {
+    if (request.open) return;
     setProblem(undefined);
     accept.mutate(
       { id: trade.id, termsVersionId: terms.versionId },
@@ -137,7 +138,7 @@ export function ReviewAccept({ trade }: { trade: TradeView }): React.JSX.Element
         inspectionHours={terms.inspectionWindowHours}
         categoryName={trade.categoryName ?? undefined}
         fees={fees}
-        totalNote="The delivery charge is shown above and is not part of this total."
+        totalNote="The delivery charge is paid to the seller outside Komtru protection and is not part of this total."
       />
       <p className="mb-[12px] mt-[12px] text-[11px] leading-[1.5] text-trust-gray">
         Accepting locks this version as the agreement. Funds are protected only after you fund the Trade.

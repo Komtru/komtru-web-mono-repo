@@ -326,7 +326,9 @@ describe('CT-B9 Confirm & send to the buyer', () => {
     expect(screen.getByText('5–7 days')).toBeTruthy();
     expect(screen.getByText('48 hours · Electronics standard')).toBeTruthy();
     expect(screen.getByText('₦458,780.00')).toBeTruthy();
-    expect(screen.getByText(/The delivery charge is shown above and is not part of this total/)).toBeTruthy();
+    expect(
+      screen.getByText(/paid to the seller outside Komtru protection and is not part of this total/),
+    ).toBeTruthy();
     expect(screen.getByText(/Nothing is final until they do and fund the Trade/)).toBeTruthy();
     await expectNoAxeViolations(view.container, SHELL_RULES);
   });

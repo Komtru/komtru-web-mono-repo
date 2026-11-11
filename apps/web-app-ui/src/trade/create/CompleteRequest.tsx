@@ -393,7 +393,7 @@ function Completion({ trade }: { trade: TradeView }): React.JSX.Element {
                     totalMinor: amounts.buyerTotalMinor,
                   }
             }
-            totalNote="The delivery charge is shown above and is not part of this total."
+            totalNote="The delivery charge is paid to the seller outside Komtru protection and is not part of this total."
           />
           <NoteBanner>
             Once you send this, the buyer reviews and accepts. Nothing is final until they do and fund the
