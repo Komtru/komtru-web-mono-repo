@@ -163,6 +163,38 @@ describe('Z5: confirm and release, behind an explicit acknowledgement', () => {
   });
 });
 
+describe('one press, one call', () => {
+  it('sends the release once however many times Confirm & Release is pressed', async () => {
+    serve(workspaceTrade('INSPECTION', 'BUYER'), undefined, {
+      'POST /trades/:id/accept-inspection': workspaceTrade('COMPLETED', 'BUYER'),
+    });
+    show();
+    fireEvent.click(await screen.findByRole('button', { name: 'Confirm & Release Payment' }));
+    const dialog = await screen.findByRole('dialog');
+    fireEvent.click(within(dialog).getByRole('checkbox'));
+    const confirm = within(dialog).getByRole('button', { name: 'Confirm & Release' });
+    fireEvent.click(confirm);
+    fireEvent.click(confirm);
+    fireEvent.click(confirm);
+    await screen.findByText('You released the payment');
+    expect(callsTo(api.call, 'POST', '/trades/:id/accept-inspection')).toHaveLength(1);
+  });
+});
+
+describe('an agreed extension', () => {
+  it('tells the buyer the seller agreed', async () => {
+    serve(
+      workspaceTrade('INSPECTION', 'BUYER'),
+      inspectionRead({
+        canRequestMoreTime: false,
+        extensionRequest: { id: id(95), status: 'ACCEPTED', extraHours: 24 },
+      }),
+    );
+    show();
+    expect(await screen.findByText('More time was agreed')).toBeTruthy();
+  });
+});
+
 describe('BEI1: the buyer asks the seller for more time, once', () => {
   it('offers only choices within one original window, and sends the hours and a note', async () => {
     expect(extraHourChoices(48)).toEqual([12, 24, 48]);

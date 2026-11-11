@@ -20,6 +20,7 @@ import { useState } from 'react';
 import { EXTENSION_REASONS, deliveryTimeState } from '../delivery-time';
 import { isProblem, platformWords, problemMessage, whenLabel } from '../format';
 import { ItemSummary } from '../parts';
+import { useNow } from '../use-now';
 
 const tradeHref = (id: string) => `/trade/${id}`;
 
@@ -55,6 +56,7 @@ export function RequestMoreTime({ id }: { id: string }): React.JSX.Element {
   const trade = useTrade(id);
   const deadline = useDeliveryDeadline(id, trade.data !== undefined);
   const ask = useRequestDeliveryExtension();
+  const now = useNow();
   const [reason, setReason] = useState<DeliveryExtensionReason | undefined>(undefined);
   const [date, setDate] = useState('');
   const [touched, setTouched] = useState(false);
@@ -100,7 +102,7 @@ export function RequestMoreTime({ id }: { id: string }): React.JSX.Element {
     );
   }
   const view = trade.data;
-  const state = deliveryTimeState(deadline.data, view.yourRole, new Date());
+  const state = deliveryTimeState(deadline.data, view.yourRole, now);
   const due = deadline.data.deadline?.dueAt;
 
   if (sent) {

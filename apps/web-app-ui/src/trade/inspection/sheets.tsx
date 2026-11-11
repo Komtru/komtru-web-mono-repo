@@ -9,6 +9,11 @@ import { useState } from 'react';
 import { hoursLabel, platformWords } from '../format';
 import { OverTabBar } from '../parts';
 
+/**
+ * Hard-coded on purpose: the platform stores the acknowledgement as a code (`RELEASE_IS_FINAL_V1`, returned in
+ * `release.acknowledgement`), not as text, and this sentence is the words that code stands for. If the code's
+ * version changes, this wording must change with it.
+ */
 /** The sentence the platform stores with the acknowledgement; the checkbox says exactly this. */
 export const ACKNOWLEDGEMENT =
   'I’ve compared the item to the seller’s proof and confirm it matches what was agreed.';
@@ -115,6 +120,8 @@ export function MoreTimeSheet({
   const [problem, setProblem] = useState<string | undefined>(undefined);
   const close = () => {
     setProblem(undefined);
+    setHours(undefined);
+    setNote('');
     onClose();
   };
   const send = () => {

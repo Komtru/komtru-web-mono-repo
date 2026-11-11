@@ -72,7 +72,7 @@ export function Inspect({ id }: { id: string }): React.JSX.Element {
       </Frame>
     );
   }
-  if (trade.isError) {
+  if (trade.data === undefined) {
     return (
       <LoadFailed
         title="Couldn’t open this trade"
@@ -189,6 +189,11 @@ function BuyerInspect({ trade, read, query }: Parts): React.JSX.Element {
       <Window read={read} query={query} buyer />
       {request?.status === 'PENDING' && (
         <NoteBanner title={extensionPending('BUYER').title}>{extensionPending('BUYER').body}</NoteBanner>
+      )}
+      {request?.status === 'ACCEPTED' && (
+        <NoteBanner title="More time was agreed">
+          The seller agreed, so your inspection window is longer. The new end time is above.
+        </NoteBanner>
       )}
       {request?.status === 'DECLINED' && (
         <NoteBanner title="More time was declined">

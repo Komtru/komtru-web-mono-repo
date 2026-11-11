@@ -14,6 +14,7 @@ import {
   WarnBanner,
 } from '@komtru/ui-kit';
 import { useState } from 'react';
+import { useNow } from '../use-now';
 import { deliveryTimeState, overdueWords, reasonLabel } from '../delivery-time';
 import { partyName, platformWords, whenLabel } from '../format';
 import { extendHref } from '../workspace-state';
@@ -28,9 +29,10 @@ export function DeliveryTime({ trade, role }: BodyProps): React.JSX.Element | nu
 type Read = NonNullable<ReturnType<typeof useDeliveryDeadline>['data']>;
 
 function Panel({ trade, role, read }: BodyProps & { read: Read }): React.JSX.Element | null {
+  const now = useNow();
   const respond = useRespondToDeliveryExtension();
   const [problem, setProblem] = useState<string | undefined>(undefined);
-  const state = deliveryTimeState(read, role, new Date());
+  const state = deliveryTimeState(read, role, now);
   const request = read.extensionRequest;
   const counterparty =
     trade.counterparty === undefined || trade.counterparty === null

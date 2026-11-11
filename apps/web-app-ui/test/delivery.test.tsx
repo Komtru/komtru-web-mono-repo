@@ -103,6 +103,32 @@ describe('confirm delivery (Customer-4, AB1)', () => {
     );
   });
 
+  it('sends the confirmation once however many times it is pressed', async () => {
+    serve(workspaceTrade('SHIPPED', 'BUYER'), {
+      'POST /trades/:id/confirm-delivery': workspaceTrade('INSPECTION', 'BUYER'),
+    });
+    overview();
+    const button = await screen.findByRole('button', { name: 'Confirm you have it' });
+    fireEvent.click(button);
+    fireEvent.click(button);
+    await screen.findByText('Inspect the item');
+    expect(callsTo(api.call, 'POST', '/trades/:id/confirm-delivery')).toHaveLength(1);
+  });
+
+  it('reads the trade again when the platform answers with a conflict, so the screen follows it', async () => {
+    serve(workspaceTrade('SHIPPED', 'BUYER'), {
+      'POST /trades/:id/confirm-delivery': problem('INVALID_TRANSITION', 409),
+    });
+    overview();
+    await screen.findByRole('button', { name: 'Confirm you have it' });
+    const before = callsTo(api.call, 'GET', '/trades/:id').length;
+    fireEvent.click(screen.getByRole('button', { name: 'Confirm you have it' }));
+    await screen.findByRole('alert');
+    await waitFor(() => {
+      expect(callsTo(api.call, 'GET', '/trades/:id').length).toBeGreaterThan(before);
+    });
+  });
+
   it('gives the seller nothing to confirm', async () => {
     serve(workspaceTrade('SHIPPED', 'SELLER'));
     overview();

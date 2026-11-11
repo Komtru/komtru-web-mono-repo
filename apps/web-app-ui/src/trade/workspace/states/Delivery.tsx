@@ -1,7 +1,7 @@
 'use client';
 
 import type { TradeView } from '@komtru/api-client';
-import { useConfirmDelivery, useInspection } from '@komtru/api-client/react';
+import { tradeKeys, useConfirmDelivery, useInspection } from '@komtru/api-client/react';
 import {
   ActionStack,
   Button,
@@ -13,7 +13,8 @@ import {
   TermList,
   TermRow,
 } from '@komtru/ui-kit';
-import { useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
+import { useRef, useState } from 'react';
 import { hoursLabel, platformWords, whenLabel } from '../../format';
 import { stateCopy } from '../../workspace-copy';
 import { DeliveryTime } from '../DeliveryTime';
@@ -25,6 +26,9 @@ import { BannerView, FurtherViews, type BodyProps } from '../shared';
  */
 function ConfirmDelivery({ trade, label }: { trade: TradeView; label: string }): React.JSX.Element {
   const confirm = useConfirmDelivery();
+  const queryClient = useQueryClient();
+  // A second press before the first has been answered must not send a second call.
+  const sending = useRef(false);
   const [problem, setProblem] = useState<string | undefined>(undefined);
   return (
     <>
@@ -40,9 +44,16 @@ function ConfirmDelivery({ trade, label }: { trade: TradeView; label: string }):
           type="button"
           disabled={confirm.isPending}
           onClick={() => {
+            if (sending.current) return;
+            sending.current = true;
             setProblem(undefined);
             confirm.mutate(trade.id, {
+              onSettled: () => {
+                sending.current = false;
+              },
               onError: (error) => {
+                // The trade may have moved on (confirmed elsewhere, held): read it again so the screen follows.
+                void queryClient.invalidateQueries({ queryKey: tradeKeys.one(trade.id), exact: true });
                 setProblem(platformWords(error, 'We couldn’t confirm the delivery. Try again.'));
               },
             });
