@@ -7185,6 +7185,37 @@
           "method": "btree",
           "with": {}
         },
+        "payouts_account_idx": {
+          "name": "payouts_account_idx",
+          "columns": [
+            {
+              "expression": "payout_account_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "payouts_source_trade_idx": {
+          "name": "payouts_source_trade_idx",
+          "columns": [
+            {
+              "expression": "source_trade_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "where": "\"ledger\".\"payouts\".\"source_trade_id\" IS NOT NULL",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
         "payouts_one_per_source": {
           "name": "payouts_one_per_source",
           "columns": [

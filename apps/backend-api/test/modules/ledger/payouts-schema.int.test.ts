@@ -289,4 +289,14 @@ describe.runIf(infraEnabled)('ledger payouts schema (T-073)', () => {
       ).toBe('KT013');
     });
   });
+  it('indexes the payout lookups by account and by source trade', async () => {
+    const { rows } = await t
+      .owner()
+      .query<{ indexname: string }>(
+        `SELECT indexname FROM pg_indexes WHERE schemaname = 'ledger' AND tablename = 'payouts'`,
+      );
+    expect(rows.map((r) => r.indexname)).toEqual(
+      expect.arrayContaining(['payouts_account_idx', 'payouts_source_trade_idx']),
+    );
+  });
 });

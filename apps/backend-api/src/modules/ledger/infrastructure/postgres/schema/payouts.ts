@@ -186,6 +186,12 @@ export const payouts = ledger.table(
     index('payouts_in_flight_idx')
       .on(table.status, table.updatedAt)
       .where(sql`${table.status} IN ('REQUESTED', 'PROCESSING')`),
+    // "Which payouts went to this account" (removing an account, ops) and "which payout paid this
+    // trade" (PR1, T-076) are both lookups by a reference column; without these they are table scans.
+    index('payouts_account_idx').on(table.payoutAccountId),
+    index('payouts_source_trade_idx')
+      .on(table.sourceTradeId)
+      .where(sql`${table.sourceTradeId} IS NOT NULL`),
     uniqueIndex('payouts_one_per_source')
       .on(table.sourceJournalEntryId)
       .where(sql`${table.sourceJournalEntryId} IS NOT NULL`),

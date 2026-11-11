@@ -100,9 +100,16 @@ CREATE UNIQUE INDEX "payout_accounts_one_default" ON "ledger"."payout_accounts" 
 CREATE INDEX "payout_holds_active_idx" ON "ledger"."payout_holds" USING btree ("user_id") WHERE "ledger"."payout_holds"."released_at" IS NULL;--> statement-breakpoint
 CREATE INDEX "payouts_user_idx" ON "ledger"."payouts" USING btree ("user_id","requested_at" DESC NULLS FIRST,"id" DESC NULLS FIRST);--> statement-breakpoint
 CREATE INDEX "payouts_in_flight_idx" ON "ledger"."payouts" USING btree ("status","updated_at") WHERE "ledger"."payouts"."status" IN ('REQUESTED', 'PROCESSING');--> statement-breakpoint
+CREATE INDEX "payouts_account_idx" ON "ledger"."payouts" USING btree ("payout_account_id");--> statement-breakpoint
+CREATE INDEX "payouts_source_trade_idx" ON "ledger"."payouts" USING btree ("source_trade_id") WHERE "ledger"."payouts"."source_trade_id" IS NOT NULL;--> statement-breakpoint
 CREATE UNIQUE INDEX "payouts_one_per_source" ON "ledger"."payouts" USING btree ("source_journal_entry_id") WHERE "ledger"."payouts"."source_journal_entry_id" IS NOT NULL;--> statement-breakpoint
 CREATE UNIQUE INDEX "payouts_provider_transfer" ON "ledger"."payouts" USING btree ("provider","provider_transfer_id") WHERE "ledger"."payouts"."provider_transfer_id" IS NOT NULL;--> statement-breakpoint
 -- T-073, hand-written below this line: the rules drizzle cannot express.
+--
+-- No foreign key on any user_id here, deliberately: identity.users belongs to another module, and the
+-- ledger refers across module boundaries by soft reference only, as every ledger table does
+-- (ledger_accounts.owner_user_id, payment_attempts.buyer_user_id). The ledger's own rows — accounts,
+-- journals — are real foreign keys above.
 --
 -- A payout only ever moves forward. What left the payable, the frozen fee, what the bank is sent, the
 -- reference the provider knows it by and the journal that moved it into clearing are fixed the moment
