@@ -164,11 +164,22 @@ export async function updatePayoutAccount(
 }
 
 /** Accounts still waiting on a verify job, oldest first, for the backstop sweep. */
-export async function stalePendingAccounts(db: Reader, before: Date, limit: number): Promise<string[]> {
+export async function stalePendingAccounts(
+  db: Reader,
+  before: Date,
+  createdAfter: Date,
+  limit: number,
+): Promise<string[]> {
   const rows = await db
     .select({ id: payoutAccounts.id })
     .from(payoutAccounts)
-    .where(and(eq(payoutAccounts.status, 'PENDING_VERIFICATION'), lt(payoutAccounts.updatedAt, before)))
+    .where(
+      and(
+        eq(payoutAccounts.status, 'PENDING_VERIFICATION'),
+        lt(payoutAccounts.updatedAt, before),
+        gt(payoutAccounts.createdAt, createdAfter),
+      ),
+    )
     .orderBy(payoutAccounts.updatedAt)
     .limit(limit);
   return rows.map((row) => row.id);

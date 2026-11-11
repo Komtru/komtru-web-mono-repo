@@ -27,6 +27,7 @@ import {
   type VerifiedChargeView,
   type VerifyOutcome,
 } from '../domain/funding.js';
+import { payoutIdFromReference } from '../domain/payouts.js';
 import type { PaymentProviderAdapter } from '../domain/providerAdapter.js';
 import { paystackEventId } from '../infrastructure/providers/paystack/eventId.js';
 import {
@@ -285,12 +286,17 @@ export interface ProcessDeliveryDeps extends SettleDeps {
   /** The provider's transaction verify call (`verifyCharge` in paystack/client.ts). */
   verify: (reference: string) => Promise<VerifiedChargeView>;
   parse: PaymentProviderAdapter['parseWebhookEvent'];
+  /**
+   * T-073: settles one payout on the provider's transfer verify answer (`resolvePayout`). Absent,
+   * transfer events are recorded and left for the payout sweep.
+   */
+  resolvePayout?: (payoutId: string) => Promise<string>;
 }
 
 /**
- * The job behind `POST /webhooks/paystack`. Charge events are re-verified and settled; transfer and
- * refund events are recorded and left for T-073 and T-075, which have nothing in flight to match
- * them against yet. A delivery is marked processed only once its outcome is committed.
+ * The job behind `POST /webhooks/paystack`. Charge events are re-verified and settled; transfer
+ * events settle their payout on transfer verify (T-073); refund events are recorded and left for
+ * T-075, which has nothing in flight to match them against yet. A delivery is marked processed only once its outcome is committed.
  */
 export async function processDelivery(deps: ProcessDeliveryDeps, webhookId: bigint): Promise<string> {
   const delivery = await findDelivery(deps.db, webhookId);
@@ -314,6 +320,26 @@ export async function processDelivery(deps: ProcessDeliveryDeps, webhookId: bigi
   if (!event) {
     await markDeliveryProcessed(deps.db, webhookId, `ignored: ${delivery.eventType} is not acted on`);
     return 'ignored';
+  }
+  if (
+    event.type === 'transfer.success' ||
+    event.type === 'transfer.failed' ||
+    event.type === 'transfer.reversed'
+  ) {
+    const payoutId = payoutIdFromReference(event.reference);
+    if (!payoutId) {
+      await markDeliveryProcessed(deps.db, webhookId, 'unknown reference');
+      return 'UNKNOWN_REFERENCE';
+    }
+    if (!deps.resolvePayout) {
+      await markDeliveryProcessed(deps.db, webhookId, `ignored: ${event.type} has no handler here`);
+      return 'ignored';
+    }
+    // Only the reference is read from the body: the outcome comes from transfer verify. A verify
+    // that fails, or a payout still pending, leaves the delivery unprocessed for the retry.
+    const outcome = await deps.resolvePayout(payoutId);
+    await markDeliveryProcessed(deps.db, webhookId, outcome === 'MISSING' ? 'unknown reference' : null);
+    return outcome === 'MISSING' ? 'UNKNOWN_REFERENCE' : outcome;
   }
   if (event.type !== 'charge.succeeded' && event.type !== 'charge.failed') {
     await markDeliveryProcessed(deps.db, webhookId, `ignored: ${event.type} has no handler yet`);

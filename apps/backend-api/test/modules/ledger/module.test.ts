@@ -7,7 +7,9 @@ import { testRedisEnv, testRedisUrl } from '../../support/db-urls.js';
 import {
   ledgerModule,
   PROCESS_PAYMENT_WEBHOOK_QUEUE,
+  PROCESS_PAYOUT_QUEUE,
   RESOLVE_ACCOUNT_NAME_QUEUE,
+  VERIFY_PAYOUT_ACCOUNT_QUEUE,
   VERIFY_CHARGE_QUEUE,
 } from '../../../src/modules/ledger/index.js';
 import { assertRouteInvariants, routeLabel } from '../../../src/platform/http/route.js';
@@ -26,6 +28,17 @@ describe('the ledger module', () => {
       'POST /trades/:code/payment/confirm',
       'GET /trades/:code/payment/status',
       'POST /webhooks/paystack',
+      'GET /payouts/banks',
+      'GET /me/payout-accounts',
+      'POST /me/payout-accounts',
+      'POST /me/payout-accounts/:id/default',
+      'DELETE /me/payout-accounts/:id',
+      'GET /me/payout-preferences',
+      'PUT /me/payout-preferences',
+      'GET /me/payouts/summary',
+      'GET /me/payouts',
+      'GET /me/payouts/:id',
+      'POST /me/payouts',
     ]);
     const webhook = routes.find((r) => r.path === '/webhooks/paystack');
     expect(webhook?.scope).toBe('PUBLIC');
@@ -36,12 +49,25 @@ describe('the ledger module', () => {
     expect(() => assertRouteInvariants(routes)).not.toThrow();
   });
 
+  it('puts every payout route behind a session, and keys the withdrawal for retries (T-073)', () => {
+    const routes = (ledgerModule.routes ?? []).filter(
+      (r) => r.path.startsWith('/me/payout') || r.path.startsWith('/payouts'),
+    );
+    for (const route of routes) expect(route.scope, routeLabel(route)).toBe('CONSUMER');
+    const withdraw = routes.find((r) => routeLabel(r) === 'POST /me/payouts');
+    expect(withdraw?.retryable).toBe(true);
+    expect(withdraw?.rateLimit).toBeDefined();
+  });
+
   it('consumes the name-resolution and funding queues', () => {
     expect((ledgerModule.queues ?? []).map((q) => q.name)).toEqual([
       RESOLVE_ACCOUNT_NAME_QUEUE,
       VERIFY_CHARGE_QUEUE,
       PROCESS_PAYMENT_WEBHOOK_QUEUE,
+      VERIFY_PAYOUT_ACCOUNT_QUEUE,
+      PROCESS_PAYOUT_QUEUE,
     ]);
+    expect(PROCESS_PAYOUT_QUEUE).toBe('ledger.process-payout');
     expect(RESOLVE_ACCOUNT_NAME_QUEUE).toBe('ledger.resolve-account-name');
   });
 
@@ -53,7 +79,11 @@ describe('the ledger module', () => {
     expect(registry.list().map((j) => j.name)).toEqual([
       'ledger.refresh-bank-list',
       'ledger.sweep-payment-webhooks',
+      'ledger.sweep-payouts',
+      'ledger.sweep-payouts-auto',
     ]);
+    // Once a day, at 09:00 in the scheduler's zone (Africa/Lagos).
+    expect(registry.get('ledger.sweep-payouts-auto')?.cron).toBe('0 9 * * *');
     expect(registry.get('ledger.refresh-bank-list')?.cron).toMatch(/^\S+ \S+ \* \* \*$/);
   });
 
@@ -124,6 +154,21 @@ describe('the ledger module', () => {
     expect(error).toHaveBeenCalledWith(
       expect.objectContaining({ outcome: 'NOT_RELEASABLE', reason: 'the trade does not exist' }),
       expect.stringContaining('could not settle'),
+    );
+  });
+
+  it('subscribes to its own payout request and to escrow releases (T-073)', async () => {
+    const { ctx, subscribe } = startedContext();
+    await ledgerModule.start?.(ctx);
+    await ledgerModule.stop?.();
+    const names = subscribe.mock.calls.map(
+      (call) => call[0] as { name: string; event: { eventType: string } },
+    );
+    expect(names.map((s) => [s.name, s.event.eventType])).toEqual(
+      expect.arrayContaining([
+        ['ledger.on-payout-requested', 'ledger.payout.requested'],
+        ['ledger.on-escrow-released', 'ledger.payment.escrow_released'],
+      ]),
     );
   });
 
