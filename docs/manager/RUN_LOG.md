@@ -526,3 +526,5 @@ VALUE` cannot work here at all (drizzle runs every pending migration in one tran
 - Capacity: 0. No in-flight worktrees or branches to resume.
 - Next: unchanged. F-026 or F-027 (Backend done, UI outstanding, both web-app-ui, one at a time), and the full
   `KOMTRU_INFRA_TESTS=1` run on `main`. The 5-hour window resets at 02:29 WAT.
+
+## 2026-11-11 07:36 WAT — skipped: locked (lock from 2026-11-11T04:31:58Z; 5h 47%, week 18%; F-026 worktree committed at 07:02 WAT)
