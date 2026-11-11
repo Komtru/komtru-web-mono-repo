@@ -69,6 +69,7 @@ export * from './domain/events.js';
 export * from './domain/funding.js';
 export * from './domain/release.js';
 export * from './domain/payouts.js';
+export * from './domain/refunds.js';
 export * from './infrastructure/postgres/schema/index.js';
 export {
   findAccountId,
@@ -100,6 +101,13 @@ export {
   type ReleaseInput,
   type ReleaseResult,
 } from './services/release.service.js';
+export {
+  decideRefund,
+  REFUNDABLE_STATUSES,
+  type RefundDeps,
+  type RefundInput,
+  type RefundResult,
+} from './services/refund.service.js';
 export {
   executePayout,
   placePayoutHold,

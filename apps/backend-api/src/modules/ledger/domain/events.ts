@@ -198,3 +198,61 @@ export const payoutAutoSkippedEvent = defineEvent(
     amountMinor: amountMinorSchema,
   }),
 );
+
+/** What became of the buyer protection fee on a refund (T-075, design §12 Q4). */
+export const REFUND_FEE_TREATMENTS = ['REFUND', 'RECOGNISE', 'RETAIN'] as const;
+export const REFUND_SCOPES = ['FULL', 'PARTIAL'] as const;
+
+/**
+ * A refund was decided (M8 §9, T-075): the decision journal has posted and the refund row is written,
+ * in the same transaction as this event. M7 consumes it to move the trade `FUNDED -> CANCELLED_REFUNDED`
+ * with `reason` as the cancellation reason; the ledger's own dispatch subscriber queues the provider
+ * call on it. The money is on its way, not yet back: `ledger.refund.completed` says when it is.
+ */
+export const paymentEscrowRefundedEvent = defineEvent(
+  'ledger.payment.escrow_refunded',
+  1,
+  z.object({
+    tradeId: z.uuid(),
+    refundId: z.uuid(),
+    journalEntryId: z.uuid(),
+    buyerUserId: z.uuid(),
+    /** `trades.refund.requested`'s reason: DELIVERY_OVERDUE, SELLER_CANNOT_FULFIL, MUTUAL_AGREEMENT. */
+    reason: z.string().min(1),
+    scope: z.enum(REFUND_SCOPES),
+    currency: z.string(),
+    /** Out of the trade's escrow liability. */
+    itemAmountMinor: amountMinorSchema,
+    /** The protection fee handed back with it; zero when retained or recognised. */
+    feeAmountMinor: amountMinorSchema,
+    /** What the buyer gets back: item plus fee. */
+    amountMinor: amountMinorSchema,
+    buyerProtectionFeeTreatment: z.enum(REFUND_FEE_TREATMENTS),
+    refundedAt: z.iso.datetime(),
+  }),
+);
+
+export const REFUND_OUTCOMES = ['PROCESSED', 'FAILED', 'NEEDS_REVIEW'] as const;
+
+/**
+ * A refund reached an outcome on the provider's own record of it (T-075). PROCESSED: the money is back
+ * on the buyer's payment method. FAILED: it came back to our balance and the failure journal has
+ * returned it to the trade's liabilities, in this transaction. NEEDS_REVIEW: nothing posted; ops
+ * decides (T-076). Notifications and CR3/SC2 key on it.
+ */
+export const refundCompletedEvent = defineEvent(
+  'ledger.refund.completed',
+  1,
+  z.object({
+    refundId: z.uuid(),
+    tradeId: z.uuid(),
+    buyerUserId: z.uuid(),
+    outcome: z.enum(REFUND_OUTCOMES),
+    currency: z.string(),
+    amountMinor: amountMinorSchema,
+    /** The failure journal for FAILED; null otherwise. */
+    journalEntryId: z.uuid().nullable(),
+    reason: z.string().nullable(),
+    completedAt: z.iso.datetime(),
+  }),
+);
