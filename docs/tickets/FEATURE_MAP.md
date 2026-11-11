@@ -517,12 +517,13 @@ list a trade.
 
 - **Journey:** Complete & grow
 - **Actor:** seller
-- **Absorbs:** T-073 (todo), T-124 (todo)
+- **Absorbs:** T-073 (done), T-124 (todo)
 - **Backend scope:** Payout accounts, preferences and payouts against the ledger (T-073).
 - **Frontend scope:** Seller Payouts (AB5, AB6, WF1, PR1) and the seller money tab (Seller-6). _5 v2 screens._
-- **Status:** Backend done, UI outstanding (2026-11-11): T-073 merged; next: T-124 Seller Payouts UI (AB5, AB6, WF1, PR1, Seller-6) over the merged `/me/payout-accounts` and `/me/payouts` routes.
+- **Status:** Backend done, UI outstanding
 - **Depends on:** none
 - **MVP:** yes
+- **Progress note (2026-11-11):** T-073 (backend) merged; next: T-124 Seller Payouts UI (AB5, AB6, WF1, PR1, Seller-6) over the merged `/me/payout-accounts` and `/me/payouts` routes.
 
 #### F-038 — Leave a review
 

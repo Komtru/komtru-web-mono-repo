@@ -19,6 +19,7 @@ The engine exists and only the UI is missing, so these are the highest-value wor
 
 | Feature | Title                                                  | Journey                  | MVP |
 | ------- | ------------------------------------------------------ | ------------------------ | --- |
+| F-037   | Get paid out                                           | Complete & grow          | yes |
 | F-044   | Account basics, addresses, documents and system states | Account, trust & support | yes |
 | F-045   | Verify yourself, and close or recover an account       | Account, trust & support | yes |
 
@@ -55,7 +56,6 @@ The engine exists and only the UI is missing, so these are the highest-value wor
 | F-028   | Delivery and evidence in the workspace               | Deliver & inspect                       | yes |
 | F-029   | Capture and compare proof media                      | Deliver & inspect                       | yes |
 | F-030   | Cancel a trade and get a refund                      | Issues & resolution                     | yes |
-| F-037   | Get paid out                                         | Complete & grow                         | yes |
 | F-075   | Hosting and real deploy jobs                         | Launch & assurance (not a user journey) | yes |
 | F-078   | Definition-of-done audit and first push              | Launch & assurance (not a user journey) | yes |
 | F-014   | Sign in with Google, Apple or Facebook               | Arrive & verify                         |     |
@@ -86,7 +86,6 @@ The engine exists and only the UI is missing, so these are the highest-value wor
 | F-033   | Resolution execution: the return track                          | Issues & resolution                     | yes |
 | F-034   | Resolution execution: replacement and mutual settlement         | Issues & resolution                     | yes |
 | F-035   | Decide a dispute in TrustOps                                    | Issues & resolution                     | yes |
-| F-037   | Get paid out                                                    | Complete & grow                         | yes |
 | F-040   | Apply for merchant certification and have it reviewed           | Sell on Komtru                          | yes |
 | F-041   | List items and manage stock                                     | Sell on Komtru                          | yes |
 | F-042   | Shop settings and catalogue import                              | Sell on Komtru                          | yes |
