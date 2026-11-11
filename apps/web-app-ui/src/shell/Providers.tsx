@@ -8,6 +8,7 @@ import { useRouter } from 'next/navigation';
 import { useCallback, useState } from 'react';
 import { appSpec, webAppEnv } from '../app-config';
 import { clearOfflineCache } from './ServiceWorker';
+import { clearWelcomeTransient } from '../welcome/state';
 
 /**
  * The client half of the root layout: one TanStack Query client, one `ApiClient`, and the decision
@@ -27,6 +28,8 @@ export function Providers({ children }: { children: React.ReactNode }): React.JS
   const onSessionEnded = useCallback(() => {
     // The previous person's cached trades must not be handed to the next one from memory.
     queries.clear();
+    // A first name kept for the done screen is the last person's, not the next one's.
+    clearWelcomeTransient();
     // Everything this device saved belonged to the person whose session just ended. The Cache API
     // is per origin, not per person, and the phone at a motor park counter is a shared phone — so
     // the pages go before the next person reaches the sign-in screen.

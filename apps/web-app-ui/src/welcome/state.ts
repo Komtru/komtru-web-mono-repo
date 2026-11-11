@@ -5,6 +5,7 @@
 
 const DONE_KEY = 'komtru.welcome.done';
 const NAME_KEY = 'komtru.welcome.name';
+const ARRIVED_KEY = 'komtru.welcome.arrived';
 
 const memory = new Map<string, string>();
 
@@ -50,13 +51,40 @@ export const welcomeDone = (): boolean => read('local', DONE_KEY) === '1';
 /** Finishing and skipping are the same fact: this device has seen it and will not be sent back. */
 export function markWelcomeDone(): void {
   write('local', DONE_KEY, '1');
+  notify();
 }
 
 /** A new sign-up starts the walkthrough afresh, even on a phone that someone else already took it on. */
 export function resetWelcome(): void {
   remove(DONE_KEY);
   remove(NAME_KEY);
+  remove(ARRIVED_KEY);
 }
+
+/** What only the walkthrough in progress needs: dropped when a session ends, so the next person inherits none of it. */
+export function clearWelcomeTransient(): void {
+  remove(NAME_KEY);
+  remove(ARRIVED_KEY);
+}
+
+/** OB4 hands over to OB5: the done screen is reached through the flow, not by a bookmark or a back button. */
+export function markWelcomeArrived(): void {
+  write('session', ARRIVED_KEY, '1');
+}
+
+export const welcomeArrived = (): boolean => read('session', ARRIVED_KEY) === '1';
+
+/** Subscribers to this tab's own changes, for `useSyncExternalStore`. */
+const listeners = new Set<() => void>();
+export const subscribeWelcome = (listener: () => void): (() => void) => {
+  listeners.add(listener);
+  return () => {
+    listeners.delete(listener);
+  };
+};
+const notify = (): void => {
+  for (const listener of listeners) listener();
+};
 
 /** The first word of the name typed at sign-up. */
 export function rememberFirstName(fullName: string): void {
@@ -69,3 +97,8 @@ export function rememberFirstName(fullName: string): void {
 }
 
 export const welcomeName = (): string | null => read('session', NAME_KEY);
+
+/** OB5 has read the name; it is not kept for anyone after. */
+export const forgetWelcomeName = (): void => {
+  remove(NAME_KEY);
+};

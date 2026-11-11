@@ -16,10 +16,12 @@ const POSITION = { '1': 1, '2': 2, '3': 3 } as const;
  */
 export function Walkthrough({ step }: { step: '1' | '2' | '3' }): React.JSX.Element {
   const router = useRouter();
-  useWelcomeGate();
+  const ready = useWelcomeGate();
   const copy = stepFor(step);
   if (copy === undefined) throw new Error(`no walkthrough step ${step}`);
   const key: StepKey = step;
+
+  if (!ready) return <></>;
 
   const skip = () => {
     markWelcomeDone();

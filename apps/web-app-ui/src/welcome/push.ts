@@ -5,6 +5,8 @@
 // is `undefined` for now and a granted permission is recorded as `permission-only`. The seam is here so adding it
 // is one object, not a rewrite of the screen.
 
+import { captureException } from '@sentry/nextjs';
+
 export type NotificationSupport = NotificationPermission | 'unsupported';
 
 export type PushOutcome =
@@ -36,17 +38,41 @@ export function notificationSupport(): NotificationSupport {
   return typeof Notification === 'undefined' ? 'unsupported' : Notification.permission;
 }
 
+/** Kept in memory too: with storage blocked, every call would otherwise mint a new id and a new device row. */
+let memoryFingerprint: string | undefined;
+
 /** Stable per browser profile: the platform upserts on it, so asking twice is one device, not two. */
 function deviceFingerprint(): string {
   try {
     const kept = window.localStorage.getItem(FINGERPRINT_KEY);
     if (kept !== null && kept !== '') return kept;
-    const made = crypto.randomUUID();
-    window.localStorage.setItem(FINGERPRINT_KEY, made);
-    return made;
   } catch {
-    return crypto.randomUUID();
+    // Fall through to the copy this page holds.
   }
+  memoryFingerprint ??= crypto.randomUUID();
+  try {
+    window.localStorage.setItem(FINGERPRINT_KEY, memoryFingerprint);
+  } catch {
+    // The in-memory copy carries this page.
+  }
+  return memoryFingerprint;
+}
+
+/**
+ * The promise form, and the callback form older Safari still has: there `requestPermission` returns nothing and
+ * reports through its argument. Modern browsers do both, which is harmless: the first answer wins.
+ */
+function askPermission(): Promise<NotificationPermission> {
+  return new Promise((resolve) => {
+    const returned = Notification.requestPermission((answer) => {
+      resolve(answer);
+    }) as Promise<NotificationPermission> | undefined;
+    if (returned !== undefined && typeof returned.then === 'function') {
+      returned.then(resolve, () => {
+        resolve('default');
+      });
+    }
+  });
 }
 
 export async function enablePush(options: {
@@ -58,7 +84,7 @@ export async function enablePush(options: {
   // A denial is the browser's to undo; asking again does nothing but look broken.
   if (support === 'denied') return 'denied';
 
-  const answer = support === 'granted' ? 'granted' : await Notification.requestPermission();
+  const answer = support === 'granted' ? 'granted' : await askPermission();
   if (answer === 'denied') return 'denied';
   if (answer !== 'granted') return 'dismissed';
 
@@ -68,8 +94,9 @@ export async function enablePush(options: {
     if (pushToken === undefined || pushToken === '') return 'permission-only';
     await options.register({ deviceFingerprint: deviceFingerprint(), platform: 'WEB', pushToken });
     return 'enabled';
-  } catch {
-    // The permission is already given and the person's next step must not depend on a token call.
+  } catch (error) {
+    // The permission is already given and the person's next step must not depend on a token call; it is reported, not lost.
+    captureException(error);
     return 'permission-only';
   }
 }

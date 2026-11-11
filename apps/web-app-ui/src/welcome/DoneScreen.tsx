@@ -3,28 +3,41 @@
 import { Button, TextField } from '@komtru/ui-kit';
 import { tradeCodeSchema, TRADE_CODE_EXAMPLE } from '@komtru/shared-types';
 import { useRouter } from 'next/navigation';
-import { useEffect, useState, useSyncExternalStore } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { WelcomeFrame } from './parts';
-import { markWelcomeDone, welcomeName } from './state';
-
-const subscribeNever = (): (() => void) => () => undefined;
+import { forgetWelcomeName, markWelcomeDone, welcomeName } from './state';
+import { useWelcomeGate } from './useWelcomeGate';
 
 /**
  * OB5: the walkthrough is over the moment this shows, so it is marked done here and not on a button: closing the tab
- * on this screen must not bring it back. Two first actions follow: start a protected trade, or open one someone sent.
+ * on this screen must not bring it back. It is only for someone who came through OB4 in this tab: a deep link goes to
+ * the app. The first name typed at sign-up is read once, then forgotten. Two first actions follow: start a protected trade, or open one someone sent.
  * v2 draws no screen for typing a code, so "Enter a Trade Code" opens the field in place and goes to `/trades/<code>`,
  * which already resolves a code to its trade.
  */
 export function DoneScreen(): React.JSX.Element {
+  const ready = useWelcomeGate('done');
+  return ready ? <DoneContent /> : <></>;
+}
+
+function DoneContent(): React.JSX.Element {
   const router = useRouter();
-  const name = useSyncExternalStore(subscribeNever, welcomeName, () => null);
+  // Read once, when the screen first draws on the client, and dropped from storage as soon as it is on screen.
+  const [name] = useState(welcomeName);
+  const form = useRef<HTMLFormElement>(null);
   const [entering, setEntering] = useState(false);
   const [code, setCode] = useState('');
   const [invalid, setInvalid] = useState(false);
 
   useEffect(() => {
     markWelcomeDone();
+    forgetWelcomeName();
   }, []);
+
+  // The button that opened the field is gone; keep the keyboard where the person is.
+  useEffect(() => {
+    if (entering) form.current?.querySelector('input')?.focus();
+  }, [entering]);
 
   const find = (event: React.FormEvent) => {
     event.preventDefault();
@@ -82,7 +95,7 @@ export function DoneScreen(): React.JSX.Element {
         </p>
       </div>
       {entering && (
-        <form id="welcome-code" onSubmit={find} noValidate>
+        <form id="welcome-code" ref={form} onSubmit={find} noValidate>
           <TextField
             label="Trade Code"
             mono

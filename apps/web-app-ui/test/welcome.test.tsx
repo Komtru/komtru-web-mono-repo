@@ -5,7 +5,15 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { DoneScreen } from '../src/welcome/DoneScreen';
 import { NotificationsScreen } from '../src/welcome/NotificationsScreen';
 import { Walkthrough } from '../src/welcome/Walkthrough';
-import { markWelcomeDone, rememberFirstName, resetWelcome, welcomeDone } from '../src/welcome/state';
+import {
+  markWelcomeArrived,
+  markWelcomeDone,
+  rememberFirstName,
+  resetWelcome,
+  welcomeArrived,
+  welcomeDone,
+  welcomeName,
+} from '../src/welcome/state';
 import { expectNoAxeViolations } from './axe';
 import { SHELL_RULES, answerWith, callsTo, renderWithApi, type CallFn } from './support/trade';
 
@@ -151,6 +159,10 @@ describe('OB4 notifications', () => {
 });
 
 describe('OB5 all set', () => {
+  beforeEach(() => {
+    markWelcomeArrived();
+  });
+
   it('greets by first name, marks the walkthrough done and offers the two first actions', async () => {
     rememberFirstName('Amaka Obi');
     const { container } = render(<DoneScreen />);
@@ -159,6 +171,8 @@ describe('OB5 all set', () => {
       screen.getByText(/Start your first protected Trade, or find one a seller already sent you/),
     ).toBeTruthy();
     expect(welcomeDone()).toBe(true);
+    // Read once, then forgotten: it is not left in storage for whoever uses the phone next.
+    expect(welcomeName()).toBeNull();
     const start = screen.getByRole('link', { name: 'Start a Trade' });
     expect(start.getAttribute('href')).toBe('/trade/new');
     await expectNoAxeViolations(container, SHELL_RULES);
@@ -185,5 +199,80 @@ describe('OB5 all set', () => {
     fireEvent.change(screen.getByLabelText('Trade Code'), { target: { value: 'hello' } });
     fireEvent.click(screen.getByRole('button', { name: 'Find trade' }));
     expect(router.push).not.toHaveBeenCalled();
+  });
+});
+
+describe('the gates', () => {
+  it('OB4 sends someone who already finished straight on, and draws nothing meanwhile', async () => {
+    stubNotification('default');
+    markWelcomeDone();
+    const { container } = renderWithApi(api.call, <NotificationsScreen />);
+    expect(container.textContent).toBe('');
+    await waitFor(() => expect(router.replace).toHaveBeenCalledWith('/'));
+  });
+
+  it('OB1 draws nothing for someone who already finished, so it never flashes', () => {
+    markWelcomeDone();
+    const { container } = render(<Walkthrough step="1" />);
+    expect(container.textContent).toBe('');
+  });
+
+  it('OB5 is not for a deep link: without coming through OB4 it goes to the app and does not mark anything', async () => {
+    resetWelcome();
+    const { container } = render(<DoneScreen />);
+    expect(container.textContent).toBe('');
+    await waitFor(() => expect(router.replace).toHaveBeenCalledWith('/'));
+    expect(welcomeDone()).toBe(false);
+  });
+
+  it('OB4 records that the done screen was reached through the flow', () => {
+    stubNotification('default');
+    renderWithApi(api.call, <NotificationsScreen />);
+    fireEvent.click(screen.getByRole('button', { name: 'Not now' }));
+    expect(welcomeArrived()).toBe(true);
+  });
+});
+
+describe('failures never block the way on', () => {
+  it('a token call that rejects still ends at OB5', async () => {
+    stubNotification('default', 'granted');
+    renderWithApi(
+      api.call,
+      <NotificationsScreen tokenSource={{ getToken: () => Promise.reject(new Error('no fcm')) }} />,
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Allow notifications' }));
+    await waitFor(() => expect(router.push).toHaveBeenCalledWith('/welcome/done'));
+    expect(api.call).not.toHaveBeenCalled();
+  });
+
+  it('a registration that fails still ends at OB5', async () => {
+    stubNotification('default', 'granted');
+    answerWith(api.call, { 'POST /me/devices': new Error('offline') });
+    renderWithApi(api.call, <NotificationsScreen tokenSource={{ getToken: () => Promise.resolve('t') }} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Allow notifications' }));
+    await waitFor(() => expect(router.push).toHaveBeenCalledWith('/welcome/done'));
+    expect(callsTo(api.call, 'POST', '/me/devices')).toHaveLength(1);
+  });
+});
+
+describe('focus', () => {
+  it('moves to the code field when Enter a Trade Code swaps it in', () => {
+    markWelcomeArrived();
+    render(<DoneScreen />);
+    fireEvent.click(screen.getByRole('button', { name: 'Enter a Trade Code' }));
+    expect(document.activeElement).toBe(screen.getByLabelText('Trade Code'));
+  });
+
+  it('moves to Continue after a refusal, and the status region was already there to announce the note', async () => {
+    stubNotification('default', 'denied');
+    renderWithApi(api.call, <NotificationsScreen />);
+    const region = screen.getByRole('status');
+    expect(region.textContent).toBe('');
+    fireEvent.click(screen.getByRole('button', { name: 'Allow notifications' }));
+    await waitFor(() =>
+      expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Continue' })),
+    );
+    expect(screen.getAllByRole('status')[0]).toBe(region);
+    expect(region.textContent).toMatch(/blocked in your browser/i);
   });
 });

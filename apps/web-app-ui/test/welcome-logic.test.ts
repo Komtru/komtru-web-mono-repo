@@ -97,6 +97,21 @@ describe('notification support', () => {
   });
 });
 
+describe('the device fingerprint', () => {
+  it('stays the same across calls even when storage throws', async () => {
+    const blocked = () => {
+      throw new Error('blocked');
+    };
+    vi.stubGlobal('localStorage', { getItem: blocked, setItem: blocked, removeItem: blocked });
+    vi.stubGlobal('Notification', { permission: 'granted', requestPermission: vi.fn() });
+    const register = vi.fn<(b: { deviceFingerprint: string }) => Promise<unknown>>().mockResolvedValue({});
+    const source = { getToken: () => Promise.resolve('t') };
+    await enablePush({ register, tokenSource: source });
+    await enablePush({ register, tokenSource: source });
+    expect(register.mock.calls[0]?.[0].deviceFingerprint).toBe(register.mock.calls[1]?.[0].deviceFingerprint);
+  });
+});
+
 describe('enablePush', () => {
   const register =
     vi.fn<(body: { deviceFingerprint: string; platform: 'WEB'; pushToken: string }) => Promise<unknown>>();
@@ -146,6 +161,17 @@ describe('enablePush', () => {
       'denied',
     );
     expect(register).not.toHaveBeenCalled();
+  });
+
+  it('understands the callback form of older Safari, where requestPermission returns nothing', async () => {
+    vi.stubGlobal('Notification', {
+      permission: 'default',
+      requestPermission: (callback: (p: NotificationPermission) => void) => {
+        callback('granted');
+        return undefined;
+      },
+    });
+    expect(await enablePush({ register, tokenSource: undefined })).toBe('permission-only');
   });
 
   it('reports a dismissed prompt as dismissed', async () => {

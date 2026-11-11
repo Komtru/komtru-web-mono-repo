@@ -3,13 +3,15 @@
 import { useRegisterDevice } from '@komtru/api-client/react';
 import { Button, NoteBanner } from '@komtru/ui-kit';
 import { useRouter } from 'next/navigation';
-import { useState, useSyncExternalStore } from 'react';
+import { useEffect, useState, useSyncExternalStore } from 'react';
 import { defaultTokenSource, enablePush, notificationSupport, type PushTokenSource } from './push';
 import { WelcomeFrame } from './parts';
+import { markWelcomeArrived } from './state';
 import { stepFor } from './steps';
 import { useWelcomeGate } from './useWelcomeGate';
 
 const DONE = '/welcome/done';
+const CONTINUE_ID = 'welcome-continue';
 
 const subscribeNever = (): (() => void) => () => undefined;
 const askable = (): 'default' => 'default';
@@ -34,7 +36,7 @@ export function NotificationsScreen({
   tokenSource?: PushTokenSource | undefined;
 }): React.JSX.Element {
   const router = useRouter();
-  useWelcomeGate();
+  const ready = useWelcomeGate();
   const register = useRegisterDevice();
   const copy = stepFor('notifications');
   const [refused, setRefused] = useState<Blocked | undefined>(undefined);
@@ -45,7 +47,15 @@ export function NotificationsScreen({
   const blocked: Blocked | undefined =
     refused ?? (support === 'denied' || support === 'unsupported' ? support : undefined);
 
+  // "Allow" is gone once refused; Continue takes its place and the focus with it.
+  useEffect(() => {
+    if (refused !== undefined) document.getElementById(CONTINUE_ID)?.focus();
+  }, [refused]);
+
+  if (!ready) return <></>;
+
   const goOn = () => {
+    markWelcomeArrived();
     router.push(DONE);
   };
 
@@ -74,7 +84,9 @@ export function NotificationsScreen({
             </Button>
           </>
         ) : (
-          <Button onClick={goOn}>Continue</Button>
+          <Button id={CONTINUE_ID} onClick={goOn}>
+            Continue
+          </Button>
         )
       }
     >
@@ -98,11 +110,10 @@ export function NotificationsScreen({
         </div>
         <h2 className="mb-[8px] text-[18px] font-semibold">{copy?.title}</h2>
         <p className="mx-auto mb-[20px] max-w-[260px] text-[12.5px] leading-[1.6] text-slate">{copy?.body}</p>
-        {blocked !== undefined && (
-          <div className="text-left" role="status">
-            <NoteBanner>{BLOCKED_COPY[blocked]}</NoteBanner>
-          </div>
-        )}
+        {/* Mounted before it has anything to say, so a screen reader hears it when it fills. */}
+        <div className="text-left" role="status">
+          {blocked !== undefined && <NoteBanner>{BLOCKED_COPY[blocked]}</NoteBanner>}
+        </div>
       </div>
     </WelcomeFrame>
   );
