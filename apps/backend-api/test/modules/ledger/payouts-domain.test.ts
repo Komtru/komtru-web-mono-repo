@@ -180,3 +180,14 @@ describe('the sweep calendar (Africa/Lagos)', () => {
     expect(sweepKey('AUTO_WEEKLY', user, at)).toBe(`AUTO_WEEKLY:${user}:2026-11-16`);
   });
 });
+
+describe('the payout vocabulary the screens share (T-073)', () => {
+  it('is the schema’s own, word for word', async () => {
+    const shared = await import('@komtru/shared-types');
+    const schema = await import('../../../src/modules/ledger/infrastructure/postgres/schema/payouts.js');
+    expect([...schema.PAYOUT_MODES]).toEqual([...shared.PAYOUT_MODES]);
+    expect([...schema.PAYOUT_STATUSES]).toEqual([...shared.PAYOUT_STATUSES]);
+    expect([...schema.PAYOUT_TRIGGERS]).toEqual([...shared.PAYOUT_TRIGGERS]);
+    expect([...schema.PAYOUT_ACCOUNT_STATUSES]).toEqual([...shared.PAYOUT_ACCOUNT_STATUSES]);
+  });
+});
