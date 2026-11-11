@@ -44,7 +44,11 @@ import type {
   TransferRecipientResult,
 } from '../../../domain/providerAdapter.js';
 import { ChargeNotFoundError } from '../../../domain/funding.js';
-import { TransferNotFoundError, type VerifiedTransferView } from '../../../domain/payouts.js';
+import {
+  AccountNotResolvableError,
+  TransferNotFoundError,
+  type VerifiedTransferView,
+} from '../../../domain/payouts.js';
 import { parsePaystackEvent } from './events.js';
 import { verifyPaystackSignature } from './signature.js';
 
@@ -147,7 +151,8 @@ async function call(options: PaystackClientOptions, spec: CallSpec): Promise<Pay
     if (
       error instanceof ApiError ||
       error instanceof ChargeNotFoundError ||
-      error instanceof TransferNotFoundError
+      error instanceof TransferNotFoundError ||
+      error instanceof AccountNotResolvableError
     ) {
       throw error;
     }
@@ -326,6 +331,13 @@ export const resolveAccountName = async (
       // logging — which is why it goes here rather than into the path.
       path: `/bank/resolve?${query.toString()}`,
       idempotent: true,
+      // Paystack refuses an account it cannot find with a 422 (sometimes a 400, or `status: false` on
+      // a 200). That is the answer about the account, and the payout-account job marks it FAILED on
+      // it; a 5xx or a timeout is still an outage and is retried.
+      recognise: (status) =>
+        status === 400 || status === 422 || status === 200
+          ? new AccountNotResolvableError(bankCode)
+          : undefined,
     },
     resolveAccountResponse,
   );

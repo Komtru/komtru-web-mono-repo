@@ -79,6 +79,15 @@ export {
   type ReleaseResult,
 } from './services/release.service.js';
 export {
+  executePayout,
+  placePayoutHold,
+  releasePayoutHold,
+  type ExecutePayoutDeps,
+  type ExecutePayoutInput,
+  type ExecutePayoutResult,
+  type PlaceHoldInput,
+} from './services/payout.service.js';
+export {
   activeTradeHolds,
   lockTradeForRelease,
   type TradeForRelease,

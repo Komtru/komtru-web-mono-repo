@@ -125,3 +125,76 @@ export const paymentReviewRequiredEvent = defineEvent(
     dueAmountMinor: amountMinorSchema,
   }),
 );
+
+const PAYOUT_TRIGGER_VALUES = ['MANUAL', 'AUTO_IMMEDIATE', 'AUTO_SWEEP'] as const;
+
+/**
+ * A payout was asked for (T-073): the seller's payable was debited into the payout's clearing account
+ * in the same transaction. The ledger's own dispatch subscriber consumes it to queue the transfer, so
+ * the job never runs before the payout row it reads has committed.
+ */
+export const payoutRequestedEvent = defineEvent(
+  'ledger.payout.requested',
+  1,
+  z.object({
+    payoutId: z.uuid(),
+    userId: z.uuid(),
+    trigger: z.enum(PAYOUT_TRIGGER_VALUES),
+    reference: z.string().min(1),
+    currency: z.string(),
+    amountMinor: amountMinorSchema,
+    feeMinor: amountMinorSchema,
+    transferAmountMinor: amountMinorSchema,
+    requestedAt: z.iso.datetime(),
+  }),
+);
+
+export const PAYOUT_OUTCOMES = ['SUCCEEDED', 'FAILED', 'REVERSED', 'NEEDS_REVIEW'] as const;
+
+/**
+ * A payout reached an outcome (T-073): the settling or reversing journal posted in the same
+ * transaction, or — for NEEDS_REVIEW — nothing posted and ops decides (T-076). WF1 and the seller's
+ * notifications key on it. A SUCCEEDED payout the bank later returns publishes again as REVERSED.
+ */
+export const payoutCompletedEvent = defineEvent(
+  'ledger.payout.completed',
+  1,
+  z.object({
+    payoutId: z.uuid(),
+    userId: z.uuid(),
+    outcome: z.enum(PAYOUT_OUTCOMES),
+    reference: z.string().min(1),
+    currency: z.string(),
+    amountMinor: amountMinorSchema,
+    transferAmountMinor: amountMinorSchema,
+    /** The journal that answers for the outcome; null for NEEDS_REVIEW. */
+    journalEntryId: z.uuid().nullable(),
+    reason: z.string().nullable(),
+    completedAt: z.iso.datetime(),
+  }),
+);
+
+export const PAYOUT_SKIP_REASONS = [
+  'HELD',
+  'NO_VERIFIED_ACCOUNT',
+  'INSUFFICIENT_BALANCE',
+  'AMOUNT_TOO_SMALL',
+] as const;
+
+/**
+ * An automatic payout (AUTO_IMMEDIATE or a sweep) that was due and was not made, and why. Nothing
+ * moved. Published so the seller can be told their money is waiting (a missing account) and risk can
+ * see a hold doing its job.
+ */
+export const payoutAutoSkippedEvent = defineEvent(
+  'ledger.payout.auto_skipped',
+  1,
+  z.object({
+    userId: z.uuid(),
+    trigger: z.enum(['AUTO_IMMEDIATE', 'AUTO_SWEEP']),
+    reason: z.enum(PAYOUT_SKIP_REASONS),
+    /** The sweep key, or the release journal an immediate payout would have paid out. */
+    key: z.string().min(1),
+    amountMinor: amountMinorSchema,
+  }),
+);

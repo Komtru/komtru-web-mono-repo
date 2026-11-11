@@ -1,5 +1,8 @@
 import { ChargeNotFoundError } from '../../../src/modules/ledger/domain/funding.js';
-import { TransferNotFoundError } from '../../../src/modules/ledger/domain/payouts.js';
+import {
+  AccountNotResolvableError,
+  TransferNotFoundError,
+} from '../../../src/modules/ledger/domain/payouts.js';
 import { createHmac } from 'node:crypto';
 import type { ServerResponse } from 'node:http';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -156,6 +159,31 @@ describe('the paystack client', () => {
       accountName: 'ADA LOVELACE',
     });
     expect(stub!.hits[0]!.path).toBe('/bank/resolve?account_number=0123456789&bank_code=044');
+  });
+
+  it.each([
+    [
+      'a 422',
+      422,
+      { status: false, message: 'Could not resolve account name. Check parameters or try again.' },
+    ],
+    ['a 400', 400, { status: false, message: 'Invalid account number' }],
+    ['a refusal on a 200', 200, { status: false, message: 'Could not resolve account name' }],
+  ])(
+    'reads %s from bank resolve as an account that cannot be resolved, not an outage',
+    async (_n, code, body) => {
+      const options = await serving((_path, res) => json(res, code, body));
+      await expect(
+        createPaystackAdapter(options).resolveAccountName('0123456789', '044'),
+      ).rejects.toBeInstanceOf(AccountNotResolvableError);
+    },
+  );
+
+  it('still reads a provider outage on bank resolve as an outage', async () => {
+    const options = await serving((_path, res) => json(res, 500, { status: false, message: 'boom' }));
+    await expect(
+      createPaystackAdapter(options).resolveAccountName('0123456789', '044'),
+    ).rejects.toBeInstanceOf(ApiError);
   });
 
   it('creates a nuban transfer recipient from the resolved name', async () => {

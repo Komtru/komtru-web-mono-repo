@@ -190,3 +190,29 @@ export interface VerifiedTransferView {
   currency: string;
   providerTransferId: string;
 }
+
+/**
+ * The provider's answer when a bank account cannot be resolved: a wrong number, or a bank that does
+ * not hold it. A finding about the account, not an outage, so the verify job marks the account FAILED
+ * rather than retrying a question whose answer will not change.
+ */
+export class AccountNotResolvableError extends Error {
+  readonly code = 'ACCOUNT_NOT_RESOLVABLE';
+  constructor(readonly bankCode: string) {
+    super(`the provider could not resolve this account at bank ${bankCode}`);
+    this.name = 'AccountNotResolvableError';
+  }
+}
+
+/** A NUBAN: ten digits, after the spaces and dashes a person types are removed. */
+export const normaliseNuban = (input: string): string | null => {
+  const digits = input.replace(/[\s-]/g, '');
+  return /^\d{10}$/.test(digits) ? digits : null;
+};
+
+/** `******5567`: the only form of an account number any client sees. */
+export const maskAccountNumber = (accountNumber: string): string =>
+  `${'*'.repeat(Math.max(accountNumber.length - 4, 1))}${accountNumber.slice(-4)}`;
+
+/** The HMAC domain of `payout_accounts.account_number_hash`. */
+export const PAYOUT_ACCOUNT_HASH_DOMAIN = 'ledger:payout-account';
