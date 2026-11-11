@@ -520,7 +520,7 @@ list a trade.
 - **Absorbs:** T-073 (todo), T-124 (todo)
 - **Backend scope:** Payout accounts, preferences and payouts against the ledger (T-073).
 - **Frontend scope:** Seller Payouts (AB5, AB6, WF1, PR1) and the seller money tab (Seller-6). _5 v2 screens._
-- **Status (2026-11-11): in progress** — backend layer, implement steps 1–4 of the plan merged on branch `f-037-payouts` (migration 0048_ledger_payouts, payout journals, fee freeze, transfer verify); next: plan step 5 (services with concurrency tests), then jobs/webhooks, routes, api-client, then review → fix → merge; then the T-124 UI layer. Open review items: none yet (not reviewed).
+- **Status:** Not started — in progress (2026-11-11): backend layer, implement steps 1–4 of the plan merged on branch `f-037-payouts` (migration 0048_ledger_payouts, payout journals, fee freeze, transfer verify); next: plan step 5 (services with concurrency tests), then jobs/webhooks, routes, api-client, then review → fix → merge; then the T-124 UI layer. Open review items: none yet (not reviewed).
 - **Depends on:** none
 - **MVP:** yes
 
