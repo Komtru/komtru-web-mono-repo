@@ -59,6 +59,7 @@ What changed, from [`screens-v2.tsv`](../design-reference/screens-v2.tsv) (437 s
 
 ### T-192 — Create a trade: buyer starts, seller completes
 
+- **Status:** Done (2026-11-11). Plan: docs/superpowers/plans/2026-11-11-f-018-create-trade.md. Review: 4 must-fix and 7 should-fix items fixed (1 declined). E2E waived (no harness).
 - **Status notes (F-018):** screens built and unit/component tested with axe on every stage (plan: `docs/superpowers/plans/2026-11-11-f-018-create-trade.md`; visual check: `docs/ui-review/T-192/`). **E2E waived for now:** the repo has no end-to-end harness (no Playwright test project, config or CI job; `tools/visual-check` only drives screenshots), and F-018 may not touch the backend a real flow would need. The whole journey (buyer request, seller completion, buyer accept, refusal to fund an open request) is covered by jsdom component tests against a mocked client. Add the e2e spec when the e2e project exists.
 - **Depends on:** T-115, T-061, T-063, T-049, T-046, T-190
 - **Model:** sonnet

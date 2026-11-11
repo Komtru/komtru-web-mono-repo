@@ -284,10 +284,10 @@ list a trade.
 
 - **Journey:** Propose & agree
 - **Actor:** buyer
-- **Absorbs:** T-192 (todo)
+- **Absorbs:** T-192 (done)
 - **Backend scope:** Served by F-017.
 - **Frontend scope:** Create a Trade · Buyer starts (CT-B1–CT-B6) and Seller completes (CT-B7–CT-B10, CT-B2P, CT-B8P) — stages 1 and 2 of the v2 four-stage model. _12 v2 screens._
-- **Status:** Not started
+- **Status:** Done
 - **Depends on:** F-017
 - **MVP:** yes
 
