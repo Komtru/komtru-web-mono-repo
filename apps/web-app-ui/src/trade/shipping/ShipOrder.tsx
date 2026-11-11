@@ -2,8 +2,10 @@
 
 import { ProblemError, UploadError, uploadFile, type TradeView } from '@komtru/api-client';
 import {
+  tradeKeys,
   useApiClient,
   useDeliveryDeadline,
+  useReportDelivered,
   useShipOptions,
   useShipSelfArranged,
   useTrade,
@@ -24,10 +26,12 @@ import {
   VersionTimeline,
   WarnBanner,
 } from '@komtru/ui-kit';
-import { useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
+import { useEffect, useState } from 'react';
 import { isProblem, partyName, problemMessage, whenLabel } from '../format';
 import { ItemSummary } from '../parts';
 import { Deadline } from '../workspace/shared';
+import { checkPhone, checkPlate, checkWaybill, normalisePlate } from './evidence';
 
 /** Before the escrow is funded the seller is told to wait (X1); the platform's dispatch guard says the same. */
 const BEFORE_FUNDING = [
@@ -50,6 +54,11 @@ const platformWords = (error: unknown, fallback: string): string =>
   error instanceof ProblemError && error.problem.detail !== undefined
     ? error.problem.detail
     : problemMessage(error, fallback);
+
+/** A failure: the risk banner is already a live alert. */
+const Alert = ({ children }: { children: React.ReactNode }): React.JSX.Element => (
+  <RiskBanner>{children}</RiskBanner>
+);
 
 /**
  * F-026 (Seller-3, X1, X2): the seller hands the item over and says so, with proof. Which state shows is the
@@ -88,28 +97,47 @@ export function ShipOrder({ id }: { id: string }): React.JSX.Element {
   return <ShipForm trade={view} />;
 }
 
-/** X1: the guard, drawn. Nothing on this screen can be tapped to ship. */
+/** X1: the guard, drawn, in the words of where the trade really is. Nothing here can be tapped to ship. */
 function DispatchLocked({ trade }: { trade: TradeView }): React.JSX.Element {
   const buyer =
     trade.counterparty === undefined || trade.counterparty === null
       ? undefined
       : partyName(trade.counterparty);
+  const funded = trade.status === 'PENDING_PAYMENT';
+  const accepting = trade.status === 'AWAITING_ACCEPTANCE';
+  const body = funded
+    ? `${buyer ?? 'The buyer'} hasn’t funded this trade yet — you’ll be told the moment they do.`
+    : accepting
+      ? 'This trade hasn’t been accepted yet. Respond to the request first; shipping opens once it is agreed and funded.'
+      : 'This trade hasn’t been agreed yet. Shipping opens once it is agreed and the buyer has funded it.';
   return (
     <Frame title={trade.tradeCode} id={trade.id}>
-      <WarnBanner title="Dispatch Locked · Awaiting Escrow">
-        {buyer ?? 'The buyer'} hasn’t funded this trade yet — you’ll be told the moment they do.
+      <WarnBanner title={funded ? 'Dispatch Locked · Awaiting Escrow' : 'Dispatch Locked · Not Yet Agreed'}>
+        {body}
       </WarnBanner>
       <ItemSummary trade={trade} />
       <VersionTimeline
         aria-label="Where this trade stands"
         steps={[
+          funded
+            ? {
+                id: 'agreed',
+                title: 'Agreement reached',
+                ...(trade.acceptedAt === null ? {} : { detail: whenLabel(trade.acceptedAt) }),
+                state: 'done' as const,
+              }
+            : {
+                id: 'agreed',
+                title: accepting ? 'Waiting for your answer' : 'Agreement',
+                detail: accepting ? 'Not yet accepted' : 'Not yet agreed',
+                state: 'active' as const,
+              },
           {
-            id: 'agreed',
-            title: 'Agreement reached',
-            ...(trade.acceptedAt === null ? {} : { detail: whenLabel(trade.acceptedAt) }),
-            state: 'done',
+            id: 'escrow',
+            title: 'Escrow locked',
+            detail: 'Not yet funded',
+            state: funded ? ('active' as const) : ('pending' as const),
           },
-          { id: 'escrow', title: 'Escrow locked', detail: 'Not yet funded', state: 'active' },
           { id: 'shipped', title: 'Shipped / in transit', detail: 'Locked until funded', state: 'pending' },
         ]}
       />
@@ -117,6 +145,11 @@ function DispatchLocked({ trade }: { trade: TradeView }): React.JSX.Element {
         <Button type="button" disabled>
           Dispatch locked
         </Button>
+        {accepting && (
+          <Button asChild>
+            <a href={tradeHref(trade.id)}>Respond to this request</a>
+          </Button>
+        )}
         <Button asChild variant="secondary">
           <a href={tradeHref(trade.id)}>Back to the trade</a>
         </Button>
@@ -125,15 +158,39 @@ function DispatchLocked({ trade }: { trade: TradeView }): React.JSX.Element {
   );
 }
 
-/** The trade is on its way: the screen says so and is done. */
+/** The trade is on its way (or reported delivered): the seller can say it arrived, once. */
 function Shipped({ trade }: { trade: TradeView }): React.JSX.Element {
+  const report = useReportDelivered();
+  const [problem, setProblem] = useState<string | undefined>(undefined);
+  const reported = trade.status === 'UNCONFIRMED_DELIVERY';
+  const onReport = () => {
+    setProblem(undefined);
+    report.mutate(trade.id, {
+      onError: (error) => {
+        setProblem(platformWords(error, 'We couldn’t report the delivery. Try again.'));
+      },
+    });
+  };
   return (
     <Frame title={`Ship ${trade.tradeCode}`} id={trade.id}>
-      <StatusHero tone="success" as="h2" title="Marked as shipped">
-        The buyer can see the item is on its way. Your waybill is kept with the trade.
-      </StatusHero>
+      {reported ? (
+        <StatusHero tone="success" as="h2" title="Delivery reported">
+          The buyer has been asked to confirm it arrived.
+        </StatusHero>
+      ) : (
+        <StatusHero tone="success" as="h2" title="Marked as shipped">
+          The buyer can see the item is on its way. Your waybill is kept with the trade. When it has arrived,
+          report the delivery so the buyer can confirm.
+        </StatusHero>
+      )}
+      {problem !== undefined && <Alert>{problem}</Alert>}
       <ActionStack>
-        <Button asChild>
+        {trade.status === 'SHIPPED' && (
+          <Button type="button" onClick={onReport} disabled={report.isPending}>
+            {report.isPending ? 'Reporting…' : 'Report delivery'}
+          </Button>
+        )}
+        <Button asChild variant={trade.status === 'SHIPPED' ? 'secondary' : 'primary'}>
           <a href={tradeHref(trade.id)}>Back to the trade</a>
         </Button>
       </ActionStack>
@@ -147,13 +204,24 @@ function ShipForm({ trade }: { trade: TradeView }): React.JSX.Element {
   const deadline = useDeliveryDeadline(trade.id, true);
   const ship = useShipSelfArranged();
   const client = useApiClient();
-  const [waybill, setWaybill] = useState('');
-  const [phone, setPhone] = useState('');
-  const [plate, setPlate] = useState('');
+  const queryClient = useQueryClient();
+  const [values, setValues] = useState({ waybill: '', phone: '', plate: '' });
+  const [touched, setTouched] = useState<readonly string[]>([]);
+  // What the platform said about a field when it refused; cleared the moment the person edits that field.
+  const [refused, setRefused] = useState<Record<string, string>>({});
   const [receipt, setReceipt] = useState<{ fileId: string; name: string } | undefined>(undefined);
   const [uploading, setUploading] = useState(false);
   const [failure, setFailure] = useState<string | undefined>(undefined);
   const [problem, setProblem] = useState<string | undefined>(undefined);
+
+  // A 409 means the trade is not where this screen thought it was (shipped meanwhile, or the dispatch guard):
+  // read the trade again and let its status choose the screen. The platform's words stay until it does.
+  const optionsConflict = options.error instanceof ProblemError && options.error.status === 409;
+  useEffect(() => {
+    if (optionsConflict) {
+      void queryClient.invalidateQueries({ queryKey: tradeKeys.one(trade.id), exact: true });
+    }
+  }, [optionsConflict, queryClient, trade.id]);
 
   if (options.isPending) {
     return (
@@ -165,9 +233,7 @@ function ShipForm({ trade }: { trade: TradeView }): React.JSX.Element {
   if (options.isError) {
     return (
       <Frame title={`Ship ${trade.tradeCode}`} id={trade.id}>
-        <RiskBanner>
-          {platformWords(options.error, 'We couldn’t load the ways to ship. Try again.')}
-        </RiskBanner>
+        <Alert>{platformWords(options.error, 'We couldn’t load the ways to ship. Try again.')}</Alert>
         <ActionStack>
           <Button type="button" variant="secondary" onClick={() => void options.refetch()}>
             Try again
@@ -189,8 +255,38 @@ function ShipForm({ trade }: { trade: TradeView }): React.JSX.Element {
     );
   }
 
+  const checks = {
+    waybill: checkWaybill(values.waybill),
+    phone: checkPhone(values.phone),
+    plate: checkPlate(values.plate),
+  };
+  const platformKey = { waybill: 'waybillNumber', phone: 'driverPhone', plate: 'vehiclePlate' } as const;
+  const errorOf = (field: keyof typeof checks): string | undefined =>
+    (touched.includes(field) ? checks[field] : undefined) ?? refused[platformKey[field]];
   const ready =
-    waybill.trim().length >= 3 && phone.trim() !== '' && plate.trim() !== '' && receipt !== undefined;
+    checks.waybill === undefined &&
+    checks.phone === undefined &&
+    checks.plate === undefined &&
+    receipt !== undefined;
+
+  const bind = (field: keyof typeof checks, label: string, extra: { inputMode?: 'tel' } = {}) => {
+    const error = errorOf(field);
+    return {
+      label,
+      value: values[field],
+      autoComplete: 'off',
+      ...extra,
+      invalid: error !== undefined,
+      ...(error === undefined ? {} : { helper: error }),
+      onChange: (event: React.ChangeEvent<HTMLInputElement>) => {
+        setValues((current) => ({ ...current, [field]: event.target.value }));
+        setRefused((current) => ({ ...current, [platformKey[field]]: '' }));
+      },
+      onBlur: () => {
+        setTouched((current) => (current.includes(field) ? current : [...current, field]));
+      },
+    };
+  };
 
   const onReceipt = async (file: File | undefined) => {
     if (file === undefined) return;
@@ -211,19 +307,33 @@ function ShipForm({ trade }: { trade: TradeView }): React.JSX.Element {
   };
 
   const onShip = () => {
-    if (receipt === undefined) return;
+    if (receipt === undefined || !ready) return;
     setProblem(undefined);
+    setRefused({});
     ship.mutate(
       {
         id: trade.id,
-        waybillNumber: waybill.trim(),
+        waybillNumber: values.waybill.trim(),
         receiptFileId: receipt.fileId,
-        driverPhone: phone.trim(),
-        vehiclePlate: plate.trim(),
+        driverPhone: values.phone.trim(),
+        vehiclePlate: normalisePlate(values.plate),
       },
       {
         onError: (error) => {
-          setProblem(platformWords(error, 'We couldn’t mark it shipped. Try again.'));
+          if (error instanceof ProblemError && error.status === 409) {
+            void queryClient.invalidateQueries({ queryKey: tradeKeys.one(trade.id), exact: true });
+          }
+          const fields = error instanceof ProblemError ? (error.problem.errors ?? []) : [];
+          if (fields.length > 0) {
+            const byPath = Object.fromEntries(fields.map((item) => [item.path, item.message]));
+            setRefused(byPath);
+            if (byPath.receiptFileId !== undefined) {
+              setReceipt(undefined);
+              setFailure(`${byPath.receiptFileId}. Add the receipt photo again.`);
+            }
+          } else {
+            setProblem(platformWords(error, 'We couldn’t mark it shipped. Try again.'));
+          }
         },
       },
     );
@@ -245,14 +355,7 @@ function ShipForm({ trade }: { trade: TradeView }): React.JSX.Element {
         You arrange the delivery yourself. Collection is confirmed from the waybill, so keep the receipt.
       </NoteBanner>
       <SectionLabel>Waybill and driver</SectionLabel>
-      <TextField
-        label="Waybill number"
-        value={waybill}
-        onChange={(event) => {
-          setWaybill(event.target.value);
-        }}
-        autoComplete="off"
-      />
+      <TextField {...bind('waybill', 'Waybill number')} />
       <ReceiptPicker
         receipt={receipt}
         uploading={uploading}
@@ -262,23 +365,9 @@ function ShipForm({ trade }: { trade: TradeView }): React.JSX.Element {
           setReceipt(undefined);
         }}
       />
-      <TextField
-        label="Driver or rider phone"
-        inputMode="tel"
-        value={phone}
-        onChange={(event) => {
-          setPhone(event.target.value);
-        }}
-      />
-      <TextField
-        label="Vehicle registration plate"
-        value={plate}
-        onChange={(event) => {
-          setPlate(event.target.value);
-        }}
-        autoComplete="off"
-      />
-      {problem !== undefined && <RiskBanner>{problem}</RiskBanner>}
+      <TextField {...bind('phone', 'Driver or rider phone', { inputMode: 'tel' })} />
+      <TextField {...bind('plate', 'Vehicle registration plate')} />
+      {problem !== undefined && <Alert>{problem}</Alert>}
       <ActionStack>
         <Button type="button" onClick={onShip} disabled={!ready || uploading || ship.isPending}>
           {ship.isPending ? 'Marking as shipped…' : 'Mark as shipped'}
@@ -307,7 +396,7 @@ function ReceiptPicker({
 }): React.JSX.Element {
   return (
     <div className="mb-[14px]">
-      {failure !== undefined && <RiskBanner>{failure}</RiskBanner>}
+      {failure !== undefined && <Alert>{failure}</Alert>}
       <label className="block cursor-pointer rounded-md border-[1.5px] border-dashed border-border-hairline bg-surface-primary p-[16px] text-center focus-within:outline-[2.5px] focus-within:outline-trust-indigo focus-within:outline-offset-[2px]">
         <b className="block text-[12px]">
           {uploading
@@ -316,6 +405,9 @@ function ReceiptPicker({
               ? 'Waybill receipt photo'
               : 'Replace the receipt photo'}
         </b>
+        <span role="status" className="sr-only">
+          {uploading ? 'Uploading the receipt photo' : ''}
+        </span>
         <span className="text-[10.5px] text-slate">
           A clear photo of the receipt the courier or park gave you
         </span>
@@ -333,7 +425,7 @@ function ReceiptPicker({
         <p className="mt-[8px] flex items-center justify-between text-[12px] text-midnight-text">
           <span>{receipt.name}</span>
           <button type="button" className="text-slate underline" onClick={onClear}>
-            Remove
+            Remove<span className="sr-only"> {receipt.name}</span>
           </button>
         </p>
       )}

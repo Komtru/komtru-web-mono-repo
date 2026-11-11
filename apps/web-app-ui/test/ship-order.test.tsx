@@ -145,7 +145,7 @@ describe('Seller-3 and X2: ship it yourself, with proof', () => {
       contentType: 'image/jpeg',
     });
     // The receipt is shown as the person's own file, never as an id.
-    expect(screen.getByText('receipt.jpg')).toBeTruthy();
+    expect(screen.getAllByText('receipt.jpg').length).toBeGreaterThan(0);
     expect(container.textContent).not.toContain(id(55));
 
     fireEvent.click(screen.getByRole('button', { name: 'Mark as shipped' }));
@@ -156,7 +156,7 @@ describe('Seller-3 and X2: ship it yourself, with proof', () => {
       waybillNumber: 'KT-883192',
       receiptFileId: id(55),
       driverPhone: '08012345678',
-      vehiclePlate: 'lsr 123 ab',
+      vehiclePlate: 'LSR 123 AB',
     });
     expect(
       screen.getAllByRole('link', { name: 'Back to the trade' }).map((a) => a.getAttribute('href')),
@@ -241,5 +241,151 @@ describe('who and when', () => {
     serve(problem('INTERNAL', 500));
     show();
     expect(await screen.findByText('Couldn’t open this trade')).toBeTruthy();
+  });
+});
+
+const withErrors = (code: string, httpStatus: number, errors: { path: string; message: string }[]) =>
+  new ProblemError(
+    { type: 'about:blank', title: 'Reworded', status: httpStatus, code, errors },
+    {
+      status: httpStatus,
+      requestId: undefined,
+      replayed: false,
+      retryAfterMs: undefined,
+      rateLimit: undefined,
+    },
+    false,
+  );
+
+describe('checks the evidence the way the platform does, before sending it', () => {
+  it('names a phone number the platform would refuse, and keeps shipping shut', async () => {
+    serve(workspaceTrade('FUNDED', 'SELLER'));
+    const { container } = show();
+    await screen.findByLabelText('Waybill number');
+    fill(container);
+    const phone = screen.getByLabelText<HTMLInputElement>('Driver or rider phone');
+    fireEvent.change(phone, { target: { value: '12345' } });
+    fireEvent.blur(phone);
+    expect(await screen.findByText('Enter the driver or rider phone number')).toBeTruthy();
+    expect(phone.getAttribute('aria-invalid')).toBe('true');
+    expect(phone.getAttribute('aria-describedby')).toBeTruthy();
+    await waitFor(() => {
+      expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Mark as shipped' }).disabled).toBe(true);
+    });
+    fireEvent.change(phone, { target: { value: '+234 801 234 5678' } });
+    await waitFor(() => {
+      expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Mark as shipped' }).disabled).toBe(false);
+    });
+    expect(screen.queryByText('Enter the driver or rider phone number')).toBeNull();
+    await expectNoAxeViolations(container, SHELL_RULES);
+  });
+
+  it('names a plate the platform would refuse, and a waybill with characters it does not allow', async () => {
+    serve(workspaceTrade('FUNDED', 'SELLER'));
+    const { container } = show();
+    await screen.findByLabelText('Waybill number');
+    fill(container);
+    const plate = screen.getByLabelText<HTMLInputElement>('Vehicle registration plate');
+    fireEvent.change(plate, { target: { value: '#!' } });
+    fireEvent.blur(plate);
+    expect(await screen.findByText('Enter the vehicle registration plate')).toBeTruthy();
+    const waybill = screen.getByLabelText<HTMLInputElement>('Waybill number');
+    fireEvent.change(waybill, { target: { value: 'KT*883' } });
+    fireEvent.blur(waybill);
+    expect(await screen.findByText('Use letters, digits and - / . _ only')).toBeTruthy();
+    expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Mark as shipped' }).disabled).toBe(true);
+  });
+
+  it('shows the platform’s field errors beside the fields when it refuses with a 422', async () => {
+    serve(workspaceTrade('FUNDED', 'SELLER'), {
+      'POST /trades/:id/ship/self-arranged': withErrors('VALIDATION_FAILED', 422, [
+        { path: 'driverPhone', message: 'Enter the driver or rider phone number' },
+      ]),
+    });
+    const { container } = show();
+    await screen.findByLabelText('Waybill number');
+    fill(container);
+    await waitFor(() => {
+      expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Mark as shipped' }).disabled).toBe(false);
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Mark as shipped' }));
+    expect(await screen.findByText('Enter the driver or rider phone number')).toBeTruthy();
+    expect(screen.getByLabelText('Driver or rider phone').getAttribute('aria-invalid')).toBe('true');
+  });
+});
+
+describe('when the platform says the trade has moved on', () => {
+  it('reads the trade again on a 409 and lets its status decide the screen', async () => {
+    let reads = 0;
+    serve(workspaceTrade('FUNDED', 'SELLER'), {
+      'GET /trades/:id': () => {
+        reads += 1;
+        return reads === 1 ? workspaceTrade('FUNDED', 'SELLER') : workspaceTrade('SHIPPED', 'SELLER');
+      },
+      'GET /trades/:id/ship-options': problem('CONFLICT', 409, 'This trade has already been shipped.'),
+    });
+    show();
+    expect(await screen.findByRole('heading', { name: 'Marked as shipped' }, { timeout: 4000 })).toBeTruthy();
+    expect(reads).toBeGreaterThan(1);
+  });
+});
+
+describe('X1 by status', () => {
+  it('says a trade not yet accepted is not accepted yet, and leads the seller back to respond', async () => {
+    serve(workspaceTrade('AWAITING_ACCEPTANCE', 'SELLER', { awaiting: 'YOU' }));
+    show();
+    expect(await screen.findByText(/hasn’t been accepted yet/)).toBeTruthy();
+    expect(screen.queryByText(/hasn’t funded/)).toBeNull();
+    const respond = screen.getByRole('link', { name: 'Respond to this request' });
+    expect(respond.getAttribute('href')).toBe(`/trade/${id(1)}`);
+    expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Dispatch locked' }).disabled).toBe(true);
+  });
+
+  it('says a proposal still being agreed is not agreed yet', async () => {
+    serve(workspaceTrade('PENDING_COUNTERPARTY', 'SELLER'));
+    show();
+    expect(await screen.findByText(/hasn’t been agreed yet/)).toBeTruthy();
+  });
+});
+
+describe('after shipping: report delivery', () => {
+  it('lets the seller tell the buyer it arrived, then shows the report', async () => {
+    serve(workspaceTrade('SHIPPED', 'SELLER'), {
+      'POST /trades/:id/report-delivered': workspaceTrade('UNCONFIRMED_DELIVERY', 'SELLER'),
+    });
+    show();
+    fireEvent.click(await screen.findByRole('button', { name: 'Report delivery' }));
+    expect(await screen.findByRole('heading', { name: 'Delivery reported' })).toBeTruthy();
+    expect(callsTo(api.call, 'POST', '/trades/:id/report-delivered')[0]?.params).toEqual({ id: id(1) });
+    expect(screen.queryByRole('button', { name: 'Report delivery' })).toBeNull();
+  });
+
+  it('says why when reporting fails, as an alert', async () => {
+    serve(workspaceTrade('SHIPPED', 'SELLER'), {
+      'POST /trades/:id/report-delivered': problem('INTERNAL', 500, 'Try again in a moment.'),
+    });
+    const { container } = show();
+    fireEvent.click(await screen.findByRole('button', { name: 'Report delivery' }));
+    const alert = await screen.findByRole('alert');
+    expect(alert.textContent).toContain('Try again in a moment.');
+    await expectNoAxeViolations(container, SHELL_RULES);
+  });
+});
+
+describe('the receipt picker', () => {
+  it('names the file it would remove, and announces an upload in progress', async () => {
+    serve(workspaceTrade('FUNDED', 'SELLER'));
+    const { container } = show();
+    await screen.findByLabelText('Waybill number');
+    fill(container);
+    expect(await screen.findByRole('button', { name: /^Remove\s*receipt\.jpg$/ })).toBeTruthy();
+  });
+
+  it('reports a failed upload as an alert', async () => {
+    serve(workspaceTrade('FUNDED', 'SELLER'), { 'POST /files/upload-url': problem('INTERNAL', 500) });
+    const { container } = show();
+    await screen.findByLabelText('Waybill number');
+    fill(container);
+    expect((await screen.findByRole('alert')).textContent).toContain('receipt.jpg');
   });
 });
