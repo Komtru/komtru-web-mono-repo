@@ -109,27 +109,27 @@ The same work counted per ticket. Useful for the detail in `docs/tickets/`, not 
 it counts backend and frontend layers separately, which is how the build drifted.
 
 ```
-MVP   ████████████████████··············  65/109  (60%)
-Total █████████████·····················  65/168  (39%)
+MVP   █████████████████████·············  66/109  (61%)
+Total █████████████·····················  66/168  (39%)
 ```
 
-44 MVP tickets left, 59 deferred past it.
+43 MVP tickets left, 59 deferred past it.
 
 ### Tickets in progress
 
 | Ticket | Title                                                   | MVP |
 | ------ | ------------------------------------------------------- | --- |
 | T-029  | Isolate the integration suite's shared Redis and queues | yes |
-| T-073  | Payout accounts, preferences and payouts                | yes |
 
 ### Tickets ready to start (MVP first)
 
 | Ticket | Title                                                                     | MVP |
 | ------ | ------------------------------------------------------------------------- | --- |
 | T-029  | Isolate the integration suite's shared Redis and queues                   | yes |
-| T-073  | Payout accounts, preferences and payouts                                  | yes |
+| T-055  | Merchant applications and certification                                   | yes |
 | T-075  | Refunds                                                                   | yes |
 | T-112  | First-time onboarding                                                     | yes |
+| T-124  | Seller payouts                                                            | yes |
 | T-194  | Trade workspace supporting screens: funding, terms, agreement and payment | yes |
 | T-195  | Trade workspace supporting screens: delivery and evidence                 | yes |
 | T-197  | Proof media: capture, check and compare                                   | yes |
@@ -162,7 +162,6 @@ Total █████████████·················�
 | T-057  | Search and discovery (M19)                                                | yes |
 | T-063  | Orders and multi-item trades (M9)                                         | yes |
 | T-066  | Post-funding cancellation and can't-fulfil refunds                        | yes |
-| T-073  | Payout accounts, preferences and payouts                                  | yes |
 | T-075  | Refunds                                                                   | yes |
 | T-080  | Disputes core                                                             | yes |
 | T-081  | Evidence comparison and dispute read models                               | yes |
