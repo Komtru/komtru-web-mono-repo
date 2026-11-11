@@ -6,6 +6,15 @@ cost and to find work to resume.
 
 ## Waiting on the owner
 
+- **F-037 / T-073 payout defaults** (applied on branch `f-037-payouts`; listed in `docs/superpowers/plans/2026-11-11-f-037-payouts-backend.md`):
+  - the payout fee is credited to `PLATFORM_FEE_REVENUE`;
+  - a failed payout returns the payout fee too;
+  - the name-match rule for casual (non-business) sellers is open, because T-051 only matches business names;
+  - an instant payout whose balance no longer covers it is skipped, never partially paid;
+  - the scheduled sweep runs at 09:00 Lagos time;
+  - there is no minimum or maximum payout;
+  - a hold found just before the transfer goes out cancels the payout.
+- **F-026 defaults** (merged 2026-11-11): Seller-3's optional courier/tracking/photo form is replaced by X2's four required fields (waybill, receipt photo, driver phone, plate), because the backend requires them; AC8 reuses `TradeRow`; `/orders` now shows AC8 in place of the DX-18 placeholder (T-209 may revisit).
 - **T-049 trade-standard seed values** (placeholders): a 48h inspection window and 7-day delivery
   for both categories. Electronics requires 4 photos plus a video; Fashion 3 photos and no video.
   A buyer may extend the window by up to 48h more, configurable up to 336h.
@@ -528,3 +537,23 @@ VALUE` cannot work here at all (drizzle runs every pending migration in one tran
   `KOMTRU_INFRA_TESTS=1` run on `main`. The 5-hour window resets at 02:29 WAT.
 
 ## 2026-11-11 07:36 WAT — skipped: locked (lock from 2026-11-11T04:31:58Z; 5h 47%, week 18%; F-026 worktree committed at 07:02 WAT)
+
+## 2026-11-11 08:20 WAT — run summary
+
+- Usage at start: 5h 1%, week 12%. At end: 5h 85%, week 23%.
+- Capacity: 2 (est 34, est_week 5: 1 + 2×34 ≤ 90; 12 + 2×5 ≤ 85). Every Ready MVP feature's UI is in web-app-ui, so the
+  second slot ran the **backend layer only** of F-037 (ledger module, the only migration in flight) beside F-026 (web-app-ui).
+  Features: F-026 (merged, Done), F-037 (backend layer saved at implement, plan steps 1–4 of ~8).
+- F-026 (sonnet): ship screen (Seller-3/X2 self-arranged with waybill, receipt photo, driver phone and plate,
+  client-validated to the backend rules), X1 dispatch lock worded by status, Report delivery on the shipped state, and AC8
+  Active Orders on `/orders`. Seller-2/W1–W3/BR1/SD1 were already built by F-017. MI3 and the Park/courier branches are left
+  out for MVP. Review: 2 must-fix and 7 should-fix items, all fixed. On `main`: package build, lint, typecheck and test for
+  web-app-ui (531) and api-client (254) are green, and the format check is clean. Visual check is in `docs/ui-review/T-123/`
+  (its shots predate the fixes). The fixer noted `MyTrades.tsx` has the same failed-later-page bug as ActiveOrders had.
+- F-037 (opus, money): migration `0048_ledger_payouts`, payout posting rules, the sweep calendar, a frozen payout fee, and
+  Paystack transfer verification behind a port. 505 ledger and db tests are green and `migration:safety` is clean. It was
+  stopped at 85% of the 5-hour window, before review. The branch is clean, with nothing unverified.
+- Feature costs, together: 5h-cost=84 week-cost=11. F-037 (opus, implement only) cost the most.
+- Next: resume F-037 on `f-037-payouts` at plan step 5 (services with concurrency tests), then review, fix and merge. Its
+  migration 0048 is in flight, so pair it only with a migration-free feature, for example F-027 (deliver, inspect, release;
+  Backend done, UI outstanding, web-app-ui). Still owed: the full `KOMTRU_INFRA_TESTS=1` run on `main`.

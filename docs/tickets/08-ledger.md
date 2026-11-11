@@ -50,6 +50,7 @@ Decisions C4, C5, C8, C10, C11 (design §5). The ledger is authoritative; Paysta
 
 - **Touches:** `ledger/services/{payoutAccount,payoutPreference,payout}.service.ts`, `ledger/jobs/**`
 - **Depends on:** T-072, T-051
+- **Status (2026-11-11): in progress** — on branch `f-037-payouts` (worktree `.claude/worktrees/f-037-payouts`); plan `docs/superpowers/plans/2026-11-11-f-037-payouts-backend.md` steps 1–4 done (migration 0048); next: step 5, services with concurrency tests. Owner money defaults listed in the plan and in RUN_LOG "Waiting on the owner".
 - **Acceptance criteria:**
   - `payout_accounts` owned by users only, encrypted account number, masked display, provider recipient id, name-match reference from T-051, one default per owner.
   - `payout_preferences` modes `MANUAL`, `AUTO_IMMEDIATE`, `AUTO_DAILY`, `AUTO_WEEKLY` (Monday), `AUTO_MONTHLY` (1st), rejecting non-manual modes without a verified account.
