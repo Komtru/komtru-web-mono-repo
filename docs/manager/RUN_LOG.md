@@ -6,7 +6,9 @@ cost and to find work to resume.
 
 ## Waiting on the owner
 
-- **F-037 / T-073 payout defaults** (applied on branch `f-037-payouts`; listed in `docs/superpowers/plans/2026-11-11-f-037-payouts-backend.md`):
+- **F-037 / T-073 payout defaults** (merged to `main` 2026-11-11; listed in `docs/superpowers/plans/2026-11-11-f-037-payouts-backend.md`):
+  - **new:** T-051 says a fuzzy name match "is not a pass", but decision 3 accepts it for a payout account. Decision 3 was kept. Should a fuzzy match hold the account for a person instead?
+  - **new, safe defaults:** a payout to an account no longer verified, or one under a hold, is returned to the balance before any send. A transfer still not final after 24h goes to NEEDS_REVIEW. A mismatched verify (reference, amount, currency or transfer code) goes to NEEDS_REVIEW and nothing posts. A succeeded payout later verified as failed is only logged. A failed sweep payout keeps that day's sweep key, so its money goes out on the next due sweep. Payouts are NGN only;
   - the payout fee is credited to `PLATFORM_FEE_REVENUE`;
   - a failed payout returns the payout fee too;
   - the name-match rule for casual (non-business) sellers is open, because T-051 only matches business names;
@@ -14,6 +16,12 @@ cost and to find work to resume.
   - the scheduled sweep runs at 09:00 Lagos time;
   - there is no minimum or maximum payout;
   - a hold found just before the transfer goes out cancels the payout.
+- **F-027 defaults** (merged 2026-11-11):
+  - BEI1 asks for more inspection time during inspection, as the backend built it, not with the proposal as the reference draws it. The choices are 12 h, 24 h or one more window.
+  - BEI2 has accept and decline only, with no counter.
+  - The Z5 release amount is the item amount.
+  - The DE1 date is a datetime field, capped by the platform.
+  - DE3 has no refund button, because the platform refunds on its own (F-030).
 - **F-026 defaults** (merged 2026-11-11): Seller-3's optional courier/tracking/photo form is replaced by X2's four required fields (waybill, receipt photo, driver phone, plate), because the backend requires them; AC8 reuses `TradeRow`; `/orders` now shows AC8 in place of the DX-18 placeholder (T-209 may revisit).
 - **T-049 trade-standard seed values** (placeholders): a 48h inspection window and 7-day delivery
   for both categories. Electronics requires 4 photos plus a video; Fashion 3 photos and no video.
@@ -563,3 +571,29 @@ VALUE` cannot work here at all (drizzle runs every pending migration in one tran
 - Capacity: 0. 5h used (90%) + est≈29 > 90. Window resets at 10:30 WAT. In-flight F-037 (`f-037-payouts`, plan step 5)
   is not a cheap tail, so nothing was resumed.
 - Next: resume F-037 at plan step 5, then review, fix and merge; pair only with a migration-free feature such as F-027.
+
+## 2026-11-11 12:13 WAT — run summary
+
+- Usage at start: 5h 1%, week 24%. At end: 5h 55%, week 31%.
+- Capacity: 2 (est 34, est_week 5: 1 + 2×34 ≤ 90; 24 + 5 ≤ 85). In-flight F-037 (backend, migration 0048) ran in parallel
+  with F-027 (web-app-ui, no migration), with test prefixes `komtru_f037` and `komtru_f027`. Features: F-027 (merged, Done),
+  F-037 (backend layer merged, T-124 UI outstanding).
+- F-027 (sonnet): UI only, over T-065/T-074. Customer-4/Z4 Inspect & Confirm at `/trade/[id]/inspect`, Z5 release behind an
+  acknowledgement, BEI1/BEI2 inspection extension, AB1 self-arranged logistics and confirm delivery, DE1–DE3 delivery extension,
+  and new api-client hooks. AB2/Park and MI4/multi-item are deferred. The visual check is in `docs/ui-review/T-118/`. Also fixed:
+  bottom sheets sat under the tab bar (`OverTabBar`). Review: 1 must-fix and 7 should-fix items, all fixed. The fixes added a
+  double-submit guard and a ticking clock. T-118 is "Done for MVP scope".
+- F-037 backend (opus, money): plan steps 5–9. Services under a per-user lock (a concurrency test proves no double-spend),
+  dispatch and account-verify jobs, `transfer.*` webhooks with the outcome decided only by provider verify, auto-immediate
+  payout on release, the 09:00 Lagos sweep, the 5-minute safety sweep, the `/me/payout-accounts` and `/me/payouts` routes,
+  api-client and shared-types. Review: 3 must-fix and 9 should-fix items, all fixed. The main one: holds and the account
+  state were not re-checked before a resend. Also fixed: a platform bug in which the idempotency gate failed (500) on bigint
+  bodies; it is now hashed safely. Migration 0048 gained two indexes before merge.
+- Verification: the F-027 branch and `main` ran package build, then lint, typecheck and test for web-app-ui (579) and
+  api-client (262), plus the format check. The F-037 fixer ran the full backend-api suite with `KOMTRU_INFRA_TESTS=1` (5408).
+  On `main` after both merges, the manager ran the whole-repo `turbo run lint typecheck test --force` (37/37 tasks, default
+  suite), the format check, and `migration:safety` (49 migrations, 0 errors).
+- Feature costs, together: 5h-cost=54 week-cost=7, about 27 and 3–4 each. F-037 (opus) cost most.
+- Next: F-037's T-124 Seller Payouts UI (web-app-ui; Backend done, UI outstanding). Pair it with a non-web-app-ui feature, or
+  with F-044/F-045 only if those touch different areas. F-044 and F-045 are also Backend done, UI outstanding. The full
+  `KOMTRU_INFRA_TESTS=1` run on `main` is still owed by the manager.
