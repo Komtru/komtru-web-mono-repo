@@ -92,6 +92,26 @@
       "definition": "CREATE UNIQUE INDEX payment_attempts_provider_ref ON ledger.payment_attempts USING btree (provider, provider_reference) WHERE (provider_reference IS NOT NULL)"
     },
     {
+      "table": "ledger.payout_accounts",
+      "name": "payout_accounts_one_default",
+      "definition": "CREATE UNIQUE INDEX payout_accounts_one_default ON ledger.payout_accounts USING btree (user_id) WHERE is_default"
+    },
+    {
+      "table": "ledger.payout_accounts",
+      "name": "payout_accounts_one_live",
+      "definition": "CREATE UNIQUE INDEX payout_accounts_one_live ON ledger.payout_accounts USING btree (user_id, bank_code, account_number_hash) WHERE (status = ANY (ARRAY['PENDING_VERIFICATION'::ledger.payout_account_status, 'VERIFIED'::ledger.payout_account_status]))"
+    },
+    {
+      "table": "ledger.payouts",
+      "name": "payouts_one_per_source",
+      "definition": "CREATE UNIQUE INDEX payouts_one_per_source ON ledger.payouts USING btree (source_journal_entry_id) WHERE (source_journal_entry_id IS NOT NULL)"
+    },
+    {
+      "table": "ledger.payouts",
+      "name": "payouts_provider_transfer",
+      "definition": "CREATE UNIQUE INDEX payouts_provider_transfer ON ledger.payouts USING btree (provider, provider_transfer_id) WHERE (provider_transfer_id IS NOT NULL)"
+    },
+    {
       "table": "trade.delivery_extension_requests",
       "name": "delivery_extension_one_pending",
       "definition": "CREATE UNIQUE INDEX delivery_extension_one_pending ON trade.delivery_extension_requests USING btree (deadline_id) WHERE (status = 'PENDING'::trade.delivery_extension_status)"
@@ -379,6 +399,61 @@
       "definition": "CHECK (signature_valid)"
     },
     {
+      "table": "ledger.payout_accounts",
+      "name": "payout_accounts_default_verified",
+      "definition": "CHECK (((NOT is_default) OR (status = 'VERIFIED'::ledger.payout_account_status)))"
+    },
+    {
+      "table": "ledger.payout_accounts",
+      "name": "payout_accounts_disabled",
+      "definition": "CHECK (((status = 'DISABLED'::ledger.payout_account_status) = (disabled_at IS NOT NULL)))"
+    },
+    {
+      "table": "ledger.payout_accounts",
+      "name": "payout_accounts_masked",
+      "definition": "CHECK ((account_number_masked ~ '^\\*+[0-9]{4}$'::text))"
+    },
+    {
+      "table": "ledger.payout_accounts",
+      "name": "payout_accounts_verified",
+      "definition": "CHECK ((((status = 'VERIFIED'::ledger.payout_account_status) = ((verified_at IS NOT NULL) AND (account_name IS NOT NULL) AND (provider_recipient_id IS NOT NULL))) OR ((status = 'DISABLED'::ledger.payout_account_status) AND (verified_at IS NOT NULL))))"
+    },
+    {
+      "table": "ledger.payout_holds",
+      "name": "payout_holds_released",
+      "definition": "CHECK (((released_at IS NULL) = (released_by IS NULL)))"
+    },
+    {
+      "table": "ledger.payouts",
+      "name": "payouts_amounts",
+      "definition": "CHECK (((fee_minor >= 0) AND (transfer_amount_minor > 0) AND (amount_minor = (transfer_amount_minor + fee_minor))))"
+    },
+    {
+      "table": "ledger.payouts",
+      "name": "payouts_currency",
+      "definition": "CHECK ((currency ~ '^[A-Z]{3}$'::text))"
+    },
+    {
+      "table": "ledger.payouts",
+      "name": "payouts_reference_shape",
+      "definition": "CHECK ((reference = ('payout-'::text || (id)::text)))"
+    },
+    {
+      "table": "ledger.payouts",
+      "name": "payouts_reversed_posted",
+      "definition": "CHECK (((status = ANY (ARRAY['FAILED'::ledger.payout_status, 'REVERSED'::ledger.payout_status])) = ((reversed_journal_id IS NOT NULL) AND (failed_at IS NOT NULL))))"
+    },
+    {
+      "table": "ledger.payouts",
+      "name": "payouts_succeeded_posted",
+      "definition": "CHECK (((status <> 'SUCCEEDED'::ledger.payout_status) OR ((settled_journal_id IS NOT NULL) AND (completed_at IS NOT NULL))))"
+    },
+    {
+      "table": "ledger.payouts",
+      "name": "payouts_trigger_source",
+      "definition": "CHECK ((((trigger = 'AUTO_IMMEDIATE'::ledger.payout_trigger) = (source_journal_entry_id IS NOT NULL)) AND ((trigger = 'AUTO_SWEEP'::ledger.payout_trigger) = (sweep_key IS NOT NULL))))"
+    },
+    {
       "table": "notify.notifications",
       "name": "notifications_suppressed_has_reason",
       "definition": "CHECK (((status <> 'SUPPRESSED'::notify.notification_status) OR (failed_reason IS NOT NULL)))"
@@ -639,6 +714,36 @@
       "table": "ledger.payment_provider_webhooks",
       "name": "komtru_payment_webhook_guard",
       "definition": "[O] CREATE TRIGGER komtru_payment_webhook_guard BEFORE UPDATE ON ledger.payment_provider_webhooks FOR EACH ROW EXECUTE FUNCTION ledger.guard_payment_webhook()"
+    },
+    {
+      "table": "ledger.payout_accounts",
+      "name": "komtru_no_delete",
+      "definition": "[O] CREATE TRIGGER komtru_no_delete BEFORE DELETE ON ledger.payout_accounts FOR EACH ROW EXECUTE FUNCTION ledger.reject_delete()"
+    },
+    {
+      "table": "ledger.payout_accounts",
+      "name": "komtru_payout_account_guard",
+      "definition": "[O] CREATE TRIGGER komtru_payout_account_guard BEFORE UPDATE ON ledger.payout_accounts FOR EACH ROW EXECUTE FUNCTION ledger.guard_payout_account()"
+    },
+    {
+      "table": "ledger.payout_holds",
+      "name": "komtru_no_delete",
+      "definition": "[O] CREATE TRIGGER komtru_no_delete BEFORE DELETE ON ledger.payout_holds FOR EACH ROW EXECUTE FUNCTION ledger.reject_delete()"
+    },
+    {
+      "table": "ledger.payout_holds",
+      "name": "komtru_payout_hold_guard",
+      "definition": "[O] CREATE TRIGGER komtru_payout_hold_guard BEFORE UPDATE ON ledger.payout_holds FOR EACH ROW EXECUTE FUNCTION ledger.guard_payout_hold()"
+    },
+    {
+      "table": "ledger.payouts",
+      "name": "komtru_no_delete",
+      "definition": "[O] CREATE TRIGGER komtru_no_delete BEFORE DELETE ON ledger.payouts FOR EACH ROW EXECUTE FUNCTION ledger.reject_delete()"
+    },
+    {
+      "table": "ledger.payouts",
+      "name": "komtru_payout_guard",
+      "definition": "[O] CREATE TRIGGER komtru_payout_guard BEFORE UPDATE ON ledger.payouts FOR EACH ROW EXECUTE FUNCTION ledger.guard_payout()"
     },
     {
       "table": "notify.notification_delivery_attempts",

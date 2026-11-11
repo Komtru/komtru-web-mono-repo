@@ -239,6 +239,11 @@
       "tag": "0047_trade_inspection_reminder",
       "when": 1794254639384,
       "sha256": "b3f25bd3c81fdfb1579a2bd01b3c251b24b25123e508d11f79fa31d3dcc01395"
+    },
+    {
+      "tag": "0048_ledger_payouts",
+      "when": 1794380970757,
+      "sha256": "2f41ce7d6e36614106aea659e4d0599fb7405485487280b985c1be4a6855059e"
     }
   ]
 }
