@@ -75,6 +75,11 @@ export const BANK_REVERSED_REASON = 'The bank returned this transfer, so it was 
 
 type Outcome = (typeof PAYOUT_OUTCOMES)[number];
 
+/** A transfer still not final after this long goes to NEEDS_REVIEW (the account-verify default). */
+export const MAX_PENDING_MS = 24 * 60 * 60_000;
+export const REVIEW_REASON = "The provider's record of this transfer does not match the payout.";
+export const STUCK_REASON = 'The provider has not finished this transfer within a day.';
+
 const amountsOf = (payout: PayoutRow) => ({
   amountMinor: payout.amountMinor,
   feeMinor: payout.feeMinor,
@@ -150,7 +155,7 @@ async function reverse(
 }
 
 type Claim =
-  | { kind: 'CLAIMED'; payout: PayoutRow; recipient: string }
+  | { kind: 'CLAIMED'; payout: PayoutRow }
   | { kind: 'CLOSED'; status: PayoutStatus }
   | { kind: 'NOT_REQUESTED'; status: PayoutStatus };
 
@@ -180,8 +185,50 @@ async function claim(deps: PayoutDispatchDeps, payoutId: string): Promise<Claim 
       return { kind: 'CLOSED', status: row.status };
     }
     const row = await updatePayout(tx, payout.id, { status: 'PROCESSING', dispatchedAt: now });
-    return { kind: 'CLAIMED', payout: row, recipient: account.providerRecipientId };
+    return { kind: 'CLAIMED', payout: row };
   });
+}
+
+type SendCheck =
+  { kind: 'SEND'; payout: PayoutRow; recipient: string } | { kind: 'CLOSED'; status: PayoutStatus };
+
+/**
+ * The gate in front of every send — the first one after the claim and every resend after verify said
+ * the provider has nothing: a hold in force or an account no longer payable returns the money
+ * (`reversed`, from clearing, because nothing has left). Under the user's payout lock, the same one
+ * `placePayoutHold` takes. Only a PROCESSING payout that nothing has been confirmed for reaches here.
+ */
+async function checkBeforeSend(deps: PayoutDispatchDeps, payoutId: string): Promise<SendCheck | undefined> {
+  const now = clock(deps);
+  return deps.db.transaction(async (tx): Promise<SendCheck | undefined> => {
+    const peek = await findPayout(tx, payoutId);
+    if (!peek) return undefined;
+    await lockUserPayouts(tx, peek.userId);
+    const payout = await lockPayout(tx, payoutId);
+    if (!payout) return undefined;
+    if (payout.status !== 'PROCESSING') return { kind: 'CLOSED', status: payout.status };
+    if ((await activePayoutHolds(tx, payout.userId, now)).length) {
+      const row = await reverse(tx, payout, 'FAILED', HELD_REASON, now);
+      deps.logger.warn({ payoutId }, 'ledger: payout returned before sending, a hold is in force');
+      return { kind: 'CLOSED', status: row.status };
+    }
+    const account = await findPayoutAccount(tx, payout.payoutAccountId);
+    if (account?.status !== 'VERIFIED' || !account.providerRecipientId) {
+      const row = await reverse(tx, payout, 'FAILED', ACCOUNT_UNAVAILABLE_REASON, now);
+      deps.logger.warn({ payoutId }, 'ledger: payout returned before sending, its account is not payable');
+      return { kind: 'CLOSED', status: row.status };
+    }
+    return { kind: 'SEND', payout, recipient: account.providerRecipientId };
+  });
+}
+
+/** Checks, then sends. Returns the payout's status when the check closed it instead. */
+async function checkedSend(deps: PayoutDispatchDeps, payoutId: string): Promise<PayoutProgress | undefined> {
+  const check = await checkBeforeSend(deps, payoutId);
+  if (!check) return 'MISSING';
+  if (check.kind === 'CLOSED') return check.status;
+  await send(deps, check.payout, check.recipient);
+  return undefined;
 }
 
 /** Asks the provider for the transfer and records its transfer code. Throws whatever it throws. */
@@ -217,7 +264,9 @@ export async function processPayout(deps: PayoutDispatchDeps, payoutId: string):
   if (!claimed) return 'MISSING';
   if (claimed.kind === 'CLOSED') return claimed.status;
   if (claimed.kind === 'CLAIMED') {
-    await send(deps, claimed.payout, claimed.recipient);
+    // Re-checked, not trusted from the claim: a hold placed since must still stop the transfer.
+    const closed = await checkedSend(deps, payoutId);
+    if (closed !== undefined) return closed;
   } else if (claimed.status !== 'PROCESSING') {
     return claimed.status;
   }
@@ -243,11 +292,11 @@ export async function resolvePayout(deps: PayoutDispatchDeps, payoutId: string):
       deps.logger.error({ payoutId }, 'ledger: a succeeded payout is unknown to the provider');
       return payout.status;
     }
-    // The one answer that proves nothing was sent: send it again, under the same reference.
+    // The one answer that proves nothing was sent: send it again, under the same reference — but
+    // only past the same hold and account checks as the first send.
     deps.logger.warn({ payoutId }, 'ledger: payout unknown to the provider, sending it again');
-    const account = await findPayoutAccount(deps.db, payout.payoutAccountId);
-    if (!account?.providerRecipientId) throw error;
-    await send(deps, payout, account.providerRecipientId);
+    const closed = await checkedSend(deps, payoutId);
+    if (closed !== undefined) return closed;
     throw new PayoutStillPendingError(payoutId, 'resent');
   }
 
@@ -272,7 +321,8 @@ export async function resolvePayout(deps: PayoutDispatchDeps, payoutId: string):
             status: 'NEEDS_REVIEW',
             failureReason: null,
           });
-          await announce(tx, row, 'NEEDS_REVIEW', null, mismatch, now);
+          // The provider's figures stay in the log, for ops; the event carries words anyone may see.
+          await announce(tx, row, 'NEEDS_REVIEW', null, REVIEW_REASON, now);
         }
         deps.logger.error({ payoutId, mismatch }, 'ledger: verified transfer does not match the payout');
         return { status: locked.status === 'PROCESSING' ? 'NEEDS_REVIEW' : locked.status };
@@ -309,9 +359,22 @@ export async function resolvePayout(deps: PayoutDispatchDeps, payoutId: string):
           return { status: (await reverse(tx, locked, 'FAILED', BANK_FAILED_REASON, now, seen)).status };
         case 'REVERSED':
           return { status: (await reverse(tx, locked, 'REVERSED', BANK_REVERSED_REASON, now, seen)).status };
-        case 'PENDING':
+        case 'PENDING': {
+          // 'otp', 'blocked' or a status nobody has seen, for a day: stop asking and hand it to a person.
+          // Nothing posts — the money stays in clearing, owed to the seller, until ops decides.
+          const since = locked.dispatchedAt ?? locked.requestedAt;
+          if (now.getTime() - since.getTime() >= MAX_PENDING_MS) {
+            const row = await updatePayout(tx, locked.id, { ...seen, status: 'NEEDS_REVIEW' });
+            await announce(tx, row, 'NEEDS_REVIEW', null, STUCK_REASON, now);
+            deps.logger.error(
+              { payoutId, status: verified.status },
+              'ledger: payout pending too long, held for review',
+            );
+            return { status: 'NEEDS_REVIEW' };
+          }
           await updatePayout(tx, locked.id, seen);
           return { status: 'PROCESSING', pending: verified.status };
+        }
       }
     },
   );

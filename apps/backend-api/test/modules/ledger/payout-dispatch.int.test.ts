@@ -21,10 +21,15 @@ import {
   findPayout,
   upsertPayoutMode,
 } from '../../../src/modules/ledger/infrastructure/postgres/payoutsRepository.js';
-import { recordDelivery } from '../../../src/modules/ledger/infrastructure/postgres/paymentsRepository.js';
+import {
+  findDelivery,
+  recordDelivery,
+} from '../../../src/modules/ledger/infrastructure/postgres/paymentsRepository.js';
 import {
   BANK_FAILED_REASON,
   HELD_REASON,
+  REVIEW_REASON,
+  STUCK_REASON,
   PayoutStillPendingError,
   processPayout,
   resolvePayout,
@@ -249,7 +254,7 @@ describe.runIf(infraEnabled)('payout dispatch and resolution (T-073)', () => {
     expect(await processPayout(p.deps, payout.id)).toBe('NEEDS_REVIEW');
     expect(await balance(clearingOf(payout.id))).toBe(60_000n - PAYOUT_FEE);
     expect(await outbox('ledger.payout.completed')).toEqual([
-      expect.objectContaining({ outcome: 'NEEDS_REVIEW', journalEntryId: null }),
+      expect.objectContaining({ outcome: 'NEEDS_REVIEW', journalEntryId: null, reason: REVIEW_REASON }),
     ]);
   });
 
@@ -310,6 +315,144 @@ describe.runIf(infraEnabled)('payout dispatch and resolution (T-073)', () => {
     expect(await deliver(payout.reference)).toBe('SUCCEEDED');
     expect(await deliver('fund-not-a-payout')).toBe('UNKNOWN_REFERENCE');
     expect(await deliver(`payout-${randomUUID()}`)).toBe('UNKNOWN_REFERENCE');
+  });
+
+  const placeHold = (userId: string) =>
+    t
+      .db()
+      .transaction((tx) =>
+        placePayoutHold(tx, { userId, holdType: 'PAYOUT_HOLD', source: 'RISK_RULE:test', reason: 'x' }),
+      );
+
+  it('stops a payout a hold catches after the claim, before anything is sent', async () => {
+    const { seller, payout } = await aPayout();
+    // The claim committed and the process died before the send: PROCESSING, nothing at the provider.
+    await t
+      .owner()
+      .query(`UPDATE ledger.payouts SET status = 'PROCESSING', dispatched_at = now() WHERE id = $1`, [
+        payout.id,
+      ]);
+    await placeHold(seller);
+    const p = provider(payout, new TransferNotFoundError(payout.reference));
+
+    expect(await processPayout(p.deps, payout.id)).toBe('FAILED');
+    expect(p.initiateTransfer).not.toHaveBeenCalled();
+    expect(await balance(payableOf(seller))).toBe(100_000n);
+    expect(await balance(clearingOf(payout.id))).toBe(0n);
+    expect(await findPayout(t.db(), payout.id)).toMatchObject({ failureReason: HELD_REASON });
+    expect(await balanced()).toBe(true);
+  });
+
+  it('never resends past a hold placed after a send that went unanswered', async () => {
+    const { seller, payout } = await aPayout();
+    const p = provider(payout, new TransferNotFoundError(payout.reference));
+    p.initiateTransfer.mockRejectedValueOnce(new Error('socket hang up'));
+    await expect(processPayout(p.deps, payout.id)).rejects.toThrow('socket hang up');
+
+    await placeHold(seller);
+    expect(await processPayout(p.deps, payout.id)).toBe('FAILED');
+    expect(p.initiateTransfer).toHaveBeenCalledTimes(1);
+    expect(await balance(payableOf(seller))).toBe(100_000n);
+  });
+
+  it('never resends to an account that is no longer payable', async () => {
+    const { seller, payout } = await aPayout();
+    const p = provider(payout, new TransferNotFoundError(payout.reference));
+    p.initiateTransfer.mockRejectedValueOnce(new Error('socket hang up'));
+    await expect(processPayout(p.deps, payout.id)).rejects.toThrow('socket hang up');
+
+    await t
+      .owner()
+      .query(
+        `UPDATE ledger.payout_accounts SET status = 'DISABLED', is_default = false, disabled_at = now() WHERE id = $1`,
+        [payout.payoutAccountId],
+      );
+    expect(await processPayout(p.deps, payout.id)).toBe('FAILED');
+    expect(p.initiateTransfer).toHaveBeenCalledTimes(1);
+    expect(await balance(payableOf(seller))).toBe(100_000n);
+  });
+
+  it('holds a transfer whose code is not the one the provider gave us for review', async () => {
+    const { payout } = await aPayout();
+    const p = provider(payout, 'success');
+    p.verifyTransfer.mockResolvedValue(answer(payout, 'success', { providerTransferId: 'TRF_other' }));
+    expect(await processPayout(p.deps, payout.id)).toBe('NEEDS_REVIEW');
+    expect(await balance(clearingOf(payout.id))).toBe(60_000n - PAYOUT_FEE);
+  });
+
+  it('leaves a succeeded payout alone when a later verify does not match it', async () => {
+    const { seller, payout } = await aPayout();
+    const poolBefore = await balance(POOL);
+    const p = provider(payout, 'success');
+    expect(await processPayout(p.deps, payout.id)).toBe('SUCCEEDED');
+
+    p.verifyTransfer.mockResolvedValue(answer(payout, 'reversed', { amountMinor: 1 }));
+    expect(await resolvePayout(p.deps, payout.id)).toBe('SUCCEEDED');
+    expect(await status(payout.id)).toBe('SUCCEEDED');
+    expect(await balance(payableOf(seller))).toBe(40_000n);
+    expect(await balance(POOL)).toBe(poolBefore - (60_000n - PAYOUT_FEE));
+    expect(await outbox('ledger.payout.completed')).toHaveLength(1);
+  });
+
+  it('hands a transfer still not final after a day to a person, posting nothing', async () => {
+    const { payout } = await aPayout();
+    const p = provider(payout, 'otp');
+    await expect(processPayout(p.deps, payout.id)).rejects.toBeInstanceOf(PayoutStillPendingError);
+
+    const later = { ...p.deps, now: () => new Date(Date.now() + 25 * 60 * 60_000) };
+    expect(await resolvePayout(later, payout.id)).toBe('NEEDS_REVIEW');
+    expect(await balance(clearingOf(payout.id))).toBe(60_000n - PAYOUT_FEE);
+    expect(await outbox('ledger.payout.completed')).toEqual([
+      expect.objectContaining({ outcome: 'NEEDS_REVIEW', reason: STUCK_REASON, journalEntryId: null }),
+    ]);
+  });
+
+  describe('a transfer webhook whose body says success', () => {
+    const deliver = async (reference: string, deps: PayoutDispatchDeps) => {
+      const delivery = await recordDelivery(t.db(), {
+        provider: 'PAYSTACK',
+        providerEventId: `transfer.success:${randomUUID()}`,
+        eventType: 'transfer.success',
+        payload: { event: 'transfer.success', data: { reference } },
+      });
+      const run = processDelivery(
+        {
+          db: t.db(),
+          logger,
+          verify: () => Promise.reject(new Error('not a charge')),
+          parse: () => ({ type: 'transfer.success', reference, providerTransferId: 'TRF_1' }),
+          resolvePayout: (id) => resolvePayout(deps, id),
+        },
+        delivery.id,
+      );
+      return { run, id: delivery.id };
+    };
+
+    it('fails the payout when verify says failed', async () => {
+      const { seller, payout } = await aPayout();
+      const p = provider(payout, 'pending');
+      await expect(processPayout(p.deps, payout.id)).rejects.toBeInstanceOf(PayoutStillPendingError);
+      p.verifyTransfer.mockResolvedValue(answer(payout, 'failed'));
+
+      expect(await (await deliver(payout.reference, p.deps)).run).toBe('FAILED');
+      expect(await balance(payableOf(seller))).toBe(100_000n);
+      expect(await balance(clearingOf(payout.id))).toBe(0n);
+    });
+
+    it('posts nothing while verify says pending, and leaves the delivery for the retry', async () => {
+      const { seller, payout } = await aPayout();
+      const p = provider(payout, 'pending');
+      await expect(processPayout(p.deps, payout.id)).rejects.toBeInstanceOf(PayoutStillPendingError);
+      const poolBefore = await balance(POOL);
+
+      const { run, id } = await deliver(payout.reference, p.deps);
+      await expect(run).rejects.toBeInstanceOf(PayoutStillPendingError);
+      expect(await status(payout.id)).toBe('PROCESSING');
+      expect((await findDelivery(t.db(), id))?.processedAt).toBeNull();
+      expect(await balance(POOL)).toBe(poolBefore);
+      expect(await balance(payableOf(seller))).toBe(40_000n);
+      expect(await outbox('ledger.payout.completed')).toEqual([]);
+    });
   });
 
   describe('automatic payouts', () => {
