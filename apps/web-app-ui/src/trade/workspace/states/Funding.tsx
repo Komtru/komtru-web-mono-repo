@@ -5,6 +5,7 @@ import { ActionStack, Button, CodeCard, SectionLabel, StatusHero, VersionTimelin
 import { BACK_TO_TRADES, ItemSummary, versionSteps } from '../../parts';
 import { stateCopy } from '../../workspace-copy';
 import { fundHref, shipHref } from '../../workspace-state';
+import { DeliveryTime } from '../DeliveryTime';
 import {
   BannerView,
   Deadline,
@@ -61,6 +62,7 @@ export function FundsProtected({ trade, role }: BodyProps): React.JSX.Element {
         query={deadline}
         at={deadline.data?.deadline?.dueAt}
       />
+      <DeliveryTime trade={trade} role={role} />
       <MoneyRows trade={trade} role={role} held={copy.payoutHeld ?? ''} />
       <Fulfilment trade={trade} />
       {role === 'SELLER' && (

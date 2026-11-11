@@ -98,6 +98,10 @@ export const fundHref = (tradeId: string): string => `/trade/${tradeId}/fund`;
 
 /** Where the seller ships a funded trade (F-026). Its own route: a flow, not a view of the trade. */
 export const shipHref = (tradeId: string): string => `/trade/${tradeId}/ship`;
+/** Inspect & Confirm (Z4/Z5), and for the seller the answer to a request for more time (BEI2). */
+export const inspectHref = (tradeId: string): string => `/trade/${tradeId}/inspect`;
+/** DE1: the seller asks the buyer for more time to deliver. */
+export const extendHref = (tradeId: string): string => `/trade/${tradeId}/extend`;
 
 export const tabItems = (tradeId: string) =>
   WORKSPACE_TAB_DEFS.map((tab) => ({ id: tab.id, label: tab.label, href: tabHref(tradeId, tab.id) }));
@@ -132,6 +136,22 @@ const FUNDS_HELD: readonly WorkspaceStatus[] = [
   'COMPLETED',
 ];
 
+const moreTimeRow = (tradeId: string): TradeActionRow => ({
+  id: 'ask-more-time',
+  title: 'Ask for more time · Seller',
+  description: 'Ask the buyer for a later delivery date before the deadline passes, once.',
+  availability: 'live',
+  href: extendHref(tradeId),
+});
+
+const confirmDeliveryRow = (tradeId: string, title: string): TradeActionRow => ({
+  id: 'confirm-delivery',
+  title,
+  description: 'Say the item has arrived. Your inspection time starts.',
+  availability: 'live',
+  href: tabHref(tradeId, 'overview'),
+});
+
 /**
  * What the person can do with this trade right now, derived from its status and from THEIR side of it. The
  * list is the reference's CWT-09 ("actions derive from state, role and policy"): the same rows for the same
@@ -139,8 +159,8 @@ const FUNDS_HELD: readonly WorkspaceStatus[] = [
  *
  * Only what is real is `live`: reading the agreed terms and activity, and withdrawing before payment (the
  * platform lets either party cancel an agreed trade nobody has paid for), and the buyer's funding (F-024). Everything else names the feature
- * that will own it. SEAM(F-026 shipping, F-027 inspection, F-030 cancellation after payment,
- * F-032 disputes): turn a `later` row into a `live` one when the flow exists, and nothing else here changes.
+ * that will own it. SEAM(F-030 cancellation after payment,
+ * F-032 disputes, reporting an issue): turn a `later` row into a `live` one when the flow exists, and nothing else here changes.
  */
 export function tradeActions(status: WorkspaceStatus, role: TradeRole, tradeId: string): TradeActionRow[] {
   const rows: TradeActionRow[] = [
@@ -169,7 +189,7 @@ export function tradeActions(status: WorkspaceStatus, role: TradeRole, tradeId: 
         });
       break;
     case 'FUNDED':
-      if (!buyer)
+      if (!buyer) {
         rows.push({
           id: 'ship',
           title: 'Ship the item · Seller',
@@ -177,6 +197,8 @@ export function tradeActions(status: WorkspaceStatus, role: TradeRole, tradeId: 
           availability: 'live',
           href: shipHref(tradeId),
         });
+        rows.push(moreTimeRow(tradeId));
+      }
       later(
         'cancel-after-payment',
         'Ask to cancel · Either party',
@@ -184,34 +206,41 @@ export function tradeActions(status: WorkspaceStatus, role: TradeRole, tradeId: 
       );
       break;
     case 'SHIPPED':
-      if (!buyer)
+      if (!buyer) {
         later('report-delivered', 'Report delivery · Seller', "Reporting delivery isn't in the app yet.");
-      else
-        later('confirm-delivery', 'Confirm you have it · Buyer', "Confirming delivery isn't in the app yet.");
+        rows.push(moreTimeRow(tradeId));
+      } else rows.push(confirmDeliveryRow(tradeId, 'Confirm you have it · Buyer'));
       break;
     case 'UNCONFIRMED_DELIVERY':
-      if (buyer)
-        later('confirm-delivery', 'Confirm delivery · Buyer', "Confirming delivery isn't in the app yet.");
+      if (buyer) rows.push(confirmDeliveryRow(tradeId, 'Confirm delivery · Buyer'));
       break;
     case 'INSPECTION':
       if (buyer) {
-        later(
-          'accept',
-          'Accept the item · Buyer',
-          "Accepting and releasing the payment isn't in the app yet.",
-        );
-        later(
-          'more-time',
-          'Ask for more time · Buyer',
-          "Asking for more inspection time isn't in the app yet.",
+        rows.push(
+          {
+            id: 'accept',
+            title: 'Accept the item · Buyer',
+            description: 'Compare it with the seller’s proof, then confirm and release the payment.',
+            availability: 'live',
+            href: inspectHref(tradeId),
+          },
+          {
+            id: 'more-time',
+            title: 'Ask for more time · Buyer',
+            description: 'Ask the seller to extend the inspection window, once.',
+            availability: 'live',
+            href: inspectHref(tradeId),
+          },
         );
         later('report-issue', 'Report an issue · Buyer', "Reporting an issue isn't in the app yet.");
       } else {
-        later(
-          'answer-extension',
-          'Answer a request for more time · Seller',
-          "Answering isn't in the app yet.",
-        );
+        rows.push({
+          id: 'answer-extension',
+          title: 'Answer a request for more time · Seller',
+          description: 'See whether the buyer asked for more inspection time, and agree or decline.',
+          availability: 'live',
+          href: inspectHref(tradeId),
+        });
       }
       break;
     default:

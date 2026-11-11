@@ -303,6 +303,8 @@ export const getDeliveryDeadline = defineEndpoint({
         .looseObject({
           id: z.uuid(),
           status: z.string(),
+          reason: z.string().optional(),
+          note: z.string().nullable().optional(),
           currentDueAt: z.string(),
           requestedDueAt: z.string(),
         })
@@ -311,7 +313,22 @@ export const getDeliveryDeadline = defineEndpoint({
   },
 });
 
-/** The inspection window, whether more time can be asked for or answered, and the delivery evidence (Z4). */
+/** BEI1/BEI2: a request for more inspection time, as the platform reports it. */
+export const inspectionExtensionSchema = z.looseObject({
+  id: z.uuid(),
+  status: z.string(),
+  extraHours: z.number().optional(),
+  note: z.string().nullable().optional(),
+  currentDueAt: z.string().optional(),
+  requestedDueAt: z.string().optional(),
+});
+export type InspectionExtension = z.infer<typeof inspectionExtensionSchema>;
+
+/**
+ * The inspection window, whether more time can be asked for or answered, the seller's proof beside the delivery
+ * evidence (Z4), and the one sentence the buyer acknowledges before releasing (Z5). Proof and evidence are empty
+ * until the trade has shipped.
+ */
 export const getInspection = defineEndpoint({
   method: 'get',
   path: '/trades/:id/inspection',
@@ -328,12 +345,81 @@ export const getInspection = defineEndpoint({
         extended: z.boolean(),
         autoReleasePaused: z.boolean(),
       }),
-      extensionRequest: z.looseObject({ id: z.uuid(), status: z.string() }).nullable(),
+      extensionRequest: inspectionExtensionSchema.nullable(),
       canRequestMoreTime: z.boolean(),
       canRespondToRequest: z.boolean(),
+      sellerProof: z
+        .looseObject({
+          media: z.array(z.looseObject({ fileId: z.uuid(), attachedAt: z.string().optional() })),
+        })
+        .optional(),
       deliveryEvidence: z.looseObject({
-        selfArranged: z.looseObject({ waybillNumber: z.string(), shippedAt: z.string() }).nullable(),
+        signals: z.array(z.looseObject({ source: z.string(), reportedAt: z.string().optional() })).optional(),
+        selfArranged: z
+          .looseObject({
+            waybillNumber: z.string(),
+            shippedAt: z.string(),
+            receiptFileId: z.uuid().optional(),
+            vehiclePlate: z.string().optional(),
+            driverPhone: z.string().optional(),
+          })
+          .nullable(),
       }),
+      release: z
+        .looseObject({ acknowledgement: z.string(), acknowledgedAt: z.string().nullable().optional() })
+        .optional(),
     }),
+  },
+});
+
+/** BEI1: the buyer asks the seller for more inspection time, once. Whole hours; the platform holds the ceiling. */
+export const requestInspectionExtension = defineEndpoint({
+  method: 'post',
+  path: '/trades/:id/inspection-extension',
+  scope: 'CONSUMER',
+  retryable: true,
+  schema: {
+    params: tradeParams,
+    body: z.object({
+      extraHours: z.number().int().min(1),
+      note: z.string().trim().min(1).max(500).optional(),
+    }),
+    response: inspectionExtensionSchema,
+  },
+});
+
+const extensionRequestParams = z.object({ id: z.uuid(), requestId: z.uuid() });
+
+/** BEI2: the seller agrees; the deadline moves. */
+export const acceptInspectionExtension = defineEndpoint({
+  method: 'post',
+  path: '/trades/:id/inspection-extension/:requestId/accept',
+  scope: 'CONSUMER',
+  retryable: true,
+  schema: { params: extensionRequestParams, response: inspectionExtensionSchema },
+});
+
+/** BEI2: the seller declines; the original deadline stands. */
+export const declineInspectionExtension = defineEndpoint({
+  method: 'post',
+  path: '/trades/:id/inspection-extension/:requestId/decline',
+  scope: 'CONSUMER',
+  retryable: true,
+  schema: { params: extensionRequestParams, response: inspectionExtensionSchema },
+});
+
+/**
+ * Z5: the buyer confirms the item and releases the payment. Final, so it carries the explicit acknowledgement
+ * (the literal `true`, nothing else counts). Answers with the trade, now completed.
+ */
+export const acceptInspection = defineEndpoint({
+  method: 'post',
+  path: '/trades/:id/accept-inspection',
+  scope: 'CONSUMER',
+  retryable: true,
+  schema: {
+    params: tradeParams,
+    body: z.object({ acknowledged: z.literal(true) }),
+    response: tradeViewSchema,
   },
 });

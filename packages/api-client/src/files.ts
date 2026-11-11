@@ -43,6 +43,22 @@ export const finalizeUpload = defineEndpoint({
   },
 });
 
+/** A short-lived signed URL for a file the caller may see. Fetch it again rather than keeping it. */
+export const getFile = defineEndpoint({
+  method: 'get',
+  path: '/files/:id',
+  scope: 'CONSUMER',
+  schema: {
+    params: z.object({ id: z.uuid() }),
+    response: z.looseObject({
+      fileId: z.uuid(),
+      url: z.url(),
+      expiresAt: z.string().nullable(),
+      contentType: z.string(),
+    }),
+  },
+});
+
 export class UploadError extends Error {
   constructor(
     message: string,

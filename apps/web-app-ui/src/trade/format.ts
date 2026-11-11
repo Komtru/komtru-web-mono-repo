@@ -64,6 +64,12 @@ export function problemMessage(error: unknown, fallback: string): string {
   }
 }
 
+/** The platform's own sentence when it sent one (a refused receipt, a passed deadline), else ours. */
+export const platformWords = (error: unknown, fallback: string): string =>
+  error instanceof ProblemError && error.problem.detail !== undefined
+    ? error.problem.detail
+    : problemMessage(error, fallback);
+
 /** The name a trade's item goes by: brand and model when the category asks for them, else the category. */
 export function itemTitle(spec: unknown, fallback = 'Item'): string {
   const record = asRecord(spec);

@@ -398,10 +398,10 @@ list a trade.
 
 - **Journey:** Deliver & inspect
 - **Actor:** buyer
-- **Absorbs:** T-065 (done), T-074 (done), T-118 (todo)
+- **Absorbs:** T-065 (done), T-074 (done), T-118 (done)
 - **Backend scope:** Inspection and completion, and release and settlement. Both already built (T-065, T-074).
 - **Frontend scope:** Delivery and inspection: confirm delivery (Z4, Z5), live logistics and buyer handover PIN (AB1, AB2), delivery extension (DE1–DE4), inspection checklist (BEI1, BEI2), buyer tab (Customer-4), seller pick (MI4). _12 v2 screens._
-- **Status:** Backend done, UI outstanding
+- **Status:** Done
 - **Depends on:** F-022, F-062 _(post-MVP)_
 - **MVP:** yes
 - **Note:** Its dependency on Park integration (F-062) is dropped for MVP — self-arranged delivery only, no hub custody and no pickup PIN.

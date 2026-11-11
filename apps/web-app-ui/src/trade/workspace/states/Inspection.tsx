@@ -1,9 +1,10 @@
 'use client';
 
 import { useInspection } from '@komtru/api-client/react';
-import { SectionLabel, TermList, TermRow } from '@komtru/ui-kit';
+import { ActionStack, Button, SectionLabel, TermList, TermRow } from '@komtru/ui-kit';
 import { hoursLabel, whenLabel } from '../../format';
 import { extensionPending, releasePaused, stateCopy } from '../../workspace-copy';
+import { inspectHref } from '../../workspace-state';
 import { BannerView, Deadline, FurtherViews, NotInTheAppYet, type BodyProps } from '../shared';
 
 /** CWT-04: the buyer has the item and the clock is running. */
@@ -40,7 +41,20 @@ export function Inspection({ trade, role }: BodyProps): React.JSX.Element {
           </TermList>
         </>
       )}
-      {/* SEAM(F-027): "Inspect & compare", accept and release, ask for more time, answer a request, report an issue. */}
+      {role === 'BUYER' && (
+        <ActionStack>
+          <Button asChild>
+            <a href={inspectHref(trade.id)}>Inspect & confirm</a>
+          </Button>
+        </ActionStack>
+      )}
+      {role === 'SELLER' && data?.canRespondToRequest === true && (
+        <ActionStack>
+          <Button asChild>
+            <a href={inspectHref(trade.id)}>Answer the request</a>
+          </Button>
+        </ActionStack>
+      )}
       {copy.seam !== undefined && <NotInTheAppYet>{copy.seam}</NotInTheAppYet>}
       <FurtherViews trade={trade} />
     </>

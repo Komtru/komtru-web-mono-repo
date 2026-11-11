@@ -289,15 +289,14 @@ describe('in transit and delivery (CWT-03)', () => {
     show();
     expect(await screen.findByText('Did it arrive?')).toBeTruthy();
     expect(screen.getByText(/within 24 hours/)).toBeTruthy();
-    expect(screen.getByText("Confirming delivery isn't in the app yet.")).toBeTruthy();
-    expect(screen.queryByRole('button', { name: /confirm/i })).toBeNull();
+    expect(screen.getByRole('button', { name: 'Confirm delivery' })).toBeTruthy();
   });
 
   it('tells the seller the buyer has to confirm, with nothing to press', async () => {
     serve(workspaceTrade('UNCONFIRMED_DELIVERY', 'SELLER'));
     show();
     expect(await screen.findByText('Waiting for the buyer to confirm')).toBeTruthy();
-    expect(screen.queryByText("Confirming delivery isn't in the app yet.")).toBeNull();
+    expect(screen.queryByRole('button', { name: /confirm/i })).toBeNull();
   });
 });
 
@@ -350,12 +349,28 @@ describe('inspection (CWT-04)', () => {
     expect(await screen.findByText('Automatic release is paused')).toBeTruthy();
   });
 
-  it('offers no accept, report or extension control: those are the inspection feature', async () => {
+  it('leads the buyer to Inspect & confirm, and says reporting an issue is not here yet', async () => {
     serve(workspaceTrade('INSPECTION', 'BUYER'));
     show();
     await screen.findByText('Inspect the item');
-    expect(screen.queryByRole('button', { name: /accept|release|report|time|inspect/i })).toBeNull();
-    expect(screen.getByText(/aren't in the app yet/)).toBeTruthy();
+    expect(screen.getByRole('link', { name: 'Inspect & confirm' }).getAttribute('href')).toBe(
+      `/trade/${id(1)}/inspect`,
+    );
+    // Nothing on the overview releases the payment: that is behind the acknowledgement on its own screen.
+    expect(screen.queryByRole('button', { name: /release|confirm/i })).toBeNull();
+    expect(screen.getByText("Reporting an issue isn't in the app yet.")).toBeTruthy();
+  });
+
+  it('leads the seller to the request only when the platform says there is one to answer', async () => {
+    serve(workspaceTrade('INSPECTION', 'SELLER'), {
+      'GET /trades/:id/inspection': inspectionRead({
+        yourRole: 'SELLER',
+        canRespondToRequest: true,
+        extensionRequest: { id: id(95), status: 'PENDING' },
+      }),
+    });
+    show();
+    expect(await screen.findByRole('link', { name: 'Answer the request' })).toBeTruthy();
   });
 });
 
@@ -539,8 +554,9 @@ describe('the actions tab (CWT-09)', () => {
       'Report an issue · Buyer',
       'Release funds · Guarded',
     ]);
-    expect(within(rows[1]!).getByText(/Not in the app yet/)).toBeTruthy();
-    expect(within(list).getAllByRole('link')).toHaveLength(1);
+    expect(within(rows[1]!).queryByText(/Not in the app yet/)).toBeNull();
+    expect(within(rows[3]!).getByText(/Not in the app yet/)).toBeTruthy();
+    expect(within(list).getAllByRole('link')).toHaveLength(3);
     expect(screen.queryByRole('button', { name: /accept|report|release|withdraw/i })).toBeNull();
     await expectNoAxeViolations(container, SHELL_RULES);
   });

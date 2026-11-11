@@ -110,7 +110,6 @@ export function stateCopy(status: WorkspaceStatus, role: TradeRole, ctx: CopyCon
               title: 'Waiting for the buyer to confirm',
               body: `You've reported the item delivered. If the buyer doesn't answer${within}, the delivery is treated as confirmed.`,
             },
-        ...(buyer ? { seam: notYet('Confirming delivery') } : {}),
       };
     case 'INSPECTION':
       return {
@@ -126,9 +125,9 @@ export function stateCopy(status: WorkspaceStatus, role: TradeRole, ctx: CopyCon
               body: 'If the window passes with no issue reported, the payment is released to you automatically.',
             },
         deadlineLabel: 'Inspection ends',
-        seam: buyer
-          ? "Accepting the item, asking for more time and reporting an issue aren't in the app yet."
-          : notYet('Answering a request for more time'),
+        // Accepting, asking for more time and answering a request are on Inspect & Confirm. Reporting an issue
+        // is a case (F-032), so the buyer is told it is not here yet.
+        ...(buyer ? { seam: notYet('Reporting an issue') } : {}),
       };
     case 'DISPUTED':
       return {

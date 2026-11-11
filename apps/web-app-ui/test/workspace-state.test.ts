@@ -106,17 +106,20 @@ describe('what can be done', () => {
       .map((row) => row.id);
 
   it.each(WORKSPACE_STATUSES.flatMap((status) => ROLES.map((role) => [status, role] as const)))(
-    'offers only what is real for %s as the %s: reading the terms, funding, shipping, and withdrawing before payment',
+    'offers only what is real for %s as the %s: what the app really does at each state',
     (status, role) => {
-      const expected =
-        status === 'FUNDED' && role === 'SELLER'
-          ? ['view-terms', 'ship']
-          : status !== 'PENDING_PAYMENT'
-            ? ['view-terms']
-            : role === 'BUYER'
-              ? ['view-terms', 'fund', 'cancel']
-              : ['view-terms', 'cancel'];
-      expect(live(status, role).sort()).toEqual(expected.sort());
+      const key = `${status} ${role}`;
+      const expected: Record<string, string[]> = {
+        'FUNDED SELLER': ['view-terms', 'ship', 'ask-more-time'],
+        'SHIPPED SELLER': ['view-terms', 'ask-more-time'],
+        'SHIPPED BUYER': ['view-terms', 'confirm-delivery'],
+        'UNCONFIRMED_DELIVERY BUYER': ['view-terms', 'confirm-delivery'],
+        'INSPECTION BUYER': ['view-terms', 'accept', 'more-time'],
+        'INSPECTION SELLER': ['view-terms', 'answer-extension'],
+        'PENDING_PAYMENT BUYER': ['view-terms', 'fund', 'cancel'],
+        'PENDING_PAYMENT SELLER': ['view-terms', 'cancel'],
+      };
+      expect(live(status, role).sort()).toEqual((expected[key] ?? ['view-terms']).sort());
     },
   );
 
@@ -149,6 +152,16 @@ describe('what can be done', () => {
     );
     expect(ids('INSPECTION', 'SELLER')).not.toContain('accept');
     expect(ids('INSPECTION', 'SELLER')).toContain('answer-extension');
+  });
+
+  it('points each live delivery and inspection action at the screen that does it', () => {
+    const href = (status: (typeof WORKSPACE_STATUSES)[number], role: TradeRole, id: string) =>
+      tradeActions(status, role, ID).find((row) => row.id === id)?.href;
+    expect(href('INSPECTION', 'BUYER', 'accept')).toBe(`/trade/${ID}/inspect`);
+    expect(href('INSPECTION', 'BUYER', 'more-time')).toBe(`/trade/${ID}/inspect`);
+    expect(href('INSPECTION', 'SELLER', 'answer-extension')).toBe(`/trade/${ID}/inspect`);
+    expect(href('FUNDED', 'SELLER', 'ask-more-time')).toBe(`/trade/${ID}/extend`);
+    expect(href('SHIPPED', 'BUYER', 'confirm-delivery')).toBe(`/trade/${ID}`);
   });
 
   it('says plainly that a step is not in the app yet, instead of offering a control that does nothing', () => {

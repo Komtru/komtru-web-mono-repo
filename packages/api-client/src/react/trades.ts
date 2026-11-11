@@ -14,15 +14,28 @@ import {
   createTrade,
   declineTrade,
   getDeliveryDeadline,
+  acceptInspection,
+  acceptInspectionExtension,
+  declineInspectionExtension,
   getInspection,
   getTrade,
+  requestInspectionExtension,
   listTradeActivity,
   listTrades,
   previewTrade,
   sendTrade,
   type TradeView,
 } from '../trades.js';
-import { getShipOptions, reportDelivered, shipSelfArranged } from '../fulfilment.js';
+import {
+  acceptDeliveryExtension,
+  confirmDelivery,
+  declineDeliveryExtension,
+  getShipOptions,
+  reportDelivered,
+  requestDeliveryExtension,
+  shipSelfArranged,
+} from '../fulfilment.js';
+import { getFile } from '../files.js';
 import { ProblemError } from '../problems.js';
 import { nextPageParam } from '../pagination.js';
 import type { TradeListState } from '@komtru/shared-types';
@@ -164,6 +177,86 @@ export function useShipSelfArranged() {
 /** The seller reports the item delivered; the buyer is asked to confirm. */
 export const useReportDelivered = () =>
   useTradeMutation((client, id: string) => client.call(reportDelivered, { params: { id } }));
+
+/** The buyer says they have it; inspection starts. The trade it answers with is written to the cache. */
+export const useConfirmDelivery = () =>
+  useTradeMutation((client, id: string) => client.call(confirmDelivery, { params: { id } }));
+
+/** Z5: confirm the item and release the payment. The acknowledgement is part of the call, never defaulted. */
+export const useAcceptInspection = () =>
+  useTradeMutation((client, id: string) =>
+    client.call(acceptInspection, { params: { id }, body: { acknowledged: true } }),
+  );
+
+/** An answer about more time changes what the inspection and deadline reads say, not the trade's status. */
+function useTimeMutation<TVariables extends { id: string }, TAnswer>(
+  call: (client: ApiClient, variables: TVariables) => Promise<TAnswer>,
+) {
+  const client = useApiClient();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (variables: TVariables) => call(client, variables),
+    onSuccess: (_answer, { id }) => {
+      void queryClient.invalidateQueries({ queryKey: tradeKeys.inspection(id) });
+      void queryClient.invalidateQueries({ queryKey: tradeKeys.deliveryDeadline(id) });
+      void queryClient.invalidateQueries({ queryKey: tradeKeys.activity(id) });
+      void queryClient.invalidateQueries({ queryKey: tradeKeys.one(id), exact: true });
+    },
+  });
+}
+
+/** BEI1 */
+export const useRequestInspectionExtension = () =>
+  useTimeMutation(
+    (client, { id, ...body }: { id: string } & EndpointInput<typeof requestInspectionExtension>['body']) =>
+      client.call(requestInspectionExtension, { params: { id }, body }),
+  );
+
+/** BEI2 */
+export const useRespondToInspectionExtension = () =>
+  useTimeMutation(
+    (
+      client,
+      { id, requestId, decision }: { id: string; requestId: string; decision: 'ACCEPT' | 'DECLINE' },
+    ) =>
+      client.call(decision === 'ACCEPT' ? acceptInspectionExtension : declineInspectionExtension, {
+        params: { id, requestId },
+      }),
+  );
+
+/** DE1 */
+export const useRequestDeliveryExtension = () =>
+  useTimeMutation(
+    (client, { id, ...body }: { id: string } & EndpointInput<typeof requestDeliveryExtension>['body']) =>
+      client.call(requestDeliveryExtension, { params: { id }, body }),
+  );
+
+/** DE2 */
+export const useRespondToDeliveryExtension = () =>
+  useTimeMutation(
+    (
+      client,
+      { id, requestId, decision }: { id: string; requestId: string; decision: 'ACCEPT' | 'DECLINE' },
+    ) =>
+      client.call(decision === 'ACCEPT' ? acceptDeliveryExtension : declineDeliveryExtension, {
+        params: { id, requestId },
+      }),
+  );
+
+/**
+ * A file the person may see, as a short-lived signed URL. Not kept past the minutes it is good for, and not
+ * refetched on focus: a photo that is already on screen should not flicker.
+ */
+export function useFileUrl(fileId: string | undefined) {
+  const client = useApiClient();
+  return useQuery({
+    queryKey: ['files', fileId] as const,
+    queryFn: ({ signal }) => client.call(getFile, { params: { id: fileId as string } }, { signal }),
+    enabled: fileId !== undefined,
+    staleTime: 4 * 60 * 1000,
+    refetchOnWindowFocus: false,
+  });
+}
 
 const LIST_PAGE = 20;
 

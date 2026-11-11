@@ -7,11 +7,11 @@ behind it is [`BUILD_PLAN.md`](BUILD_PLAN.md). The unit of work is the feature, 
 thing in an app.
 
 ```
-MVP   ████████████······················  18/52   (35%)
-Total ████████··························  18/80   (22%)
+MVP   ████████████······················  19/52   (37%)
+Total ████████··························  19/80   (24%)
 ```
 
-34 MVP features left, 28 deferred past it.
+33 MVP features left, 28 deferred past it.
 
 ## Backend done, UI outstanding
 
@@ -19,7 +19,6 @@ The engine exists and only the UI is missing, so these are the highest-value wor
 
 | Feature | Title                                                  | Journey                  | MVP |
 | ------- | ------------------------------------------------------ | ------------------------ | --- |
-| F-027   | Confirm delivery, inspect, complete and release        | Deliver & inspect        | yes |
 | F-044   | Account basics, addresses, documents and system states | Account, trust & support | yes |
 | F-045   | Verify yourself, and close or recover an account       | Account, trust & support | yes |
 
@@ -34,7 +33,7 @@ The engine exists and only the UI is missing, so these are the highest-value wor
 | The trade workspace                     | 1    | 2     | 1        | 2         |
 | Fund & protect                          | 1    | 2     | 1        | 1         |
 | Fulfil & dispatch                       | 1    | 1     | 1        | 1         |
-| Deliver & inspect                       | 0    | 3     | 0        | 3         |
+| Deliver & inspect                       | 1    | 3     | 1        | 3         |
 | Issues & resolution                     | 0    | 7     | 0        | 6         |
 | Complete & grow                         | 0    | 3     | 0        | 1         |
 | Sell on Komtru                          | 0    | 4     | 0        | 3         |
@@ -110,11 +109,11 @@ The same work counted per ticket. Useful for the detail in `docs/tickets/`, not 
 it counts backend and frontend layers separately, which is how the build drifted.
 
 ```
-MVP   ████████████████████··············  64/109  (59%)
-Total █████████████·····················  64/168  (38%)
+MVP   ████████████████████··············  65/109  (60%)
+Total █████████████·····················  65/168  (39%)
 ```
 
-45 MVP tickets left, 59 deferred past it.
+44 MVP tickets left, 59 deferred past it.
 
 ### Tickets in progress
 
@@ -171,7 +170,6 @@ Total █████████████·················�
 | T-112  | First-time onboarding                                                     | yes |
 | T-113  | Home and discovery                                                        | yes |
 | T-114  | Seller profile and Trust Passport                                         | yes |
-| T-118  | Delivery, pickup PIN and inspection                                       | yes |
 | T-119  | Cancellation and refunds                                                  | yes |
 | T-120  | Disputes (buyer and seller)                                               | yes |
 | T-121  | Apply for merchant certification                                          | yes |

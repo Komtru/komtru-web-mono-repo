@@ -60,9 +60,21 @@ export const inspectionRead = (over: Record<string, unknown> = {}) => ({
   extensionRequest: null,
   canRequestMoreTime: true,
   canRespondToRequest: false,
-  deliveryEvidence: {
-    selfArranged: { waybillNumber: 'KT-883192', shippedAt: '2026-09-30T12:18:00.000Z' },
+  sellerProof: {
+    media: [
+      { fileId: id(7), attachedAt: '2026-09-29T09:00:00.000Z' },
+      { fileId: id(8), attachedAt: '2026-09-29T09:01:00.000Z' },
+    ],
   },
+  deliveryEvidence: {
+    signals: [{ source: 'SELLER_SELF_REPORT', reportedAt: '2026-09-30T12:20:00.000Z' }],
+    selfArranged: {
+      waybillNumber: 'KT-883192',
+      shippedAt: '2026-09-30T12:18:00.000Z',
+      vehiclePlate: 'LSR123AB',
+    },
+  },
+  release: { acknowledgement: 'RELEASE_IS_FINAL_V1', acknowledgedAt: null },
   ...over,
 });
 
@@ -127,3 +139,11 @@ export const renderLive = (call: Mock<CallFn>, fake: FakeSocket, ui: React.React
       </ApiClientProvider>
     </QueryClientProvider>,
   );
+
+/** What `GET /files/:id` answers for a seller's proof photo. */
+export const fileRead = (n: number, contentType = 'image/jpeg') => ({
+  fileId: id(n),
+  url: `https://files.test/${String(n)}.jpg?sig=1`,
+  expiresAt: '2026-11-11T12:30:00.000Z',
+  contentType,
+});
