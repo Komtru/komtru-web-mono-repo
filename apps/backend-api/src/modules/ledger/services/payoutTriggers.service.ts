@@ -21,7 +21,12 @@ import {
   stalePendingAccounts,
   usersWithModes,
 } from '../infrastructure/postgres/payoutsRepository.js';
-import { executePayout, type ExecutePayoutDeps, type ExecutePayoutResult } from './payout.service.js';
+import {
+  executePayout,
+  PAYOUT_CURRENCY,
+  type ExecutePayoutDeps,
+  type ExecutePayoutResult,
+} from './payout.service.js';
 
 type EscrowReleased = z.output<(typeof paymentEscrowReleasedEvent)['payload']>;
 
@@ -99,6 +104,11 @@ const SWEEP_PAGE = 200;
 /**
  * `ledger.sweep-payouts-auto`, daily. Each user is one transaction of their own, so one seller's
  * failure is not everybody's, and a re-run the same day pays nobody twice (the sweep key).
+ *
+ * The key is held by the day's payout whatever became of it, so a sweep payout the bank FAILED is
+ * not retried the same day: its money is already back in the available balance (the reversal), and
+ * the user's next due sweep pays it out with everything else. Retrying a failing bank within the day
+ * would only fail again; the seller can still withdraw by hand meanwhile.
  */
 export async function sweepAutoPayouts(deps: SweepDeps): Promise<SweepSummary> {
   const now = deps.now?.() ?? new Date();
@@ -137,7 +147,9 @@ async function sweepOne(
     // The balance is read under the same lock `executePayout` takes (advisory locks stack within a
     // transaction), so the amount swept is exactly what is available when the payout is written.
     await lockUserPayouts(tx, userId);
-    const available = (await accountBalance(tx, { type: 'USER_PAYABLE', ownerUserId: userId })).balanceMinor;
+    const available = (
+      await accountBalance(tx, { type: 'USER_PAYABLE', ownerUserId: userId }, PAYOUT_CURRENCY)
+    ).balanceMinor;
     if (available <= 0n) return 'EMPTY';
     const result = await executePayout(
       tx,

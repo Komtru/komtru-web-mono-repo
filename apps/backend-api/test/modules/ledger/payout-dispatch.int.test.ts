@@ -553,6 +553,49 @@ describe.runIf(infraEnabled)('payout dispatch and resolution (T-073)', () => {
     });
   });
 
+  it('does not re-sweep a day whose sweep payout failed; the money waits for the next due sweep', async () => {
+    const user = randomUUID();
+    await credit(user, 30_000n);
+    await verifiedAccount(user);
+    await t.db().transaction((tx) => upsertPayoutMode(tx, user, 'AUTO_DAILY'));
+
+    expect((await sweepAutoPayouts({ db: t.db(), logger, fee, now: () => TUESDAY })).created).toBe(1);
+    const { rows } = await t
+      .owner()
+      .query<{ id: string }>(`SELECT id FROM ledger.payouts WHERE user_id = $1`, [user]);
+    const swept = (await findPayout(t.db(), rows[0]!.id))!;
+    expect(await processPayout(provider(swept, 'failed').deps, swept.id)).toBe('FAILED');
+    expect(await balance(payableOf(user))).toBe(30_000n);
+
+    // Same day: the key is spent, so the failing bank is not tried again.
+    expect(await sweepAutoPayouts({ db: t.db(), logger, fee, now: () => TUESDAY })).toMatchObject({
+      created: 0,
+      existing: 1,
+    });
+    // Next day: the returned money goes out with the rest.
+    const wednesday = new Date(TUESDAY.getTime() + 24 * 60 * 60_000);
+    expect((await sweepAutoPayouts({ db: t.db(), logger, fee, now: () => wednesday })).created).toBe(1);
+    expect(await balance(payableOf(user))).toBe(0n);
+  });
+
+  it('refuses a payout fee priced in anything but naira, before writing anything', async () => {
+    const seller = randomUUID();
+    await credit(seller, 30_000n);
+    await verifiedAccount(seller);
+    await expect(
+      t
+        .db()
+        .transaction((tx) =>
+          executePayout(
+            tx,
+            { logger, fee: () => ({ ...fee(), currency: 'USD' }) },
+            { userId: seller, amountMinor: 10_000n, trigger: 'MANUAL' },
+          ),
+        ),
+    ).rejects.toThrow(/not NGN/);
+    expect(await balance(payableOf(seller))).toBe(30_000n);
+  });
+
   it('re-drives payouts whose job was lost, and leaves recent ones alone', async () => {
     const { payout } = await aPayout();
     const enqueuePayout = vi.fn(() => Promise.resolve());

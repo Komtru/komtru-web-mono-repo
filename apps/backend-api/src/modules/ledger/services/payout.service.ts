@@ -93,7 +93,20 @@ export type ExecutePayoutResult =
   /** Nothing written; the reason is one a seller or an operator can act on. */
   | { outcome: 'REFUSED'; reason: PayoutSkipReason | 'ACCOUNT_NOT_FOUND'; detail: string };
 
-const feeOf = (deps: Pick<ExecutePayoutDeps, 'fee'>): PayoutFee => deps.fee?.() ?? snapshotPayoutFee();
+/**
+ * Payouts are in naira and only naira: the payable read, the journal and the transfer are all NGN,
+ * pinned here rather than taken from whatever currency a fee snapshot happens to name.
+ */
+export const PAYOUT_CURRENCY = 'NGN';
+
+/** The frozen fee, refused (a defect, thrown) if the fee file ever prices payouts in another currency. */
+const feeOf = (deps: Pick<ExecutePayoutDeps, 'fee'>): PayoutFee => {
+  const fee = deps.fee?.() ?? snapshotPayoutFee();
+  if (fee.currency !== PAYOUT_CURRENCY) {
+    throw new Error(`ledger: the payout fee is in ${fee.currency}, not ${PAYOUT_CURRENCY}`);
+  }
+  return fee;
+};
 
 /** An account money may be sent to: the user's own, verified, with a provider recipient. */
 const payable = (account: PayoutAccountRow | undefined, userId: string): account is PayoutAccountRow =>
@@ -150,7 +163,7 @@ export async function executePayout(
   }
 
   const fee = feeOf(deps);
-  const currency = fee.currency;
+  const currency = PAYOUT_CURRENCY;
   let amounts;
   try {
     amounts = payoutAmounts(input.amountMinor, fee.amountMinor);
@@ -439,14 +452,14 @@ export async function payoutSummary(
   const user = userId.toLowerCase();
   const fee = feeOf(deps);
   const [balance, inFlight, mode, holds, account] = await Promise.all([
-    accountBalance(deps.db, { type: 'USER_PAYABLE', ownerUserId: user }, fee.currency),
+    accountBalance(deps.db, { type: 'USER_PAYABLE', ownerUserId: user }, PAYOUT_CURRENCY),
     inFlightTotal(deps.db, user),
     findPayoutMode(deps.db, user),
     activePayoutHolds(deps.db, user, deps.now?.() ?? new Date()),
     findDefaultAccount(deps.db, user),
   ]);
   return {
-    currency: fee.currency,
+    currency: PAYOUT_CURRENCY,
     availableMinor: koboToJson(balance.balanceMinor < 0n ? 0n : balance.balanceMinor),
     inFlightMinor: koboToJson(inFlight),
     payoutFeeMinor: koboToJson(fee.amountMinor),
