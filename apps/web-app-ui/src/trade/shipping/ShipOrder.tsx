@@ -28,7 +28,7 @@ import {
 } from '@komtru/ui-kit';
 import { useQueryClient } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
-import { isProblem, partyName, problemMessage, whenLabel } from '../format';
+import { isProblem, partyName, platformWords, problemMessage, whenLabel } from '../format';
 import { ItemSummary } from '../parts';
 import { Deadline } from '../workspace/shared';
 import { checkPhone, checkPlate, checkWaybill, normalisePlate } from './evidence';
@@ -48,12 +48,6 @@ const SHIPPED_ONWARD = ['SHIPPED', 'UNCONFIRMED_DELIVERY', 'INSPECTION', 'COMPLE
 const RECEIPT = { category: 'OTHER', visibility: 'PRIVATE_CASE' } as const;
 
 const tradeHref = (id: string) => `/trade/${id}`;
-
-/** The platform's own sentence when it sent one (a refused receipt, a passed deadline), else ours. */
-const platformWords = (error: unknown, fallback: string): string =>
-  error instanceof ProblemError && error.problem.detail !== undefined
-    ? error.problem.detail
-    : problemMessage(error, fallback);
 
 /** A failure: the risk banner is already a live alert. */
 const Alert = ({ children }: { children: React.ReactNode }): React.JSX.Element => (

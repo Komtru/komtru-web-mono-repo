@@ -31,8 +31,10 @@ describe('what the workspace says, for each side', () => {
   it('keeps the seams to the side that would act: shipping is built, so neither side is told it is missing', () => {
     expect(stateCopy('FUNDED', 'SELLER').seam).toBeUndefined();
     expect(stateCopy('FUNDED', 'BUYER').seam).toBeUndefined();
-    expect(stateCopy('UNCONFIRMED_DELIVERY', 'BUYER', ctx).seam).toBe(notYet('Confirming delivery'));
-    expect(stateCopy('UNCONFIRMED_DELIVERY', 'SELLER', ctx).seam).toBeUndefined();
+    // Confirming delivery and accepting are built (F-027); reporting an issue (F-032) is not.
+    expect(stateCopy('UNCONFIRMED_DELIVERY', 'BUYER', ctx).seam).toBeUndefined();
+    expect(stateCopy('INSPECTION', 'BUYER', ctx).seam).toBe(notYet('Reporting an issue'));
+    expect(stateCopy('INSPECTION', 'SELLER', ctx).seam).toBeUndefined();
   });
 
   it('never promises a control: no copy tells a person to press, tap or click anything', () => {

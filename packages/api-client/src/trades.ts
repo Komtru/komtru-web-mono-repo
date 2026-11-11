@@ -303,6 +303,8 @@ export const getDeliveryDeadline = defineEndpoint({
         .looseObject({
           id: z.uuid(),
           status: z.string(),
+          reason: z.string().optional(),
+          note: z.string().nullable().optional(),
           currentDueAt: z.string(),
           requestedDueAt: z.string(),
         })
