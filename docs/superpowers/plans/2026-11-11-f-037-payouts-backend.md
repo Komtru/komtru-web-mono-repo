@@ -85,12 +85,14 @@ is what a reconciliation run can check per payout.
 
 ## Steps (each committed when green)
 
-1. Plan (this file).
-2. Schema and migration `0048`, lock and invariants updated; schema integration tests.
-3. Pure domain (`domain/payouts.ts`): journal lines per outcome, sweep due-ness by Lagos date, the
+**Status (2026-11-11, budget stop):** steps 1–4 are DONE and committed. **Next: step 5.** Steps 5–9 are not started.
+
+1. [done] Plan (this file).
+2. [done] Schema and migration `0048`, lock and invariants updated; schema integration tests.
+3. [done] Pure domain (`domain/payouts.ts`): journal lines per outcome, sweep due-ness by Lagos date, the
    transfer-status mapping, preference validation. Unit tests first.
-4. `snapshotPayoutFee` in config; `verifyTransfer` in the Paystack client (stub-server test).
-5. Repositories and `payoutAccount`, `payoutPreference`, `payout` services; integration tests including
+4. [done] `snapshotPayoutFee` in config; `verifyTransfer` in the Paystack client (stub-server test).
+5. [next] Repositories and `payoutAccount`, `payoutPreference`, `payout` services; integration tests including
    concurrent withdrawals against one balance.
 6. Jobs: verify account, dispatch, verify payout, the two sweeps; webhook ingest for `transfer.*`.
 7. Routes under `/me/payout-accounts`, `/me/payout-preferences`, `/me/payouts`, plus `/payouts/banks`.
@@ -117,3 +119,19 @@ is what a reconciliation run can check per payout.
    rather than leaving it queued indefinitely.
 8. **Suspended or closed users:** no gate here beyond the hold table; a `FULL_FREEZE` is how risk
    stops one.
+
+## Notes for whoever resumes step 5
+
+- `resolveAccountName` maps every provider refusal to a generic 502 `ApiError`; the account-verify
+  job needs a recognised "account not resolvable" error (400/422) to mark an account FAILED rather
+  than retrying. Check `test/modules/ledger/jobs.test.ts` still passes after adding it.
+- Planned single job `ledger.process-payout` {payoutId}: REQUESTED → claim, hold check, send;
+  PROCESSING → `verifyTransfer`; `TransferNotFoundError` → safe to resend (same reference). Webhook
+  `transfer.*` calls the same resolution. Settle only on the verify answer; amount/currency mismatch
+  → NEEDS_REVIEW.
+- Per-user serialisation: `pg_advisory_xact_lock(hashtext('ledger:payable:' || userId))` in
+  `executePayout` and in `placePayoutHold`.
+- Ledger code may not call `getFeeSchedule` (fee guard); use `snapshotPayoutFee` from the config barrel.
+- T-051's `readBankNameMatch` needs a `findBankNameMatch` store; add a narrow reader export to the
+  trust barrel rather than exporting `bindStore`.
+- Bank list route returns `{ banks }` (bounded reference data, not paginated).
