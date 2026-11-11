@@ -36,7 +36,8 @@ export const payoutKeys = {
   one: (id: string) => ['me', 'payouts', 'one', id] as const,
   accounts: ['me', 'payouts', 'accounts'] as const,
   preference: ['me', 'payouts', 'preference'] as const,
-  banks: ['me', 'payouts', 'banks'] as const,
+  /** Reference data, not the seller's: outside `all`, so a money change never refetches the bank list. */
+  banks: ['payouts', 'banks'] as const,
 };
 
 /** REQUESTED and PROCESSING are on their way; every other status is the platform's settled answer. */

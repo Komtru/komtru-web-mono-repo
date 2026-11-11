@@ -39,7 +39,12 @@ export function payoutStatus(status: PayoutStatus): { tone: RowTone; label: stri
   }
 }
 
-/** The five ways to be paid, in the platform's order. Weekly is Monday and monthly the 1st (shared-types). */
+/**
+ * The five ways to be paid, in the platform's order (`PAYOUT_MODES`, shared-types). The days are the backend's
+ * schedule, not this screen's: `sweepModesDue`, `WEEKLY_SWEEP_WEEKDAY` (Monday) and `MONTHLY_SWEEP_DAY` (the 1st), all
+ * Africa/Lagos, in `apps/backend-api/src/modules/ledger/domain/payouts.ts`. Change them there first. No time of day is
+ * stated: the sweep's 09:00 slot is an owner default, not a promise.
+ */
 export const MODE_COPY: Record<PayoutMode, { label: string; detail: string }> = {
   MANUAL: { label: 'When I withdraw', detail: 'Your balance stays here until you withdraw it.' },
   AUTO_IMMEDIATE: {

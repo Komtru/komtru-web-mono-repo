@@ -251,3 +251,9 @@ describe('the payout hooks', () => {
     expect(invalidate).toHaveBeenCalledWith({ queryKey: payoutKeys.summary });
   });
 });
+
+describe('the bank list key', () => {
+  it('sits outside the seller’s payout keys, so refreshing money never refetches reference data', () => {
+    expect(payoutKeys.banks.slice(0, 2)).not.toEqual(payoutKeys.all);
+  });
+});
