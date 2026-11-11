@@ -2,13 +2,17 @@
 
 // What the buyer's four stages and the seller's three share: the stage header and the agreement preview that
 // CT-B4, CT-B9 and CT-B10 draw the same way ("both parties see the same agreement").
-import { Stepper, TermList, TermRow } from '@komtru/ui-kit';
+import { TermList, TermRow } from '@komtru/ui-kit';
 import { hoursLabel, naira } from '../format';
 import { promiseLabel } from './request';
 
 export const BUYER_STAGES = ['About', 'Item & delivery', 'Terms', 'Review'] as const;
 
-/** "Start a Trade 2 / 4" and the rail under it. */
+/**
+ * The rail under the header: one bar per stage, filled up to the one the person is on, each named beneath it, as the
+ * v2 buyer and seller flows draw it. The kit's numbered `Stepper` is v1's rail and is wider than a phone with four
+ * named stages, so these screens draw the v2 one.
+ */
 export function StageHeader({
   stages,
   current,
@@ -19,12 +23,28 @@ export function StageHeader({
   heading: string;
 }): React.JSX.Element {
   return (
-    <>
-      <p className="mb-[8px] mt-0 text-[11px] font-semibold text-slate">
-        {heading} · {String(current + 1)} / {String(stages.length)}
-      </p>
-      <Stepper steps={stages} current={current} label={`${heading}, step ${String(current + 1)}`} />
-    </>
+    <ol
+      aria-label={`${heading}, step ${String(current + 1)} of ${String(stages.length)}`}
+      className="m-0 mb-[18px] flex list-none gap-[6px] p-0"
+    >
+      {stages.map((stage, index) => (
+        <li
+          key={stage}
+          {...(index === current ? { 'aria-current': 'step' as const } : {})}
+          className="min-w-0 flex-1"
+        >
+          <span
+            aria-hidden
+            className={`mb-[6px] block h-[4px] rounded-[2px] ${index === current ? 'bg-trust-indigo' : index < current ? 'bg-trust-emerald' : 'bg-border-hairline'}`}
+          />
+          <span
+            className={`block truncate text-[9px] font-[650] ${index === current ? 'text-midnight-text' : 'text-slate'}`}
+          >
+            {stage}
+          </span>
+        </li>
+      ))}
+    </ol>
   );
 }
 
@@ -69,24 +89,40 @@ export function Agreement({
         Terms
       </h2>
       <TermList aria-label="Terms of this trade">
-        <TermRow label="Seller">{sellerName}</TermRow>
-        {sellerLocation !== undefined && <TermRow label="Seller location">{sellerLocation}</TermRow>}
-        <TermRow label="Item details">{itemDetails ?? WAITING}</TermRow>
-        <TermRow label="Delivery">{deliveryLine}</TermRow>
-        {collectionPhone !== undefined && <TermRow label="Collection phone">{collectionPhone}</TermRow>}
-        <TermRow label="Delivery cost">
+        <TermRow checked label="Seller">
+          {sellerName}
+        </TermRow>
+        {sellerLocation !== undefined && (
+          <TermRow checked label="Seller location">
+            {sellerLocation}
+          </TermRow>
+        )}
+        <TermRow checked label="Item details">
+          {itemDetails ?? WAITING}
+        </TermRow>
+        <TermRow checked label="Delivery">
+          {deliveryLine}
+        </TermRow>
+        {collectionPhone !== undefined && (
+          <TermRow checked label="Collection phone">
+            {collectionPhone}
+          </TermRow>
+        )}
+        <TermRow checked label="Delivery cost">
           {deliveryChargeMinor === undefined ? WAITING : naira(deliveryChargeMinor)}
         </TermRow>
-        <TermRow label="Delivery promise">
+        <TermRow checked label="Delivery promise">
           {deliveryPromise === undefined ? WAITING : (promiseLabel(deliveryPromise) ?? deliveryPromise)}
         </TermRow>
         {inspectionHours !== undefined && (
-          <TermRow label="Inspection">
+          <TermRow checked label="Inspection">
             {hoursLabel(inspectionHours)} · {standard}
           </TermRow>
         )}
-        <TermRow label="Cancellation">Free before shipment</TermRow>
-        <TermRow label="Refund">
+        <TermRow checked label="Cancellation">
+          Free before shipment
+        </TermRow>
+        <TermRow checked label="Refund">
           {categoryName === undefined ? 'Per Komtru policy' : `Per Komtru ${categoryName} policy`}
         </TermRow>
       </TermList>

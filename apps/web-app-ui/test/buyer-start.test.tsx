@@ -98,7 +98,7 @@ describe('CT-B1 About', () => {
     await aboutStage();
     expect(await screen.findByText(/We detected the category: Electronics/)).toBeTruthy();
     expect(screen.queryByLabelText('Category')).toBeNull();
-    expect(screen.getByRole('list', { name: /Start a Trade, step 1/ })).toBeTruthy();
+    expect(screen.getByRole('list', { name: 'Start a Trade, step 1 of 4' })).toBeTruthy();
   });
 
   it('shows what the platform says the buyer pays and never works it out itself', async () => {

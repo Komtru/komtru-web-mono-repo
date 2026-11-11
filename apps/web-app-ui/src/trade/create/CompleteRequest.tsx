@@ -13,6 +13,7 @@ import { nairaToKobo } from '@komtru/shared-types';
 import {
   ActionStack,
   Button,
+  ItemCard,
   LoadFailed,
   LoadingScreen,
   NoteBanner,
@@ -352,20 +353,20 @@ function Completion({ trade }: { trade: TradeView }): React.JSX.Element {
 
       {stage === 2 && (
         <>
-          <div className="mb-[12px]">
-            <div className="text-[16px] font-semibold">
-              {fields.brand !== undefined || fields.model !== undefined
+          <ItemCard
+            title={
+              fields.brand !== undefined || fields.model !== undefined
                 ? [fields.brand, fields.model].filter(Boolean).join(' ')
-                : (request.requestedItem ?? 'Item')}
-            </div>
-            <div className="mt-[2px] text-[11.5px] text-slate">
-              {[...Object.entries(fields)]
+                : (request.requestedItem ?? 'Item')
+            }
+            sub={
+              Object.entries(fields)
                 .filter(([key, value]) => key !== 'brand' && key !== 'model' && value.trim() !== '')
                 .map(([, value]) => value.trim())
-                .join(' · ')}
-            </div>
-            <div className="mt-[6px] font-mono text-[20px] font-semibold">{naira(terms.itemAmountMinor)}</div>
-          </div>
+                .join(' · ') || undefined
+            }
+            price={naira(terms.itemAmountMinor)}
+          />
           <Agreement
             sellerName="You"
             sellerLocation={

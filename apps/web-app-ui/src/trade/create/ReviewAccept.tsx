@@ -5,6 +5,7 @@ import { tradeKeys, useAcceptTrade, useDeclineTrade, usePreviewTrade } from '@ko
 import {
   ActionStack,
   Button,
+  ItemCard,
   NoteBanner,
   ReadyBanner,
   RiskBanner,
@@ -120,11 +121,11 @@ export function ReviewAccept({ trade }: { trade: TradeView }): React.JSX.Element
           Item details, delivery cost and promise are now complete.
         </ReadyBanner>
       )}
-      <div className="mb-[12px]">
-        <div className="text-[16px] font-semibold">{itemTitle(terms.itemSpec)}</div>
-        {sub !== undefined && <div className="mt-[2px] text-[11.5px] text-slate">{sub}</div>}
-        <div className="mt-[6px] font-mono text-[20px] font-semibold">{naira(terms.itemAmountMinor)}</div>
-      </div>
+      <ItemCard
+        title={itemTitle(terms.itemSpec)}
+        {...(sub === undefined ? {} : { sub })}
+        price={naira(terms.itemAmountMinor)}
+      />
       <Agreement
         sellerName={seller}
         sellerLocation={request.sellerLocation}

@@ -3,7 +3,6 @@
 import type { LookupResult, TradeStandard, TradeView } from '@komtru/api-client';
 import {
   ActionStack,
-  Button,
   CodeCard,
   NoteBanner,
   OptionCard,
@@ -15,6 +14,7 @@ import {
   TermList,
   TermRow,
   TextField,
+  VersionTimeline,
   WarnBanner,
 } from '@komtru/ui-kit';
 import { useState } from 'react';
@@ -307,6 +307,9 @@ export function Terms({ standard }: { standard: TradeStandard }): React.JSX.Elem
   );
 }
 
+const CODE_ACTION =
+  'flex-1 cursor-pointer rounded-[10px] px-[14px] py-[11px] text-[13px] font-semibold focus-visible:outline-[2.5px] focus-visible:outline-pure-white focus-visible:outline-offset-[2px]';
+
 /** CT-B5: the request is with the seller, and the screen says what is outstanding. */
 export function Sent({ trade, sellerName }: { trade: TradeView; sellerName: string }): React.JSX.Element {
   const [shared, setShared] = useState<'idle' | 'copied' | 'failed'>('idle');
@@ -331,23 +334,27 @@ export function Sent({ trade, sellerName }: { trade: TradeView; sellerName: stri
   };
   return (
     <ScreenColumn>
-      <StatusHero tone="info" title={`Sent to ${sellerName}`}>
+      <StatusHero tone="success" title={`Sent to ${sellerName}`}>
         They&apos;ll confirm the item details and delivery cost, then you&apos;ll review and accept. Nothing
         is charged until then.
       </StatusHero>
       <CodeCard label="Your Trade Code" code={trade.tradeCode}>
-        <Button
+        <button
           type="button"
-          variant="secondary"
           onClick={() => {
             copy(trade.tradeCode);
           }}
+          className={`${CODE_ACTION} border border-solid border-[rgba(255,255,255,.35)] bg-transparent text-pure-white`}
         >
           Copy
-        </Button>
-        <Button type="button" variant="secondary" onClick={share}>
+        </button>
+        <button
+          type="button"
+          onClick={share}
+          className={`${CODE_ACTION} border-0 bg-pure-white text-komtru-midnight`}
+        >
           Share
-        </Button>
+        </button>
       </CodeCard>
       <p role="status" className="mb-[12px] mt-0 text-[11.5px] text-slate">
         {shared === 'copied'
@@ -357,30 +364,31 @@ export function Sent({ trade, sellerName }: { trade: TradeView; sellerName: stri
             : ''}
       </p>
       <SectionLabel>What happens next</SectionLabel>
-      <ol aria-label="What happens next" className="m-0 mb-[16px] list-none p-0">
-        {[
-          ["You've told us what you want", 'Seller, item, price and where it goes'],
-          [`${sellerName} adds their part`, 'Item details, delivery cost and promise'],
-          ['You review and accept', 'With the final cost visible'],
-          ['You fund the Trade', 'Payment is protected'],
-        ].map(([step, detail], index) => (
-          <li
-            key={step}
-            className="flex gap-[10px] border-b border-solid border-border-hairline py-[9px] text-[12.5px] last:border-b-0"
-          >
-            <span
-              aria-hidden
-              className="grid h-[20px] w-[20px] shrink-0 place-items-center rounded-[50%] bg-surface-secondary text-[10px] font-semibold"
-            >
-              {index + 1}
-            </span>
-            <span>
-              <span className="block font-semibold">{step}</span>
-              <span className="block text-[11.5px] text-slate">{detail}</span>
-            </span>
-          </li>
-        ))}
-      </ol>
+      <VersionTimeline
+        aria-label="What happens next"
+        className="mb-[16px] rounded-md border border-solid border-border-hairline bg-surface-primary p-[14px]"
+        steps={[
+          {
+            id: 'told',
+            title: "You've told us what you want",
+            detail: 'Seller, item, price and where it goes',
+            state: 'done',
+          },
+          {
+            id: 'seller',
+            title: `${sellerName} adds their part`,
+            detail: 'Item details, delivery cost and promise',
+            state: 'active',
+          },
+          {
+            id: 'accept',
+            title: 'You review and accept',
+            detail: 'With the final cost visible',
+            state: 'pending',
+          },
+          { id: 'fund', title: 'You fund the Trade', detail: 'Payment is protected', state: 'pending' },
+        ]}
+      />
       <ActionStack>{BACK_TO_TRADES}</ActionStack>
     </ScreenColumn>
   );

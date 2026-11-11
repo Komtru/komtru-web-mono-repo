@@ -20,6 +20,7 @@ import { nairaToKobo } from '@komtru/shared-types';
 import {
   ActionStack,
   Button,
+  ItemCard,
   LoadFailed,
   LoadingScreen,
   NoteBanner,
@@ -297,11 +298,11 @@ export function BuyerStart({
 
       {stage === 3 && standard !== undefined && kobo !== undefined && (
         <>
-          <div className="mb-[12px]">
-            <div className="text-[16px] font-semibold">{title.trim()}</div>
-            <div className="mt-[2px] text-[11.5px] text-slate">Details to be confirmed by the seller</div>
-            <div className="mt-[6px] font-mono text-[20px] font-semibold">{naira(kobo.toString())}</div>
-          </div>
+          <ItemCard
+            title={title.trim()}
+            sub="Details to be confirmed by the seller"
+            price={naira(kobo.toString())}
+          />
           <Agreement
             sellerName={sellerName}
             itemDetails={undefined}
