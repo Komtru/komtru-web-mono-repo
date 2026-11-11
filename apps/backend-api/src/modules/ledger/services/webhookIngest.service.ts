@@ -366,11 +366,7 @@ export async function processDelivery(deps: ProcessDeliveryDeps, webhookId: bigi
     await markDeliveryProcessed(deps.db, webhookId, outcome === 'MISSING' ? 'unknown refund' : null);
     return outcome === 'MISSING' ? 'UNKNOWN_REFERENCE' : outcome;
   }
-  if (event.type !== 'charge.succeeded' && event.type !== 'charge.failed') {
-    await markDeliveryProcessed(deps.db, webhookId, `ignored: ${event.type} has no handler yet`);
-    return 'ignored';
-  }
-
+  // Every other event type is handled above, so what remains is a charge (the type checker agrees).
   if (!isFundingReference(event.reference)) {
     // Not a checkout this module issued, so there is nothing to verify it against.
     await markDeliveryProcessed(deps.db, webhookId, 'unknown reference');
