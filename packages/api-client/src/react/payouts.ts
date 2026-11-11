@@ -44,16 +44,24 @@ export const payoutKeys = {
 export const isPayoutInFlight = (payout: Pick<Payout, 'status'>): boolean =>
   payout.status === 'REQUESTED' || payout.status === 'PROCESSING';
 
-/** The available balance, what is on its way, the fee a withdrawal now pays, the mode and any hold. */
+/**
+ * The available balance, what is on its way, the fee a withdrawal now pays, the mode and any hold. Polled while money
+ * is on its way (a failed payout returns it to the balance), and only then.
+ */
 export function usePayoutSummary() {
   const client = useApiClient();
   return useQuery({
     queryKey: payoutKeys.summary,
     queryFn: ({ signal }) => client.call(getPayoutSummary, {}, { signal }),
+    refetchInterval: (query) =>
+      query.state.data !== undefined && BigInt(query.state.data.inFlightMinor) > 0n ? PAYOUT_POLL_MS : false,
   });
 }
 
-/** The seller's payouts, newest first. A stale cursor (422) resets the list to its first page. */
+/**
+ * The seller's payouts, newest first. A stale cursor (422) resets the list to its first page. Polled while any loaded
+ * payout is on its way, so its row settles without a reload, and only then.
+ */
 export function usePayouts() {
   const client = useApiClient();
   const queryClient = useQueryClient();
@@ -75,6 +83,11 @@ export function usePayouts() {
         throw error;
       }
     },
+    // After `queryFn`, so the page type is inferred from it rather than from this callback.
+    refetchInterval: (query: { state: { data?: { pages: { items: Payout[] }[] } } }) =>
+      query.state.data?.pages.some((page) => page.items.some(isPayoutInFlight)) === true
+        ? PAYOUT_POLL_MS
+        : false,
   });
 }
 

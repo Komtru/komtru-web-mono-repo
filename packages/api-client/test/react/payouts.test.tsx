@@ -6,6 +6,7 @@ import { createApiClient } from '../../src/client.js';
 import { ApiClientProvider } from '../../src/react/client-context.js';
 import {
   PAYOUT_POLL_MS,
+  usePayoutSummary,
   payoutKeys,
   useAddPayoutAccount,
   usePayout,
@@ -255,5 +256,39 @@ describe('the payout hooks', () => {
 describe('the bank list key', () => {
   it('sits outside the seller’s payout keys, so refreshing money never refetches reference data', () => {
     expect(payoutKeys.banks.slice(0, 2)).not.toEqual(payoutKeys.all);
+  });
+});
+
+describe('the balance and history', () => {
+  it('poll while money is on its way and stop once it has settled', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    let settled = false;
+    const { requests, wrapper: Wrapper } = setup((path) =>
+      path.startsWith('/me/payouts/summary')
+        ? {
+            currency: 'NGN',
+            availableMinor: '0',
+            inFlightMinor: settled ? '0' : '120000000',
+            payoutFeeMinor: '0',
+            mode: 'MANUAL',
+            held: false,
+            defaultAccount: destination,
+          }
+        : { items: [payout(settled ? 'SUCCEEDED' : 'PROCESSING')], nextCursor: null },
+    );
+    function Probe() {
+      const summary = usePayoutSummary();
+      const list = usePayouts();
+      const status = list.data?.pages[0]?.items[0]?.status ?? 'loading';
+      return <p>{`${summary.data?.inFlightMinor ?? 'loading'} ${status}`}</p>;
+    }
+    render(<Probe />, { wrapper: Wrapper });
+    expect(await screen.findByText('120000000 PROCESSING')).toBeTruthy();
+    settled = true;
+    await vi.advanceTimersByTimeAsync(PAYOUT_POLL_MS + 10);
+    expect(await screen.findByText('0 SUCCEEDED')).toBeTruthy();
+    const seen = requests.length;
+    await vi.advanceTimersByTimeAsync(PAYOUT_POLL_MS * 3);
+    expect(requests).toHaveLength(seen);
   });
 });
