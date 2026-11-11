@@ -81,11 +81,32 @@ describe('Active Orders (AC8)', () => {
     expect(screen.getAllByRole('link')).toHaveLength(1);
   });
 
-  it('says there is nothing to fulfil, and points to the trades, when there are no orders', async () => {
+  it('keeps its heading and says there is nothing to fulfil yet, with no buyer-side link', async () => {
     answerWith(api.call, { 'GET /trades': list([bought]) });
     renderWithApi(api.call, <ActiveOrders />);
     expect(await screen.findByText('No orders to fulfil')).toBeTruthy();
-    expect(screen.getByRole('link', { name: 'See all your trades' }).getAttribute('href')).toBe('/trades');
+    expect(screen.getByRole('heading', { level: 1, name: 'Active Orders' })).toBeTruthy();
+    expect(screen.getByText(/funds a trade with you/)).toBeTruthy();
+    expect(screen.queryByRole('link')).toBeNull();
+  });
+
+  it('says some orders did not load when a later page fails, keeps what it has, and can try again', async () => {
+    let tries = 0;
+    answerWith(api.call, {
+      'GET /trades': ({ query }: { query?: Record<string, unknown> }) => {
+        if (query?.cursor === undefined) return list([toShip], 'c2');
+        tries += 1;
+        if (tries === 1) throw new Error('offline');
+        return list([moving]);
+      },
+    });
+    renderWithApi(api.call, <ActiveOrders />);
+    const alert = await screen.findByRole('alert');
+    expect(alert.textContent).toContain('Some orders didn’t load');
+    expect(screen.getByRole('heading', { name: 'Ready to ship' })).toBeTruthy();
+    fireEvent.click(within(alert).getByRole('button', { name: 'Try again' }));
+    expect(await screen.findByRole('heading', { name: 'In transit' })).toBeTruthy();
+    expect(screen.queryByRole('alert')).toBeNull();
   });
 
   it('reads on through every page, so an order on a later page is not missed', async () => {

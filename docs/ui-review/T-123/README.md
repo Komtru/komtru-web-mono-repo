@@ -15,3 +15,22 @@ canned stand-in for the platform (trade ids mapped to states; one proxy adds the
 
 **Left out on purpose:** MI3 (multi-item ship, F-080), the Park waybill and handover OTP branch of X2 (F-062, F-066,
 dropped for MVP). See each screen's deviations.
+
+## Judgement
+
+**Pass, with the deviations accepted.** The structure, the order of content and the copy of each screen match the
+reference; the pixel scores (4% to 13%) are not a measure of a defect, because three things the check cannot
+discount light up every heat map:
+
+1. **The shell and the footer.** The built screen sits in the app shell (the reference draws none) and its actions
+   sit in the page flow above the real tab bar, where the reference pins them in a sticky footer. That shifts the
+   lower half of each screen and lights the tab bar.
+2. **The deliberate MVP scope cuts.** X2 drops the logistics-method picker and Park (F-062, F-066 dropped); the
+   reference's block of the largest cards is absent, so everything under it moves. AC8 reuses `TradeRow`, whose
+   layout differs from the reference's.
+3. **Illustrative data.** Names, codes, amounts and dates come from a canned stand-in for the platform, so the text
+   differs from the drawing.
+
+Nothing flagged is a spacing, colour or type error against the design system: the differing regions are text and
+cards offset by the above. X1 scores highest (13.16%) because its three-step list is built from the shared timeline
+component, which draws the nodes slightly larger than the reference's.

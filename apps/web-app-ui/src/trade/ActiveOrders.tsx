@@ -6,6 +6,7 @@ import {
   Button,
   EmptyState,
   LoadFailed,
+  RiskBanner,
   ScreenColumn,
   SectionLabel,
   Skeleton,
@@ -47,7 +48,7 @@ export function ActiveOrders(): React.JSX.Element {
       </ScreenColumn>
     );
   }
-  if (list.isError) {
+  if (list.isError && list.data === undefined) {
     return (
       <LoadFailed
         title="Couldn’t load your orders"
@@ -63,17 +64,22 @@ export function ActiveOrders(): React.JSX.Element {
     trades: selling.filter((trade) => (stage.statuses as readonly string[]).includes(trade.status)),
   })).filter((group) => group.trades.length > 0);
 
+  const notAllLoaded = isFetchNextPageError && (
+    <RiskBanner title="Some orders didn’t load">
+      <Button type="button" variant="ghost" onClick={() => void fetchNextPage()}>
+        Try again
+      </Button>
+    </RiskBanner>
+  );
+
   if (groups.length === 0) {
     return (
       <ScreenColumn>
+        <h1 className="mb-[16px] text-[19px] font-semibold">Active Orders</h1>
+        {notAllLoaded}
         <EmptyState
           title="No orders to fulfil"
-          body="When a buyer funds a trade with you, it appears here ready to ship."
-          action={
-            <Button asChild variant="secondary">
-              <a href="/trades">See all your trades</a>
-            </Button>
-          }
+          body="When a buyer funds a trade with you, it appears here, ready to ship."
         />
       </ScreenColumn>
     );
@@ -82,6 +88,7 @@ export function ActiveOrders(): React.JSX.Element {
   return (
     <ScreenColumn>
       <h1 className="mb-[16px] text-[19px] font-semibold">Active Orders</h1>
+      {notAllLoaded}
       {groups.map((group) => (
         <section key={group.id} className="mb-[8px]">
           <SectionLabel>
