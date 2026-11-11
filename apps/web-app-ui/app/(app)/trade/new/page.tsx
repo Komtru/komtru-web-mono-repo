@@ -1,11 +1,15 @@
 import type { Metadata } from 'next';
 import { AppShell } from '../../../../src/shell/AppShell';
 import { resolveMode, resolveViewer } from '../../../../src/shell/viewer';
+import { BuyerStart } from '../../../../src/trade/create/BuyerStart';
 import { StartTrade } from '../../../../src/trade/StartTrade';
 
 export const metadata: Metadata = { title: 'Start Trade' };
 
-/** I3. Buy mode starts a purchase and Sell mode a sale; `?with=` names the other party in advance. */
+/**
+ * Buy mode is the buyer's four-stage request (CT-B1 to CT-B5); Sell mode is still I3 until the seller-starts flow
+ * (F-019). `?with=` names the other party in advance.
+ */
 export default async function StartTradePage({
   searchParams,
 }: {
@@ -17,10 +21,11 @@ export default async function StartTradePage({
 
   return (
     <AppShell tab="trades" viewer={viewer} mode={mode}>
-      <StartTrade
-        defaultRole={mode === 'sell' ? 'SELLER' : 'BUYER'}
-        {...(typeof other === 'string' ? { counterparty: other } : {})}
-      />
+      {mode === 'sell' ? (
+        <StartTrade defaultRole="SELLER" {...(typeof other === 'string' ? { counterparty: other } : {})} />
+      ) : (
+        <BuyerStart {...(typeof other === 'string' ? { counterparty: other } : {})} />
+      )}
     </AppShell>
   );
 }

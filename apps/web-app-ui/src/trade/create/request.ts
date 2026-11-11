@@ -28,6 +28,13 @@ export const REQUEST_KEYS = [
 
 export type DeliveryMode = 'COURIER' | 'PARK';
 
+export interface ParkOption {
+  id: string;
+  name: string;
+  /** "Terminus area · Open today · 8am–7pm". */
+  detail: string;
+}
+
 const KEYWORDS: Record<string, RegExp> = {
   electronics:
     /\b(iphone|ipad|macbook|airpods?|samsung|galaxy|pixel|tecno|infinix|phone|smartphone|laptop|notebook|tablet|tv|television|monitor|console|playstation|ps[45]|xbox|camera|drone|speaker|headphones?|earbuds?|smart ?watch|router|charger|power ?bank)\b/i,
