@@ -72,6 +72,7 @@ Decisions C4, C5, C8, C10, C11 (design §5). The ledger is authoritative; Paysta
 ### T-075 — Refunds
 
 - **Touches:** `ledger/services/refund.service.ts`, `ledger/jobs/refund.job.ts`
+- **Status (2026-11-11): in progress** — backend layer implemented on branch `f-030-cancel-refund` (10 commits, migration 0049, plan docs/superpowers/plans/2026-11-11-f-030-refunds-backend.md) and reviewed; next: fix (opus), then merge; T-119 UI after. Open review items: must-fix 1 approved cancellation stranded by a hold (no re-drive/sweep); should-fix 2 dispatch re-check holds, 3 foreign provider refund attach, 4 /me/refunds cursor microseconds, 5 sweep multiplies poll chains, 6 failed-refund recovery unwired (T-076?), 7 test gaps, 8 api-client note trim.
 - **Depends on:** T-072
 - **Acceptance criteria:**
   - Refund API against the original charge reference, never client-supplied; full or partial; cumulative refunds per charge never exceed the charge (DB-backed guard, tested under concurrency).

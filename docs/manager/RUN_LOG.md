@@ -6,6 +6,17 @@ cost and to find work to resume.
 
 ## Waiting on the owner
 
+- **F-030 / T-066 / T-075 refund and cancellation defaults** (on branch `f-030-cancel-refund`, not merged; listed in `docs/superpowers/plans/2026-11-11-f-030-refunds-backend.md`):
+  - **new:** the reference screen's 12-hour auto-approve of a cancellation request is in no spec, so it is not built. Should it be?
+  - **new:** "Contest" is a plain decline, with no TrustOps hold. A declined request cannot be asked again.
+  - **new, safe defaults:** a failed refund returns the money to escrow, with no automatic or admin retry yet. A refund call that fails or gets no answer is never re-sent; after 1 hour with no webhook it goes to review, and one still pending after 7 days goes to review. If the trade's fee terms say the fee is not refundable, the fee is booked as revenue when the refund is decided. A hold blocks cancel and refund. The platform absorbs Paystack's refund processing fee.
+- **F-018 / T-192 create-a-trade defaults** (merged 2026-11-11; listed in `docs/superpowers/plans/2026-11-11-f-018-create-trade.md`):
+  - **new:** a buyer's request stores required item fields as "Seller to confirm" until the seller completes it. Funding and accept are blocked while any remain. Should the platform accept a proposal with the item spec left open?
+  - **new:** the delivery charge is held in the item spec, shown as "paid to the seller outside Komtru protection", and is not in the funded total or the fee snapshot. Should it be?
+  - **new:** there is no delivery-partner catalogue, so the seller types the partner and the charge. Which partners are approved, and at what cost?
+  - **new:** the item category is found by keyword match, with a picker as the fallback. Should the platform detect it?
+  - E2E is waived for T-192 because the repo has no end-to-end harness (F-076).
+
 - **F-013 / T-112 onboarding defaults** (merged 2026-11-11; listed in `docs/superpowers/plans/2026-11-11-f-013-onboarding.md`):
   - **new:** the backend sends push through FCM, but the repo has no Firebase web config, SDK or messaging worker. OB4 asks for browser permission and registers no device until a web token source is added. Should a feature add Firebase web push?
   - **new, defaults:** returning users on a new device do not see the walkthrough; Skip on OB1–OB3 also skips the notification ask; there is no replay link in Account; OB5 greets by the first name typed at sign-up (no profile read exists).
@@ -639,4 +650,27 @@ VALUE` cannot work here at all (drizzle runs every pending migration in one tran
 - Feature costs: F-037 UI merge 5h-cost=2 week-cost=0; F-013 (implement+review+fix) 5h-cost=11 week-cost=2.
 - Next: Ready MVP features in journey order: F-018 (create a trade, buyer starts), then F-023, F-028, F-029 and F-030.
   F-044 and F-045 wait on F-046 (and F-030), so they are not Ready yet. F-037 waits on the viewer seam (owner). The full
+  `KOMTRU_INFRA_TESTS=1` run on `main` is still owed.
+
+## 2026-11-11 21:47 WAT — run summary
+
+- Usage at start: 5h 15%, week 38%. At end: 5h 85%, week 47%.
+- Capacity: 2 (est 27, est_week 4: 15 + 2×27 ≤ 90; 38 + 4 ≤ 85). No in-flight work. F-018 (web-app-ui, no migration) ran in
+  parallel with the F-030 backend layer (backend-api, migration 0049), with test prefixes `komtru_f018` and `komtru_f030`.
+  Features: F-018 (merged, Done), F-030 (backend layer saved at review, before fix).
+- F-018 (sonnet): CT-B1–CT-B10, CT-B2P, CT-B8P in `src/trade/create/`, with `/trade/new` in Buy mode and `/trade/[id]/complete`.
+  No backend or api-client change. Review: 4 must-fix (Park submit dead end, double-submit, funding not blocked for a spec still
+  holding "Seller to confirm", axe gaps) and 8 should-fix items. All were fixed except `next/link`, declined per T-110.
+  E2E is waived because there is no harness. The visual check in `docs/ui-review/T-192/` reports 3.3–6.6% differing pixels
+  with the shell masked. The difference is copy and data, not layout, and the deviation was accepted. Checks in the worktree
+  and again on `main`: package build, then lint, typecheck and test for web-app-ui (735) and api-client (278), plus the format check.
+- F-030 backend (opus, money): T-075 refunds and T-066 post-funding cancellation, migration `0049_refunds_cancellations`,
+  routes, and the shared-types and api-client hooks. Implementer: backend 5478 tests (infra on), api-client 287, shared-types 199, migration
+  safety clean. Review: 1 must-fix (an approved cancellation can be stranded by a hold, with nothing to re-drive it) and 7
+  should-fix items, recorded in the T-066, T-075 and F-030 status lines. Stopped at 85% of the 5-hour window, because an opus
+  fix phase would have crossed 88%. The branch is clean and committed (10 commits). Nothing is merged.
+- Feature costs, together: 5h-cost=70 week-cost=9. F-018 (implement+review+fix+merge) was about 25, and F-030 (implement+review) about 45.
+- Next: resume F-030. Resume its implementer as fixer, or start a fresh opus fixer with the review items from the status lines.
+  Then merge (full backend suite with `KOMTRU_INFRA_TESTS=1`, migration safety), then the T-119 UI layer. After that, F-023,
+  F-028 and F-029 in journey order. F-037, F-044 and F-045 remain Backend done, UI outstanding. The full
   `KOMTRU_INFRA_TESTS=1` run on `main` is still owed.

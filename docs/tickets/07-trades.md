@@ -87,6 +87,7 @@ State machine: design §6 (decision C1). Trades never touch money; they request 
 ### T-066 — Post-funding cancellation and can't-fulfil refunds
 
 - **Touches:** `trades/services/cancellation.service.ts`
+- **Status (2026-11-11): in progress** — backend layer implemented on branch `f-030-cancel-refund` (10 commits, migration 0049, plan docs/superpowers/plans/2026-11-11-f-030-refunds-backend.md) and reviewed; next: fix (opus), then merge; T-119 UI after. Open review items: must-fix 1 approved cancellation stranded by a hold (no re-drive/sweep); should-fix 2 dispatch re-check holds, 3 foreign provider refund attach, 4 /me/refunds cursor microseconds, 5 sweep multiplies poll chains, 6 failed-refund recovery unwired (T-076?), 7 test gaps, 8 api-client note trim.
 - **Depends on:** T-064, T-075
 - **Acceptance criteria:**
   - Buyer requests cancellation before shipment (CR1); seller approves or declines (CR2); approval requests a full refund (CR3) and moves to `CANCELLED_REFUNDED`.
