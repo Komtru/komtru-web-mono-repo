@@ -88,6 +88,9 @@ The decision posts in the same transaction that writes the refund row and publis
 
 ## Steps (each committed when green)
 
+**Status (2026-11-11):** steps 1–8 are DONE and committed. The backend layer of F-030 is complete;
+T-119 (the screens) is the parallel UI run.
+
 1. Plan (this file).
 2. Migration `0049`: `ledger.refunds` and its triggers, `trade.cancellation_requests`; lock and
    invariants; schema integration tests.
@@ -127,3 +130,22 @@ The decision posts in the same transaction that writes the refund row and publis
 9. **Partial refunds** are supported by the service (item money only, fee retained) but no route or
    caller uses them yet; T-080's dispute split posts its own journal and will need an
    execute-only entry point.
+
+## As built
+
+- `ledger.payment.escrow_refunded` {tradeId, refundId, journalEntryId, buyerUserId, reason, scope,
+  amounts, buyerProtectionFeeTreatment} and `ledger.refund.completed` {outcome PROCESSED | FAILED |
+  NEEDS_REVIEW}. Trades publishes `trades.cancellation.requested` and `trades.cancellation.responded`
+  for CR2's notification; no notification plan is wired for them yet (T-068's job).
+- The ledger subscribes to `trades.refund.requested` (`ledger.on-refund-requested`), so DE3's overdue
+  delivery, which only published the event until now, is refunded end to end as well.
+- Cancellation activity rows are written with `metadata.event` (`CANCELLATION_REQUESTED`,
+  `CANCELLATION_APPROVED`, `CANCELLATION_DECLINED`, `CANCELLATION_LAPSED`, `SELLER_CANNOT_FULFIL`,
+  `ESCROW_REFUNDED`) and are internal: adding them to the party feed needs new `TradeActivityKind`
+  labels, which web-app-ui maps exhaustively, so that belongs with T-119.
+- SQLSTATEs: `KT014` cumulative refund guard, `KT015` refund and cancellation-request guards.
+- `funding.int.test.ts` now truncates `payment_attempts` with `CASCADE` (refunds reference it).
+- A declined buyer request cannot be repeated on the same trade (default; listed below).
+
+10. **A declined cancellation request cannot be asked again** on the same trade (default, to stop a
+    buyer re-asking a seller who has answered). Confirm or allow one more.

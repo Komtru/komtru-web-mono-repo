@@ -92,6 +92,7 @@ State machine: design §6 (decision C1). Trades never touch money; they request 
   - Buyer requests cancellation before shipment (CR1); seller approves or declines (CR2); approval requests a full refund (CR3) and moves to `CANCELLED_REFUNDED`.
   - Seller can't fulfil (SC1) refunds automatically (SC2).
   - Pre-funding cancellation stays a plain status change (M7 D3).
+- **Status:** Backend done (2026-11-11, F-030 backend layer, not yet reviewed or merged). Plan: `docs/superpowers/plans/2026-11-11-f-030-refunds-backend.md`. `trade.cancellation_requests` (migration 0049); `cancellation.service.ts` with `GET /trades/:id/cancellation`, `POST /trades/:id/cancellation-request`, `…/:requestId/approve|decline` and `POST /trades/:id/cannot-fulfil`. Approval and SC1 publish `trades.refund.requested` and close dispatch; `ledger.payment.escrow_refunded` moves the trade `FUNDED → CANCELLED_REFUNDED` with its cancellation reason. CR2's 12-hour auto-approval is not built (owner question). The T-119 UI is outstanding.
 
 ### T-067 — IMEI verification
 
