@@ -6,8 +6,11 @@ cost and to find work to resume.
 
 ## Waiting on the owner
 
-- **F-037 / T-124 payouts UI** (on branch `f-037-payouts-ui`, not merged yet; listed in `docs/superpowers/plans/2026-11-11-f-037-payouts-ui.md`):
-  - **new:** the Payouts row in Account shows only when `viewer.hasSold` is true, but `resolveViewer` still returns the anonymous viewer, so nothing links to `/account/payouts` yet. Should a feature fill the viewer seam before F-037 counts as Done?
+- **F-013 / T-112 onboarding defaults** (merged 2026-11-11; listed in `docs/superpowers/plans/2026-11-11-f-013-onboarding.md`):
+  - **new:** the backend sends push through FCM, but the repo has no Firebase web config, SDK or messaging worker. OB4 asks for browser permission and registers no device until a web token source is added. Should a feature add Firebase web push?
+  - **new, defaults:** returning users on a new device do not see the walkthrough; Skip on OB1–OB3 also skips the notification ask; there is no replay link in Account; OB5 greets by the first name typed at sign-up (no profile read exists).
+- **F-037 / T-124 payouts UI** (merged to `main` 2026-11-11; listed in `docs/superpowers/plans/2026-11-11-f-037-payouts-ui.md`):
+  - **new:** the Payouts row in Account shows only when `viewer.hasSold` is true, but `resolveViewer` still returns the anonymous viewer, so nothing links to `/account/payouts` yet. The UI is now merged (2026-11-11), but F-037 stays `Backend done, UI outstanding` until this is answered. Should a feature fill the viewer seam before F-037 counts as Done?
   - **new:** should PR1 offer "Download receipt (PDF)"? It needs a backend route, which does not exist yet.
   - **new:** AB5 makes no arrival-time promise (the reference's "within 2 hours, always within 24" was dropped). Should it promise one, and from what source?
 - **F-037 / T-073 payout defaults** (merged to `main` 2026-11-11; listed in `docs/superpowers/plans/2026-11-11-f-037-payouts-backend.md`):
@@ -616,3 +619,24 @@ VALUE` cannot work here at all (drizzle runs every pending migration in one tran
 - Next: merge F-037 UI: package build, `turbo run lint typecheck test --force` in the worktree and on `main`, format check,
   then merge and set the statuses. Whether F-037 is `Done` depends on the viewer-seam owner question (no link to the
   screens yet). F-044 and F-045 remain Backend done, UI outstanding. The full `KOMTRU_INFRA_TESTS=1` run on `main` is still owed.
+
+## 2026-11-11 18:13 WAT — run summary
+
+- Usage at start: 5h 1%, week 36%. At end: 5h 14%, week 38%.
+- Capacity: 2 (est 34, est_week 5: 1 + 2×34 ≤ 90; 36 + 5 ≤ 85). In-flight F-037 UI used the first slot. Features: F-037 UI
+  (merged; feature stays Backend done, UI outstanding on the viewer-seam question), F-013 (merged, Done).
+- F-037 UI (T-124): the manager ran the merge checks. In the worktree: package build, then lint, typecheck and test for
+  web-app-ui (618) and api-client (276), and the format check. After merging, on `main`: whole-repo
+  `turbo run lint typecheck test --force` (37/37) and the format check. T-124 is Done. The feature is not Done, because no
+  user can reach `/account/payouts` until `resolveViewer` reports `hasSold`.
+- F-013 (sonnet): OB1–OB5 under `/welcome/*`, reached only by a new sign-up (E3 verify passes `next=/welcome`). The walkthrough
+  is remembered per device and redirects once done. OB4 asks for browser push permission. It would register through the new
+  api-client `registerDevice` (`POST /me/devices`), but there is no web token source yet (owner question). OB5 has the
+  Trade Code entry. No backend change, no migration. Visual check `docs/ui-review/T-112/` passed (≤2% differing pixels).
+  Review: no must-fix, 9 should-fix items. 8 were fixed (focus handling, gate flash, deep-link OB5, first-name PII cleanup,
+  Safari permission, Sentry capture, fingerprint fallback, tests). `next/link` was declined, per the T-110 plain-anchor
+  pattern. On the branch, web-app-ui (666) and api-client (278) are green. On `main`, `turbo` is 37/37 and the format check is clean.
+- Feature costs: F-037 UI merge 5h-cost=2 week-cost=0; F-013 (implement+review+fix) 5h-cost=11 week-cost=2.
+- Next: Ready MVP features in journey order: F-018 (create a trade, buyer starts), then F-023, F-028, F-029 and F-030.
+  F-044 and F-045 wait on F-046 (and F-030), so they are not Ready yet. F-037 waits on the viewer seam (owner). The full
+  `KOMTRU_INFRA_TESTS=1` run on `main` is still owed.
