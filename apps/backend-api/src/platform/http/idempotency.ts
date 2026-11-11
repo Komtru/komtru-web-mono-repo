@@ -56,7 +56,11 @@ const hashRequest = (req: Request, body: unknown): string =>
         req.method,
         `${req.baseUrl}${req.path}`,
         JSON.stringify(req.query ?? {}),
-        JSON.stringify(body ?? null),
+        // The parsed body: a kobo codec decodes amounts to bigint, which JSON.stringify refuses, so
+        // they are hashed as their digit strings — exactly the wire form they arrived in.
+        JSON.stringify(body ?? null, (_key, value: unknown) =>
+          typeof value === 'bigint' ? value.toString() : value,
+        ),
       ].join('\n'),
     )
     .digest('hex');

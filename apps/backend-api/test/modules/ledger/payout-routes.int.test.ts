@@ -3,19 +3,21 @@
 import { randomUUID } from 'node:crypto';
 import express from 'express';
 import request from 'supertest';
-import { describe, expect, it, vi } from 'vitest';
+import { afterAll, describe, expect, it, vi } from 'vitest';
 import { loadConfig } from '../../../src/config/env.js';
 import { createEncryption } from '../../../src/platform/crypto/encryption.js';
 import { createHmacHasher } from '../../../src/platform/crypto/hmac.js';
 import { errorHandler, notFound } from '../../../src/platform/errors.js';
+import { createIdempotencyGate } from '../../../src/platform/http/idempotency.js';
 import { mountRoutes } from '../../../src/platform/http/mount.js';
+import { createRedis } from '../../../src/platform/redis/connections.js';
 import { ANONYMOUS_ACTOR, type Actor } from '../../../src/platform/http/principal.js';
 import { createLogger } from '../../../src/platform/logger.js';
 import { postJournal } from '../../../src/modules/ledger/index.js';
 import { payoutRoutes } from '../../../src/modules/ledger/http/payoutRoutes.js';
 import { insertPayoutAccount } from '../../../src/modules/ledger/infrastructure/postgres/payoutsRepository.js';
 import { testActor } from '../../support/actors.js';
-import { infraEnabled, testRedisEnv, testRedisUrl } from '../../support/db-urls.js';
+import { infraEnabled, testKeyPrefix, testRedisEnv, testRedisUrl } from '../../support/db-urls.js';
 import { useTestDatabase } from '../../support/db.js';
 import { identityProcessEnv } from '../../support/identity-env.js';
 
@@ -42,7 +44,11 @@ const idOf = (res: { body: unknown }): string => (res.body as { id: string }).id
 describe.runIf(infraEnabled)('the payout routes (T-073)', () => {
   const t = useTestDatabase();
 
-  const appFor = (actor: Actor, banks: typeof BANKS | null = BANKS) => {
+  const appFor = (
+    actor: Actor,
+    banks: typeof BANKS | null = BANKS,
+    idempotency: Parameters<typeof mountRoutes>[1]['idempotency'] = (_input, run) => run(),
+  ) => {
     const cache = { read: () => Promise.resolve(banks), write: () => Promise.resolve() };
     const enqueueVerify = vi.fn(() => Promise.resolve());
     const app = express();
@@ -58,7 +64,7 @@ describe.runIf(infraEnabled)('the payout routes (T-073)', () => {
         logger,
         resolveActor: () => Promise.resolve(actor),
         rateLimit: () => Promise.resolve(),
-        idempotency: (_input, run) => run(),
+        idempotency,
       },
     )(router);
     app.use('/v1', router);
@@ -194,5 +200,56 @@ describe.runIf(infraEnabled)('the payout routes (T-073)', () => {
     const other = await seller();
     expect((await request(other.app).get(`/v1/me/payouts/${ids[0]!}`)).status).toBe(404);
     expect(page(await request(other.app).get('/v1/me/payouts')).items).toEqual([]);
+  });
+  it("answers 404 for another seller's receipt, and 200 for its owner", async () => {
+    const owner = await seller(50_000n);
+    await verify(owner.userId);
+    const created = await request(owner.app).post('/v1/me/payouts').send({ amountMinor: '10000' });
+    const id = idOf(created);
+    expect((await request(owner.app).get(`/v1/me/payouts/${id}`)).status).toBe(200);
+    const stranger = await seller();
+    const res = await request(stranger.app).get(`/v1/me/payouts/${id}`);
+    expect(res.status).toBe(404);
+    expect(JSON.stringify(res.body)).not.toContain(owner.userId);
+  });
+
+  describe('with the real idempotency gate', () => {
+    const redis = createRedis(testRedisUrl(), { keyPrefix: testKeyPrefix() });
+    afterAll(async () => void (await redis.quit().catch(() => redis.disconnect())));
+
+    it('makes a double tap with one idempotency key exactly one withdrawal', async () => {
+      const userId = randomUUID();
+      const { app } = appFor(testActor(userId), BANKS, createIdempotencyGate({ db: t.db(), redis, logger }));
+      await t.db().transaction((tx) =>
+        postJournal(tx, {
+          idempotencyKey: `test:release:${randomUUID()}`,
+          description: 'test release',
+          lines: [
+            { account: { type: 'PLATFORM_ESCROW_POOL' }, direction: 'DEBIT', amountMinor: 50_000n },
+            {
+              account: { type: 'USER_PAYABLE', ownerUserId: userId },
+              direction: 'CREDIT',
+              amountMinor: 50_000n,
+            },
+          ],
+        }),
+      );
+      await verify(userId);
+
+      const key = `tap-${randomUUID()}`;
+      const tap = () =>
+        request(app).post('/v1/me/payouts').set('Idempotency-Key', key).send({ amountMinor: '20000' });
+      const [a, b] = await Promise.all([tap(), tap()]);
+      const again = await tap();
+      expect([a.status, b.status, again.status]).toEqual([201, 201, 201]);
+      expect(new Set([idOf(a), idOf(b), idOf(again)]).size).toBe(1);
+
+      const { rows } = await t
+        .owner()
+        .query<{ n: string }>(`SELECT count(*) AS n FROM ledger.payouts WHERE user_id = $1`, [userId]);
+      expect(Number(rows[0]?.n)).toBe(1);
+      const summary = await request(app).get('/v1/me/payouts/summary');
+      expect(summary.body).toMatchObject({ availableMinor: '30000', inFlightMinor: '20000' });
+    });
   });
 });

@@ -82,8 +82,14 @@ describe('the ledger module', () => {
       'ledger.sweep-payouts',
       'ledger.sweep-payouts-auto',
     ]);
-    // Once a day, at 09:00 in the scheduler's zone (Africa/Lagos).
+    // Once a day, at 09:00 in the scheduler's zone — which is Africa/Lagos unless an operator says otherwise.
     expect(registry.get('ledger.sweep-payouts-auto')?.cron).toBe('0 9 * * *');
+    const config = loadConfig({
+      NODE_ENV: 'test',
+      POSTGRES_URL: 'postgresql://komtru:komtru@localhost:56432/komtru_v2_dev',
+      REDIS_URL: testRedisUrl(),
+    });
+    expect(config.scheduler.timezone).toBe('Africa/Lagos');
     expect(registry.get('ledger.refresh-bank-list')?.cron).toMatch(/^\S+ \S+ \* \* \*$/);
   });
 
