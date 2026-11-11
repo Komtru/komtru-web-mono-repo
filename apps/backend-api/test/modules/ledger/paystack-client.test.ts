@@ -1,4 +1,5 @@
 import { ChargeNotFoundError } from '../../../src/modules/ledger/domain/funding.js';
+import { TransferNotFoundError } from '../../../src/modules/ledger/domain/payouts.js';
 import { createHmac } from 'node:crypto';
 import type { ServerResponse } from 'node:http';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -7,6 +8,7 @@ import {
   listBanks,
   MAX_BANK_PAGES,
   verifyCharge,
+  verifyTransfer,
   type PaystackClientOptions,
 } from '../../../src/modules/ledger/infrastructure/providers/paystack/client.js';
 import { ApiError } from '../../../src/platform/errors.js';
@@ -258,6 +260,57 @@ describe('the paystack client', () => {
     const error = await verifyCharge(options, 'fund-x').catch((e: unknown) => e);
     expect(error).toBeInstanceOf(ApiError);
     expect(error).not.toBeInstanceOf(ChargeNotFoundError);
+  });
+
+  it('verifies a transfer by OUR reference, reading the amount, currency and status (T-073)', async () => {
+    const options = await serving((_path, res) =>
+      json(
+        res,
+        200,
+        ok({
+          reference: 'payout-1',
+          status: 'success',
+          amount: 4_520_000,
+          currency: 'NGN',
+          transfer_code: 'TRF_abc',
+          reason: 'Komtru payout',
+        }),
+      ),
+    );
+    await expect(verifyTransfer(options, 'payout-1')).resolves.toEqual({
+      reference: 'payout-1',
+      status: 'success',
+      amountMinor: 4_520_000,
+      currency: 'NGN',
+      providerTransferId: 'TRF_abc',
+    });
+    expect(stub!.hits[0]!.path).toBe('/transfer/verify/payout-1');
+    expect(stub!.hits[0]!.method).toBe('GET');
+  });
+
+  it('reports a transfer Paystack never received as TransferNotFoundError, which is what makes a retry safe', async () => {
+    const options = await serving((_path, res) =>
+      json(res, 404, { status: false, message: 'Transfer not found' }),
+    );
+    await expect(verifyTransfer(options, 'payout-x')).rejects.toBeInstanceOf(TransferNotFoundError);
+    await stub?.close();
+    const other = await serving((_path, res) => json(res, 400, { status: false, message: 'Invalid key' }));
+    const error = await verifyTransfer(other, 'payout-x').catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(ApiError);
+    expect(error).not.toBeInstanceOf(TransferNotFoundError);
+  });
+
+  it('refuses a transfer verify response with no amount, rather than settling from it', async () => {
+    const options = await serving((_path, res) =>
+      json(
+        res,
+        200,
+        ok({ reference: 'payout-1', status: 'success', currency: 'NGN', transfer_code: 'TRF_1' }),
+      ),
+    );
+    const error = await verifyTransfer(options, 'payout-1').catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(ApiError);
+    expect((error as ApiError).detail).toContain('amount');
   });
 
   it('treats a 200 carrying a failed envelope as an error, without echoing the key', async () => {

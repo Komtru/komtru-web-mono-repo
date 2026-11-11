@@ -168,3 +168,25 @@ export function sweepModesDue(at: Date): SweepMode[] {
 /** `<mode>:<user>:<lagos date>`: unique on the payout, so a re-run of the same day pays nothing. */
 export const sweepKey = (mode: SweepMode, userId: string, at: Date): string =>
   `${mode}:${uuidSchema.parse(userId).toLowerCase()}:${lagosDate(at).isoDate}`;
+
+/**
+ * The transfer verify call's answer when the provider has no transfer with this reference. That is
+ * the one answer that proves a transfer was never sent, so it is what lets a dispatch that timed out
+ * be asked again — anything else leaves the payout in flight.
+ */
+export class TransferNotFoundError extends Error {
+  readonly code = 'TRANSFER_NOT_FOUND';
+  constructor(readonly reference: string) {
+    super(`the provider has no transfer with reference ${reference}`);
+    this.name = 'TransferNotFoundError';
+  }
+}
+
+/** What transfer verify says, narrowed to what settling a payout reads. */
+export interface VerifiedTransferView {
+  reference: string;
+  status: string;
+  amountMinor: number;
+  currency: string;
+  providerTransferId: string;
+}
