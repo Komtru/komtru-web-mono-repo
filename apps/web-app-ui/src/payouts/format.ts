@@ -61,14 +61,14 @@ export const MODE_COPY: Record<PayoutMode, { label: string; detail: string }> = 
 };
 
 /**
- * What the seller typed, as kobo: "1,200,000" or "452000.50". Grouping commas and spaces are dropped; anything that
- * is not a plain amount with at most two decimals is `undefined`, never a guess.
+ * What the seller typed, as kobo: "1,200,000", "1200000" or "452000.50". Commas are accepted only as thousands
+ * grouping ("452000,50" or "1,2,3" is not an amount, and is never read as one); anything that is not a plain amount
+ * with at most two decimals is `undefined`, never a guess.
  */
 export function parseNairaToKobo(text: string): string | undefined {
-  const plain = text.replace(/[\s,]/g, '');
-  const match = /^(\d+)(?:\.(\d{1,2}))?$/.exec(plain);
+  const match = /^(\d+|\d{1,3}(?:,\d{3})+)(?:\.(\d{1,2}))?$/.exec(text.trim());
   if (match === null) return undefined;
-  const whole = BigInt(match[1] ?? '0');
+  const whole = BigInt((match[1] ?? '0').replace(/,/g, ''));
   const kobo = BigInt((match[2] ?? '').padEnd(2, '0'));
   return (whole * 100n + kobo).toString();
 }

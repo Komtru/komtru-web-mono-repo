@@ -72,6 +72,11 @@ describe('payout wording', () => {
     expect(parseNairaToKobo('12.345')).toBeUndefined();
     expect(parseNairaToKobo('-5')).toBeUndefined();
     expect(parseNairaToKobo('1e5')).toBeUndefined();
+    expect(parseNairaToKobo('1,5')).toBeUndefined();
+    expect(parseNairaToKobo('452000,50')).toBeUndefined();
+    expect(parseNairaToKobo('1,2,3')).toBeUndefined();
+    expect(parseNairaToKobo('1200,000')).toBeUndefined();
+    expect(parseNairaToKobo('12,000.5')).toBe('1200050');
   });
 
   it('writes kobo back as the amount a person would type', () => {
