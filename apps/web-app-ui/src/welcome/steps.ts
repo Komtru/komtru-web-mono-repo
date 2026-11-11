@@ -54,3 +54,6 @@ export function nextPath(key: StepKey): string | undefined {
 
 /** Where the walkthrough hands over to: the app's root sends each person to their mode's landing screen. */
 export const AFTER_WELCOME = '/';
+
+/** Where a new sign-up is sent once its account is open (terms and the first password still come first). */
+export const WELCOME_ENTRY = '/welcome';

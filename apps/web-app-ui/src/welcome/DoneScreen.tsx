@@ -3,9 +3,11 @@
 import { Button, TextField } from '@komtru/ui-kit';
 import { tradeCodeSchema, TRADE_CODE_EXAMPLE } from '@komtru/shared-types';
 import { useRouter } from 'next/navigation';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useSyncExternalStore } from 'react';
 import { WelcomeFrame } from './parts';
 import { markWelcomeDone, welcomeName } from './state';
+
+const subscribeNever = (): (() => void) => () => undefined;
 
 /**
  * OB5: the walkthrough is over the moment this shows, so it is marked done here and not on a button: closing the tab
@@ -15,14 +17,13 @@ import { markWelcomeDone, welcomeName } from './state';
  */
 export function DoneScreen(): React.JSX.Element {
   const router = useRouter();
-  const [name, setName] = useState<string | null>(null);
+  const name = useSyncExternalStore(subscribeNever, welcomeName, () => null);
   const [entering, setEntering] = useState(false);
   const [code, setCode] = useState('');
   const [invalid, setInvalid] = useState(false);
 
   useEffect(() => {
     markWelcomeDone();
-    setName(welcomeName());
   }, []);
 
   const find = (event: React.FormEvent) => {

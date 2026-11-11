@@ -5,7 +5,7 @@ import { ProblemError, resendOtp } from '@komtru/api-client';
 import { Banner, Button, OtpInput } from '@komtru/ui-kit';
 import { useRouter } from 'next/navigation';
 import { useEffect, useRef, useState } from 'react';
-import { signUpCode, type SentCode } from '../drafts';
+import { signUpCode, signUpDraft, type SentCode } from '../drafts';
 import { ENTRY, failureMessage, UNAVAILABLE } from '../flow';
 import { proveCode, type CodeOutcome } from '../session-calls';
 import {
@@ -20,6 +20,8 @@ import {
 } from './EntryFrame';
 import { useDraft } from './useDraft';
 import { useOpenSession } from './useOpenSession';
+import { rememberFirstName, resetWelcome } from '../../welcome/state';
+import { WELCOME_ENTRY } from '../../welcome/steps';
 
 const FORM = 'verify-form';
 
@@ -50,7 +52,7 @@ function resendFailure(error: unknown): Shown {
 export function VerifyForm(): React.JSX.Element {
   const client = useApiClient();
   const router = useRouter();
-  const openSession = useOpenSession(undefined);
+  const openSession = useOpenSession(WELCOME_ENTRY);
   const sent = useDraft(signUpCode);
   const [code, setCode] = useState('');
   const [shown, setShown] = useState<Shown>({ kind: 'none' });
@@ -76,6 +78,10 @@ export function VerifyForm(): React.JSX.Element {
     const outcome: CodeOutcome = await proveCode(sent.challengeId, code);
     if (outcome.kind === 'session') {
       finished.current = true;
+      // A new account is the walkthrough's audience: start it afresh and keep the name for OB5. `openSession` clears
+      // the sign-up draft, so the name is read before it goes.
+      resetWelcome();
+      rememberFirstName(signUpDraft.read()?.fullName ?? '');
       await openSession(outcome);
       return;
     }

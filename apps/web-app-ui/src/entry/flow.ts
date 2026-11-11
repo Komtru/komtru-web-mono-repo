@@ -58,8 +58,8 @@ const withNext = (path: string, next: string | undefined): string =>
  *
  * Terms first, because the platform puts them first: an account that has not accepted the Terms in
  * force has no lawful basis for anything after it. A first password is next on the phone path.
- * Everything else the platform names — a username, a second channel — is first-time onboarding
- * (T-112), which is not built, so it goes where the person was going, and the app's root otherwise.
+ * Everything else goes where the person was going, and the app's root otherwise. A new sign-up's `next` is the
+ * first-time walkthrough (F-013), which the verify screen passes, so terms and the first password still come first.
  */
 export function afterSession(nextStep: NextStep | undefined, next: string | undefined): string {
   if (nextStep === 'ACCEPT_TERMS') return withNext(ENTRY.termsUpdated, next);

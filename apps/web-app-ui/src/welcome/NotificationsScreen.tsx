@@ -3,13 +3,16 @@
 import { useRegisterDevice } from '@komtru/api-client/react';
 import { Button, NoteBanner } from '@komtru/ui-kit';
 import { useRouter } from 'next/navigation';
-import { useEffect, useState } from 'react';
+import { useState, useSyncExternalStore } from 'react';
 import { defaultTokenSource, enablePush, notificationSupport, type PushTokenSource } from './push';
 import { WelcomeFrame } from './parts';
 import { stepFor } from './steps';
 import { useWelcomeGate } from './useWelcomeGate';
 
 const DONE = '/welcome/done';
+
+const subscribeNever = (): (() => void) => () => undefined;
+const askable = (): 'default' => 'default';
 
 type Blocked = 'denied' | 'unsupported';
 
@@ -34,14 +37,13 @@ export function NotificationsScreen({
   useWelcomeGate();
   const register = useRegisterDevice();
   const copy = stepFor('notifications');
-  const [blocked, setBlocked] = useState<Blocked | undefined>(undefined);
+  const [refused, setRefused] = useState<Blocked | undefined>(undefined);
   const [asking, setAsking] = useState(false);
 
-  // Read on the client: what the browser allows is not known on the server.
-  useEffect(() => {
-    const support = notificationSupport();
-    if (support === 'denied' || support === 'unsupported') setBlocked(support);
-  }, []);
+  // What the browser allows is not known on the server, so the server's answer is "askable" and the client corrects it.
+  const support = useSyncExternalStore(subscribeNever, notificationSupport, askable);
+  const blocked: Blocked | undefined =
+    refused ?? (support === 'denied' || support === 'unsupported' ? support : undefined);
 
   const goOn = () => {
     router.push(DONE);
@@ -52,7 +54,7 @@ export function NotificationsScreen({
     const outcome = await enablePush({ register: (body) => register.mutateAsync(body), tokenSource });
     setAsking(false);
     if (outcome === 'denied' || outcome === 'unsupported') {
-      setBlocked(outcome);
+      setRefused(outcome);
       return;
     }
     goOn();

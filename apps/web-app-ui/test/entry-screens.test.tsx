@@ -12,6 +12,7 @@ import { SignUpForm } from '../src/entry/components/SignUpForm';
 import { TermsForm } from '../src/entry/components/TermsForm';
 import { TermsUpdated } from '../src/entry/components/TermsScreens';
 import { VerifyForm } from '../src/entry/components/VerifyForm';
+import { markWelcomeDone, welcomeDone, welcomeName } from '../src/welcome/state';
 import { Welcome } from '../src/entry/components/Welcome';
 import { clearEntryDrafts, resetCode, signUpCode, signUpDraft } from '../src/entry/drafts';
 import { expectNoAxeViolations } from './axe';
@@ -288,7 +289,7 @@ describe('E3 and E3b Verify', () => {
     typeCode('482390');
     fireEvent.click(screen.getByRole('button', { name: 'Verify & continue' }));
     await waitFor(() => {
-      expect(router.replace).toHaveBeenCalledWith('/set-password');
+      expect(router.replace).toHaveBeenCalledWith('/set-password?next=%2Fwelcome');
     });
     expect(network.to('/api/auth/verify')[0]?.body).toEqual({ challengeId, code: '482390' });
     expect(tokenNow()).toBe('at-1');
@@ -296,6 +297,21 @@ describe('E3 and E3b Verify', () => {
     // the person back to the start.
     expect(signUpCode.read()).toBeNull();
     expect(router.replace).not.toHaveBeenCalledWith('/signup');
+  });
+
+  it('sends a new account on to the first-time walkthrough, and keeps the first name for its last screen', async () => {
+    markWelcomeDone();
+    signUpDraft.write({ phone: '0802 341 5567', email: 'ada@example.com', fullName: 'Ada Obi' });
+    network.on('POST /api/auth/verify', 200, { ...session, nextStep: 'DONE' });
+    show(<VerifyForm />);
+    typeCode('482390');
+    fireEvent.click(screen.getByRole('button', { name: 'Verify & continue' }));
+    await waitFor(() => {
+      expect(router.replace).toHaveBeenCalledWith('/welcome');
+    });
+    expect(welcomeName()).toBe('Ada');
+    // A fresh account is a fresh walkthrough, even on a phone that someone else already took it on.
+    expect(welcomeDone()).toBe(false);
   });
 
   it('asks for a fresh code once the code is spent', async () => {
