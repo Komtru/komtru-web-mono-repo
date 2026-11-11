@@ -116,6 +116,8 @@ Total ██████████████················
 | Ticket | Title                                                   | MVP |
 | ------ | ------------------------------------------------------- | --- |
 | T-029  | Isolate the integration suite's shared Redis and queues | yes |
+| T-066  | Post-funding cancellation and can't-fulfil refunds      | yes |
+| T-075  | Refunds                                                 | yes |
 
 ### Tickets ready to start (MVP first)
 
