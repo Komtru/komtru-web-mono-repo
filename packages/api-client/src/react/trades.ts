@@ -22,6 +22,7 @@ import {
   sendTrade,
   type TradeView,
 } from '../trades.js';
+import { getShipOptions, shipSelfArranged } from '../fulfilment.js';
 import { ProblemError } from '../problems.js';
 import { nextPageParam } from '../pagination.js';
 import type { TradeListState } from '@komtru/shared-types';
@@ -37,6 +38,7 @@ export const tradeKeys = {
   activity: (id: string) => ['trades', id, 'activity'] as const,
   deliveryDeadline: (id: string) => ['trades', id, 'delivery-deadline'] as const,
   inspection: (id: string) => ['trades', id, 'inspection'] as const,
+  shipOptions: (id: string) => ['trades', id, 'ship-options'] as const,
 };
 
 export const tradeQueryOptions = (client: ApiClient, id: string) => ({
@@ -124,6 +126,28 @@ export const useCancelTrade = () =>
 
 export const useClaimTrade = () =>
   useTradeMutation((client, id: string) => client.call(claimTrade, { params: { id } }));
+
+/**
+ * The ways the seller can ship (X2), as the platform computed them. A 409 is the dispatch guard (X1): the trade
+ * is not funded, or has gone on already. A screen decides X1 from the trade's status, not from this error: the
+ * client repeats an idempotent call that met a 409, so the answer would arrive late.
+ */
+export function useShipOptions(id: string, enabled = true) {
+  const client = useApiClient();
+  return useQuery({
+    queryKey: tradeKeys.shipOptions(id),
+    queryFn: ({ signal }) => client.call(getShipOptions, { params: { id } }, { signal }),
+    enabled,
+    retry: false,
+  });
+}
+
+/** Marks the trade shipped with the seller's own arrangement; the trade it answers with is written to the cache. */
+export const useShipSelfArranged = () =>
+  useTradeMutation(
+    (client, { id, ...body }: { id: string } & EndpointInput<typeof shipSelfArranged>['body']) =>
+      client.call(shipSelfArranged, { params: { id }, body }),
+  );
 
 const LIST_PAGE = 20;
 
