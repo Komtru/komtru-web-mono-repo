@@ -22,7 +22,7 @@ import {
   addressLine,
   hoursLabel,
   isProblem,
-  naira,
+  nairaShort,
   partyName,
   platformWords,
   problemMessage,
@@ -235,7 +235,7 @@ function BuyerInspect({ trade, read, query }: Parts): React.JSX.Element {
       <ReleaseSheet
         open={releasing}
         tradeId={trade.id}
-        amount={trade.fees === null ? undefined : naira(trade.fees.itemAmountMinor)}
+        amount={trade.fees === null ? undefined : nairaShort(trade.fees.itemAmountMinor)}
         seller={seller}
         onClose={() => {
           setReleasing(false);
