@@ -78,6 +78,16 @@ export const BACK_TO_TRADES = (
   </Button>
 );
 
+/**
+ * A bottom sheet, lifted above the app shell's tab bar. The kit pins both at z-20 to the reference (which has no
+ * tab bar), and the bar comes later in the page, so on a phone it would sit over the sheet's own actions. A
+ * positioned wrapper with a higher z-index puts the sheet's stacking context above the bar without touching
+ * either component. An empty wrapper while the sheet is closed takes no space.
+ */
+export function OverTabBar({ children }: { children: React.ReactNode }): React.JSX.Element {
+  return <div className="relative z-30">{children}</div>;
+}
+
 /** The confirmation every withdrawal goes through: a decision that cannot be undone asks once. */
 export function ConfirmSheet({
   open,
@@ -97,23 +107,25 @@ export function ConfirmSheet({
   children: React.ReactNode;
 }): React.JSX.Element {
   return (
-    <Sheet
-      open={open}
-      onClose={onClose}
-      title={title}
-      footer={
-        <>
-          <Button type="button" variant="danger" onClick={onConfirm} disabled={pending}>
-            {pending ? 'Working…' : confirm}
-          </Button>
-          <Button type="button" variant="secondary" onClick={onClose}>
-            Keep it
-          </Button>
-        </>
-      }
-    >
-      {children}
-    </Sheet>
+    <OverTabBar>
+      <Sheet
+        open={open}
+        onClose={onClose}
+        title={title}
+        footer={
+          <>
+            <Button type="button" variant="danger" onClick={onConfirm} disabled={pending}>
+              {pending ? 'Working…' : confirm}
+            </Button>
+            <Button type="button" variant="secondary" onClick={onClose}>
+              Keep it
+            </Button>
+          </>
+        }
+      >
+        {children}
+      </Sheet>
+    </OverTabBar>
   );
 }
 
