@@ -335,7 +335,8 @@ export const ledgerModule = defineModule({
       name: PROCESS_PAYOUT_QUEUE,
       attempts: PAYOUT_JOB_ATTEMPTS,
       backoffMs: PAYOUT_JOB_BACKOFF_MS,
-      process: async (data: ProcessPayoutJob) => await processPayoutJob(dispatchDeps(), data),
+      process: async (data: ProcessPayoutJob, job, token) =>
+        await processPayoutJob(dispatchDeps(), data, job, token),
     },
   ],
   schedules: [
