@@ -557,3 +557,9 @@ VALUE` cannot work here at all (drizzle runs every pending migration in one tran
 - Next: resume F-037 on `f-037-payouts` at plan step 5 (services with concurrency tests), then review, fix and merge. Its
   migration 0048 is in flight, so pair it only with a migration-free feature, for example F-027 (deliver, inspect, release;
   Backend done, UI outstanding, web-app-ui). Still owed: the full `KOMTRU_INFRA_TESTS=1` run on `main`.
+
+## 2026-11-11 09:13 WAT — skipped: budget (5h 90%, week 24%)
+
+- Capacity: 0. 5h used (90%) + est≈29 > 90. Window resets at 10:30 WAT. In-flight F-037 (`f-037-payouts`, plan step 5)
+  is not a cheap tail, so nothing was resumed.
+- Next: resume F-037 at plan step 5, then review, fix and merge; pair only with a migration-free feature such as F-027.
