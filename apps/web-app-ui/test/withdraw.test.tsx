@@ -124,7 +124,7 @@ describe('Withdraw (AB5)', () => {
       'POST /me/payouts': () => {
         attempt += 1;
         if (attempt === 1) throw new Error('offline');
-        if (attempt === 2) throw problem('INSUFFICIENT_BALANCE');
+        if (attempt === 2) throw problem('VALIDATION_FAILED', 422);
         return payout({ status: 'REQUESTED' });
       },
     });
@@ -133,13 +133,39 @@ describe('Withdraw (AB5)', () => {
     fireEvent.click(withdrawButton());
     expect((await screen.findByRole('alert')).textContent).toContain('Nothing was sent');
     fireEvent.click(withdrawButton());
-    expect((await screen.findByRole('alert')).textContent).toContain('more than your available balance');
+    expect((await screen.findByRole('alert')).textContent).toContain('too small');
     expect(screen.getByRole('alert').textContent).not.toContain('Reworded title');
     fireEvent.click(withdrawButton());
     await waitFor(() => expect(router.push).toHaveBeenCalled());
     expect(keyOf(1)?.idempotencyKey).toBe(keyOf(0)?.idempotencyKey);
     expect(keyOf(2)?.idempotencyKey).not.toBe(keyOf(1)?.idempotencyKey);
   });
+
+  it.each([
+    ['a 503', 503, 'PAYMENT_PROVIDER_UNAVAILABLE'],
+    ['a 409', 409, 'CONFLICT'],
+  ])(
+    'keeps the same key when a retry follows %s, which may have reached the platform',
+    async (_name, status, code) => {
+      let attempt = 0;
+      answerWith(api.call, {
+        'GET /me/payouts/summary': summary(),
+        'GET /me/payout-accounts': accounts(payoutAccount()),
+        'POST /me/payouts': () => {
+          attempt += 1;
+          if (attempt === 1) throw problem(code, status);
+          return payout({ status: 'REQUESTED' });
+        },
+      });
+      renderWithApi(api.call, <Withdraw />);
+      await screen.findByDisplayValue('1,200,000');
+      fireEvent.click(withdrawButton());
+      await screen.findByRole('alert');
+      fireEvent.click(withdrawButton());
+      await waitFor(() => expect(router.push).toHaveBeenCalled());
+      expect(keyOf(1)?.idempotencyKey).toBe(keyOf(0)?.idempotencyKey);
+    },
+  );
 
   it('words a pause and a missing account, and offers the way to add one', async () => {
     answerWith(api.call, {

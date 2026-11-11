@@ -1,6 +1,6 @@
 'use client';
 
-import { ProblemError, createIdempotencyKey, type PayoutAccount } from '@komtru/api-client';
+import { createIdempotencyKey, type PayoutAccount } from '@komtru/api-client';
 import { usePayoutAccounts, usePayoutSummary, useRequestPayout } from '@komtru/api-client/react';
 import {
   ActionStack,
@@ -18,7 +18,7 @@ import {
 import { useRouter } from 'next/navigation';
 import { useRef, useState } from 'react';
 import { nairaShort } from '../trade/format';
-import { accountLabel, koboToInput, parseNairaToKobo, payoutProblem } from './format';
+import { accountLabel, isDecidedRefusal, koboToInput, parseNairaToKobo, payoutProblem } from './format';
 import { BANK_HREF, BankRow, PAYOUTS_HREF, payoutHref } from './parts';
 
 /** The reference's two quick amounts, in kobo. Offered only below the balance; "All" is the balance itself. */
@@ -125,8 +125,8 @@ function WithdrawForm({
       {
         onSuccess: (payout) => router.push(payoutHref(payout.id)),
         onError: (error) => {
-          // The platform answered, so this withdrawal is decided; the next tap is a new one.
-          if (error instanceof ProblemError) attempt.current = undefined;
+          // Only a definitive refusal ends this withdrawal; anything else may have reached the platform.
+          if (isDecidedRefusal(error)) attempt.current = undefined;
           setProblem(payoutProblem(error, 'withdraw'));
         },
       },

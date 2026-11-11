@@ -81,6 +81,17 @@ export function koboToInput(minor: string): string {
   return kobo === 0n ? whole : `${whole}.${kobo.toString().padStart(2, '0')}`;
 }
 
+/**
+ * True only when the platform has definitively refused the withdrawal, so the next tap is a new withdrawal with a
+ * new idempotency key. A 408, a 409, a 429, any 5xx and any failure without a problem (a lost answer) may mean the
+ * payout was committed or is in flight: the key is kept, so trying again replays the same withdrawal, never a second.
+ */
+export function isDecidedRefusal(error: unknown): boolean {
+  if (!(error instanceof ProblemError)) return false;
+  const { status } = error;
+  return status >= 400 && status < 500 && status !== 408 && status !== 409 && status !== 429;
+}
+
 export type PayoutAction = 'withdraw' | 'schedule' | 'add-account' | 'default-account' | 'remove-account';
 
 const FALLBACK: Record<PayoutAction, string> = {

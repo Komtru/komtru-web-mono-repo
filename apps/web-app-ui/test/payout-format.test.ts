@@ -2,6 +2,7 @@ import { ProblemError } from '@komtru/api-client';
 import { describe, expect, it } from 'vitest';
 import {
   MODE_COPY,
+  isDecidedRefusal,
   accountLabel,
   bankBadge,
   koboToInput,
@@ -91,5 +92,15 @@ describe('payout wording', () => {
     expect(payoutProblem(problem('PAYMENT_PROVIDER_UNAVAILABLE', 503), 'add-account')).toMatch(/right now/);
     expect(payoutProblem(new Error('offline'), 'withdraw')).toMatch(/Nothing was sent/);
     expect(payoutProblem(problem('PAYOUT_HELD'), 'withdraw')).not.toContain('Title copy');
+  });
+
+  it('ends a withdrawal only on a definitive refusal, never on one that may have reached the platform', () => {
+    expect(isDecidedRefusal(problem('VALIDATION_FAILED', 422))).toBe(true);
+    expect(isDecidedRefusal(problem('NOT_FOUND', 404))).toBe(true);
+    expect(isDecidedRefusal(problem('VALIDATION_FAILED', 400))).toBe(true);
+    for (const status of [408, 409, 429, 500, 502, 503]) {
+      expect(isDecidedRefusal(problem('ANY', status))).toBe(false);
+    }
+    expect(isDecidedRefusal(new Error('offline'))).toBe(false);
   });
 });
