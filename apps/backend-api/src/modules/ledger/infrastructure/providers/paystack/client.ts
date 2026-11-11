@@ -250,6 +250,11 @@ export const initializeCharge = async (
   };
 };
 
+const mentionsUnresolvable = (body: unknown): boolean => {
+  const message = (body as { message?: unknown } | null)?.message;
+  return typeof message === 'string' && /could\s+not\s+resolve\s+account/i.test(message);
+};
+
 const mentionsNotFound = (body: unknown): boolean => {
   const message = (body as { message?: unknown } | null)?.message;
   return typeof message === 'string' && /not\s*found/i.test(message);
@@ -331,11 +336,11 @@ export const resolveAccountName = async (
       // logging — which is why it goes here rather than into the path.
       path: `/bank/resolve?${query.toString()}`,
       idempotent: true,
-      // Paystack refuses an account it cannot find with a 422 (sometimes a 400, or `status: false` on
-      // a 200). That is the answer about the account, and the payout-account job marks it FAILED on
-      // it; a 5xx or a timeout is still an outage and is retried.
-      recognise: (status) =>
-        status === 400 || status === 422 || status === 200
+      // Only Paystack's "could not resolve account name" is a verdict on the account, and the job marks
+      // it FAILED. Every other refusal — a bad key, an unknown bank code, a bare `status: false` — is
+      // not about the account, so it stays an ApiError and the queue retries it.
+      recognise: (status, body) =>
+        (status === 400 || status === 422 || status === 200) && mentionsUnresolvable(body)
           ? new AccountNotResolvableError(bankCode)
           : undefined,
     },

@@ -162,29 +162,37 @@ describe('the paystack client', () => {
   });
 
   it.each([
-    [
-      'a 422',
-      422,
-      { status: false, message: 'Could not resolve account name. Check parameters or try again.' },
-    ],
-    ['a 400', 400, { status: false, message: 'Invalid account number' }],
-    ['a refusal on a 200', 200, { status: false, message: 'Could not resolve account name' }],
-  ])(
-    'reads %s from bank resolve as an account that cannot be resolved, not an outage',
-    async (_n, code, body) => {
-      const options = await serving((_path, res) => json(res, code, body));
-      await expect(
-        createPaystackAdapter(options).resolveAccountName('0123456789', '044'),
-      ).rejects.toBeInstanceOf(AccountNotResolvableError);
-    },
-  );
-
-  it('still reads a provider outage on bank resolve as an outage', async () => {
-    const options = await serving((_path, res) => json(res, 500, { status: false, message: 'boom' }));
+    ['a 422', 422],
+    ['a 400', 400],
+    ['a refusal on a 200', 200],
+  ])('reads "could not resolve account name" on %s as an unresolvable account', async (_n, code) => {
+    const options = await serving((_path, res) =>
+      json(res, code, {
+        status: false,
+        message: 'Could not resolve account name. Check parameters or try again.',
+      }),
+    );
     await expect(
       createPaystackAdapter(options).resolveAccountName('0123456789', '044'),
-    ).rejects.toBeInstanceOf(ApiError);
+    ).rejects.toBeInstanceOf(AccountNotResolvableError);
   });
+
+  it.each([
+    ['any other 422', 422, { status: false, message: 'Unknown bank code' }],
+    ['any other 400', 400, { status: false, message: 'Invalid key' }],
+    ['a bare refusal on a 200', 200, { status: false }],
+    ['a 500', 500, { status: false, message: 'boom' }],
+  ])(
+    'reads %s on bank resolve as a failure to retry, not a verdict on the account',
+    async (_n, code, body) => {
+      const options = await serving((_path, res) => json(res, code, body));
+      const error = await createPaystackAdapter(options)
+        .resolveAccountName('0123456789', '044')
+        .catch((e: unknown) => e);
+      expect(error).toBeInstanceOf(ApiError);
+      expect(error).not.toBeInstanceOf(AccountNotResolvableError);
+    },
+  );
 
   it('creates a nuban transfer recipient from the resolved name', async () => {
     const options = await serving((_path, res) => json(res, 200, ok({ recipient_code: 'RCP_1' })));
