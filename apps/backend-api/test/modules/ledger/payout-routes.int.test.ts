@@ -32,6 +32,13 @@ const crypto = { encryption: createEncryption(config), hasher: createHmacHasher(
 const fee = () => ({ version: 'test-fee-schedule', currency: 'NGN', amountMinor: 0n });
 const BANKS = [{ name: 'Guaranty Trust Bank', code: '058' }];
 
+interface Page {
+  items: { id: string }[];
+  nextCursor: string | null;
+}
+const page = (res: { body: unknown }): Page => res.body as Page;
+const idOf = (res: { body: unknown }): string => (res.body as { id: string }).id;
+
 describe.runIf(infraEnabled)('the payout routes (T-073)', () => {
   const t = useTestDatabase();
 
@@ -118,10 +125,10 @@ describe.runIf(infraEnabled)('the payout routes (T-073)', () => {
     expect(res.status).toBe(202);
     expect(res.body).toMatchObject({ status: 'PENDING_VERIFICATION', accountNumberMasked: '******5567' });
     expect(JSON.stringify(res.body)).not.toContain('0123455567');
-    expect(enqueueVerify).toHaveBeenCalledWith(res.body.id);
+    expect(enqueueVerify).toHaveBeenCalledWith(idOf(res));
 
     const list = await request(app).get('/v1/me/payout-accounts');
-    expect(list.body.accounts).toHaveLength(1);
+    expect((list.body as { accounts: unknown[] }).accounts).toHaveLength(1);
   });
 
   it('refuses an automatic mode without a verified account with the code AB6 branches on', async () => {
@@ -155,17 +162,18 @@ describe.runIf(infraEnabled)('the payout routes (T-073)', () => {
       const res = await request(app).post('/v1/me/payouts').send({ amountMinor: amount });
       expect(res.status).toBe(201);
       expect(res.body).toMatchObject({ status: 'REQUESTED', amountMinor: amount, trigger: 'MANUAL' });
-      ids.push(res.body.id as string);
+      ids.push(idOf(res));
     }
 
-    const first = await request(app).get('/v1/me/payouts?limit=2');
-    expect(first.status).toBe(200);
-    expect(first.body.items).toHaveLength(2);
-    expect(first.body.nextCursor).toEqual(expect.any(String));
-    const second = await request(app).get(`/v1/me/payouts?limit=2&cursor=${String(first.body.nextCursor)}`);
-    expect(second.body.items).toHaveLength(1);
-    expect(second.body.nextCursor).toBeNull();
-    const seen = [...first.body.items, ...second.body.items].map((p: { id: string }) => p.id);
+    const firstRes = await request(app).get('/v1/me/payouts?limit=2');
+    expect(firstRes.status).toBe(200);
+    const first = page(firstRes);
+    expect(first.items).toHaveLength(2);
+    expect(first.nextCursor).toEqual(expect.any(String));
+    const second = page(await request(app).get(`/v1/me/payouts?limit=2&cursor=${String(first.nextCursor)}`));
+    expect(second.items).toHaveLength(1);
+    expect(second.nextCursor).toBeNull();
+    const seen = [...first.items, ...second.items].map((p) => p.id);
     expect(seen.sort()).toEqual([...ids].sort());
 
     const receipt = await request(app).get(`/v1/me/payouts/${ids[0]!}`);
@@ -185,6 +193,6 @@ describe.runIf(infraEnabled)('the payout routes (T-073)', () => {
     // Somebody else's payout is not found, not forbidden.
     const other = await seller();
     expect((await request(other.app).get(`/v1/me/payouts/${ids[0]!}`)).status).toBe(404);
-    expect((await request(other.app).get('/v1/me/payouts')).body.items).toEqual([]);
+    expect(page(await request(other.app).get('/v1/me/payouts')).items).toEqual([]);
   });
 });
