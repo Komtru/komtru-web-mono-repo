@@ -67,3 +67,20 @@ export const tradeFundingReviewRequiredEvent = defineEvent(
     expectedAmountMinor: z.string().nullable(),
   }),
 );
+
+/**
+ * T-066: the ledger has decided a refund and posted it (`paymentEscrowRefundedEvent`, T-075), so a FUNDED
+ * trade moves `FUNDED -> CANCELLED_REFUNDED` with `reason` as its cancellation reason. Declared here for the
+ * same reason as the two above. A PARTIAL refund is a dispute outcome and moves nothing here.
+ */
+export const ledgerEscrowRefundedEvent = defineEvent(
+  'ledger.payment.escrow_refunded',
+  1,
+  z.object({
+    tradeId: z.uuid(),
+    refundId: z.uuid(),
+    journalEntryId: z.uuid(),
+    reason: z.string().min(1),
+    scope: z.enum(['FULL', 'PARTIAL']),
+  }),
+);
