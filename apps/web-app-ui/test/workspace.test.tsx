@@ -189,7 +189,11 @@ describe('funds protected (CWT-02)', () => {
     expect(within(money).getByText('Your payout').nextElementSibling?.textContent).toContain(
       'held, not yet released',
     );
-    expect(screen.getByText("Marking the item shipped isn't in the app yet.")).toBeTruthy();
+    // Shipping is built (F-026): the seller is led to it instead of told it is missing.
+    expect(screen.queryByText("Marking the item shipped isn't in the app yet.")).toBeNull();
+    expect(screen.getByRole('link', { name: 'Ship this order' }).getAttribute('href')).toBe(
+      `/trade/${id(1)}/ship`,
+    );
   });
 
   it('shows the buyer what they paid and when the seller must ship', async () => {
@@ -202,12 +206,21 @@ describe('funds protected (CWT-02)', () => {
     expect(screen.queryByText("Marking the item shipped isn't in the app yet.")).toBeNull();
   });
 
-  it.each(['BUYER', 'SELLER'] as const)('offers no ship, fund or pay control to the %s', async (role) => {
-    serve(workspaceTrade('FUNDED', role));
+  it('offers the buyer no ship, fund or pay control', async () => {
+    serve(workspaceTrade('FUNDED', 'BUYER'));
     show();
     await screen.findByText('Funds protected');
     expect(screen.queryByRole('button', { name: /ship|dispatch|fund|pay/i })).toBeNull();
     expect(screen.queryByRole('link', { name: /ship|dispatch|fund|pay/i })).toBeNull();
+  });
+
+  it('offers the seller shipping only, and no fund or pay control', async () => {
+    serve(workspaceTrade('FUNDED', 'SELLER'));
+    show();
+    await screen.findByText('Funds protected');
+    expect(screen.getByRole('link', { name: 'Ship this order' })).toBeTruthy();
+    expect(screen.queryByRole('link', { name: /fund|pay/i })).toBeNull();
+    expect(screen.queryByRole('button', { name: /fund|pay/i })).toBeNull();
   });
 
   it('says the deadline could not be loaded and lets the person try again, without losing the rest', async () => {

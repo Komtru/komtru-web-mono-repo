@@ -81,7 +81,6 @@ export function stateCopy(status: WorkspaceStatus, role: TradeRole, ctx: CopyCon
             },
         deadlineLabel: buyer ? 'The seller ships by' : 'Ship by',
         payoutHeld: 'held, not yet released',
-        ...(buyer ? {} : { seam: notYet('Marking the item shipped') }),
       };
     case 'SHIPPED':
       return {

@@ -4,7 +4,7 @@ import { useDeliveryDeadline } from '@komtru/api-client/react';
 import { ActionStack, Button, CodeCard, SectionLabel, StatusHero, VersionTimeline } from '@komtru/ui-kit';
 import { BACK_TO_TRADES, ItemSummary, versionSteps } from '../../parts';
 import { stateCopy } from '../../workspace-copy';
-import { fundHref } from '../../workspace-state';
+import { fundHref, shipHref } from '../../workspace-state';
 import {
   BannerView,
   Deadline,
@@ -63,7 +63,13 @@ export function FundsProtected({ trade, role }: BodyProps): React.JSX.Element {
       />
       <MoneyRows trade={trade} role={role} held={copy.payoutHeld ?? ''} />
       <Fulfilment trade={trade} />
-      {/* SEAM(F-026): the seller's "Prepare & dispatch" action goes here when shipping exists. */}
+      {role === 'SELLER' && (
+        <ActionStack>
+          <Button asChild>
+            <a href={shipHref(trade.id)}>Ship this order</a>
+          </Button>
+        </ActionStack>
+      )}
       {copy.seam !== undefined && <NotInTheAppYet>{copy.seam}</NotInTheAppYet>}
       <FurtherViews trade={trade} />
     </>
