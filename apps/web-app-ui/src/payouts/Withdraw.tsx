@@ -43,7 +43,8 @@ export function Withdraw(): React.JSX.Element {
       </Frame>
     );
   }
-  if (summary.isError || accounts.isError) {
+  // Only when there is nothing to show: a failed refetch (after a withdrawal, say) keeps the form and its key.
+  if (summary.data === undefined || accounts.data === undefined) {
     return (
       <LoadFailed
         title="Couldn’t load your balance"

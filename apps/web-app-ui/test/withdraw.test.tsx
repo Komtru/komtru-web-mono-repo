@@ -167,6 +167,34 @@ describe('Withdraw (AB5)', () => {
     },
   );
 
+  it('keeps the form and its key when the balance fails to refresh after a withdrawal that may have gone through', async () => {
+    let reads = 0;
+    let posts = 0;
+    answerWith(api.call, {
+      'GET /me/payouts/summary': () => {
+        reads += 1;
+        if (reads > 1) throw new Error('offline');
+        return summary();
+      },
+      'GET /me/payout-accounts': accounts(payoutAccount()),
+      'POST /me/payouts': () => {
+        posts += 1;
+        if (posts === 1) throw problem('PAYMENT_PROVIDER_UNAVAILABLE', 503);
+        return payout({ status: 'REQUESTED' });
+      },
+    });
+    renderWithApi(api.call, <Withdraw />);
+    await screen.findByDisplayValue('1,200,000');
+    fireEvent.click(withdrawButton());
+    await screen.findByRole('alert');
+    await waitFor(() => expect(reads).toBeGreaterThan(1));
+    expect(screen.queryByText('Couldn’t load your balance')).toBeNull();
+    expect(screen.getByDisplayValue('1,200,000')).toBeTruthy();
+    fireEvent.click(withdrawButton());
+    await waitFor(() => expect(router.push).toHaveBeenCalled());
+    expect(keyOf(1)?.idempotencyKey).toBe(keyOf(0)?.idempotencyKey);
+  });
+
   it('words a pause and a missing account, and offers the way to add one', async () => {
     answerWith(api.call, {
       'GET /me/payouts/summary': summary({ held: true }),

@@ -45,7 +45,8 @@ export function PayoutReceipt({ id }: { id: string }): React.JSX.Element {
       </Frame>
     );
   }
-  if (query.isError) {
+  // A failed poll keeps the payout already on screen.
+  if (query.data === undefined) {
     const missing = isProblem(query.error, 'NOT_FOUND');
     return (
       <LoadFailed

@@ -40,7 +40,8 @@ export function Payouts(): React.JSX.Element {
       </ScreenColumn>
     );
   }
-  if (summary.isError) {
+  // A failed refetch keeps what was already read on screen; the error stands in only when there is nothing.
+  if (summary.data === undefined) {
     return (
       <LoadFailed
         title="Couldn’t load your payouts"

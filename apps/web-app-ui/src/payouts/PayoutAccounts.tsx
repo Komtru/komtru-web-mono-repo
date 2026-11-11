@@ -41,7 +41,7 @@ export function PayoutAccounts(): React.JSX.Element {
         <div role="status" aria-label="Loading your bank accounts" aria-busy="true">
           <Skeleton width="full" lines={2} />
         </div>
-      ) : accounts.isError ? (
+      ) : accounts.data === undefined ? (
         <LoadFailed
           title="Couldn’t load your bank accounts"
           body="Check your connection and try again."
@@ -192,7 +192,7 @@ function AddAccount({ first }: { first: boolean }): React.JSX.Element {
   return (
     <section aria-label="Add a bank account">
       {!first && <SectionLabel>Add a bank account</SectionLabel>}
-      {banks.isError ? (
+      {banks.isError && banks.data === undefined ? (
         <RiskBanner title="The list of banks didn’t load">
           <Button type="button" variant="ghost" onClick={() => void banks.refetch()}>
             Try again
