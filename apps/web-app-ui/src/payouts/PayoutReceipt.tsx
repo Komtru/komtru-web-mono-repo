@@ -17,7 +17,15 @@ import {
   TermRow,
   WarnBanner,
 } from '@komtru/ui-kit';
-import { isProblem, itemTitle, naira, partyName, problemMessage, whenLabel } from '../trade/format';
+import {
+  isProblem,
+  itemTitle,
+  naira,
+  nairaShort,
+  partyName,
+  problemMessage,
+  whenLabel,
+} from '../trade/format';
 import { tabHref } from '../trade/workspace-state';
 import { accountLabel, payoutStatus } from './format';
 import { BANK_HREF, BankRow, PAYOUTS_HREF, WITHDRAW_HREF } from './parts';
@@ -157,7 +165,7 @@ function Failed({ payout }: { payout: Payout }): React.JSX.Element {
         title={returned ? 'This payout came back' : 'This withdrawal didn’t go through'}
         className="pt-[40px]"
       >
-        {naira(payout.amountMinor)} is back in your available balance — nothing was lost, and you can try
+        {nairaShort(payout.amountMinor)} is back in your available balance — nothing was lost, and you can try
         again.
       </StatusHero>
       {payout.destination !== null && (

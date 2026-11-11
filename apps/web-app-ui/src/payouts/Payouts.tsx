@@ -124,11 +124,14 @@ function PaidHow({ summary }: { summary: PayoutSummary }): React.JSX.Element {
           <BankRow
             bankName={account.bankName}
             title={accountLabel(account)}
-            sub={`${account.accountName ?? 'Verified by your bank'} · Paid ${MODE_COPY[summary.mode].label.toLowerCase()}`}
+            sub={account.accountName ?? 'Verified by your bank'}
             trailing={<span className="text-[11px] font-semibold text-info-on-soft">Change</span>}
           />
         </a>
       )}
+      <p className="mb-0 mt-[2px] text-[11px] text-slate">
+        Payout schedule: <b className="font-semibold text-midnight-text">{MODE_COPY[summary.mode].label}</b>
+      </p>
     </section>
   );
 }

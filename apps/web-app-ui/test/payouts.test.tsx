@@ -117,7 +117,7 @@ describe('Payouts (Seller-6)', () => {
     fireEvent.click(within(sheet).getByRole('button', { name: 'Save' }));
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
     expect(callsTo(api.call, 'PUT', '/me/payout-preferences')[0]?.body).toEqual({ mode: 'AUTO_WEEKLY' });
-    expect(await screen.findByText(/Paid weekly/)).toBeTruthy();
+    expect(await screen.findByText('Weekly')).toBeTruthy();
   });
 
   it('says an automatic mode needs a verified account, with the way to add one', async () => {

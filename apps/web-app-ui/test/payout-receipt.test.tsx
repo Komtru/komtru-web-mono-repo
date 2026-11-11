@@ -120,7 +120,7 @@ describe('Withdrawal failed (WF1)', () => {
     });
     const { container } = renderWithApi(api.call, <PayoutReceipt id={PAYOUT_ID} />);
     expect(await screen.findByRole('heading', { name: 'This withdrawal didn’t go through' })).toBeTruthy();
-    expect(screen.getByText(/₦1,200,000.00 is back in your available balance/)).toBeTruthy();
+    expect(screen.getByText(/₦1,200,000 is back in your available balance/)).toBeTruthy();
     expect(screen.getByText('Bank declined — account may be inactive or frozen')).toBeTruthy();
     expect(screen.getByRole('link', { name: 'Try again' }).getAttribute('href')).toBe(
       '/account/payouts/withdraw',
