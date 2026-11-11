@@ -11,6 +11,7 @@ export * from './auth/session.js';
 export * from './cases.js';
 export * from './client.js';
 export * from './contracts.js';
+export * from './devices.js';
 export * from './entry.js';
 export * from './files.js';
 export * from './fulfilment.js';
