@@ -1,7 +1,7 @@
 // The ledger's domain events (design §4.3). Published through the outbox inside the transaction
 // that wrote the journal entry, so the posting and the announcement of it either both happen or
 // neither does — a consumer that sees this event can rely on the entry being readable.
-import { defineEvent, koboSchema } from '@komtru/shared-types';
+import { defineEvent, koboSchema, REFUND_FEE_TREATMENTS, REFUND_SCOPES } from '@komtru/shared-types';
 import { z } from 'zod';
 import { ENTRY_DIRECTIONS, LEDGER_ACCOUNT_TYPES, PAYMENT_PROVIDERS } from './accounts.js';
 
@@ -196,5 +196,59 @@ export const payoutAutoSkippedEvent = defineEvent(
     /** The sweep key, or the release journal an immediate payout would have paid out. */
     key: z.string().min(1),
     amountMinor: amountMinorSchema,
+  }),
+);
+
+/**
+ * A refund was decided (M8 §9, T-075): the decision journal has posted and the refund row is written,
+ * in the same transaction as this event. M7 consumes it to move the trade `FUNDED -> CANCELLED_REFUNDED`
+ * with `reason` as the cancellation reason; the ledger's own dispatch subscriber queues the provider
+ * call on it. The money is on its way, not yet back: `ledger.refund.completed` says when it is.
+ */
+export const paymentEscrowRefundedEvent = defineEvent(
+  'ledger.payment.escrow_refunded',
+  1,
+  z.object({
+    tradeId: z.uuid(),
+    refundId: z.uuid(),
+    journalEntryId: z.uuid(),
+    buyerUserId: z.uuid(),
+    /** `trades.refund.requested`'s reason: DELIVERY_OVERDUE, SELLER_CANNOT_FULFIL, MUTUAL_AGREEMENT. */
+    reason: z.string().min(1),
+    scope: z.enum(REFUND_SCOPES),
+    currency: z.string(),
+    /** Out of the trade's escrow liability. */
+    itemAmountMinor: amountMinorSchema,
+    /** The protection fee handed back with it; zero when retained or recognised. */
+    feeAmountMinor: amountMinorSchema,
+    /** What the buyer gets back: item plus fee. */
+    amountMinor: amountMinorSchema,
+    buyerProtectionFeeTreatment: z.enum(REFUND_FEE_TREATMENTS),
+    refundedAt: z.iso.datetime(),
+  }),
+);
+
+export const REFUND_OUTCOMES = ['PROCESSED', 'FAILED', 'NEEDS_REVIEW'] as const;
+
+/**
+ * A refund reached an outcome on the provider's own record of it (T-075). PROCESSED: the money is back
+ * on the buyer's payment method. FAILED: it came back to our balance and the failure journal has
+ * returned it to the trade's liabilities, in this transaction. NEEDS_REVIEW: nothing posted; ops
+ * decides (T-076). Notifications and CR3/SC2 key on it.
+ */
+export const refundCompletedEvent = defineEvent(
+  'ledger.refund.completed',
+  1,
+  z.object({
+    refundId: z.uuid(),
+    tradeId: z.uuid(),
+    buyerUserId: z.uuid(),
+    outcome: z.enum(REFUND_OUTCOMES),
+    currency: z.string(),
+    amountMinor: amountMinorSchema,
+    /** The failure journal for FAILED; null otherwise. */
+    journalEntryId: z.uuid().nullable(),
+    reason: z.string().nullable(),
+    completedAt: z.iso.datetime(),
   }),
 );

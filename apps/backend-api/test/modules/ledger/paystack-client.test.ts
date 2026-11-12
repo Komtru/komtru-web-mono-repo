@@ -11,10 +11,12 @@ import {
   listBanks,
   MAX_BANK_PAGES,
   verifyCharge,
+  verifyRefund,
   verifyTransfer,
   type PaystackClientOptions,
 } from '../../../src/modules/ledger/infrastructure/providers/paystack/client.js';
 import { ApiError } from '../../../src/platform/errors.js';
+import { RefundNotFoundError } from '../../../src/modules/ledger/domain/refunds.js';
 import { createLogger } from '../../../src/platform/logger.js';
 import { loadConfig } from '../../../src/config/env.js';
 import { FORBIDDEN } from '../../support/forbidden-primitives.js';
@@ -334,6 +336,40 @@ describe('the paystack client', () => {
     const error = await verifyTransfer(other, 'payout-x').catch((e: unknown) => e);
     expect(error).toBeInstanceOf(ApiError);
     expect(error).not.toBeInstanceOf(TransferNotFoundError);
+  });
+
+  it('fetches a refund by its provider id, reading the amount, currency and status (T-075)', async () => {
+    const options = await serving((_path, res) =>
+      json(
+        res,
+        200,
+        ok({ id: 3018284, transaction: 1641, amount: 45_675_000, currency: 'NGN', status: 'processed' }),
+      ),
+    );
+    await expect(verifyRefund(options, '3018284')).resolves.toEqual({
+      providerRefundId: '3018284',
+      status: 'processed',
+      amountMinor: 45_675_000,
+      currency: 'NGN',
+    });
+    expect(stub!.hits[0]!.path).toBe('/refund/3018284');
+    expect(stub!.hits[0]!.method).toBe('GET');
+  });
+
+  it('reports a refund Paystack has no record of as RefundNotFoundError', async () => {
+    const options = await serving((_path, res) =>
+      json(res, 404, { status: false, message: 'Refund not found' }),
+    );
+    await expect(verifyRefund(options, '1')).rejects.toBeInstanceOf(RefundNotFoundError);
+  });
+
+  it('refuses a refund response with no amount, rather than resolving from it', async () => {
+    const options = await serving((_path, res) =>
+      json(res, 200, ok({ id: 1, currency: 'NGN', status: 'processed' })),
+    );
+    const error = await verifyRefund(options, '1').catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(ApiError);
+    expect((error as ApiError).detail).toContain('amount');
   });
 
   it('refuses a transfer verify response with no amount, rather than settling from it', async () => {

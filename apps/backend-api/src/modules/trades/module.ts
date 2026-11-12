@@ -18,6 +18,7 @@ import type { Logger } from '../../platform/logger.js';
 import { createConfigAccessor } from '../config/index.js';
 import type { SocketGateway } from '../socket/index.js';
 import { tradeStateChangedEvent } from './domain/events.js';
+import { cancellationRoutes } from './http/cancellation.routes.js';
 import { fulfilmentRoutes } from './http/fulfilment.routes.js';
 import { inspectionRoutes } from './http/inspection.routes.js';
 import { tradeRoutes } from './http/trade.routes.js';
@@ -25,7 +26,12 @@ import { deliveryDeadlineJob } from './jobs/deliveryDeadline.job.js';
 import { graceDeadlineJob } from './jobs/graceDeadline.job.js';
 import { inspectionDeadlineJob } from './jobs/inspectionDeadline.job.js';
 import { inspectionReminderJob } from './jobs/inspectionReminder.job.js';
-import { ledgerEscrowFundedEvent, ledgerEscrowReleasedEvent } from './domain/ledgerEvents.js';
+import {
+  ledgerEscrowFundedEvent,
+  ledgerEscrowRefundedEvent,
+  ledgerEscrowReleasedEvent,
+} from './domain/ledgerEvents.js';
+import { lapsePendingCancellation, refundTrade } from './services/cancellation.service.js';
 import { openDeliveryDeadline } from './services/deadline.service.js';
 import { fundTrade } from './services/funding.service.js';
 import { settleTrade } from './services/inspectionDeadline.service.js';
@@ -129,6 +135,7 @@ export function createTradesModule(options: TradesModuleOptions): KomtruModule {
     routes: [
       ...tradeRoutes(() => deps),
       ...fulfilmentRoutes(() => fulfilment),
+      ...cancellationRoutes(() => fulfilment),
       ...inspectionRoutes(() => inspection),
     ],
     schedules: [
@@ -211,6 +218,32 @@ export function createTradesModule(options: TradesModuleOptions): KomtruModule {
           if (outcome === 'IGNORED' || outcome === 'UNKNOWN_TRADE') {
             ctx.logger.warn({ tradeId: payload.tradeId, outcome }, 'trades: escrow release not applied');
           }
+        },
+      });
+      // T-066: the ledger has decided the buyer's refund: FUNDED -> CANCELLED_REFUNDED, in the event's own
+      // transaction. A trade that is no longer FUNDED is reported, not retried: a retry cannot fix it, and
+      // the money is already accounted for in the ledger, which is where T-076 finds it.
+      ctx.events.subscribe({
+        name: 'trades.on-escrow-refunded',
+        event: ledgerEscrowRefundedEvent,
+        handler: async ({ payload }, tx) => {
+          const outcome = await refundTrade(tx, payload);
+          if (outcome === 'IGNORED' || outcome === 'UNKNOWN_TRADE') {
+            ctx.logger.warn(
+              { tradeId: payload.tradeId, refundId: payload.refundId, scope: payload.scope, outcome },
+              'trades: escrow refund not applied to the trade',
+            );
+          }
+        },
+      });
+      // T-066: a buyer's cancellation request still waiting when the trade leaves FUNDED some other way
+      // (shipped, or refunded for an overdue delivery) can no longer be answered.
+      ctx.events.subscribe({
+        name: 'trades.lapse-cancellation-request',
+        event: tradeStateChangedEvent,
+        handler: async ({ payload }, tx) => {
+          if (payload.from !== 'FUNDED') return;
+          await lapsePendingCancellation(tx, payload.tradeId);
         },
       });
       // T-068: who may join `trade:<code>`, and a push for every change a workspace tab shows. The

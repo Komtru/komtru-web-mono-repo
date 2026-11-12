@@ -10,6 +10,7 @@ export * from './payments.js';
 export * from './payouts.js';
 export * from './query.js';
 export * from './realtime.js';
+export * from './refunds.js';
 export * from './tradeLive.js';
 export * from './trades.js';
 export type { RealtimeConnection, SocketLike } from '../realtime/connection.js';

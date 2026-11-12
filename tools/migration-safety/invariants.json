@@ -112,6 +112,26 @@
       "definition": "CREATE UNIQUE INDEX payouts_provider_transfer ON ledger.payouts USING btree (provider, provider_transfer_id) WHERE (provider_transfer_id IS NOT NULL)"
     },
     {
+      "table": "ledger.refunds",
+      "name": "refunds_one_live_full",
+      "definition": "CREATE UNIQUE INDEX refunds_one_live_full ON ledger.refunds USING btree (trade_id) WHERE ((scope = 'FULL'::ledger.refund_scope) AND (status <> 'FAILED'::ledger.refund_status))"
+    },
+    {
+      "table": "ledger.refunds",
+      "name": "refunds_provider_refund",
+      "definition": "CREATE UNIQUE INDEX refunds_provider_refund ON ledger.refunds USING btree (provider, provider_refund_id) WHERE (provider_refund_id IS NOT NULL)"
+    },
+    {
+      "table": "trade.cancellation_requests",
+      "name": "cancellation_request_one_approved",
+      "definition": "CREATE UNIQUE INDEX cancellation_request_one_approved ON trade.cancellation_requests USING btree (trade_id) WHERE (status = 'APPROVED'::trade.cancellation_request_status)"
+    },
+    {
+      "table": "trade.cancellation_requests",
+      "name": "cancellation_request_one_pending",
+      "definition": "CREATE UNIQUE INDEX cancellation_request_one_pending ON trade.cancellation_requests USING btree (trade_id) WHERE (status = 'PENDING'::trade.cancellation_request_status)"
+    },
+    {
       "table": "trade.delivery_extension_requests",
       "name": "delivery_extension_one_pending",
       "definition": "CREATE UNIQUE INDEX delivery_extension_one_pending ON trade.delivery_extension_requests USING btree (deadline_id) WHERE (status = 'PENDING'::trade.delivery_extension_status)"
@@ -454,9 +474,59 @@
       "definition": "CHECK ((((trigger = 'AUTO_IMMEDIATE'::ledger.payout_trigger) = (source_journal_entry_id IS NOT NULL)) AND ((trigger = 'AUTO_SWEEP'::ledger.payout_trigger) = (sweep_key IS NOT NULL))))"
     },
     {
+      "table": "ledger.refunds",
+      "name": "refunds_amounts",
+      "definition": "CHECK (((item_amount_minor >= 0) AND (fee_amount_minor >= 0) AND (amount_minor > 0) AND (amount_minor = (item_amount_minor + fee_amount_minor))))"
+    },
+    {
+      "table": "ledger.refunds",
+      "name": "refunds_currency",
+      "definition": "CHECK ((currency ~ '^[A-Z]{3}$'::text))"
+    },
+    {
+      "table": "ledger.refunds",
+      "name": "refunds_failed_posted",
+      "definition": "CHECK (((status = 'FAILED'::ledger.refund_status) = ((failed_journal_id IS NOT NULL) AND (failed_at IS NOT NULL))))"
+    },
+    {
+      "table": "ledger.refunds",
+      "name": "refunds_fee_treatment",
+      "definition": "CHECK (((fee_treatment = ANY (ARRAY['REFUND'::text, 'RECOGNISE'::text, 'RETAIN'::text])) AND ((fee_treatment = 'REFUND'::text) OR (fee_amount_minor = 0)) AND ((scope = 'FULL'::ledger.refund_scope) OR (fee_treatment = 'RETAIN'::text))))"
+    },
+    {
+      "table": "ledger.refunds",
+      "name": "refunds_processed",
+      "definition": "CHECK (((status = 'PROCESSED'::ledger.refund_status) = (completed_at IS NOT NULL)))"
+    },
+    {
+      "table": "ledger.refunds",
+      "name": "refunds_reason",
+      "definition": "CHECK (((length(reason) >= 1) AND (length(reason) <= 64)))"
+    },
+    {
+      "table": "ledger.refunds",
+      "name": "refunds_reference_shape",
+      "definition": "CHECK ((reference = ('refund-'::text || (id)::text)))"
+    },
+    {
       "table": "notify.notifications",
       "name": "notifications_suppressed_has_reason",
       "definition": "CHECK (((status <> 'SUPPRESSED'::notify.notification_status) OR (failed_reason IS NOT NULL)))"
+    },
+    {
+      "table": "trade.cancellation_requests",
+      "name": "cancellation_request_answered",
+      "definition": "CHECK (((status = ANY (ARRAY['APPROVED'::trade.cancellation_request_status, 'DECLINED'::trade.cancellation_request_status])) = ((responded_at IS NOT NULL) AND (responded_by_user_id IS NOT NULL))))"
+    },
+    {
+      "table": "trade.cancellation_requests",
+      "name": "cancellation_request_reason_side",
+      "definition": "CHECK ((((requested_by_role = 'BUYER'::trade.trade_initiator_role) AND (reason = ANY (ARRAY['CHANGED_MIND'::trade.cancellation_request_reason, 'FOUND_CHEAPER'::trade.cancellation_request_reason, 'ORDERED_BY_MISTAKE'::trade.cancellation_request_reason]))) OR ((requested_by_role = 'SELLER'::trade.trade_initiator_role) AND (reason = ANY (ARRAY['OUT_OF_STOCK'::trade.cancellation_request_reason, 'WRONG_PRICE'::trade.cancellation_request_reason, 'CANNOT_MEET_TIMELINE'::trade.cancellation_request_reason, 'OTHER'::trade.cancellation_request_reason])))))"
+    },
+    {
+      "table": "trade.cancellation_requests",
+      "name": "cancellation_request_seller_approved",
+      "definition": "CHECK (((requested_by_role = 'BUYER'::trade.trade_initiator_role) OR (status = 'APPROVED'::trade.cancellation_request_status)))"
     },
     {
       "table": "trade.delivery_extension_requests",
@@ -746,9 +816,29 @@
       "definition": "[O] CREATE TRIGGER komtru_payout_guard BEFORE UPDATE ON ledger.payouts FOR EACH ROW EXECUTE FUNCTION ledger.guard_payout()"
     },
     {
+      "table": "ledger.refunds",
+      "name": "komtru_no_delete",
+      "definition": "[O] CREATE TRIGGER komtru_no_delete BEFORE DELETE ON ledger.refunds FOR EACH ROW EXECUTE FUNCTION ledger.reject_delete()"
+    },
+    {
+      "table": "ledger.refunds",
+      "name": "komtru_refund_guard",
+      "definition": "[O] CREATE TRIGGER komtru_refund_guard BEFORE UPDATE ON ledger.refunds FOR EACH ROW EXECUTE FUNCTION ledger.guard_refund()"
+    },
+    {
+      "table": "ledger.refunds",
+      "name": "komtru_refund_total",
+      "definition": "[O] CREATE TRIGGER komtru_refund_total BEFORE INSERT OR UPDATE OF amount_minor, status, payment_attempt_id ON ledger.refunds FOR EACH ROW EXECUTE FUNCTION ledger.guard_refund_total()"
+    },
+    {
       "table": "notify.notification_delivery_attempts",
       "name": "komtru_append_only",
       "definition": "[O] CREATE TRIGGER komtru_append_only BEFORE DELETE OR UPDATE ON notify.notification_delivery_attempts FOR EACH ROW EXECUTE FUNCTION platform.reject_mutation()"
+    },
+    {
+      "table": "trade.cancellation_requests",
+      "name": "komtru_cancellation_request_guard",
+      "definition": "[O] CREATE TRIGGER komtru_cancellation_request_guard BEFORE UPDATE ON trade.cancellation_requests FOR EACH ROW EXECUTE FUNCTION trade.guard_cancellation_request()"
     },
     {
       "table": "trade.inspection_acknowledgements",

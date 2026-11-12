@@ -8,6 +8,7 @@ import {
   ledgerModule,
   PROCESS_PAYMENT_WEBHOOK_QUEUE,
   PROCESS_PAYOUT_QUEUE,
+  PROCESS_REFUND_QUEUE,
   RESOLVE_ACCOUNT_NAME_QUEUE,
   VERIFY_PAYOUT_ACCOUNT_QUEUE,
   VERIFY_CHARGE_QUEUE,
@@ -39,6 +40,8 @@ describe('the ledger module', () => {
       'GET /me/payouts',
       'GET /me/payouts/:id',
       'POST /me/payouts',
+      'GET /trades/:id/refunds',
+      'GET /me/refunds',
     ]);
     const webhook = routes.find((r) => r.path === '/webhooks/paystack');
     expect(webhook?.scope).toBe('PUBLIC');
@@ -66,7 +69,9 @@ describe('the ledger module', () => {
       PROCESS_PAYMENT_WEBHOOK_QUEUE,
       VERIFY_PAYOUT_ACCOUNT_QUEUE,
       PROCESS_PAYOUT_QUEUE,
+      PROCESS_REFUND_QUEUE,
     ]);
+    expect(PROCESS_REFUND_QUEUE).toBe('ledger.process-refund');
     expect(PROCESS_PAYOUT_QUEUE).toBe('ledger.process-payout');
     expect(RESOLVE_ACCOUNT_NAME_QUEUE).toBe('ledger.resolve-account-name');
   });
@@ -80,6 +85,7 @@ describe('the ledger module', () => {
       'ledger.refresh-bank-list',
       'ledger.sweep-payment-webhooks',
       'ledger.sweep-payouts',
+      'ledger.sweep-refunds',
       'ledger.sweep-payouts-auto',
     ]);
     // Once a day, at 09:00 in the scheduler's zone — which is Africa/Lagos unless an operator says otherwise.

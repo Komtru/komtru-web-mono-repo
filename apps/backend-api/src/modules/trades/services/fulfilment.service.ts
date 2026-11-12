@@ -16,6 +16,7 @@ import {
 import { selfArrangedShipments, tradeDeadlines } from '../infrastructure/postgres/schema/fulfilment.js';
 import { tradeProofMedia } from '../infrastructure/postgres/schema/proof.js';
 import { applyTransition } from '../infrastructure/postgres/transitions.js';
+import { hasApprovedCancellation } from './cancellation.service.js';
 import type { FulfilmentDeps } from './fulfilmentPorts.js';
 import {
   loadTerms,
@@ -39,7 +40,8 @@ export function requireSeller(trade: TradeRow, userId: string): void {
  * X1, in one place for every shipping endpoint including T-087's and T-093's. Before FUNDED the
  * answer is the lock the screen explains ("Dispatch locked, awaiting escrow"); afterwards it is the
  * ordinary invalid transition. A trade whose delivery deadline has elapsed has a refund in flight
- * (DE4), and shipping into it would leave a parcel moving against escrow that is being returned.
+ * (DE4), and shipping into it would leave a parcel moving against escrow that is being returned. So
+ * does an approved cancellation (T-066).
  */
 export async function assertDispatchOpen(tx: Tx, trade: TradeRow): Promise<void> {
   const guard = dispatchGuard(trade.status);
@@ -74,6 +76,17 @@ export async function assertDispatchOpen(tx: Tx, trade: TradeRow): Promise<void>
       'This trade missed its delivery deadline and the buyer is being refunded, so it can no longer be shipped.',
       undefined,
       { reason: 'DELIVERY_OVERDUE' },
+    );
+  }
+  // T-066: an approved cancellation (CR2) or a seller's own (SC1) has asked for the escrow back.
+  if (await hasApprovedCancellation(tx, trade.id)) {
+    throw new ApiError(
+      409,
+      'CONFLICT',
+      'This trade has been cancelled',
+      'A cancellation was agreed and the buyer is being refunded, so it can no longer be shipped.',
+      undefined,
+      { reason: 'CANCELLATION_APPROVED' },
     );
   }
 }

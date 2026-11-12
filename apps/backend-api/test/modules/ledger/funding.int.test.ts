@@ -353,7 +353,7 @@ describe.runIf(infraEnabled)('funding a trade (T-072)', () => {
     it('never turns a confirm racing the settle into an error, and never verifies a settled charge', async () => {
       for (let round = 0; round < 5; round++) {
         // One success per trade: clear the last round's attempt (TRUNCATE fires no row trigger).
-        await t.owner().query(`TRUNCATE ledger.payment_attempts`);
+        await t.owner().query(`TRUNCATE ledger.payment_attempts CASCADE`);
         verifies = [];
         const attempt = await start();
         const [view, outcome] = await Promise.all([
