@@ -1,6 +1,6 @@
 // Reads and writes for refunds (T-075). No rule lives here: what a refund posts is
 // `domain/refunds.ts`, and migration 0049's triggers refuse an over-refund or a backwards move.
-import { and, desc, eq, inArray, isNull, lt, or } from 'drizzle-orm';
+import { and, desc, eq, inArray, isNull, lt, or, sql } from 'drizzle-orm';
 import type { Db } from '../../../../db/index.js';
 import type { Tx } from '../../../../platform/events/publish.js';
 import { paymentAttempts, type PaymentAttemptRow } from './schema/payments.js';
@@ -122,23 +122,34 @@ export async function listTradeRefunds(db: Reader, tradeId: string): Promise<Ref
     .orderBy(desc(refunds.requestedAt), desc(refunds.id));
 }
 
-/** A buyer's refunds, newest first, `limit + 1` rows from the cursor for `cursorPage`. */
+/** A refund row with `requested_at` as Postgres renders it, to the microsecond: the cursor's key. */
+export interface BuyerRefundRow {
+  refund: RefundRow;
+  requestedAtExact: string;
+}
+
+/**
+ * A buyer's refunds, newest first, `limit + 1` rows from the cursor for `cursorPage`. The cursor is the
+ * timestamp's own text, never a JavaScript Date: a Date keeps milliseconds, and a keyset that rounds
+ * skips or repeats rows written within one millisecond of each other.
+ */
 export async function listBuyerRefunds(
   db: Reader,
   buyerUserId: string,
   limit: number,
-  cursor?: { requestedAt: Date; id: string },
-): Promise<RefundRow[]> {
+  cursor?: { requestedAt: string; id: string },
+): Promise<BuyerRefundRow[]> {
+  const at = cursor ? sql`${cursor.requestedAt}::timestamptz` : undefined;
   return db
-    .select()
+    .select({ refund: refunds, requestedAtExact: sql<string>`${refunds.requestedAt}::text` })
     .from(refunds)
     .where(
       and(
         eq(refunds.buyerUserId, buyerUserId),
-        cursor
+        cursor && at
           ? or(
-              lt(refunds.requestedAt, cursor.requestedAt),
-              and(eq(refunds.requestedAt, cursor.requestedAt), lt(refunds.id, cursor.id)),
+              sql`${refunds.requestedAt} < ${at}`,
+              and(sql`${refunds.requestedAt} = ${at}`, lt(refunds.id, cursor.id)),
             )
           : undefined,
       ),

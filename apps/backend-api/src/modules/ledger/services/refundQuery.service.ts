@@ -51,7 +51,11 @@ export async function listRefundsForTrade(
   return { refunds: (await listTradeRefunds(deps.db, input.tradeId)).map(refundView) };
 }
 
-/** The caller's refunds as a buyer, newest first. */
+/** Postgres's own text for a timestamptz, as `::text` renders it; anything else is not our cursor. */
+const EXACT_TIMESTAMP = /^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}:\d{2}(\.\d{1,6})?([+-]\d{2}(:?\d{2})?|Z)$/;
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/** The caller's refunds as a buyer, newest first, keyed on (requested_at to the microsecond, id). */
 export async function listMyRefunds(
   deps: RefundQueryDeps,
   input: { userId: string; limit: number; cursor?: CursorKey },
@@ -59,8 +63,8 @@ export async function listMyRefunds(
   const at = input.cursor?.requestedAt;
   const id = input.cursor?.id;
   const cursor =
-    typeof at === 'string' && typeof id === 'string' && !Number.isNaN(Date.parse(at))
-      ? { requestedAt: new Date(at), id }
+    typeof at === 'string' && typeof id === 'string' && EXACT_TIMESTAMP.test(at) && UUID.test(id)
+      ? { requestedAt: at, id: id.toLowerCase() }
       : undefined;
   if (input.cursor && !cursor) {
     throw new ApiError(
@@ -71,8 +75,9 @@ export async function listMyRefunds(
     );
   }
   const rows = await listBuyerRefunds(deps.db, input.userId.toLowerCase(), input.limit, cursor);
-  return cursorPage(rows.map(refundView), input.limit, (view) => ({
-    requestedAt: view.requestedAt,
-    id: view.id,
+  const page = cursorPage(rows, input.limit, (row) => ({
+    requestedAt: row.requestedAtExact,
+    id: row.refund.id,
   }));
+  return { ...page, items: page.items.map((row) => refundView(row.refund)) };
 }

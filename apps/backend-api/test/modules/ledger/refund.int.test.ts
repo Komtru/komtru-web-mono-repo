@@ -21,6 +21,7 @@ import {
   listRefundsForTrade,
 } from '../../../src/modules/ledger/services/refundQuery.service.js';
 import { ApiError } from '../../../src/platform/errors.js';
+import { decodeCursor, type CursorKey } from '../../../src/platform/http/paginate.js';
 import {
   fundedTradeWithCharge,
   outboxOf,
@@ -296,6 +297,60 @@ describe.runIf(infraEnabled)('deciding a refund (T-075)', () => {
       expect((await listMyRefunds({ db: t.db() }, { userId: first.seller, limit: 20 })).items).toHaveLength(
         0,
       );
+    });
+
+    it('pages through refunds written within one millisecond without skipping or repeating one', async () => {
+      const first = await fundedTradeWithCharge(t);
+      const ids: string[] = [];
+      for (let i = 0; i < 5; i += 1) {
+        const trade = i === 0 ? first : await fundedTradeWithCharge(t, { buyer: first.buyer });
+        const result = await refund(trade);
+        if (result.outcome !== 'REFUNDED') throw new Error(result.outcome);
+        ids.push(result.refundId);
+      }
+      // Five refunds inside one millisecond, a microsecond apart: a Date-based cursor rounds every one of
+      // them to the same instant. Set by the owner with triggers off (replica role), because requested_at is frozen.
+      const client = await t.owner().connect();
+      try {
+        await client.query('BEGIN');
+        await client.query('SET LOCAL session_replication_role = replica');
+        for (const [i, id] of ids.entries()) {
+          await client.query(
+            `UPDATE ledger.refunds SET requested_at = '2026-11-12 10:00:00.123000+00'::timestamptz + $2 * interval '1 microsecond' WHERE id = $1`,
+            [id, i],
+          );
+        }
+        await client.query('COMMIT');
+      } catch (error) {
+        await client.query('ROLLBACK');
+        throw error;
+      } finally {
+        client.release();
+      }
+
+      const seen: string[] = [];
+      let cursor: CursorKey | undefined;
+      for (let pageNo = 0; pageNo < 10; pageNo += 1) {
+        const page = await listMyRefunds(
+          { db: t.db() },
+          { userId: first.buyer, limit: 2, ...(cursor ? { cursor } : {}) },
+        );
+        seen.push(...page.items.map((item) => item.id));
+        if (!page.nextCursor) break;
+        cursor = decodeCursor(page.nextCursor);
+      }
+      // Newest first: the last one written is a microsecond later than the rest.
+      expect(seen).toEqual([...ids].reverse());
+    });
+
+    it('refuses a cursor it did not issue', async () => {
+      const trade = await fundedTradeWithCharge(t);
+      const outcome = await listMyRefunds(
+        { db: t.db() },
+        { userId: trade.buyer, limit: 2, cursor: { requestedAt: 'yesterday', id: 'x' } },
+      ).catch((error: unknown) => error);
+      expect(outcome).toBeInstanceOf(ApiError);
+      expect((outcome as ApiError).status).toBe(422);
     });
   });
 });

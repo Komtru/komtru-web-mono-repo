@@ -28,11 +28,18 @@ export interface FundedTrade {
 
 export async function fundedTradeWithCharge(
   t: TestDatabase,
-  options: { status?: string; item?: bigint; fee?: bigint; refundableOnFullRefund?: boolean } = {},
+  options: {
+    status?: string;
+    item?: bigint;
+    fee?: bigint;
+    refundableOnFullRefund?: boolean;
+    /** An existing buyer, for tests that need several trades by one person. */
+    buyer?: string;
+  } = {},
 ): Promise<FundedTrade> {
   const item = options.item ?? REFUND_ITEM;
   const fee = options.fee ?? REFUND_FEE;
-  const buyer = await insertUser(t.app(), { verification_level: 'CONTACT_VERIFIED' });
+  const buyer = options.buyer ?? (await insertUser(t.app(), { verification_level: 'CONTACT_VERIFIED' }));
   const seller = await insertUser(t.app(), { verification_level: 'IDENTITY_VERIFIED' });
   const tradeId = await insertTrade(t.app(), { buyer, seller });
   const terms = await insertTermsVersion(t.app(), tradeId, buyer, { item_amount_minor: item.toString() });
