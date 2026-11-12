@@ -29,12 +29,19 @@ export interface ProcessRefundJob {
   refundId: string;
   /** How many times this job has waited on a pending refund; drives the poll delay. */
   polls?: number;
+  /**
+   * Queued by the sweep: asks once and completes, pending or not. Only the dispatch's own job polls,
+   * so a sweep every five minutes cannot stack a new poll chain beside it each time a long poll leaves
+   * the row looking stale. A refund whose own chain was lost is still asked about every
+   * `STALE_PROCESSING_REFUND_MS` by the sweep itself, and by its webhook.
+   */
+  sweep?: boolean;
 }
 
 /**
  * A refund still pending at the provider is not a failed attempt: the job moves back to delayed and
  * polls again, without spending an attempt. The poll is bounded by the dispatch service's own age cap
- * (a week, then NEEDS_REVIEW), after which the job completes.
+ * (a week, then NEEDS_REVIEW), after which the job completes. A sweep's job does not poll.
  */
 export async function processRefundJob(
   deps: RefundDispatchDeps,
@@ -45,7 +52,9 @@ export async function processRefundJob(
   try {
     return await processRefund(deps, data.refundId);
   } catch (error) {
-    if (!(error instanceof RefundStillPendingError) || !job || !token) throw error;
+    if (!(error instanceof RefundStillPendingError)) throw error;
+    if (data.sweep) return 'PROCESSING';
+    if (!job || !token) throw error;
     const polls = data.polls ?? 0;
     await job.updateData({ ...data, polls: polls + 1 });
     await job.moveToDelayed(Date.now() + refundPollDelayMs(polls), token);
@@ -59,17 +68,21 @@ const jobOptions = {
 };
 
 /**
- * Keyed by the refund, so the escrow_refunded event delivered twice queues one job. The sweep passes
- * `deduplicate: false`: BullMQ keeps a finished job's id and silently ignores re-adding it.
+ * Keyed by the refund, so the escrow_refunded event delivered twice queues one job. The sweep's
+ * re-queue is unkeyed — BullMQ keeps a finished job's id and silently ignores re-adding it — and marked
+ * `sweep`, so it asks once rather than starting a second poll chain.
  */
 export const enqueueProcessRefund = async (
   queues: QueueFactory,
   refundId: string,
-  { deduplicate = true }: { deduplicate?: boolean } = {},
+  { sweep = false }: { sweep?: boolean } = {},
 ): Promise<void> => {
   await queues
     .producer<ProcessRefundJob>(PROCESS_REFUND_QUEUE)
-    .add('process', { refundId }, { ...jobOptions, ...(deduplicate ? { jobId: `refund-${refundId}` } : {}) });
+    .add('process', sweep ? { refundId, sweep: true } : { refundId }, {
+      ...jobOptions,
+      ...(sweep ? {} : { jobId: `refund-${refundId}` }),
+    });
 };
 
 /** A REQUESTED refund nobody has picked up after this long lost its dispatch job. */

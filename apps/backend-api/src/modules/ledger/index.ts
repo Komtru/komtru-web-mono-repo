@@ -442,7 +442,7 @@ export const ledgerModule = defineModule({
         await sweepInFlightRefunds({
           db: d.db,
           logger: d.logger,
-          enqueue: (refundId) => enqueueProcessRefund(d.queues, refundId, { deduplicate: false }),
+          enqueue: (refundId) => enqueueProcessRefund(d.queues, refundId, { sweep: true }),
         });
         await redriveRefundRequests({ db: d.db, logger: d.logger });
       },

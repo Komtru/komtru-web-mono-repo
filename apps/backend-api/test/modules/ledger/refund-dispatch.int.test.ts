@@ -30,7 +30,13 @@ import {
   UNNAMED_MS,
   type RefundDispatchDeps,
 } from '../../../src/modules/ledger/services/refundDispatch.service.js';
-import { sweepInFlightRefunds } from '../../../src/modules/ledger/jobs/refund.job.js';
+import {
+  enqueueProcessRefund,
+  processRefundJob,
+  sweepInFlightRefunds,
+} from '../../../src/modules/ledger/jobs/refund.job.js';
+import type { QueueFactory } from '../../../src/platform/queue/factory.js';
+import { DelayedError } from 'bullmq';
 import { infraEnabled, testRedisEnv, testRedisUrl } from '../../support/db-urls.js';
 import { useTestDatabase } from '../../support/db.js';
 import {
@@ -364,6 +370,42 @@ describe.runIf(infraEnabled)('sending and resolving a refund (T-075)', () => {
     };
     expect(await deliver('RF_1')).toBe('FAILED');
     expect(await deliver('RF_UNKNOWN')).toBe('UNKNOWN_REFERENCE');
+  });
+
+  it('polls a pending refund from its own dispatch, while a sweep re-queue asks once and starts no chain', async () => {
+    const { refundId } = await decided();
+    const p = provider({ status: 'pending' });
+    const job = () => ({
+      updateData: vi.fn(() => Promise.resolve()),
+      moveToDelayed: vi.fn(() => Promise.resolve()),
+    });
+
+    const dispatch = job();
+    await expect(processRefundJob(p.deps, { refundId }, dispatch, 'token')).rejects.toBeInstanceOf(
+      DelayedError,
+    );
+    expect(dispatch.moveToDelayed).toHaveBeenCalledTimes(1);
+
+    const swept = job();
+    expect(await processRefundJob(p.deps, { refundId, sweep: true }, swept, 'token')).toBe('PROCESSING');
+    expect(swept.moveToDelayed).not.toHaveBeenCalled();
+    expect(swept.updateData).not.toHaveBeenCalled();
+    expect(p.initiateRefund).toHaveBeenCalledTimes(1);
+  });
+
+  it('marks a sweep’s re-queue as one, and keys only the dispatch’s own job', async () => {
+    const add = vi.fn(() => Promise.resolve());
+    const queues = { producer: () => ({ add }) } as unknown as QueueFactory;
+    await enqueueProcessRefund(queues, 'r-1');
+    await enqueueProcessRefund(queues, 'r-1', { sweep: true });
+    expect(add).toHaveBeenNthCalledWith(
+      1,
+      'process',
+      { refundId: 'r-1' },
+      expect.objectContaining({ jobId: 'refund-r-1' }),
+    );
+    expect(add).toHaveBeenNthCalledWith(2, 'process', { refundId: 'r-1', sweep: true }, expect.anything());
+    expect((add.mock.calls[1] as unknown[])[2]).not.toHaveProperty('jobId');
   });
 
   it('re-queues a decided refund whose dispatch never ran', async () => {
