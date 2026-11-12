@@ -26,19 +26,19 @@ agreement and accepts (CT-S7).
 
 ## Routes
 
-| Route                | Screen                  | Reads / writes                                                        |
-| -------------------- | ----------------------- | --------------------------------------------------------------------- |
-| `/trade/new` (sell)  | CT-S1 to CT-S4, CT-S5   | standards, lookup, preview, addresses, files, `POST /trades`, `/send` |
-| `/trade/[id]` (buyer)| CT-S6, CT-S7            | the trade, preview, addresses, `POST /trades/:id/accept`, `/decline`  |
+| Route                 | Screen                | Reads / writes                                                        |
+| --------------------- | --------------------- | --------------------------------------------------------------------- |
+| `/trade/new` (sell)   | CT-S1 to CT-S4, CT-S5 | standards, lookup, preview, addresses, files, `POST /trades`, `/send` |
+| `/trade/[id]` (buyer) | CT-S6, CT-S7          | the trade, preview, addresses, `POST /trades/:id/accept`, `/decline`  |
 
 ## Steps (each committed when green)
 
-1. [ ] Plan (this file).
-2. [ ] Pure logic in `create/request.ts`: `sellerSpec`, `isSellerOffer`. Tests first.
-3. [ ] Seller start CT-S1 to CT-S5 and the Sell-mode route.
-4. [ ] Buyer completes CT-S6, CT-S7, wired into the trade screen.
-5. [ ] Visual check against the v2 master (`docs/ui-review/T-193/`).
-6. [ ] Verification: packages build, lint, typecheck, test for web-app-ui and api-client, `format:check`.
+1. [x] Plan (this file).
+2. [x] Pure logic in `create/request.ts`: `sellerSpec`, `isSellerOffer`. Tests first.
+3. [x] Seller start CT-S1 to CT-S5 and the Sell-mode route.
+4. [x] Buyer completes CT-S6, CT-S7, wired into the trade screen.
+5. [x] Visual check against the v2 master (`docs/ui-review/T-193/`).
+6. [x] Verification: packages build, lint, typecheck, test for web-app-ui and api-client, `format:check`.
 
 ## Owner questions (defaults taken)
 
