@@ -10,6 +10,12 @@ cost and to find work to resume.
   - **new:** the reference screen's 12-hour auto-approve of a cancellation request is in no spec, so it is not built. Should it be?
   - **new:** "Contest" is a plain decline, with no TrustOps hold. A declined request cannot be asked again.
   - **new, safe defaults:** a failed refund returns the money to escrow, with no automatic or admin retry yet. A refund call that fails or gets no answer is never re-sent; after 1 hour with no webhook it goes to review, and one still pending after 7 days goes to review. If the trade's fee terms say the fee is not refundable, the fee is booked as revenue when the refund is decided. A hold blocks cancel and refund. The platform absorbs Paystack's refund processing fee.
+- **F-030 refunds backend, review-fix questions** (merged 2026-11-12):
+  - **new:** a hold placed after a refund is decided keeps the refund unsent until the hold is lifted (safest default). Should a fraud or compliance hold block a refund that is already decided?
+  - **new:** a trade with a requested refund whose books don't match its snapshot is retried every 5 minutes and logs an error each time. Should it back off, or open a case (T-076)?
+  - **new:** how should a failed refund be recovered: a new refund against the same charge, or a manual payout to the buyer? (deferred to T-076)
+  - **new:** T-074's release has no re-drive after a hold is lifted. The fix covered refunds only.
+- **F-019 / T-193 seller-starts defaults** (merged 2026-11-12; listed in `docs/superpowers/plans/2026-11-12-f-019-seller-starts.md`): no listings exist, so the seller types the item name and price. The buyer's address on file is not shown on CT-S1. The delivery charge and partner work as in F-018. Park is "Coming soon" for the buyer.
 - **F-018 / T-192 create-a-trade defaults** (merged 2026-11-11; listed in `docs/superpowers/plans/2026-11-11-f-018-create-trade.md`):
   - **new:** a buyer's request stores required item fields as "Seller to confirm" until the seller completes it. Funding and accept are blocked while any remain. Should the platform accept a proposal with the item spec left open?
   - **new:** the delivery charge is held in the item spec, shown as "paid to the seller outside Komtru protection", and is not in the funded total or the fee snapshot. Should it be?
@@ -676,3 +682,27 @@ VALUE` cannot work here at all (drizzle runs every pending migration in one tran
   `KOMTRU_INFRA_TESTS=1` run on `main` is still owed.
 
 ## 2026-11-12 09:14 WAT — skipped: locked (lock from 2026-11-12T05:57:00Z; 5h 51%, week 68%; active run merged F-019 at 09:03 WAT and committed at 09:10 WAT)
+
+## 2026-11-12 09:30 WAT — run summary
+
+- Usage at start: 5h 1%, week 61%. At end: 5h 53%, week 68%.
+- Found a stale lock from 01:24 WAT. That run never logged. It started the F-019 UI and the F-030 fix phase, spent about
+  14% of the week (47→61), and died without closing. Its work was on the branches, so nothing was lost.
+- Capacity: 2 (est 25, est_week 4: 1 + 2×25 ≤ 90; 61 + 4 ≤ 85). Both slots went to the in-flight work. F-019 is web-app-ui with
+  no migration. F-030 is backend-api with migration 0049. Test prefixes were `komtru_f019` and `komtru_f030`.
+  Features: F-019 (merged, Done), F-030 backend layer (merged; the feature is Backend done, UI outstanding).
+- F-019 (sonnet): CT-S1–CT-S5, CT-S2F, CT-S6, CT-S7. A fresh implementer finished the visual check (`docs/ui-review/T-193/`; CT-S5
+  is 19.9% off because of a 60px offset with no stage rail, and the rest is 9.8–11.7%, mostly shell and content) and the verification.
+  Review: 2 must-fix (a stale category spec sent after a Back and title edit; the proof uploader losing its attachments on Back
+  while their ids were still sent) and 6 should-fix items. All were fixed. web-app-ui 778, api-client 278. E2E is waived (no harness).
+- F-030 backend (opus fixer): the must-fix is fixed. The re-drive sweep now re-decides an approved refund that a hold stranded.
+  Should-fix items 2, 3, 4, 5, 7 and 8 are fixed. Item 6, failed-refund recovery, is deferred to T-076. The fixer also fixed an
+  api-client typecheck that was already broken on the branch.
+- Merge checks:
+  - In each worktree: package build, then lint, typecheck and test, the format check, and migration safety (0 errors).
+  - On `main`: the whole-repo `turbo run lint typecheck test --force` with `KOMTRU_INFRA_TESTS=1` gave 36/37. Only the
+    backend-api test task failed, under load. Re-run alone it passed (313 files, 5498 tests), so the full infra run on `main`
+    that was owed is now done. migration:safety on `main` has the expected "baseline is this commit" warning.
+- Feature costs, together: 5h-cost=52 week-cost=7. That covers F-019 (finish, review, fix, merge) and F-030 (fix, merge).
+- Next: the F-030 UI layer (T-119), then F-023, F-028 and F-029 in journey order. F-037, F-044 and F-045 remain Backend done,
+  UI outstanding. Watch backend-api for flaky tests under turbo load.
