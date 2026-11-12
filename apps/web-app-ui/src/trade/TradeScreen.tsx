@@ -33,7 +33,8 @@ import { ShareTrade } from './ShareTrade';
 import { isProblem, proofNeeds, problemMessage } from './format';
 import { BACK_TO_TRADES, ConfirmSheet, ItemSummary, PartyHeader, TermsRows } from './parts';
 import { ReviewAccept } from './create/ReviewAccept';
-import { isRequestShaped, isRequestSpec } from './create/request';
+import { BuyerChoose } from './create/BuyerChoose';
+import { isRequestShaped, isRequestSpec, isSellerOffer } from './create/request';
 import { SellerRequest } from './create/SellerRequest';
 import { ProofUpload } from './ProofUpload';
 import { Workspace } from './workspace/Workspace';
@@ -100,6 +101,9 @@ function TradeState({ trade, tab }: { trade: TradeView; tab: WorkspaceTab }): Re
         isRequestShaped(trade.terms?.itemSpec)
       )
         return <ReviewAccept trade={trade} />;
+      // A seller's finished offer (F-019): the buyer chooses how to receive it, then reviews and accepts.
+      if (trade.yourRole === 'BUYER' && isSellerOffer(trade.initiatorRole, trade.terms?.itemSpec))
+        return <BuyerChoose trade={trade} />;
       return <AnswerProposal trade={trade} />;
     case 'DECLINED':
     case 'CANCELLED':

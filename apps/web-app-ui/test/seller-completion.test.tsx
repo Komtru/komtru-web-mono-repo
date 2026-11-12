@@ -216,6 +216,17 @@ describe('CT-B7 Item details', () => {
     expect(await screen.findByText('Add the photos and video to carry on.')).toBeTruthy();
   });
 
+  it('still shows what was attached when the seller goes back to the item', async () => {
+    answerWith(api.call, handlers(asSeller(), upload));
+    const view = renderWithApi(api.call, <CompleteRequest id={id(1)} />);
+    await itemStage(view.container);
+    await screen.findByLabelText('Delivery partner');
+    press(/^back$/i);
+    await screen.findByLabelText('Brand');
+    expect(screen.getByRole('button', { name: 'Remove front.jpg' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Remove back.jpg' })).toBeTruthy();
+  });
+
   it("says there is nothing to complete when it is not the seller's request", async () => {
     answerWith(api.call, handlers(asBuyer()));
     renderWithApi(api.call, <CompleteRequest id={id(1)} />);

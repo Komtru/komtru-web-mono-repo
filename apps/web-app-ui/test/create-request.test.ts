@@ -6,8 +6,10 @@ import {
   completedSpec,
   detectCategory,
   isRequestSpec,
+  isSellerOffer,
   parkAvailable,
   requestSpec,
+  sellerSpec,
   waitingKeys,
 } from '../src/trade/create/request';
 import { itemSub, itemTitle } from '../src/trade/format';
@@ -106,5 +108,64 @@ describe('reserved keys', () => {
         delivery: { mode: 'COURIER', chargeMinor: '1', promise: '1-3' },
       }),
     ).toThrow(/reserved/);
+  });
+});
+
+describe('the seller-started spec (F-019)', () => {
+  const made = () =>
+    sellerSpec(
+      electronics,
+      'iPhone 13 Pro',
+      { brand: 'Apple', model: 'iPhone 13 Pro', condition: 'Brand new', serial: '  ' },
+      { partner: 'SwiftDrop', chargeMinor: '350000', promise: '5-7' },
+    );
+  it('holds everything the seller said, the delivery commitments, and nothing waiting', () => {
+    const spec = made();
+    expect(spec).toEqual({
+      requestedItem: 'iPhone 13 Pro',
+      brand: 'Apple',
+      model: 'iPhone 13 Pro',
+      condition: 'Brand new',
+      deliveryMode: 'COURIER',
+      deliveryPartner: 'SwiftDrop',
+      deliveryChargeMinor: '350000',
+      deliveryPromise: '5-7',
+    });
+    expect(waitingKeys(spec)).toEqual([]);
+    expect(itemTitle(spec)).toBe('Apple iPhone 13 Pro');
+    expect(itemSub(spec)).toBe('Brand new');
+  });
+  it('is an offer only when the seller started it and it carries commitments and nothing waits', () => {
+    expect(isSellerOffer('SELLER', made())).toBe(true);
+    expect(isSellerOffer('BUYER', made())).toBe(false);
+    expect(isSellerOffer('SELLER', { brand: 'Apple' })).toBe(false);
+    expect(isSellerOffer('SELLER', { ...made(), brand: SELLER_TO_CONFIRM })).toBe(false);
+    expect(isSellerOffer('SELLER', null)).toBe(false);
+  });
+  it('refuses to be built over a reserved key', () => {
+    expect(() =>
+      sellerSpec(
+        { itemSpecFields: [{ key: 'deliveryMode', label: 'Mode', required: true }] },
+        'x',
+        { deliveryMode: 'PARK' },
+        { partner: 'a', chargeMinor: '1', promise: '1-3' },
+      ),
+    ).toThrow(/reserved/);
+  });
+  it('carries only the category own keys, so what was typed under another category never rides along', () => {
+    const spec = sellerSpec(
+      fashion,
+      'Nike sneakers',
+      { brand: 'Nike', model: 'Air', condition: 'Brand new', deliveryMode: 'PARK', imei: '123' },
+      { partner: 'SwiftDrop', chargeMinor: '350000', promise: '5-7' },
+    );
+    expect(spec).toEqual({
+      requestedItem: 'Nike sneakers',
+      brand: 'Nike',
+      deliveryMode: 'COURIER',
+      deliveryPartner: 'SwiftDrop',
+      deliveryChargeMinor: '350000',
+      deliveryPromise: '5-7',
+    });
   });
 });

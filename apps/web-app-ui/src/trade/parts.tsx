@@ -96,6 +96,7 @@ export function ConfirmSheet({
   pending,
   onConfirm,
   onClose,
+  confirmDisabled = false,
   children,
 }: {
   open: boolean;
@@ -104,6 +105,8 @@ export function ConfirmSheet({
   pending: boolean;
   onConfirm: () => void;
   onClose: () => void;
+  /** Holds the confirm back until what it needs (a reason, say) is given. */
+  confirmDisabled?: boolean;
   children: React.ReactNode;
 }): React.JSX.Element {
   return (
@@ -114,7 +117,7 @@ export function ConfirmSheet({
         title={title}
         footer={
           <>
-            <Button type="button" variant="danger" onClick={onConfirm} disabled={pending}>
+            <Button type="button" variant="danger" onClick={onConfirm} disabled={pending || confirmDisabled}>
               {pending ? 'Working…' : confirm}
             </Button>
             <Button type="button" variant="secondary" onClick={onClose}>

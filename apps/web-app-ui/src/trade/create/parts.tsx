@@ -2,7 +2,8 @@
 
 // What the buyer's four stages and the seller's three share: the stage header and the agreement preview that
 // CT-B4, CT-B9 and CT-B10 draw the same way ("both parties see the same agreement").
-import { TermList, TermRow } from '@komtru/ui-kit';
+import type { TradeStandard } from '@komtru/api-client';
+import { OptionCard, TermList, TermRow, TextField } from '@komtru/ui-kit';
 import { useEffect, useRef } from 'react';
 import { hoursLabel, naira } from '../format';
 import { promiseLabel } from './request';
@@ -65,19 +66,23 @@ export function StageHeader({
 const WAITING = <span className="font-semibold text-warning-on-soft">Waiting</span>;
 
 export interface AgreementProps {
+  /** The name on the other side of the terms. The row is labelled "Seller" unless `partyLabel` says otherwise. */
   sellerName: string;
+  /** "Buyer" when the seller is the one reading (CT-S4). */
+  partyLabel?: 'Seller' | 'Buyer';
   /** The seller's address as the terms carry it, when there is one. */
   sellerLocation?: string | undefined;
   /** The item's description once the seller gave it, or `undefined` while it waits. */
   itemDetails: string | undefined;
-  deliveryLine: string;
+  deliveryLine: React.ReactNode;
   collectionPhone?: string | undefined;
   /** Whole kobo digit strings from the platform, or `undefined` while the seller has not said. */
   deliveryChargeMinor: string | undefined;
   deliveryPromise: string | undefined;
   inspectionHours: number | undefined;
   categoryName: string | undefined;
-  fees: { itemMinor: string; protectionFeeMinor: string; totalMinor: string } | undefined;
+  fees:
+    { itemMinor: string; protectionFeeMinor: string; totalMinor: string; proceedsMinor?: string } | undefined;
   /** CT-B4 and CT-B9 have no total to give until the seller's part is in, or the platform has not computed it. */
   totalNote?: string;
 }
@@ -85,6 +90,7 @@ export interface AgreementProps {
 /** The terms and the money of one agreement. Nothing here adds money: every figure is the platform's. */
 export function Agreement({
   sellerName,
+  partyLabel = 'Seller',
   sellerLocation,
   itemDetails,
   deliveryLine,
@@ -103,7 +109,7 @@ export function Agreement({
         Terms
       </h2>
       <TermList aria-label="Terms of this trade">
-        <TermRow checked label="Seller">
+        <TermRow checked label={partyLabel}>
           {sellerName}
         </TermRow>
         {sellerLocation !== undefined && (
@@ -143,7 +149,7 @@ export function Agreement({
       {fees !== undefined && (
         <>
           <TermList
-            aria-label="What you pay"
+            aria-label={fees.proceedsMinor === undefined ? 'What you pay' : 'What is paid'}
             className="mt-[12px] border-t border-solid border-border-hairline"
           >
             <TermRow label="Item price">{naira(fees.itemMinor)}</TermRow>
@@ -151,11 +157,74 @@ export function Agreement({
             <TermRow label="Total due on funding">
               <strong className="text-midnight-text">{naira(fees.totalMinor)}</strong>
             </TermRow>
+            {fees.proceedsMinor !== undefined && (
+              <TermRow label="You receive when the trade completes">{naira(fees.proceedsMinor)}</TermRow>
+            )}
           </TermList>
           {totalNote !== undefined && (
             <p className="mt-[6px] text-[11px] leading-[1.5] text-slate">{totalNote}</p>
           )}
         </>
+      )}
+    </>
+  );
+}
+
+const CONDITIONS = ['Brand new', 'Used · like new', 'Used · good'] as const;
+
+/**
+ * The category's own item fields, as the seller states them: text fields, and the three condition cards where the
+ * category asks for a condition. Shared by CT-B7 and CT-S2, so a field added to a standard appears on both.
+ */
+export function ItemFields({
+  standard,
+  fields,
+  setField,
+  tried,
+}: {
+  standard: Pick<TradeStandard, 'itemSpecFields'>;
+  fields: Record<string, string>;
+  setField: (key: string, value: string) => void;
+  tried: boolean;
+}): React.JSX.Element {
+  return (
+    <>
+      {standard.itemSpecFields.map((field) =>
+        field.key === 'condition' ? (
+          <fieldset key={field.key} className="mb-[16px] min-w-0 border-0 p-0">
+            <legend className="mb-[6px] p-0 text-[13px] font-semibold">
+              {field.required ? field.label : `${field.label} (optional)`}
+            </legend>
+            {CONDITIONS.map((condition) => (
+              <OptionCard
+                key={condition}
+                name="condition"
+                value={condition}
+                checked={fields.condition === condition}
+                onChange={() => {
+                  setField('condition', condition);
+                }}
+              >
+                {condition}
+              </OptionCard>
+            ))}
+            {tried && field.required && (fields.condition ?? '') === '' && (
+              <p role="alert" className="text-[12px] font-semibold text-risk-on-soft">
+                Choose the condition to carry on.
+              </p>
+            )}
+          </fieldset>
+        ) : (
+          <TextField
+            key={field.key}
+            label={field.required ? field.label : `${field.label} (optional)`}
+            value={fields[field.key] ?? ''}
+            onChange={(event) => {
+              setField(field.key, event.target.value);
+            }}
+            invalid={tried && field.required && (fields[field.key] ?? '').trim() === ''}
+          />
+        ),
       )}
     </>
   );
