@@ -115,7 +115,8 @@ T-119 (the screens) is the parallel UI run.
 3. **A refund the provider reports `failed`**: the money is reversed back into the trade's escrow and
    fee liabilities (the platform holds it and still owes it), the refund is FAILED and
    `ledger.refund.completed` says so; the trade stays `CANCELLED_REFUNDED`. **No automatic retry and
-   no admin retry route yet** (M8 §10's dual-approval `payment.refund` is T-076/T-140 territory).
+   no admin retry route yet** (M8 §10's dual-approval `payment.refund` is T-076/T-140 territory;
+   recorded on T-076 as inherited from this review).
 4. **An initiate call that fails or times out is never re-sent** (Paystack takes no client reference,
    so a resend could refund twice). Default: wait for a webhook to name it, else NEEDS_REVIEW after
    an hour. Confirm whether Paystack's list-refunds-by-transaction can be relied on to automate this.
@@ -125,8 +126,10 @@ T-119 (the screens) is the parallel UI run.
 7. **Paystack's own processing fee is not refunded to the platform** (m8 §5); nothing posts for it
    yet — T-076's reconciliation will see the provider balance differ by that fee.
 8. **A hold on the trade** refuses cancellation and can't-fulfil (409), and the ledger refuses a
-   refund decision on a held trade as well. Nothing re-drives a refund after a hold is lifted
-   (same open question as T-074's release).
+   refund decision on a held trade as well. **Fixed in review:** a request refused for a hold is
+   decided again by the refund sweep once no hold is left (`redriveRefundRequests`), and a hold
+   placed after the decision keeps the refund unsent (REQUESTED) until it is lifted. The release's
+   own re-drive (T-074) is still open.
 9. **Partial refunds** are supported by the service (item money only, fee retained) but no route or
    caller uses them yet; T-080's dispute split posts its own journal and will need an
    execute-only entry point.
@@ -149,3 +152,16 @@ T-119 (the screens) is the parallel UI run.
 
 10. **A declined cancellation request cannot be asked again** on the same trade (default, to stop a
     buyer re-asking a seller who has answered). Confirm or allow one more.
+
+## Review fixes (2026-11-12)
+
+1. Must-fix: `redriveRefundRequests` in the five-minute refund sweep decides again any FUNDED, unheld
+   trade whose refund was requested over 10 minutes ago (trades' `refundsAwaitingDecision`).
+2. The dispatch claim locks the trade FOR SHARE and re-reads holds; a held refund stays REQUESTED.
+3. Webhook attach by charge: own provider only, and only after the provider's record matches the
+   refund's amount and currency.
+4. `/me/refunds` cursor on `requested_at` to the microsecond.
+5. Sweep re-queues ask once (`sweep: true`); only the dispatch's keyed job polls.
+6. Failed-refund recovery deferred to T-076 (noted there).
+7. Tests for each fix, the cancellation routes and an approve-versus-cancel race.
+8. api-client: notes sent trimmed, none when blank; cancellation mutation answers typed.
