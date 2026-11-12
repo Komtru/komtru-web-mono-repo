@@ -197,6 +197,24 @@ describe.runIf(infraEnabled)('cancelling a funded trade (T-066)', () => {
       );
       expect(again.extensions).toMatchObject({ reason: 'REFUND_ALREADY_REQUESTED' });
     });
+
+    it('asks the ledger once when the seller approves and cancels at the same moment', async () => {
+      const trade = await tradeAt(t, 'FUNDED');
+      const pending = await ask(trade);
+      const results = await Promise.allSettled([
+        answer(trade, pending.id, 'APPROVE'),
+        cancelAsSeller(deps(), { userId: trade.seller, tradeId: trade.tradeId, reason: 'OUT_OF_STOCK' }),
+      ]);
+      expect(results.filter((r) => r.status === 'fulfilled')).toHaveLength(1);
+      expect(await refundRequests(trade.tradeId)).toHaveLength(1);
+      const { rows } = await t
+        .owner()
+        .query(
+          `SELECT count(*)::int AS n FROM trade.cancellation_requests WHERE trade_id = $1 AND status = 'APPROVED'`,
+          [trade.tradeId],
+        );
+      expect(rows[0].n).toBe(1);
+    });
   });
 
   describe('the ledger’s answer', () => {

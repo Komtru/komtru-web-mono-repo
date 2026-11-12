@@ -327,6 +327,32 @@ describe.runIf(infraEnabled)('sending and resolving a refund (T-075)', () => {
     expect(p.initiateRefund).toHaveBeenCalledTimes(1);
   });
 
+  it('is re-queued by the sweep while held, and sent once the hold is lifted', async () => {
+    const { trade, refundId } = await decided();
+    const holdId = await insertRow(t.app(), 'trade.trade_holds', {
+      trade_id: trade.tradeId,
+      source: 'RISK',
+      reason: 'under review',
+      placed_by_actor_type: 'SYSTEM',
+    });
+    const p = provider({ status: 'processed' });
+    expect(await processRefund(p.deps, refundId)).toBe('REQUESTED');
+
+    // A held refund's row does not change, so it stays stale and the sweep keeps asking.
+    const enqueue = vi.fn(() => Promise.resolve());
+    const sweep = () =>
+      sweepInFlightRefunds({ db: t.db(), logger, enqueue, now: new Date(Date.now() + 10 * 60_000) });
+    await sweep();
+    expect(enqueue).toHaveBeenCalledWith(refundId);
+    expect(await processRefund(p.deps, refundId)).toBe('REQUESTED');
+    expect(p.initiateRefund).not.toHaveBeenCalled();
+
+    await t.owner().query('UPDATE trade.trade_holds SET released_at = now() WHERE id = $1', [holdId]);
+    expect(await processRefund(p.deps, refundId)).toBe('PROCESSED');
+    expect(await processRefund(p.deps, refundId)).toBe('PROCESSED');
+    expect(p.initiateRefund).toHaveBeenCalledTimes(1);
+  });
+
   it('sends once when dispatches race', async () => {
     const { refundId } = await decided();
     const p = provider({ status: 'processed' });
