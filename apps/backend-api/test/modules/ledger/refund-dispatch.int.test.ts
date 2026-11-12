@@ -243,6 +243,60 @@ describe.runIf(infraEnabled)('sending and resolving a refund (T-075)', () => {
       });
       expect(p.initiateRefund).toHaveBeenCalledTimes(1);
     });
+
+    it('is not named by another provider’s refund on the same charge reference', async () => {
+      const { trade, refundId } = await decided();
+      const p = provider({ status: 'processed' }, new Error('timeout'));
+      await processRefund(p.deps, refundId);
+
+      expect(
+        await resolveRefundEvent(p.deps, {
+          provider: 'FLUTTERWAVE',
+          chargeReference: trade.chargeReference,
+          providerRefundId: 'FLW_1',
+        }),
+      ).toBe('MISSING');
+      expect(await findRefund(t.db(), refundId)).toMatchObject({
+        status: 'PROCESSING',
+        providerRefundId: null,
+      });
+      expect(p.verifyRefund).not.toHaveBeenCalled();
+    });
+
+    it('is not named by a refund on its charge that is not this one, and still waits for its own', async () => {
+      const { trade, refundId } = await decided();
+      // A refund someone made by hand on the provider's dashboard: same charge, another amount.
+      const records: Record<string, Partial<VerifiedRefundView>> = {
+        RF_DASHBOARD: { amountMinor: 1_000_00 },
+        RF_OURS: {},
+      };
+      const p = provider({ status: 'processed' }, new Error('timeout'));
+      p.verifyRefund.mockImplementation((id: string) =>
+        Promise.resolve({
+          providerRefundId: id,
+          status: 'processed',
+          amountMinor: Number(TOTAL),
+          currency: 'NGN',
+          ...records[id],
+        }),
+      );
+      await processRefund(p.deps, refundId);
+
+      const event = (providerRefundId: string) =>
+        resolveRefundEvent(p.deps, {
+          provider: 'PAYSTACK',
+          chargeReference: trade.chargeReference,
+          providerRefundId,
+        });
+      expect(await event('RF_DASHBOARD')).toBe('MISSING');
+      expect(await findRefund(t.db(), refundId)).toMatchObject({
+        status: 'PROCESSING',
+        providerRefundId: null,
+      });
+
+      expect(await event('RF_OURS')).toBe('PROCESSED');
+      expect(await findRefund(t.db(), refundId)).toMatchObject({ providerRefundId: 'RF_OURS' });
+    });
   });
 
   it('does not send a refund while a hold placed after the decision is on the trade', async () => {

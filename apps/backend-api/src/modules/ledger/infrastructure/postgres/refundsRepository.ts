@@ -93,15 +93,21 @@ export async function findRefundByProviderId(
 /**
  * In-flight refunds against a charge that the provider has not named yet: what a `refund.*` webhook
  * can be matched to when the initiate call's answer was lost. Matched by either of the charge's
- * references, because Paystack's refund events carry the transaction's reference.
+ * references, because Paystack's refund events carry the transaction's reference. Only the event's own
+ * provider's refunds: another provider's reference space is not this one's.
  */
-export async function unnamedRefundsForCharge(db: Reader, chargeReference: string): Promise<RefundRow[]> {
+export async function unnamedRefundsForCharge(
+  db: Reader,
+  provider: RefundRow['provider'],
+  chargeReference: string,
+): Promise<RefundRow[]> {
   return db
     .select({ refund: refunds })
     .from(refunds)
     .innerJoin(paymentAttempts, eq(paymentAttempts.id, refunds.paymentAttemptId))
     .where(
       and(
+        eq(refunds.provider, provider),
         eq(refunds.status, 'PROCESSING'),
         isNull(refunds.providerRefundId),
         or(

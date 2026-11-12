@@ -330,17 +330,23 @@ export async function resolveRefund(deps: RefundDispatchDeps, refundId: string):
 /**
  * Which refund a `refund.*` webhook is about. By the provider's refund id first; failing that, by the
  * original charge's reference — but only when exactly one in-flight refund against that charge is still
- * waiting to be named, because an initiate whose answer was lost leaves exactly that. The id is then
- * attached, and the refund is resolved on the provider's record like any other. Two candidates, or
- * none, and nothing is guessed.
+ * waiting to be named, because an initiate whose answer was lost leaves exactly that. Two candidates,
+ * or none, and nothing is guessed.
+ *
+ * A charge can carry a refund that is not ours — one made by hand on the provider's dashboard, say —
+ * and the provider refund id can be set only once (migration 0049), so attaching the wrong one would
+ * leave our own refund unable to be named when its webhook comes. The provider's record of the named
+ * refund is therefore read first, and the id is attached only when it is for this refund's amount and
+ * currency. Anything else is left unattached and logged; our refund keeps waiting for its own name,
+ * and past an hour goes to a person as before.
  */
 export async function attachProviderRefund(
-  deps: Pick<RefundDispatchDeps, 'db' | 'logger'>,
+  deps: Pick<RefundDispatchDeps, 'db' | 'logger' | 'verifyRefund'>,
   event: { provider: RefundRow['provider']; chargeReference: string; providerRefundId: string },
 ): Promise<string | undefined> {
   const named = await findRefundByProviderId(deps.db, event.provider, event.providerRefundId);
   if (named) return named.id;
-  const candidates = await unnamedRefundsForCharge(deps.db, event.chargeReference);
+  const candidates = await unnamedRefundsForCharge(deps.db, event.provider, event.chargeReference);
   if (candidates.length !== 1 || !candidates[0]) {
     if (candidates.length > 1) {
       deps.logger.error(
@@ -351,6 +357,28 @@ export async function attachProviderRefund(
     return undefined;
   }
   const candidate = candidates[0];
+
+  let record: VerifiedRefundView;
+  try {
+    record = await deps.verifyRefund(event.providerRefundId);
+  } catch (error) {
+    if (!(error instanceof RefundNotFoundError)) throw error;
+    deps.logger.warn(
+      { refundId: candidate.id },
+      'ledger: a refund webhook named a refund the provider does not have',
+    );
+    return undefined;
+  }
+  // `providerRefundId: null`: the candidate has no name yet, so only the money is compared.
+  const mismatch = describeRefundMismatch({ ...candidate, providerRefundId: null }, record);
+  if (mismatch) {
+    deps.logger.warn(
+      { refundId: candidate.id, mismatch },
+      'ledger: a refund webhook on this charge is for another refund; not attached',
+    );
+    return undefined;
+  }
+
   return deps.db.transaction(async (tx) => {
     const locked = await lockRefund(tx, candidate.id);
     if (!locked || locked.status !== 'PROCESSING' || locked.providerRefundId)
