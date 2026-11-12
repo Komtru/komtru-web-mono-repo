@@ -84,8 +84,8 @@ export function useMyRefunds() {
  * Every cancellation answer changes the trade (or soon will: the refund closes it), so the trade, its
  * cancellation and its refunds are all read again, with the trade lists and the buyer's refund history.
  */
-function useCancellationMutation<V extends { tradeId: string }>(
-  call: (client: ReturnType<typeof useApiClient>, variables: V) => Promise<unknown>,
+function useCancellationMutation<V extends { tradeId: string }, R>(
+  call: (client: ReturnType<typeof useApiClient>, variables: V) => Promise<R>,
 ) {
   const client = useApiClient();
   const queryClient = useQueryClient();
@@ -109,13 +109,22 @@ interface WithKey {
 const keyed = (variables: WithKey) =>
   variables.idempotencyKey === undefined ? {} : { idempotencyKey: variables.idempotencyKey };
 
+/**
+ * The server trims a note and refuses an empty one, so what is sent is the trimmed text, or nothing
+ * when only spaces were typed — a blank note box is not a 422.
+ */
+const noted = (note: string | undefined): { note?: string } => {
+  const trimmed = note?.trim();
+  return trimmed ? { note: trimmed } : {};
+};
+
 /** CR1: the buyer asks the seller to cancel. */
 export const useRequestCancellation = () =>
   useCancellationMutation(
     (client, v: { tradeId: string; reason: BuyerCancellationReason; note?: string } & WithKey) =>
       client.call(
         requestCancellation,
-        { params: { id: v.tradeId }, body: { reason: v.reason, ...(v.note ? { note: v.note } : {}) } },
+        { params: { id: v.tradeId }, body: { reason: v.reason, ...noted(v.note) } },
         keyed(v),
       ),
   );
@@ -125,7 +134,7 @@ export const useApproveCancellation = () =>
   useCancellationMutation((client, v: { tradeId: string; requestId: string; note?: string } & WithKey) =>
     client.call(
       approveCancellation,
-      { params: { id: v.tradeId, requestId: v.requestId }, body: v.note ? { note: v.note } : {} },
+      { params: { id: v.tradeId, requestId: v.requestId }, body: noted(v.note) },
       keyed(v),
     ),
   );
@@ -135,7 +144,7 @@ export const useDeclineCancellation = () =>
   useCancellationMutation((client, v: { tradeId: string; requestId: string; note?: string } & WithKey) =>
     client.call(
       declineCancellation,
-      { params: { id: v.tradeId, requestId: v.requestId }, body: v.note ? { note: v.note } : {} },
+      { params: { id: v.tradeId, requestId: v.requestId }, body: noted(v.note) },
       keyed(v),
     ),
   );
@@ -146,7 +155,7 @@ export const useCancelAsSeller = () =>
     (client, v: { tradeId: string; reason: SellerCancellationReason; note?: string } & WithKey) =>
       client.call(
         cancelAsSeller,
-        { params: { id: v.tradeId }, body: { reason: v.reason, ...(v.note ? { note: v.note } : {}) } },
+        { params: { id: v.tradeId }, body: { reason: v.reason, ...noted(v.note) } },
         keyed(v),
       ),
   );

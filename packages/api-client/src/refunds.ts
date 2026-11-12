@@ -38,7 +38,7 @@ export {
 const kobo = z.string().regex(/^\d{1,19}$/);
 const tradeParams = z.object({ id: z.uuid() });
 const requestParams = z.object({ id: z.uuid(), requestId: z.uuid() });
-const note = z.string().min(1).max(500).optional();
+const note = z.string().trim().min(1).max(500).optional();
 
 export const cancellationRequestSchema = z.looseObject({
   id: z.uuid(),

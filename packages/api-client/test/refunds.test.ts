@@ -31,7 +31,7 @@ const refund = {
   id: id(9),
   tradeId: id(1),
   reference: `refund-${id(9)}`,
-  status: 'PROCESSING',
+  status: 'PROCESSING' as const,
   scope: 'FULL',
   reason: 'MUTUAL_AGREEMENT',
   currency: 'NGN',
@@ -98,8 +98,8 @@ describe('the cancellation and refund endpoints (T-066, T-075)', () => {
   });
 
   it('refuses the buyer’s reasons on the seller’s cancellation', () => {
-    expect(() => cancelAsSeller.schema.body.parse({ reason: 'CHANGED_MIND' })).toThrow();
-    expect(cancelAsSeller.schema.body.parse({ reason: 'OUT_OF_STOCK' })).toEqual({ reason: 'OUT_OF_STOCK' });
+    expect(() => cancelAsSeller.schema.body?.parse({ reason: 'CHANGED_MIND' })).toThrow();
+    expect(cancelAsSeller.schema.body?.parse({ reason: 'OUT_OF_STOCK' })).toEqual({ reason: 'OUT_OF_STOCK' });
   });
 
   it('reads the cancellation and the refunds the ledger decided', async () => {

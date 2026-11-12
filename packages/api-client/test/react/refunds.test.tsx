@@ -37,7 +37,9 @@ afterEach(() => {
 
 function setup(respond: (path: string, method: string) => unknown) {
   const requests: string[] = [];
+  const bodies: unknown[] = [];
   const fetch = vi.fn((input: URL | RequestInfo, init?: RequestInit) => {
+    if (typeof init?.body === 'string') bodies.push(JSON.parse(init.body));
     const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
     const path = url.replace('https://api.test/v1', '');
     const method = init?.method ?? 'GET';
@@ -51,7 +53,7 @@ function setup(respond: (path: string, method: string) => unknown) {
       <ApiClientProvider client={client}>{children}</ApiClientProvider>
     </QueryClientProvider>
   );
-  return { requests, queryClient, wrapper };
+  return { requests, bodies, queryClient, wrapper };
 }
 
 describe('the refund hooks', () => {
@@ -102,5 +104,28 @@ describe('the refund hooks', () => {
     await waitFor(() => {
       expect(invalidate).toHaveBeenCalledWith({ queryKey: tradeKeys.one(TRADE) });
     });
+  });
+
+  it('sends a note trimmed, and none at all when only spaces were typed', async () => {
+    const answered = {
+      id: '0190b0a0-0000-7000-8000-000000000003',
+      requestedByRole: 'SELLER',
+      reason: 'OUT_OF_STOCK',
+      note: null,
+      status: 'APPROVED',
+      responseNote: null,
+      respondedAt: '2026-11-11T09:00:00.000Z',
+      createdAt: '2026-11-11T09:00:00.000Z',
+    };
+    const { bodies, wrapper: Wrapper } = setup(() => answered);
+    let mutateAsync: ReturnType<typeof useCancelAsSeller>['mutateAsync'] | undefined;
+    function Probe() {
+      mutateAsync = useCancelAsSeller().mutateAsync;
+      return null;
+    }
+    render(<Probe />, { wrapper: Wrapper });
+    await mutateAsync?.({ tradeId: TRADE, reason: 'OUT_OF_STOCK', note: '  sold out  ' });
+    await mutateAsync?.({ tradeId: TRADE, reason: 'OUT_OF_STOCK', note: '   ' });
+    expect(bodies).toEqual([{ reason: 'OUT_OF_STOCK', note: 'sold out' }, { reason: 'OUT_OF_STOCK' }]);
   });
 });
