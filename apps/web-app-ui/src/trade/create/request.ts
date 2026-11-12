@@ -134,6 +134,37 @@ export function completedSpec(request: Spec, answer: SellerAnswer): Spec {
   return next;
 }
 
+/**
+ * The specification a seller-started trade is created with (F-019). The seller is the authoritative source, so every
+ * field is theirs and none waits; the delivery commitments ride with it. Courier is the only live mode (Park is
+ * deferred), so it is recorded here and the buyer's address arrives with their acceptance.
+ */
+export function sellerSpec(
+  standard: Pick<TradeStandard, 'itemSpecFields'>,
+  title: string,
+  fields: Record<string, string>,
+  delivery: { partner: string; chargeMinor: string; promise: string },
+): Spec {
+  assertNoCollision(standard.itemSpecFields.map((field) => field.key));
+  assertNoCollision(Object.keys(fields));
+  const spec: Spec = { requestedItem: title.trim() };
+  for (const [key, value] of Object.entries(fields)) {
+    if (value.trim() !== '') spec[key] = value.trim();
+  }
+  spec.deliveryMode = 'COURIER';
+  spec.deliveryPartner = delivery.partner.trim();
+  spec.deliveryChargeMinor = delivery.chargeMinor;
+  spec.deliveryPromise = delivery.promise;
+  return spec;
+}
+
+/** A trade the seller started with the delivery commitments made, nothing waiting: the buyer's CT-S6 and CT-S7. */
+export const isSellerOffer = (initiator: string, spec: unknown): boolean =>
+  initiator === 'SELLER' &&
+  isRequestShaped(spec) &&
+  typeof (spec as Spec).deliveryChargeMinor === 'string' &&
+  waitingKeys(spec).length === 0;
+
 export interface PromiseRange {
   value: string;
   label: string;

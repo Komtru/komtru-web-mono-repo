@@ -65,19 +65,23 @@ export function StageHeader({
 const WAITING = <span className="font-semibold text-warning-on-soft">Waiting</span>;
 
 export interface AgreementProps {
+  /** The name on the other side of the terms. The row is labelled "Seller" unless `partyLabel` says otherwise. */
   sellerName: string;
+  /** "Buyer" when the seller is the one reading (CT-S4). */
+  partyLabel?: 'Seller' | 'Buyer';
   /** The seller's address as the terms carry it, when there is one. */
   sellerLocation?: string | undefined;
   /** The item's description once the seller gave it, or `undefined` while it waits. */
   itemDetails: string | undefined;
-  deliveryLine: string;
+  deliveryLine: React.ReactNode;
   collectionPhone?: string | undefined;
   /** Whole kobo digit strings from the platform, or `undefined` while the seller has not said. */
   deliveryChargeMinor: string | undefined;
   deliveryPromise: string | undefined;
   inspectionHours: number | undefined;
   categoryName: string | undefined;
-  fees: { itemMinor: string; protectionFeeMinor: string; totalMinor: string } | undefined;
+  fees:
+    { itemMinor: string; protectionFeeMinor: string; totalMinor: string; proceedsMinor?: string } | undefined;
   /** CT-B4 and CT-B9 have no total to give until the seller's part is in, or the platform has not computed it. */
   totalNote?: string;
 }
@@ -85,6 +89,7 @@ export interface AgreementProps {
 /** The terms and the money of one agreement. Nothing here adds money: every figure is the platform's. */
 export function Agreement({
   sellerName,
+  partyLabel = 'Seller',
   sellerLocation,
   itemDetails,
   deliveryLine,
@@ -103,7 +108,7 @@ export function Agreement({
         Terms
       </h2>
       <TermList aria-label="Terms of this trade">
-        <TermRow checked label="Seller">
+        <TermRow checked label={partyLabel}>
           {sellerName}
         </TermRow>
         {sellerLocation !== undefined && (
@@ -143,7 +148,7 @@ export function Agreement({
       {fees !== undefined && (
         <>
           <TermList
-            aria-label="What you pay"
+            aria-label={fees.proceedsMinor === undefined ? 'What you pay' : 'What is paid'}
             className="mt-[12px] border-t border-solid border-border-hairline"
           >
             <TermRow label="Item price">{naira(fees.itemMinor)}</TermRow>
@@ -151,6 +156,9 @@ export function Agreement({
             <TermRow label="Total due on funding">
               <strong className="text-midnight-text">{naira(fees.totalMinor)}</strong>
             </TermRow>
+            {fees.proceedsMinor !== undefined && (
+              <TermRow label="You receive when the trade completes">{naira(fees.proceedsMinor)}</TermRow>
+            )}
           </TermList>
           {totalNote !== undefined && (
             <p className="mt-[6px] text-[11px] leading-[1.5] text-slate">{totalNote}</p>

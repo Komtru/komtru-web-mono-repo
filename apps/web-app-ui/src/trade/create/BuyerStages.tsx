@@ -271,14 +271,10 @@ export function ItemAndDelivery(props: {
   );
 }
 
-/** CT-B3: protection is Komtru's and is only shown; the delivery commitments are the seller's. */
-export function Terms({ standard }: { standard: TradeStandard }): React.JSX.Element {
+/** What Komtru sets for the category, the same for every Trade. Shown, never edited, on CT-B3 and CT-S3. */
+export function KomtruTerms({ standard }: { standard: TradeStandard }): React.JSX.Element {
   return (
     <>
-      <h2 className="m-0 text-[18px] font-semibold">Trade terms</h2>
-      <p className="mb-[16px] mt-[4px] text-[12.5px] text-slate">
-        Here&apos;s how delivery, inspection and protection will work.
-      </p>
       <SectionLabel>Set by Komtru — the same for every Trade</SectionLabel>
       <TermList aria-label="Set by Komtru">
         <TermRow label="Inspection">
@@ -290,6 +286,19 @@ export function Terms({ standard }: { standard: TradeStandard }): React.JSX.Elem
         <TermRow label="Refund">Full refund if damaged, not as described or incomplete</TermRow>
         <TermRow label="Returns">Per the {standard.categoryName} policy</TermRow>
       </TermList>
+    </>
+  );
+}
+
+/** CT-B3: protection is Komtru's and is only shown; the delivery commitments are the seller's. */
+export function Terms({ standard }: { standard: TradeStandard }): React.JSX.Element {
+  return (
+    <>
+      <h2 className="m-0 text-[18px] font-semibold">Trade terms</h2>
+      <p className="mb-[16px] mt-[4px] text-[12.5px] text-slate">
+        Here&apos;s how delivery, inspection and protection will work.
+      </p>
+      <KomtruTerms standard={standard} />
       <SectionLabel>The seller will add</SectionLabel>
       <TermList aria-label="The seller will add">
         <TermRow label="Delivery cost">
@@ -311,7 +320,18 @@ const CODE_ACTION =
   'flex-1 cursor-pointer rounded-[10px] px-[14px] py-[11px] text-[13px] font-semibold focus-visible:outline-[2.5px] focus-visible:outline-pure-white focus-visible:outline-offset-[2px]';
 
 /** CT-B5: the request is with the seller, and the screen says what is outstanding. */
-export function Sent({ trade, sellerName }: { trade: TradeView; sellerName: string }): React.JSX.Element {
+export function Sent({
+  trade,
+  sellerName,
+  role = 'BUYER',
+}: {
+  trade: TradeView;
+  /** The other party's name, whichever side that is. */
+  sellerName: string;
+  /** Whose screen this is: the buyer who asked (CT-B5) or the seller who offered (CT-S5). */
+  role?: 'BUYER' | 'SELLER';
+}): React.JSX.Element {
+  const selling = role === 'SELLER';
   const [shared, setShared] = useState<'idle' | 'copied' | 'failed'>('idle');
   const copy = (text: string) => {
     navigator.clipboard.writeText(text).then(
@@ -335,8 +355,9 @@ export function Sent({ trade, sellerName }: { trade: TradeView; sellerName: stri
   return (
     <ScreenColumn>
       <StatusHero tone="success" title={`Sent to ${sellerName}`}>
-        They&apos;ll confirm the item details and delivery cost, then you&apos;ll review and accept. Nothing
-        is charged until then.
+        {selling
+          ? "They'll choose courier or Park, give their details and review the final cost. You'll be notified when they respond."
+          : "They'll confirm the item details and delivery cost, then you'll review and accept. Nothing is charged until then."}
       </StatusHero>
       <CodeCard label="Your Trade Code" code={trade.tradeCode}>
         <button
@@ -367,27 +388,51 @@ export function Sent({ trade, sellerName }: { trade: TradeView; sellerName: stri
       <VersionTimeline
         aria-label="What happens next"
         className="mb-[16px] rounded-md border border-solid border-border-hairline bg-surface-primary p-[14px]"
-        steps={[
-          {
-            id: 'told',
-            title: "You've told us what you want",
-            detail: 'Seller, item, price and where it goes',
-            state: 'done',
-          },
-          {
-            id: 'seller',
-            title: `${sellerName} adds their part`,
-            detail: 'Item details, delivery cost and promise',
-            state: 'active',
-          },
-          {
-            id: 'accept',
-            title: 'You review and accept',
-            detail: 'With the final cost visible',
-            state: 'pending',
-          },
-          { id: 'fund', title: 'You fund the Trade', detail: 'Payment is protected', state: 'pending' },
-        ]}
+        steps={
+          selling
+            ? [
+                {
+                  id: 'told',
+                  title: "You've described the item",
+                  detail: 'Specification, photos and delivery terms',
+                  state: 'done',
+                },
+                {
+                  id: 'buyer',
+                  title: `${sellerName} chooses how to receive it`,
+                  detail: 'Courier or Park, and where',
+                  state: 'active',
+                },
+                {
+                  id: 'accept',
+                  title: `${sellerName} reviews and accepts`,
+                  detail: 'With the final cost',
+                  state: 'pending',
+                },
+                { id: 'fund', title: 'Payment is protected', detail: 'Then you dispatch', state: 'pending' },
+              ]
+            : [
+                {
+                  id: 'told',
+                  title: "You've told us what you want",
+                  detail: 'Seller, item, price and where it goes',
+                  state: 'done',
+                },
+                {
+                  id: 'seller',
+                  title: `${sellerName} adds their part`,
+                  detail: 'Item details, delivery cost and promise',
+                  state: 'active',
+                },
+                {
+                  id: 'accept',
+                  title: 'You review and accept',
+                  detail: 'With the final cost visible',
+                  state: 'pending',
+                },
+                { id: 'fund', title: 'You fund the Trade', detail: 'Payment is protected', state: 'pending' },
+              ]
+        }
       />
       <ActionStack>{BACK_TO_TRADES}</ActionStack>
     </ScreenColumn>
