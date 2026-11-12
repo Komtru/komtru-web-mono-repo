@@ -674,3 +674,5 @@ VALUE` cannot work here at all (drizzle runs every pending migration in one tran
   Then merge (full backend suite with `KOMTRU_INFRA_TESTS=1`, migration safety), then the T-119 UI layer. After that, F-023,
   F-028 and F-029 in journey order. F-037, F-044 and F-045 remain Backend done, UI outstanding. The full
   `KOMTRU_INFRA_TESTS=1` run on `main` is still owed.
+
+## 2026-11-12 09:14 WAT — skipped: locked (lock from 2026-11-12T05:57:00Z; 5h 51%, week 68%; active run merged F-019 at 09:03 WAT and committed at 09:10 WAT)
