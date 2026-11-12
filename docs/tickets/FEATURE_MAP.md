@@ -435,11 +435,11 @@ list a trade.
 
 - **Journey:** Issues & resolution
 - **Actor:** buyer, seller
-- **Absorbs:** T-066 (todo), T-075 (todo), T-119 (todo)
+- **Absorbs:** T-066 (done), T-075 (done), T-119 (todo)
 - **Backend scope:** Post-funding cancellation and can't-fulfil refunds; refunds against the ledger with the Q4 fee rule (T-066, T-075).
 - **Frontend scope:** Cancel a Trade (CT1, CT2, AR1) and Cancel After Funding (CR1–CR3, SC1, SC2). _8 v2 screens._
-- **Status:** Not started
-- **In progress (2026-11-11):** backend layer implemented on branch `f-030-cancel-refund` (10 commits, migration 0049, plan docs/superpowers/plans/2026-11-11-f-030-refunds-backend.md) and reviewed; next: fix (opus), then merge; T-119 UI after. Open review items: must-fix 1 approved cancellation stranded by a hold (no re-drive/sweep); should-fix 2 dispatch re-check holds, 3 foreign provider refund attach, 4 /me/refunds cursor microseconds, 5 sweep multiplies poll chains, 6 failed-refund recovery unwired (T-076?), 7 test gaps, 8 api-client note trim.
+- **Status:** Backend done, UI outstanding
+- **Note (2026-11-12):** backend layer (T-066, T-075, migration 0049) merged; next: the T-119 UI layer (CT1, CT2, AR1, CR1–CR3, SC1, SC2).
 - **Depends on:** none
 - **MVP:** yes
 

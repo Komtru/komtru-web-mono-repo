@@ -19,6 +19,7 @@ The engine exists and only the UI is missing, so these are the highest-value wor
 
 | Feature | Title                                                  | Journey                  | MVP |
 | ------- | ------------------------------------------------------ | ------------------------ | --- |
+| F-030   | Cancel a trade and get a refund                        | Issues & resolution      | yes |
 | F-037   | Get paid out                                           | Complete & grow          | yes |
 | F-044   | Account basics, addresses, documents and system states | Account, trust & support | yes |
 | F-045   | Verify yourself, and close or recover an account       | Account, trust & support | yes |
@@ -53,7 +54,6 @@ The engine exists and only the UI is missing, so these are the highest-value wor
 | F-023   | Terms, agreement and payment detail in the workspace | The trade workspace                     | yes |
 | F-028   | Delivery and evidence in the workspace               | Deliver & inspect                       | yes |
 | F-029   | Capture and compare proof media                      | Deliver & inspect                       | yes |
-| F-030   | Cancel a trade and get a refund                      | Issues & resolution                     | yes |
 | F-075   | Hosting and real deploy jobs                         | Launch & assurance (not a user journey) | yes |
 | F-078   | Definition-of-done audit and first push              | Launch & assurance (not a user journey) | yes |
 | F-014   | Sign in with Google, Apple or Facebook               | Arrive & verify                         |     |
@@ -75,7 +75,6 @@ The engine exists and only the UI is missing, so these are the highest-value wor
 | F-023   | Terms, agreement and payment detail in the workspace            | The trade workspace                     | yes |
 | F-028   | Delivery and evidence in the workspace                          | Deliver & inspect                       | yes |
 | F-029   | Capture and compare proof media                                 | Deliver & inspect                       | yes |
-| F-030   | Cancel a trade and get a refund                                 | Issues & resolution                     | yes |
 | F-031   | Lifecycle exceptions: expiry, withdrawal and inspection updates | Issues & resolution                     | yes |
 | F-032   | Report an issue and open a dispute                              | Issues & resolution                     | yes |
 | F-033   | Resolution execution: the return track                          | Issues & resolution                     | yes |
@@ -103,19 +102,17 @@ The same work counted per ticket. Useful for the detail in `docs/tickets/`, not 
 it counts backend and frontend layers separately, which is how the build drifted.
 
 ```
-MVP   ██████████████████████············  70/109  (64%)
-Total ██████████████····················  70/168  (42%)
+MVP   ██████████████████████············  72/109  (66%)
+Total ███████████████···················  72/168  (43%)
 ```
 
-39 MVP tickets left, 59 deferred past it.
+37 MVP tickets left, 59 deferred past it.
 
 ### Tickets in progress
 
 | Ticket | Title                                                   | MVP |
 | ------ | ------------------------------------------------------- | --- |
 | T-029  | Isolate the integration suite's shared Redis and queues | yes |
-| T-066  | Post-funding cancellation and can't-fulfil refunds      | yes |
-| T-075  | Refunds                                                 | yes |
 
 ### Tickets ready to start (MVP first)
 
@@ -123,12 +120,15 @@ Total ██████████████················
 | ------ | ------------------------------------------------------------------------- | --- |
 | T-029  | Isolate the integration suite's shared Redis and queues                   | yes |
 | T-055  | Merchant applications and certification                                   | yes |
-| T-075  | Refunds                                                                   | yes |
+| T-080  | Disputes core                                                             | yes |
+| T-119  | Cancellation and refunds                                                  | yes |
 | T-194  | Trade workspace supporting screens: funding, terms, agreement and payment | yes |
 | T-195  | Trade workspace supporting screens: delivery and evidence                 | yes |
 | T-197  | Proof media: capture, check and compare                                   | yes |
+| T-198  | Lifecycle exceptions and trade extras                                     | yes |
 | T-034  | Social login                                                              |     |
 | T-067  | IMEI verification                                                         |     |
+| T-076  | Chargebacks, reconciliation and settlement operations                     |     |
 | T-085  | Logistics schema and Park seed                                            |     |
 | T-100  | Support tickets (M10)                                                     |     |
 | T-101  | Risk and fraud (M13)                                                      |     |
@@ -155,8 +155,6 @@ Total ██████████████················
 | T-056  | Listings lifecycle, images and stock                                      | yes |
 | T-057  | Search and discovery (M19)                                                | yes |
 | T-063  | Orders and multi-item trades (M9)                                         | yes |
-| T-066  | Post-funding cancellation and can't-fulfil refunds                        | yes |
-| T-075  | Refunds                                                                   | yes |
 | T-080  | Disputes core                                                             | yes |
 | T-081  | Evidence comparison and dispute read models                               | yes |
 | T-102  | Reputation and ratings (M12)                                              | yes |
