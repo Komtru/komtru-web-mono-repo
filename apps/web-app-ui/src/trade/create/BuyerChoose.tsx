@@ -54,6 +54,8 @@ export function BuyerChoose({ trade }: { trade: TradeView }): React.JSX.Element 
   const [declining, setDeclining] = useState(false);
   const [reason, setReason] = useState('');
   const [problem, setProblem] = useState<string | undefined>(undefined);
+  const headingRef = useRef<HTMLHeadingElement>(null);
+  const arrived = useRef(false);
   const terms = trade.terms;
   const request = readRequest(trade);
   const seller =
@@ -69,6 +71,15 @@ export function BuyerChoose({ trade }: { trade: TradeView }): React.JSX.Element 
     if (hasSnapshot || category === null || amountMinor === undefined) return;
     runPreview({ role: 'BUYER', categoryCode: category, itemAmountMinor: amountMinor });
   }, [hasSnapshot, category, amountMinor, runPreview]);
+
+  // A stage change unmounts the button that was focused; focus moves to the new stage's heading, not to the page top.
+  useEffect(() => {
+    if (!arrived.current) {
+      arrived.current = true;
+      return;
+    }
+    headingRef.current?.focus();
+  }, [stage]);
 
   if (terms === null)
     return (
@@ -99,9 +110,16 @@ export function BuyerChoose({ trade }: { trade: TradeView }): React.JSX.Element 
   const parkOn = parkAvailable();
   const promise = request.deliveryPromise === undefined ? undefined : promiseLabel(request.deliveryPromise);
 
+  const retryPreview = () => {
+    if (category === null || amountMinor === undefined) return;
+    runPreview({ role: 'BUYER', categoryCode: category, itemAmountMinor: amountMinor });
+  };
+  // What the buyer pays is the platform's figure; nothing can be accepted until it is on screen.
+  const figuresReady = fees !== undefined;
+
   const onAccept = () => {
     // Synchronous, unlike `isPending`: two taps before React re-renders must not make two acceptances.
-    if (inFlight.current || waiting || addressId === null) return;
+    if (inFlight.current || waiting || addressId === null || !figuresReady) return;
     inFlight.current = true;
     setProblem(undefined);
     accept.mutate(
@@ -124,6 +142,7 @@ export function BuyerChoose({ trade }: { trade: TradeView }): React.JSX.Element 
   };
 
   const onDecline = () => {
+    if (reason.trim().length < 3) return;
     setProblem(undefined);
     decline.mutate(
       { id: trade.id, reason: reason.trim() },
@@ -163,6 +182,20 @@ export function BuyerChoose({ trade }: { trade: TradeView }): React.JSX.Element 
           </TermRow>
         </TermList>
       )}
+      {fees === undefined && (
+        <div role="status" className="mt-[12px]">
+          {preview.isError ? (
+            <RiskBanner>
+              We couldn&apos;t work out what you pay.{' '}
+              <button type="button" className="font-semibold underline" onClick={retryPreview}>
+                Try again
+              </button>
+            </RiskBanner>
+          ) : (
+            <p className="text-[12px] text-slate">Working out what you pay…</p>
+          )}
+        </div>
+      )}
       <p className="mt-[6px] text-[11px] leading-[1.5] text-slate">
         The delivery charge is paid to the seller outside Komtru protection and is not part of this total.
       </p>
@@ -182,6 +215,10 @@ export function BuyerChoose({ trade }: { trade: TradeView }): React.JSX.Element 
               },
             })}
       />
+
+      <h2 ref={headingRef} tabIndex={-1} className="sr-only">
+        {stage === 0 ? 'Choose how to receive it' : 'Review and accept'}
+      </h2>
 
       {stage === 0 && (
         <>
@@ -239,7 +276,7 @@ export function BuyerChoose({ trade }: { trade: TradeView }): React.JSX.Element 
           <ActionStack>
             <Button
               type="button"
-              disabled={waiting}
+              disabled={waiting || !figuresReady}
               onClick={() => {
                 setTried(true);
                 if (addressId === null) return;
@@ -273,7 +310,7 @@ export function BuyerChoose({ trade }: { trade: TradeView }): React.JSX.Element 
           </p>
           {problem !== undefined && <RiskBanner>{problem}</RiskBanner>}
           <ActionStack>
-            <Button type="button" onClick={onAccept} disabled={waiting || accept.isPending}>
+            <Button type="button" onClick={onAccept} disabled={waiting || accept.isPending || !figuresReady}>
               {accept.isPending ? 'Accepting…' : 'Accept & continue to payment'}
             </Button>
             <Button
@@ -310,6 +347,7 @@ export function BuyerChoose({ trade }: { trade: TradeView }): React.JSX.Element 
         confirm="Decline terms"
         pending={decline.isPending}
         onConfirm={onDecline}
+        confirmDisabled={reason.trim().length < 3}
         onClose={() => {
           setDeclining(false);
         }}

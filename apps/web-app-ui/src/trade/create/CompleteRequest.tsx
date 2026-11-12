@@ -28,7 +28,7 @@ import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { AddressPicker } from '../AddressPicker';
 import { isProblem, naira, problemMessage, proofNeeds } from '../format';
-import { ProofUpload } from '../ProofUpload';
+import { type Attached, ProofUpload } from '../ProofUpload';
 import { Agreement, ItemFields, StageHeader } from './parts';
 import { readRequest } from './read';
 import { allowedPromises, collidingKeys, completedSpec, isRequestSpec, parseCharge } from './request';
@@ -92,6 +92,7 @@ function Completion({ trade }: { trade: TradeView }): React.JSX.Element {
   const [fields, setFields] = useState<Record<string, string>>({});
   const [proof, setProof] = useState<string[]>([]);
   const [counts, setCounts] = useState({ photos: 0, videos: 0 });
+  const [attached, setAttached] = useState<Attached[]>([]);
   const [partner, setPartner] = useState('');
   const [charge, setCharge] = useState('');
   const [promise, setPromise] = useState('');
@@ -254,9 +255,11 @@ function Completion({ trade }: { trade: TradeView }): React.JSX.Element {
           <ProofUpload
             required={needs.photos}
             requireVideo={needs.video}
-            onChange={(ids, summary) => {
+            initial={attached}
+            onChange={(ids, summary, media) => {
               setProof(ids);
               setCounts(summary);
+              setAttached(media);
             }}
             step="send"
           />

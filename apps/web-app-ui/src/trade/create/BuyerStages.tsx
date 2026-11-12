@@ -356,7 +356,7 @@ export function Sent({
     <ScreenColumn>
       <StatusHero tone="success" title={`Sent to ${sellerName}`}>
         {selling
-          ? "They'll choose courier or Park, give their details and review the final cost. You'll be notified when they respond."
+          ? "They'll choose how to receive it, give their delivery address and review the final cost. You'll be notified when they respond."
           : "They'll confirm the item details and delivery cost, then you'll review and accept. Nothing is charged until then."}
       </StatusHero>
       <CodeCard label="Your Trade Code" code={trade.tradeCode}>
@@ -400,7 +400,7 @@ export function Sent({
                 {
                   id: 'buyer',
                   title: `${sellerName} chooses how to receive it`,
-                  detail: 'Courier or Park, and where',
+                  detail: 'Their delivery address',
                   state: 'active',
                 },
                 {

@@ -147,10 +147,11 @@ export function sellerSpec(
   delivery: { partner: string; chargeMinor: string; promise: string },
 ): Spec {
   assertNoCollision(standard.itemSpecFields.map((field) => field.key));
-  assertNoCollision(Object.keys(fields));
   const spec: Spec = { requestedItem: title.trim() };
-  for (const [key, value] of Object.entries(fields)) {
-    if (value.trim() !== '') spec[key] = value.trim();
+  // Only the category's own keys: what was typed under another category (the title can flip it) never rides along.
+  for (const { key } of standard.itemSpecFields) {
+    const value = (fields[key] ?? '').trim();
+    if (value !== '') spec[key] = value;
   }
   spec.deliveryMode = 'COURIER';
   spec.deliveryPartner = delivery.partner.trim();

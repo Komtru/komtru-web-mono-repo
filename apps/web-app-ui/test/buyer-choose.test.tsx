@@ -136,6 +136,65 @@ describe('CT-S6 Choose how to receive it', () => {
   });
 });
 
+describe('CT-S6 and CT-S7 edges', () => {
+  it('will not go on or accept until what the buyer pays is known, and offers a retry', async () => {
+    let fail = true;
+    answerWith(
+      api.call,
+      handlers(asBuyer(), {
+        'POST /trades/preview': () => {
+          if (fail) throw problem('INTERNAL', 500);
+          return preview();
+        },
+      }),
+    );
+    renderWithApi(api.call, <TradeScreen id={id(1)} />);
+    expect(await screen.findByText(/We couldn't work out what you pay/)).toBeTruthy();
+    await waitFor(() => {
+      expect(screen.getByRole<HTMLInputElement>('radio', { name: /Home/ }).checked).toBe(true);
+    });
+    expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Review agreement' }).disabled).toBe(true);
+    fail = false;
+    press('Try again');
+    await waitFor(() => {
+      expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Review agreement' }).disabled).toBe(
+        false,
+      );
+    });
+    expect(await screen.findByText('₦458,780.00')).toBeTruthy();
+    press('Review agreement');
+    await screen.findByRole('button', { name: 'Accept & continue to payment' });
+  });
+
+  it('moves focus to the new stage heading when the stage changes', async () => {
+    answerWith(api.call, handlers(asBuyer()));
+    renderWithApi(api.call, <TradeScreen id={id(1)} />);
+    await toS7();
+    await waitFor(() => {
+      expect(document.activeElement?.textContent).toBe('Review and accept');
+    });
+    press('Change delivery');
+    await waitFor(() => {
+      expect(document.activeElement?.textContent).toBe('Choose how to receive it');
+    });
+  });
+
+  it('holds the decline back until the reason is at least three characters', async () => {
+    answerWith(api.call, handlers(asBuyer()));
+    renderWithApi(api.call, <TradeScreen id={id(1)} />);
+    await toS7();
+    press('Decline');
+    const confirm = () => screen.getByRole<HTMLButtonElement>('button', { name: 'Decline terms' });
+    expect(confirm().disabled).toBe(true);
+    fireEvent.change(screen.getByLabelText('Reason'), { target: { value: 'no' } });
+    expect(confirm().disabled).toBe(true);
+    fireEvent.click(confirm());
+    expect(callsTo(api.call, 'POST', '/trades/:id/decline')).toHaveLength(0);
+    fireEvent.change(screen.getByLabelText('Reason'), { target: { value: 'Too dear' } });
+    expect(confirm().disabled).toBe(false);
+  });
+});
+
 describe('CT-S7 Review and accept', () => {
   it('shows the whole agreement the seller made, with the buyer address chosen', async () => {
     answerWith(api.call, handlers(asBuyer()));

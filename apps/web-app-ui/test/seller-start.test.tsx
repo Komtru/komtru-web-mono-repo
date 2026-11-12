@@ -233,7 +233,7 @@ describe('CT-S2 and CT-S2F Item and delivery', () => {
     expect(screen.getByRole('radio', { name: 'Used · like new' })).toBeTruthy();
     expect(screen.getByText('Photos of the item')).toBeTruthy();
     expect(screen.getByText('Ships from')).toBeTruthy();
-    expect(screen.getByText(/The buyer chooses courier or Park/)).toBeTruthy();
+    expect(screen.getByText(/The buyer gives their delivery address after you send this/)).toBeTruthy();
     press('Continue');
     expect(await screen.findByText('Add the brand to carry on.')).toBeTruthy();
     expect(screen.getByText('Choose the condition to carry on.')).toBeTruthy();
@@ -270,13 +270,86 @@ describe('CT-S2 and CT-S2F Item and delivery', () => {
     await expectNoAxeViolations(view.container, SHELL_RULES);
   });
 
+  it('sends no field of the old category when the title flips the category after going back', async () => {
+    answerWith(api.call, handlers());
+    const view = renderWithApi(api.call, <SellerStart />);
+    await aboutStage();
+    press('Continue');
+    await itemStage(view.container);
+    press(/^back$/i);
+    await screen.findByLabelText(/Who's the buyer/);
+    type('Item', 'Nike sneakers');
+    expect(await screen.findByText(/We detected the category: Fashion & Luxury/)).toBeTruthy();
+    press('Continue');
+    await screen.findByLabelText('Brand');
+    expect(screen.queryByLabelText('Model')).toBeNull();
+    await waitFor(() => {
+      expect(screen.getByRole<HTMLInputElement>('radio', { name: /Home/ }).checked).toBe(true);
+    });
+    press('Continue');
+    await screen.findByText('Trade terms');
+    type('Delivery partner', 'SwiftDrop');
+    type('Delivery charge (₦)', '3,500');
+    fireEvent.click(screen.getByRole('radio', { name: '5–7 days' }));
+    press('Review');
+    await screen.findByRole('button', { name: 'Send to buyer' });
+    await waitFor(() => {
+      expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Send to buyer' }).disabled).toBe(false);
+    });
+    press('Send to buyer');
+    await screen.findByText('Sent to Amaka O.');
+    const created = callsTo(api.call, 'POST', '/trades')[0]?.body as {
+      itemSpec: Record<string, unknown>;
+      categoryCode: string;
+    };
+    expect(created.categoryCode).toBe('fashion');
+    expect(created.itemSpec.brand).toBe('Apple');
+    expect(created.itemSpec).not.toHaveProperty('model');
+    expect(created.itemSpec).not.toHaveProperty('condition');
+    expect(view.container).toBeTruthy();
+  });
+
+  it('forgets nothing the seller attached, and sends nothing hidden, when they go back and return', async () => {
+    answerWith(api.call, handlers());
+    const view = renderWithApi(api.call, <SellerStart />);
+    await toTerms(view.container);
+    press(/^back$/i);
+    await screen.findByLabelText('Brand');
+    // Both photos are still shown, so the gate and what is sent agree.
+    expect(screen.getByRole('button', { name: 'Remove front.jpg' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Remove back.jpg' })).toBeTruthy();
+    expect(screen.queryByText('Proof of the item needed')).toBeNull();
+    press('Continue');
+    await screen.findByText('Trade terms');
+    type('Delivery partner', 'SwiftDrop');
+    type('Delivery charge (₦)', '3,500');
+    fireEvent.click(screen.getByRole('radio', { name: '5–7 days' }));
+    press('Review');
+    await waitFor(() => {
+      expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Send to buyer' }).disabled).toBe(false);
+    });
+    press('Send to buyer');
+    await screen.findByText('Sent to Amaka O.');
+    expect(
+      (callsTo(api.call, 'POST', '/trades')[0]?.body as { proofFileIds: string[] }).proofFileIds,
+    ).toHaveLength(2);
+  });
+
+  it('says the delivery partner is needed when it is left blank', async () => {
+    answerWith(api.call, handlers());
+    const view = renderWithApi(api.call, <SellerStart />);
+    await toTerms(view.container);
+    press('Review');
+    expect(await screen.findByText('Say which courier you will use')).toBeTruthy();
+  });
+
   it('goes back to the first stage', async () => {
     answerWith(api.call, handlers());
     renderWithApi(api.call, <SellerStart />);
     await aboutStage();
     press('Continue');
     await screen.findByLabelText('Brand');
-    press(/back/i);
+    press(/^back$/i);
     expect(await screen.findByLabelText(/Who's the buyer/)).toBeTruthy();
   });
 });
@@ -360,11 +433,35 @@ describe('CT-S4 Review and CT-S5 Sent', () => {
     const sendBody = callsTo(api.call, 'POST', '/trades/:id/send')[0]?.body as Record<string, unknown>;
     expect(sendBody.username).toBe('amaka');
     expect(sendBody.proofFileIds).toHaveLength(2);
-    expect(screen.getByText(/They'll choose courier or Park/)).toBeTruthy();
+    expect(screen.getByText(/They'll choose how to receive it, give their delivery address/)).toBeTruthy();
+    expect(screen.queryByText(/Park/)).toBeNull();
     expect(screen.getByText('KMT-9042800-NG')).toBeTruthy();
     expect(screen.getByText('Amaka O. chooses how to receive it')).toBeTruthy();
     expect(screen.getByRole('link', { name: 'Back to your trades' }).getAttribute('href')).toBe('/trades');
     await expectNoAxeViolations(view.container, SHELL_RULES);
+  });
+
+  it('will not send until the fees are known, and offers a retry when they fail to load', async () => {
+    let fail = true;
+    answerWith(
+      api.call,
+      handlers({
+        'POST /trades/preview': () => {
+          if (fail) throw problem('INTERNAL', 500);
+          return preview();
+        },
+      }),
+    );
+    const view = renderWithApi(api.call, <SellerStart />);
+    await toReview(view.container);
+    expect(await screen.findByText(/We couldn't work out the fees/)).toBeTruthy();
+    expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Send to buyer' }).disabled).toBe(true);
+    fail = false;
+    press('Try again');
+    await waitFor(() => {
+      expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Send to buyer' }).disabled).toBe(false);
+    });
+    expect(callsTo(api.call, 'POST', '/trades')).toHaveLength(0);
   });
 
   it('makes one draft however many times the button is pressed', async () => {

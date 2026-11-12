@@ -37,7 +37,7 @@ import {
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { AddressPicker } from '../AddressPicker';
 import { initialsOf, itemSub, itemTitle, naira, problemMessage, proofNeeds } from '../format';
-import { ProofUpload } from '../ProofUpload';
+import { type Attached, ProofUpload } from '../ProofUpload';
 import { KomtruTerms, Sent } from './BuyerStages';
 import { Agreement, ItemFields, StageHeader } from './parts';
 import { allowedPromises, detectCategory, parkAvailable, parseCharge, sellerSpec } from './request';
@@ -89,6 +89,7 @@ export function SellerStart({
   const [fields, setFields] = useState<Record<string, string>>({});
   const [proof, setProof] = useState<string[]>([]);
   const [counts, setCounts] = useState({ photos: 0, videos: 0 });
+  const [attached, setAttached] = useState<Attached[]>([]);
   const [addressId, setAddressId] = useState<string | null>(null);
   const [partner, setPartner] = useState('');
   const [charge, setCharge] = useState('');
@@ -115,6 +116,10 @@ export function SellerStart({
     if (category === undefined || kobo === undefined) return;
     runPreview({ role: 'SELLER', categoryCode: category, itemAmountMinor: kobo.toString() });
   }, [category, kobo, runPreview]);
+  const retryPreview = () => {
+    if (category === undefined || kobo === undefined) return;
+    runPreview({ role: 'SELLER', categoryCode: category, itemAmountMinor: kobo.toString() });
+  };
   const canSell = preview.data === undefined || preview.data.allowedRoles.includes('SELLER');
   const amounts = preview.data?.fees[0]?.snapshot.amounts;
 
@@ -208,7 +213,7 @@ export function SellerStart({
 
   const submit = async () => {
     // Synchronous, unlike `busy`: two taps before React re-renders must not make two drafts.
-    if (inFlight.current) return;
+    if (inFlight.current || amounts === undefined) return;
     if (
       standard === undefined ||
       kobo === undefined ||
@@ -431,18 +436,17 @@ export function SellerStart({
           <ProofUpload
             required={needs.photos}
             requireVideo={needs.video}
-            onChange={(ids, summary) => {
+            initial={attached}
+            onChange={(ids, summary, media) => {
               setProof(ids);
               setCounts(summary);
+              setAttached(media);
             }}
             step="send"
           />
           <AddressPicker label="Ships from" value={addressId} onChange={setAddressId} />
           <SectionLabel>Where it goes</SectionLabel>
-          <NoteBanner>
-            The buyer chooses courier or Park and gives their address or collection details after you send
-            this.
-          </NoteBanner>
+          <NoteBanner>The buyer gives their delivery address after you send this.</NoteBanner>
           {tried && !itemOk && (
             <p role="alert" className="mb-[12px] text-[12px] font-semibold text-risk-on-soft">
               {missingField !== undefined
@@ -495,6 +499,7 @@ export function SellerStart({
               setPartner(event.target.value);
             }}
             invalid={tried && partner.trim() === ''}
+            helper={tried && partner.trim() === '' ? 'Say which courier you will use' : undefined}
           />
           <TextField
             label="Delivery charge (₦)"
@@ -581,6 +586,20 @@ export function SellerStart({
             }
             totalNote="The delivery charge is paid to the seller outside Komtru protection and is not part of this total."
           />
+          {amounts === undefined && (
+            <div role="status">
+              {preview.isError ? (
+                <RiskBanner>
+                  We couldn&apos;t work out the fees.{' '}
+                  <button type="button" className="font-semibold underline" onClick={retryPreview}>
+                    Try again
+                  </button>
+                </RiskBanner>
+              ) : (
+                <p className="text-[12px] text-slate">Working out the fees…</p>
+              )}
+            </div>
+          )}
           <NoteBanner title="Before you send">
             These terms become the shared reference point for this Trade. The buyer must accept before funds
             can be protected.
@@ -615,7 +634,7 @@ export function SellerStart({
           </>
         ) : (
           <>
-            <Button type="button" onClick={() => void submit()} disabled={busy}>
+            <Button type="button" onClick={() => void submit()} disabled={busy || amounts === undefined}>
               {busy ? 'Sending…' : 'Send to buyer'}
             </Button>
             <Button

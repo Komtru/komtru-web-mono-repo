@@ -8,7 +8,7 @@ import { useRef, useState } from 'react';
 /** The file the platform stores the seller's proof under: private to the trade, never public. */
 const PROOF = { category: 'OTHER', visibility: 'PRIVATE_CASE' } as const;
 
-interface Attached extends MediaItem {
+export interface Attached extends MediaItem {
   fileId: string;
 }
 
@@ -18,7 +18,9 @@ export interface ProofUploadProps {
   /** A video is required as well as the photos. */
   requireVideo?: boolean;
   /** Told the ids of everything attached and how many are photos and videos, on every change. */
-  onChange: (fileIds: string[], counts: { photos: number; videos: number }) => void;
+  onChange: (fileIds: string[], counts: { photos: number; videos: number }, media: Attached[]) => void;
+  /** What was attached before this mounted, so a screen that unmounts it between stages does not lose or hide files. */
+  initial?: Attached[];
   /** What the locked banner says: the gate guards a send, an acceptance or a counter. */
   step: 'send' | 'accept';
 }
@@ -32,14 +34,17 @@ export function ProofUpload({
   required,
   requireVideo = false,
   onChange,
+  initial = [],
   step,
 }: ProofUploadProps): React.JSX.Element {
   const client = useApiClient();
-  const [media, setMedia] = useState<Attached[]>([]);
+  const [media, setMedia] = useState<Attached[]>(initial);
   const [busy, setBusy] = useState(0);
   const [failure, setFailure] = useState<string | undefined>(undefined);
   // Ids start at 1 and never repeat, so removing one and adding another cannot reuse a slot's key.
-  const counter = useRef(0);
+  const counter = useRef(
+    initial.reduce((top, item) => Math.max(top, Number(item.id.replace('proof-', '')) || 0), 0),
+  );
 
   const report = (next: Attached[]) => {
     setMedia(next);
@@ -49,6 +54,7 @@ export function ProofUpload({
         photos: next.filter((item) => item.kind !== 'video').length,
         videos: next.filter((item) => item.kind === 'video').length,
       },
+      next,
     );
   };
 

@@ -145,11 +145,27 @@ describe('the seller-started spec (F-019)', () => {
   it('refuses to be built over a reserved key', () => {
     expect(() =>
       sellerSpec(
-        electronics,
+        { itemSpecFields: [{ key: 'deliveryMode', label: 'Mode', required: true }] },
         'x',
         { deliveryMode: 'PARK' },
         { partner: 'a', chargeMinor: '1', promise: '1-3' },
       ),
     ).toThrow(/reserved/);
+  });
+  it('carries only the category own keys, so what was typed under another category never rides along', () => {
+    const spec = sellerSpec(
+      fashion,
+      'Nike sneakers',
+      { brand: 'Nike', model: 'Air', condition: 'Brand new', deliveryMode: 'PARK', imei: '123' },
+      { partner: 'SwiftDrop', chargeMinor: '350000', promise: '5-7' },
+    );
+    expect(spec).toEqual({
+      requestedItem: 'Nike sneakers',
+      brand: 'Nike',
+      deliveryMode: 'COURIER',
+      deliveryPartner: 'SwiftDrop',
+      deliveryChargeMinor: '350000',
+      deliveryPromise: '5-7',
+    });
   });
 });
