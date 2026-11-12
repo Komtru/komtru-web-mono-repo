@@ -7,11 +7,11 @@ behind it is [`BUILD_PLAN.md`](BUILD_PLAN.md). The unit of work is the feature, 
 thing in an app.
 
 ```
-MVP   ██████████████····················  21/52   (40%)
-Total █████████·························  21/80   (26%)
+MVP   ██████████████····················  22/52   (42%)
+Total █████████·························  22/80   (28%)
 ```
 
-31 MVP features left, 28 deferred past it.
+30 MVP features left, 28 deferred past it.
 
 ## Backend done, UI outstanding
 
@@ -30,7 +30,7 @@ The engine exists and only the UI is missing, so these are the highest-value wor
 | Platform (not a user journey)           | 9    | 10    | 9        | 10        |
 | Arrive & verify                         | 3    | 4     | 3        | 3         |
 | Home & discover                         | 0    | 2     | 0        | 2         |
-| Propose & agree                         | 2    | 5     | 2        | 3         |
+| Propose & agree                         | 3    | 5     | 3        | 3         |
 | The trade workspace                     | 1    | 2     | 1        | 2         |
 | Fund & protect                          | 1    | 2     | 1        | 1         |
 | Fulfil & dispatch                       | 1    | 1     | 1        | 1         |
@@ -50,7 +50,6 @@ The engine exists and only the UI is missing, so these are the highest-value wor
 | Feature | Title                                                | Journey                                 | MVP |
 | ------- | ---------------------------------------------------- | --------------------------------------- | --- |
 | F-005   | Deterministic integration test suite                 | Platform (not a user journey)           | yes |
-| F-019   | Create a trade: seller starts, buyer completes       | Propose & agree                         | yes |
 | F-023   | Terms, agreement and payment detail in the workspace | The trade workspace                     | yes |
 | F-028   | Delivery and evidence in the workspace               | Deliver & inspect                       | yes |
 | F-029   | Capture and compare proof media                      | Deliver & inspect                       | yes |
@@ -73,7 +72,6 @@ The engine exists and only the UI is missing, so these are the highest-value wor
 | F-005   | Deterministic integration test suite                            | Platform (not a user journey)           | yes |
 | F-015   | Home, search, categories and find-a-trade-by-code               | Home & discover                         | yes |
 | F-016   | View a seller's profile and Trust Passport                      | Home & discover                         | yes |
-| F-019   | Create a trade: seller starts, buyer completes                  | Propose & agree                         | yes |
 | F-023   | Terms, agreement and payment detail in the workspace            | The trade workspace                     | yes |
 | F-028   | Delivery and evidence in the workspace                          | Deliver & inspect                       | yes |
 | F-029   | Capture and compare proof media                                 | Deliver & inspect                       | yes |
@@ -105,11 +103,11 @@ The same work counted per ticket. Useful for the detail in `docs/tickets/`, not 
 it counts backend and frontend layers separately, which is how the build drifted.
 
 ```
-MVP   ██████████████████████············  69/109  (63%)
-Total ██████████████····················  69/168  (41%)
+MVP   ██████████████████████············  70/109  (64%)
+Total ██████████████····················  70/168  (42%)
 ```
 
-40 MVP tickets left, 59 deferred past it.
+39 MVP tickets left, 59 deferred past it.
 
 ### Tickets in progress
 
@@ -174,7 +172,6 @@ Total ██████████████················
 | T-180  | End-to-end critical paths                                                 | yes |
 | T-182  | Security review                                                           | yes |
 | T-183  | Definition-of-done audit and first push                                   | yes |
-| T-193  | Create a trade: seller starts, buyer completes                            | yes |
 | T-194  | Trade workspace supporting screens: funding, terms, agreement and payment | yes |
 | T-195  | Trade workspace supporting screens: delivery and evidence                 | yes |
 | T-196  | Trade workspace supporting screens: resolution and issue reporting        | yes |

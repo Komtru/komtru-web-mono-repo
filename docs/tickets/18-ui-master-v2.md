@@ -72,6 +72,7 @@ What changed, from [`screens-v2.tsv`](../design-reference/screens-v2.tsv) (437 s
 - **Model:** sonnet
 - **Scope:** The mirror flow: the seller starts (About, category item details including Fashion & Luxury, terms, review and send, Sent) and the buyer chooses how to receive it (CT-S6) and reviews and accepts (CT-S7). Reuses the stage components from T-192. Definition of done as epic 13 (frontend-design per screen, ui-kit only, all states, e2e and axe).
 - **Acceptance criteria:** the 8 v2 screens CT-S1, CT-S2, CT-S2F, CT-S3, CT-S4, CT-S5, CT-S6, CT-S7 are built to the reference rows in `SCREEN_INDEX.md`, with copy taken from the reference and every data-backed screen showing loading, empty, error and offline states.
+- **Status:** Done (2026-11-12). Plan: docs/superpowers/plans/2026-11-12-f-019-seller-starts.md. Review: 2 must-fix and 6 should-fix items fixed. E2E waived (no harness, as T-192). Visual check: docs/ui-review/T-193/.
 
 ### T-194 — Trade workspace supporting screens: funding, terms, agreement and payment
 

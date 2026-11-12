@@ -295,10 +295,10 @@ list a trade.
 
 - **Journey:** Propose & agree
 - **Actor:** seller
-- **Absorbs:** T-193 (todo)
+- **Absorbs:** T-193 (done)
 - **Backend scope:** Served by F-017.
 - **Frontend scope:** Create a Trade · Seller starts (CT-S1–CT-S6) and Buyer completes (CT-S7, CT-S2F) — stages 3 and 4 of the four-stage model. _8 v2 screens._
-- **Status:** Not started
+- **Status:** Done
 - **Depends on:** F-017, F-018
 - **MVP:** yes
 - **Note:** Split from F-018 at the four-stage seam: 20 screens in one ticket is two cycles, and the seller-start flow reuses the buyer-start components.
