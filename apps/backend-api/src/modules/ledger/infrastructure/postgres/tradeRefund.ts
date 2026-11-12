@@ -34,6 +34,15 @@ export async function lockTradeForRefund(tx: Tx, tradeId: string): Promise<Trade
   return row;
 }
 
+/**
+ * The trade row alone, FOR SHARE: what a refund dispatch takes before it reads the trade's holds, so a
+ * hold writer (which must lock the trade FOR UPDATE) cannot slip in between the check and the claim.
+ */
+export async function lockTradeShare(tx: Tx, tradeId: string): Promise<boolean> {
+  const [row] = await tx.select({ id: trades.id }).from(trades).where(eq(trades.id, tradeId)).for('share');
+  return row !== undefined;
+}
+
 /** Who may see a trade's refunds: its two parties. Undefined for a trade that does not exist. */
 export async function tradeParties(
   db: Pick<Tx, 'select'>,

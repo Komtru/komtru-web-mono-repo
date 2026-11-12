@@ -39,6 +39,8 @@ import {
   type RefundChange,
 } from '../infrastructure/postgres/refundsRepository.js';
 import type { RefundRow, RefundStatus } from '../infrastructure/postgres/schema/refunds.js';
+import { lockTradeShare } from '../infrastructure/postgres/tradeRefund.js';
+import { activeTradeHolds } from '../infrastructure/postgres/tradeRelease.js';
 import { postJournal } from './journal.service.js';
 
 export interface RefundDispatchDeps {
@@ -119,15 +121,31 @@ async function toReview(
   return row;
 }
 
-type Claim = { kind: 'CLAIMED'; refund: RefundRow } | { kind: 'NOT_REQUESTED'; refund: RefundRow };
+type Claim =
+  | { kind: 'CLAIMED'; refund: RefundRow }
+  | { kind: 'NOT_REQUESTED'; refund: RefundRow }
+  | { kind: 'HELD'; refund: RefundRow; holds: string[] };
 
-/** REQUESTED → PROCESSING under the row lock, before the provider hears of it. */
+/**
+ * REQUESTED → PROCESSING under the row lock, before the provider hears of it — and only while nothing
+ * holds the trade. The decision checked for holds when it posted, but a hold placed since (a fraud or
+ * compliance review on a cancelled trade) must still stop the money leaving. The trade is read FOR
+ * SHARE first, the lock every hold writer must wait on (`activeTradeHolds`), so a hold either commits
+ * before this check and is seen, or waits until the claim has committed. A held refund stays REQUESTED
+ * and the sweep asks again once the hold is lifted.
+ */
 async function claim(deps: RefundDispatchDeps, refundId: string): Promise<Claim | undefined> {
   const now = clock(deps);
   return deps.db.transaction(async (tx): Promise<Claim | undefined> => {
+    const seen = await findRefund(tx, refundId);
+    if (!seen) return undefined;
+    if (seen.status !== 'REQUESTED') return { kind: 'NOT_REQUESTED', refund: seen };
+    await lockTradeShare(tx, seen.tradeId);
     const refund = await lockRefund(tx, refundId);
     if (!refund) return undefined;
     if (refund.status !== 'REQUESTED') return { kind: 'NOT_REQUESTED', refund };
+    const holds = await activeTradeHolds(tx, refund.tradeId);
+    if (holds.length) return { kind: 'HELD', refund, holds };
     return {
       kind: 'CLAIMED',
       refund: await updateRefund(tx, refund.id, { status: 'PROCESSING', dispatchedAt: now }),
@@ -186,12 +204,20 @@ async function send(deps: RefundDispatchDeps, refund: RefundRow): Promise<void> 
 
 /**
  * The dispatch job (`ledger.process-refund`): claims a REQUESTED refund and sends it, then resolves
- * it on the provider's record. A PROCESSING one is only resolved — never sent again. Throws
- * `RefundStillPendingError` while the provider has not decided.
+ * it on the provider's record. A held trade's refund is left REQUESTED and unsent; the sweep
+ * re-queues it, since its row does not change. A PROCESSING one is only resolved — never sent
+ * again. Throws `RefundStillPendingError` while the provider has not decided.
  */
 export async function processRefund(deps: RefundDispatchDeps, refundId: string): Promise<RefundProgress> {
   const claimed = await claim(deps, refundId);
   if (!claimed) return 'MISSING';
+  if (claimed.kind === 'HELD') {
+    deps.logger.warn(
+      { refundId, tradeId: claimed.refund.tradeId, holds: claimed.holds },
+      'ledger: refund not sent while the trade is held; the sweep asks again',
+    );
+    return 'REQUESTED';
+  }
   if (claimed.kind === 'CLAIMED') await send(deps, claimed.refund);
   else if (claimed.refund.status !== 'PROCESSING') return claimed.refund.status;
   return resolveRefund(deps, refundId);

@@ -40,6 +40,7 @@ import {
   REFUND_ITEM,
   type FundedTrade,
 } from './refund-support.js';
+import { insertRow } from '../trades/support.js';
 
 const config = loadConfig({
   NODE_ENV: 'test',
@@ -242,6 +243,28 @@ describe.runIf(infraEnabled)('sending and resolving a refund (T-075)', () => {
       });
       expect(p.initiateRefund).toHaveBeenCalledTimes(1);
     });
+  });
+
+  it('does not send a refund while a hold placed after the decision is on the trade', async () => {
+    const { trade, refundId } = await decided();
+    const holdId = randomUUID();
+    await insertRow(t.app(), 'trade.trade_holds', {
+      id: holdId,
+      trade_id: trade.tradeId,
+      source: 'RISK',
+      reason: 'under review',
+      placed_by_actor_type: 'SYSTEM',
+    });
+    const p = provider({ status: 'processed' });
+
+    expect(await processRefund(p.deps, refundId)).toBe('REQUESTED');
+    expect(p.initiateRefund).not.toHaveBeenCalled();
+    expect((await findRefund(t.db(), refundId))?.status).toBe('REQUESTED');
+
+    // The hold lifts; the next dispatch (the sweep's) sends it.
+    await t.owner().query('UPDATE trade.trade_holds SET released_at = now() WHERE id = $1', [holdId]);
+    expect(await processRefund(p.deps, refundId)).toBe('PROCESSED');
+    expect(p.initiateRefund).toHaveBeenCalledTimes(1);
   });
 
   it('sends once when dispatches race', async () => {
