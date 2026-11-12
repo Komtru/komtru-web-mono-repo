@@ -525,7 +525,7 @@ list a trade.
 - **Depends on:** none
 - **MVP:** yes
 - **Progress note (2026-11-11):** T-073 (backend) merged; next: T-124 Seller Payouts UI (AB5, AB6, WF1, PR1, Seller-6) over the merged `/me/payout-accounts` and `/me/payouts` routes.
-- **Progress note (2026-11-11, later):** T-124 UI merged to `main`. Both layers are built, but the feature stays `Backend done, UI outstanding` because no user can reach the screens yet: the Account Payouts row needs `viewer.hasSold`, and `resolveViewer` still returns the anonymous viewer. Next: fill the viewer seam (owner question in RUN_LOG), then mark Done.
+- **Progress note (2026-11-11, later):** T-124 UI merged to `main`. Both layers are built, but the feature stays `Backend done, UI outstanding` because no user can reach the screens yet: the Account Payouts row needs `viewer.hasSold`, and `resolveViewer` still returns the anonymous viewer. Next: fill the viewer seam (owner answered yes on 2026-11-12: `resolveViewer` returns the signed-in viewer with `hasSold`), then mark Done. Resume as in-flight work.
 
 #### F-038 — Leave a review
 
