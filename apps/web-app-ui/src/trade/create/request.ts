@@ -3,6 +3,7 @@
 // version and validates it at creation, so a request that leaves the item to the seller marks every required field the
 // buyer cannot know as `SELLER_TO_CONFIRM`; the seller replaces them through the counter call. See the plan.
 import type { TradeStandard } from '@komtru/api-client';
+import { nairaToKobo } from '@komtru/shared-types';
 
 /** The value of a field only the seller can supply, until they supply it. The screens draw it as "Waiting". */
 export const SELLER_TO_CONFIRM = 'Seller to confirm';
@@ -185,3 +186,13 @@ export const allowedPromises = (deadlineDays: number): PromiseRange[] =>
 
 export const promiseLabel = (value: unknown): string | undefined =>
   RANGES.find((range) => range.value === value)?.label;
+
+/** A delivery charge in naira as kobo, or `undefined`. Zero is allowed (free delivery); blank and nonsense are not. */
+export const parseCharge = (text: string): bigint | undefined => {
+  if (text.trim() === '') return undefined;
+  try {
+    return nairaToKobo(text);
+  } catch {
+    return undefined;
+  }
+};

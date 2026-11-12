@@ -9,7 +9,6 @@ import {
   useTrade,
   tradeKeys,
 } from '@komtru/api-client/react';
-import { nairaToKobo } from '@komtru/shared-types';
 import {
   ActionStack,
   Button,
@@ -30,22 +29,11 @@ import { useEffect, useState } from 'react';
 import { AddressPicker } from '../AddressPicker';
 import { isProblem, naira, problemMessage, proofNeeds } from '../format';
 import { ProofUpload } from '../ProofUpload';
-import { Agreement, StageHeader } from './parts';
+import { Agreement, ItemFields, StageHeader } from './parts';
 import { readRequest } from './read';
-import { allowedPromises, collidingKeys, completedSpec, isRequestSpec } from './request';
+import { allowedPromises, collidingKeys, completedSpec, isRequestSpec, parseCharge } from './request';
 
 const SELLER_STAGES = ['Item details', 'Delivery', 'Review'] as const;
-const CONDITIONS = ['Brand new', 'Used · like new', 'Used · good'] as const;
-
-/** A charge in naira as kobo, or `undefined`. Nothing is charged for delivery at zero, which is allowed. */
-const parseCharge = (text: string): bigint | undefined => {
-  if (text.trim() === '') return undefined;
-  try {
-    return nairaToKobo(text);
-  } catch {
-    return undefined;
-  }
-};
 
 /**
  * CT-B7 to CT-B9: the seller completes the buyer's request. Everything here is the seller's to say: the item
@@ -254,43 +242,14 @@ function Completion({ trade }: { trade: TradeView }): React.JSX.Element {
             {spec.categoryName} specification. These details become the accepted specification — the evidence
             if something is disputed later.
           </p>
-          {spec.itemSpecFields.map((field) =>
-            field.key === 'condition' ? (
-              <fieldset key={field.key} className="mb-[16px] min-w-0 border-0 p-0">
-                <legend className="mb-[6px] p-0 text-[13px] font-semibold">
-                  {field.required ? field.label : `${field.label} (optional)`}
-                </legend>
-                {CONDITIONS.map((condition) => (
-                  <OptionCard
-                    key={condition}
-                    name="condition"
-                    value={condition}
-                    checked={fields.condition === condition}
-                    onChange={() => {
-                      setFields((current) => ({ ...current, condition }));
-                    }}
-                  >
-                    {condition}
-                  </OptionCard>
-                ))}
-                {tried && field.required && (fields.condition ?? '') === '' && (
-                  <p role="alert" className="text-[12px] font-semibold text-risk-on-soft">
-                    Choose the condition to carry on.
-                  </p>
-                )}
-              </fieldset>
-            ) : (
-              <TextField
-                key={field.key}
-                label={field.required ? field.label : `${field.label} (optional)`}
-                value={fields[field.key] ?? ''}
-                onChange={(event) => {
-                  setFields((current) => ({ ...current, [field.key]: event.target.value }));
-                }}
-                invalid={tried && field.required && (fields[field.key] ?? '').trim() === ''}
-              />
-            ),
-          )}
+          <ItemFields
+            standard={spec}
+            fields={fields}
+            setField={(key, value) => {
+              setFields((current) => ({ ...current, [key]: value }));
+            }}
+            tried={tried}
+          />
           <SectionLabel>Photos of the item</SectionLabel>
           <ProofUpload
             required={needs.photos}

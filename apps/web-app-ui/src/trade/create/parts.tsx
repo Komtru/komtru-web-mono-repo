@@ -2,7 +2,8 @@
 
 // What the buyer's four stages and the seller's three share: the stage header and the agreement preview that
 // CT-B4, CT-B9 and CT-B10 draw the same way ("both parties see the same agreement").
-import { TermList, TermRow } from '@komtru/ui-kit';
+import type { TradeStandard } from '@komtru/api-client';
+import { OptionCard, TermList, TermRow, TextField } from '@komtru/ui-kit';
 import { useEffect, useRef } from 'react';
 import { hoursLabel, naira } from '../format';
 import { promiseLabel } from './request';
@@ -164,6 +165,66 @@ export function Agreement({
             <p className="mt-[6px] text-[11px] leading-[1.5] text-slate">{totalNote}</p>
           )}
         </>
+      )}
+    </>
+  );
+}
+
+const CONDITIONS = ['Brand new', 'Used · like new', 'Used · good'] as const;
+
+/**
+ * The category's own item fields, as the seller states them: text fields, and the three condition cards where the
+ * category asks for a condition. Shared by CT-B7 and CT-S2, so a field added to a standard appears on both.
+ */
+export function ItemFields({
+  standard,
+  fields,
+  setField,
+  tried,
+}: {
+  standard: Pick<TradeStandard, 'itemSpecFields'>;
+  fields: Record<string, string>;
+  setField: (key: string, value: string) => void;
+  tried: boolean;
+}): React.JSX.Element {
+  return (
+    <>
+      {standard.itemSpecFields.map((field) =>
+        field.key === 'condition' ? (
+          <fieldset key={field.key} className="mb-[16px] min-w-0 border-0 p-0">
+            <legend className="mb-[6px] p-0 text-[13px] font-semibold">
+              {field.required ? field.label : `${field.label} (optional)`}
+            </legend>
+            {CONDITIONS.map((condition) => (
+              <OptionCard
+                key={condition}
+                name="condition"
+                value={condition}
+                checked={fields.condition === condition}
+                onChange={() => {
+                  setField('condition', condition);
+                }}
+              >
+                {condition}
+              </OptionCard>
+            ))}
+            {tried && field.required && (fields.condition ?? '') === '' && (
+              <p role="alert" className="text-[12px] font-semibold text-risk-on-soft">
+                Choose the condition to carry on.
+              </p>
+            )}
+          </fieldset>
+        ) : (
+          <TextField
+            key={field.key}
+            label={field.required ? field.label : `${field.label} (optional)`}
+            value={fields[field.key] ?? ''}
+            onChange={(event) => {
+              setField(field.key, event.target.value);
+            }}
+            invalid={tried && field.required && (fields[field.key] ?? '').trim() === ''}
+          />
+        ),
       )}
     </>
   );
