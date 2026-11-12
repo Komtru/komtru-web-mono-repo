@@ -10,7 +10,7 @@
 //
 // Every write here locks the trade FOR UPDATE first: the same lock shipping, the delivery sweep and
 // every transition take, so an approval and a shipment cannot both win.
-import { and, desc, eq, isNull } from 'drizzle-orm';
+import { and, asc, desc, eq, exists, isNull, lt, notExists, or } from 'drizzle-orm';
 import { ApiError } from '../../../platform/errors.js';
 import { publish, type Tx } from '../../../platform/events/publish.js';
 import {
@@ -494,6 +494,68 @@ export async function lapsePendingCancellation(tx: Tx, tradeId: string): Promise
     });
   }
   return lapsed.length;
+}
+
+export interface RefundAwaitingDecision {
+  tradeId: string;
+  /** The reason the trade gave when it asked: what `trades.refund.requested` carried. */
+  reason: PostFundingReason;
+}
+
+/**
+ * Trades that asked the ledger for their escrow back and are still FUNDED, with nothing holding them,
+ * since before `before`: an approved cancellation (CR2, SC1) or an overdue delivery (DE3's ELAPSED
+ * deadline). Normally the ledger's answer closes such a trade within seconds. One still here was
+ * refused when it asked — most often because a hold was placed between the request and the decision,
+ * and the request event, consumed, will never come again. The ledger's sweep decides these again
+ * (`redriveRefundRequests`); a decision already in force answers ALREADY_REFUNDED, so asking twice is
+ * harmless. Read-only, oldest request first.
+ */
+export async function refundsAwaitingDecision(
+  db: Pick<Tx, 'select'>,
+  input: { before: Date; limit: number },
+): Promise<RefundAwaitingDecision[]> {
+  const elapsedDelivery = db
+    .select({ id: tradeDeadlines.id })
+    .from(tradeDeadlines)
+    .where(
+      and(
+        eq(tradeDeadlines.tradeId, trades.id),
+        eq(tradeDeadlines.kind, 'DELIVERY'),
+        eq(tradeDeadlines.status, 'ELAPSED'),
+        lt(tradeDeadlines.resolvedAt, input.before),
+      ),
+    );
+  const activeHold = db
+    .select({ id: tradeHolds.id })
+    .from(tradeHolds)
+    .where(and(eq(tradeHolds.tradeId, trades.id), isNull(tradeHolds.releasedAt)));
+  const rows = await db
+    .select({ tradeId: trades.id, requestedByRole: cancellationRequests.requestedByRole })
+    .from(trades)
+    .leftJoin(
+      cancellationRequests,
+      and(eq(cancellationRequests.tradeId, trades.id), eq(cancellationRequests.status, 'APPROVED')),
+    )
+    .where(
+      and(
+        eq(trades.status, 'FUNDED'),
+        notExists(activeHold),
+        or(lt(cancellationRequests.respondedAt, input.before), exists(elapsedDelivery)),
+      ),
+    )
+    .orderBy(asc(trades.updatedAt))
+    .limit(input.limit);
+  return rows.map((row) => ({
+    tradeId: row.tradeId,
+    // An approved cancellation is the trade's own reason; only without one is it DE3's.
+    reason:
+      row.requestedByRole === 'SELLER'
+        ? 'SELLER_CANNOT_FULFIL'
+        : row.requestedByRole === 'BUYER'
+          ? 'MUTUAL_AGREEMENT'
+          : 'DELIVERY_OVERDUE',
+  }));
 }
 
 /** For `assertDispatchOpen`: an approved cancellation means a refund is on its way. */

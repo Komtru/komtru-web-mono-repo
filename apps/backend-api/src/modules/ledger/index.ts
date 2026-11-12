@@ -51,6 +51,7 @@ import {
   enqueueProcessRefund,
   PROCESS_REFUND_QUEUE,
   processRefundJob,
+  redriveRefundRequests,
   REFUND_JOB_ATTEMPTS,
   REFUND_JOB_BACKOFF_MS,
   sweepInFlightRefunds,
@@ -170,7 +171,10 @@ export { PROCESS_PAYOUT_QUEUE, VERIFY_PAYOUT_ACCOUNT_QUEUE };
 // Refunding a buyer (T-075).
 export { PROCESS_REFUND_QUEUE };
 
-/** Every five minutes: re-drives refunds whose dispatch was lost or that the provider went quiet on. */
+/**
+ * Every five minutes: re-drives refunds whose dispatch was lost or that the provider went quiet on,
+ * and decides again any refund request a hold refused once the hold is gone.
+ */
 export const SWEEP_REFUNDS_CRON = '*/5 * * * *';
 export const SWEEP_REFUNDS_SCHEDULE = 'ledger.sweep-refunds';
 
@@ -431,7 +435,8 @@ export const ledgerModule = defineModule({
     {
       name: SWEEP_REFUNDS_SCHEDULE,
       cron: SWEEP_REFUNDS_CRON,
-      description: 'Re-drives refunds whose dispatch never ran or that the provider went quiet on.',
+      description:
+        'Re-drives refunds whose dispatch never ran or that the provider went quiet on, and decides again refund requests a hold refused.',
       handler: async () => {
         const d = started();
         await sweepInFlightRefunds({
@@ -439,6 +444,7 @@ export const ledgerModule = defineModule({
           logger: d.logger,
           enqueue: (refundId) => enqueueProcessRefund(d.queues, refundId, { deduplicate: false }),
         });
+        await redriveRefundRequests({ db: d.db, logger: d.logger });
       },
     },
     {

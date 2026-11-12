@@ -5,7 +5,9 @@ import { DelayedError, type Job } from 'bullmq';
 import type { Db } from '../../../db/index.js';
 import type { Logger } from '../../../platform/logger.js';
 import type { QueueFactory } from '../../../platform/queue/factory.js';
+import { refundsAwaitingDecision } from '../../trades/index.js';
 import { staleInFlightRefunds } from '../infrastructure/postgres/refundsRepository.js';
+import { decideRefund } from '../services/refund.service.js';
 import {
   processRefund,
   RefundStillPendingError,
@@ -106,4 +108,44 @@ export async function sweepInFlightRefunds(deps: {
   for (const row of rows) await deps.enqueue(row.id);
   if (rows.length) deps.logger.warn({ refunds: rows.length }, 'ledger: re-queued stalled refunds');
   return { refunds: rows.length };
+}
+
+/**
+ * A trade that asked for its refund this long ago and is still FUNDED was refused when it asked. Long
+ * enough that a decision already made has had time to close the trade (the escrow_refunded round
+ * trip takes seconds), so the sweep almost never re-asks about a trade that is fine.
+ */
+export const STRANDED_REFUND_REQUEST_MS = 10 * 60_000;
+export const REFUND_REDRIVE_BATCH = 50;
+
+/**
+ * The re-drive for a refund request the ledger refused (must-fix from the F-030 review). The request
+ * event is consumed whatever the decision says, so a trade that asked while a hold was on it — the
+ * hold placed after the seller approved, before the bus delivered the request — would otherwise sit
+ * FUNDED, dispatch closed, with its buyer's money in escrow for good. Every five minutes, each such
+ * trade with no hold left on it is decided again, in its own transaction, by the same `decideRefund`
+ * the event uses: everything it checks it checks again, and a decision already in force answers
+ * ALREADY_REFUNDED with nothing written. Nothing is published to the trade, so its parties are not
+ * notified a second time. A trade whose books do not match its snapshot is refused again, loudly,
+ * every time — that one needs a person, not a retry.
+ */
+export async function redriveRefundRequests(deps: {
+  db: Db;
+  logger: Logger;
+  now?: Date;
+}): Promise<{ redriven: number; refunded: number }> {
+  const now = deps.now ?? new Date();
+  const stranded = await refundsAwaitingDecision(deps.db, {
+    before: new Date(now.getTime() - STRANDED_REFUND_REQUEST_MS),
+    limit: REFUND_REDRIVE_BATCH,
+  });
+  let refunded = 0;
+  for (const { tradeId, reason } of stranded) {
+    const result = await deps.db.transaction((tx) =>
+      decideRefund(tx, { logger: deps.logger }, { tradeId, reason }),
+    );
+    if (result.outcome === 'REFUNDED') refunded += 1;
+    deps.logger.warn({ tradeId, reason, outcome: result.outcome }, 'ledger: re-drove a refund request');
+  }
+  return { redriven: stranded.length, refunded };
 }
