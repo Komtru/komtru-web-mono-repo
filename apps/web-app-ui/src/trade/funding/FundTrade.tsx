@@ -21,7 +21,6 @@ import {
   ScreenColumn,
   ScreenHeader,
   SectionLabel,
-  Skeleton,
   StatusHero,
   TermList,
   TermRow,
