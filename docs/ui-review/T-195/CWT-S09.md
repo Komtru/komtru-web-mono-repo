@@ -17,4 +17,5 @@
 
 - **No waybill is generated.** The reference's logistics card shows a courier and a generated waybill "SW-88213-04"; the self-arranged seller gives their own waybill number, a receipt photo, the driver's phone and the plate (the four things the platform requires), so the card reads "Arranged by you · Pickup · seller address" and "Waybill <number>".
 - **The handover confirmation is a checkbox** ("The courier has collected the parcel"), required before "Confirm handover", which is the call that marks the trade shipped. After it the screen says "Handover confirmed" and links to tracking.
+- After handover the screen shows "Handover confirmed" with "Report delivery" for the seller (F-026's step) and a link to tracking.
 - Secondary "Back" goes to dispatch readiness (CWT-S08).

@@ -70,6 +70,24 @@ export function ReadFailed({
 }
 
 /**
+ * A secondary read that failed (the shipment, a deadline) on a screen that can still show the rest: a line in the
+ * words of the connection when the device is offline, and a retry either way.
+ */
+export function SubReadFailed({ noun, onRetry }: { noun: string; onRetry: () => void }): React.JSX.Element {
+  const online = useOnline();
+  return (
+    <p role="alert" className="mb-[14px] text-[12px] text-risk-on-soft">
+      {online
+        ? `We couldn’t load ${noun}.`
+        : `You’re offline, so we can’t load ${noun}. It will load when you’re back online.`}{' '}
+      <button type="button" className="underline" onClick={onRetry}>
+        Try again
+      </button>
+    </p>
+  );
+}
+
+/**
  * Reads the trade and hands it to `children`. `role` limits the screen to one side of the trade; the other side
  * is told so, with no control to press.
  */

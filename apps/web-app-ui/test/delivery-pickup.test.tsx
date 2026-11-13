@@ -58,7 +58,12 @@ describe('CWT-S11 delivery details (self-arranged)', () => {
 
   it('says the shipment could not be loaded, and an error or offline read of the trade', async () => {
     serve(workspaceTrade('SHIPPED', 'BUYER'), { 'GET /trades/:id/inspection': new Error('boom') });
-    expect(await screen.findByText(/We couldn't load the shipment details/)).toBeTruthy();
+    expect(await screen.findByText(/We couldn’t load the shipment details/)).toBeTruthy();
+    cleanup();
+    const online = vi.spyOn(window.navigator, 'onLine', 'get').mockReturnValue(false);
+    serve(workspaceTrade('SHIPPED', 'BUYER'), { 'GET /trades/:id/inspection': new Error('boom') });
+    expect(await screen.findByText(/You’re offline, so we can’t load the shipment details/)).toBeTruthy();
+    online.mockRestore();
     cleanup();
     answerWith(api.call, { 'GET /trades/:id': new Error('down') });
     renderWithApi(api.call, <Pickup id={id(1)} />);

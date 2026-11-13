@@ -14,7 +14,8 @@ import {
 } from '@komtru/ui-kit';
 import { whenLabel } from '../format';
 import { pickupHref } from '../workspace-state';
-import { Frame, Refusal, TradeGate, tradeHref } from './parts';
+import { Frame, Refusal, SubReadFailed, TradeGate, tradeHref } from './parts';
+import { ReportDelivery } from './ReportDelivery';
 
 const TITLE = 'Track Order';
 
@@ -29,6 +30,9 @@ const STAGE: Record<string, Stage> = {
   DISPUTED: 'RECEIVED',
   COMPLETED: 'RECEIVED',
   SETTLED: 'RECEIVED',
+  RESOLVED_RELEASED: 'RECEIVED',
+  // RESOLVED_REFUNDED and CANCELLED_REFUNDED are deliberately absent: the money went back, and whether the item
+  // reached the buyer or came back to the seller is not recorded, so no custody story is told for them.
 };
 
 /**
@@ -95,12 +99,7 @@ function Tracking({ trade }: { trade: TradeView }): React.JSX.Element {
       {shipped && inspection.isPending ? (
         <Skeleton width="full" lines={3} />
       ) : shipped && inspection.isError ? (
-        <p role="alert" className="mb-[14px] text-[12px] text-risk-on-soft">
-          We couldn&apos;t load the shipment details.{' '}
-          <button type="button" className="underline" onClick={() => void inspection.refetch()}>
-            Try again
-          </button>
-        </p>
+        <SubReadFailed noun="the shipment details" onRetry={() => void inspection.refetch()} />
       ) : (
         <InfoCard aria-label="Shipment">
           <InfoRow
@@ -122,9 +121,15 @@ function Tracking({ trade }: { trade: TradeView }): React.JSX.Element {
             )}
         </InfoCard>
       )}
+      {stage === 'IN_TRANSIT' && deadline.isError && (
+        <SubReadFailed noun="the expected delivery time" onRetry={() => void deadline.refetch()} />
+      )}
       <SectionLabel>Custody timeline</SectionLabel>
       <VersionTimeline aria-label="Custody timeline" steps={steps} />
-      <ActionStack className="mt-[16px]">
+      <div className="mt-[16px]">
+        <ReportDelivery trade={trade} />
+      </div>
+      <ActionStack>
         <Button asChild>
           <a href={pickupHref(trade.id)}>Delivery details</a>
         </Button>

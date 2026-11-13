@@ -4,20 +4,10 @@ import type { TradeView } from '@komtru/api-client';
 import { useInspection } from '@komtru/api-client/react';
 import { ActionStack, Button, NoteBanner, SectionLabel, Skeleton } from '@komtru/ui-kit';
 import { ProofTile } from '../inspection/Proof';
+import { EVIDENCE_STATUSES } from '../workspace-state';
 import { ReadFailed, Frame, Refusal, TradeGate, tradeHref } from './parts';
 
 const TITLE = 'Trade Evidence';
-/** The read of a trade's evidence exists once the item has shipped (the platform answers 409 before). */
-const SHIPPED_ONWARD = [
-  'SHIPPED',
-  'UNCONFIRMED_DELIVERY',
-  'INSPECTION',
-  'DISPUTED',
-  'COMPLETED',
-  'SETTLED',
-  'RESOLVED_RELEASED',
-  'RESOLVED_REFUNDED',
-];
 
 interface Group {
   event: string;
@@ -40,7 +30,7 @@ export function Evidence({ id }: { id: string }): React.JSX.Element {
 }
 
 function Media({ trade }: { trade: TradeView }): React.JSX.Element {
-  const readable = SHIPPED_ONWARD.includes(trade.status);
+  const readable = (EVIDENCE_STATUSES as readonly string[]).includes(trade.status);
   const inspection = useInspection(trade.id, readable);
   if (!readable) {
     return (

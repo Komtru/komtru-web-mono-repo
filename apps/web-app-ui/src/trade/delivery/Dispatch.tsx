@@ -14,6 +14,7 @@ import { useState } from 'react';
 import { hoursLabel, partyName } from '../format';
 import { tabHref, trackHref, waybillHref } from '../workspace-state';
 import { Frame, Refusal, TradeGate, tradeHref } from './parts';
+import { ReportDelivery } from './ReportDelivery';
 
 const TITLE = 'Ready to Dispatch';
 
@@ -54,6 +55,7 @@ function ByStatus({ trade }: { trade: TradeView }): React.JSX.Element {
         <p role="status" className="mb-[14px] text-[12.5px] leading-[1.5] text-slate">
           This item has already been handed over.
         </p>
+        <ReportDelivery trade={trade} />
         <ActionStack>
           <Button asChild>
             <a href={trackHref(trade.id)}>Track the delivery</a>
@@ -102,8 +104,9 @@ function Locked({ trade }: { trade: TradeView }): React.JSX.Element {
 const CHECKLIST = ['Package sealed and labelled', 'Waybill or courier receipt ready'] as const;
 
 function Ready({ trade }: { trade: TradeView }): React.JSX.Element {
+  // The checklist is the seller's own reminder before handing over: the platform's real gates (payment protected,
+  // the waybill evidence) are enforced on the next screen and on the server, so ticking does not unlock anything.
   const [ticked, setTicked] = useState<readonly string[]>([]);
-  const ready = CHECKLIST.every((item) => ticked.includes(item));
   const hours = trade.terms?.inspectionWindowHours;
   return (
     <Frame title={TITLE} id={trade.id}>
@@ -153,15 +156,9 @@ function Ready({ trade }: { trade: TradeView }): React.JSX.Element {
         If payment is not protected, dispatch stays locked. This guard is enforced server-side.
       </p>
       <ActionStack>
-        {ready ? (
-          <Button asChild>
-            <a href={waybillHref(trade.id)}>Add waybill details</a>
-          </Button>
-        ) : (
-          <Button type="button" disabled>
-            Add waybill details
-          </Button>
-        )}
+        <Button asChild>
+          <a href={waybillHref(trade.id)}>Add waybill details</a>
+        </Button>
         <Button asChild variant="secondary">
           <a href={tabHref(trade.id, 'terms')}>View agreement</a>
         </Button>

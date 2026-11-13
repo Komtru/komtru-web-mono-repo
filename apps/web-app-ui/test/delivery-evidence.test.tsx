@@ -51,7 +51,8 @@ describe('CWT-S12 trade media', () => {
     });
     expect(screen.getByRole('heading', { level: 1, name: 'Trade Evidence' })).toBeTruthy();
     expect(screen.getByText('Dispatch · 0 files')).toBeTruthy();
-    // The waybill receipt is the seller's private evidence: the buyer is not shown it.
+    // The page only declines to draw the seller's waybill receipt for the buyer; the file itself is protected by the
+    // platform (the buyer holds no access grant on it), not by this screen.
     expect(screen.getByText('The seller’s waybill receipt is kept private.')).toBeTruthy();
     expect(screen.getByText('Delivery · 0 files')).toBeTruthy();
     expect(screen.getByText('No files recorded for inspection.')).toBeTruthy();
@@ -66,6 +67,11 @@ describe('CWT-S12 trade media', () => {
     const dispatch = await screen.findByRole('region', { name: 'Dispatch' });
     expect(within(dispatch).getByText('Dispatch · 1 file')).toBeTruthy();
     expect(await within(dispatch).findByAltText('Waybill receipt')).toBeTruthy();
+  });
+
+  it('shows the evidence of a trade resolved after a dispute, as the platform allows', async () => {
+    serve(workspaceTrade('RESOLVED_REFUNDED', 'BUYER'));
+    expect(await screen.findByRole('region', { name: 'Listing' })).toBeTruthy();
   });
 
   it('says a trade that has not shipped has no evidence yet', async () => {

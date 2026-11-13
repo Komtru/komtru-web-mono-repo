@@ -115,6 +115,11 @@ describe('the delivery and evidence sheets (F-028)', () => {
     expect(evidenceHref(ID)).toBe(`/trade/${ID}/evidence`);
     expect(addEvidenceHref(ID)).toBe(`/trade/${ID}/evidence/new`);
     expect(shipHref(ID)).toBe(dispatchHref(ID));
+    // A shipped trade's "Report delivery" lives on the dispatch sheet, so the row points there and is live.
+    expect(tradeActions('SHIPPED', 'SELLER', ID).find((row) => row.id === 'report-delivered')).toMatchObject({
+      availability: 'live',
+      href: dispatchHref(ID),
+    });
   });
 });
 
@@ -130,7 +135,7 @@ describe('what can be done', () => {
       const key = `${status} ${role}`;
       const expected: Record<string, string[]> = {
         'FUNDED SELLER': ['view-terms', 'ship', 'ask-more-time'],
-        'SHIPPED SELLER': ['view-terms', 'ask-more-time'],
+        'SHIPPED SELLER': ['view-terms', 'ask-more-time', 'report-delivered'],
         'SHIPPED BUYER': ['view-terms', 'confirm-delivery'],
         'UNCONFIRMED_DELIVERY BUYER': ['view-terms', 'confirm-delivery'],
         'INSPECTION BUYER': ['view-terms', 'accept', 'more-time'],
@@ -140,9 +145,16 @@ describe('what can be done', () => {
       };
       // F-028: the delivery and evidence sheets are on offer, for either side, once the item has shipped.
       const tracked = ['SHIPPED', 'UNCONFIRMED_DELIVERY', 'INSPECTION'].includes(status) ? ['track'] : [];
-      const evidenced = ['SHIPPED', 'UNCONFIRMED_DELIVERY', 'INSPECTION', 'DISPUTED', 'COMPLETED'].includes(
-        status,
-      )
+      const evidenced = [
+        'SHIPPED',
+        'UNCONFIRMED_DELIVERY',
+        'INSPECTION',
+        'DISPUTED',
+        'COMPLETED',
+        'SETTLED',
+        'RESOLVED_RELEASED',
+        'RESOLVED_REFUNDED',
+      ].includes(status)
         ? ['evidence']
         : [];
       expect(live(status, role).sort()).toEqual(

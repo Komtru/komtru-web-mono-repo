@@ -6,7 +6,7 @@ Park is deferred for the MVP, so CWT-S09 and CWT-S11 render the self-arranged pa
 
 | Screen  | Route                          | State                      | Differing pixels |
 | ------- | ------------------------------ | -------------------------- | ---------------- |
-| CWT-S08 | `/trade/<id>/dispatch`         | seller, funded             | 12.33%           |
+| CWT-S08 | `/trade/<id>/dispatch`         | seller, funded             | 9.96%            |
 | CWT-S09 | `/trade/<id>/dispatch/waybill` | seller, funded, empty form | 9.06%            |
 | CWT-S10 | `/trade/<id>/track`            | buyer, in transit          | 13.41%           |
 | CWT-S11 | `/trade/<id>/pickup`           | buyer, in transit          | 20.20%           |

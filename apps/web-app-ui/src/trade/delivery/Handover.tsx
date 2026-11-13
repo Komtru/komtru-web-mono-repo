@@ -14,12 +14,13 @@ import {
   WarnBanner,
 } from '@komtru/ui-kit';
 import { useQueryClient } from '@tanstack/react-query';
-import { useRef, useState } from 'react';
+import { useState } from 'react';
 import { addressLine, platformWords } from '../format';
 import { ReceiptPicker } from '../shipping/ShipOrder';
 import { checkPhone, checkPlate, checkWaybill, normalisePlate } from '../shipping/evidence';
 import { dispatchHref, trackHref } from '../workspace-state';
 import { Frame, Refusal, TradeGate, tradeHref } from './parts';
+import { ReportDelivery } from './ReportDelivery';
 
 const TITLE = 'Hand Over';
 /** The waybill receipt is the seller's own private evidence for this trade, never public. */
@@ -56,6 +57,7 @@ function ByStatus({ trade }: { trade: TradeView }): React.JSX.Element {
         <StatusHero tone="success" as="h2" title="Handover confirmed">
           The buyer can see the item is on its way. Your waybill is kept with the trade.
         </StatusHero>
+        <ReportDelivery trade={trade} />
         <ActionStack>
           <Button asChild>
             <a href={trackHref(trade.id)}>Track the delivery</a>
@@ -95,7 +97,6 @@ function HandoverForm({ trade }: { trade: TradeView }): React.JSX.Element {
   const ship = useShipSelfArranged();
   const client = useApiClient();
   const queryClient = useQueryClient();
-  const sending = useRef(false);
   const [values, setValues] = useState({ waybill: '', phone: '', plate: '' });
   const [touched, setTouched] = useState<readonly string[]>([]);
   const [refused, setRefused] = useState<Record<string, string>>({});
@@ -158,8 +159,8 @@ function HandoverForm({ trade }: { trade: TradeView }): React.JSX.Element {
   };
 
   const onConfirm = () => {
-    if (receipt === undefined || !ready || sending.current) return;
-    sending.current = true;
+    // The button is shut while the call runs, and a replay of the same ship is harmless on the platform.
+    if (receipt === undefined || !ready) return;
     setProblem(undefined);
     setRefused({});
     ship.mutate(
@@ -171,9 +172,6 @@ function HandoverForm({ trade }: { trade: TradeView }): React.JSX.Element {
         vehiclePlate: normalisePlate(values.plate),
       },
       {
-        onSettled: () => {
-          sending.current = false;
-        },
         onError: (error) => {
           if (error instanceof ProblemError && error.status === 409) {
             void queryClient.invalidateQueries({ queryKey: tradeKeys.one(trade.id), exact: true });

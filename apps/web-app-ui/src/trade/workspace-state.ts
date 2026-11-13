@@ -104,6 +104,20 @@ export const waybillHref = (tradeId: string): string => `/trade/${tradeId}/dispa
 export const trackHref = (tradeId: string): string => `/trade/${tradeId}/track`;
 export const pickupHref = (tradeId: string): string => `/trade/${tradeId}/pickup`;
 export const evidenceHref = (tradeId: string): string => `/trade/${tradeId}/evidence`;
+/**
+ * Where there is evidence to browse (CWT-S12): from shipment on, including the two outcomes that follow a dispute
+ * (the platform's own `EVIDENCE_VISIBLE`). The Evidence screen and the Actions row read this one list.
+ */
+export const EVIDENCE_STATUSES: readonly WorkspaceStatus[] = [
+  'SHIPPED',
+  'UNCONFIRMED_DELIVERY',
+  'INSPECTION',
+  'DISPUTED',
+  'COMPLETED',
+  'SETTLED',
+  'RESOLVED_RELEASED',
+  'RESOLVED_REFUNDED',
+];
 export const addEvidenceHref = (tradeId: string): string => `/trade/${tradeId}/evidence/new`;
 /** Inspect & Confirm (Z4/Z5), and for the seller the answer to a request for more time (BEI2). */
 export const inspectHref = (tradeId: string): string => `/trade/${tradeId}/inspect`;
@@ -214,7 +228,13 @@ export function tradeActions(status: WorkspaceStatus, role: TradeRole, tradeId: 
       break;
     case 'SHIPPED':
       if (!buyer) {
-        later('report-delivered', 'Report delivery · Seller', "Reporting delivery isn't in the app yet.");
+        rows.push({
+          id: 'report-delivered',
+          title: 'Report delivery · Seller',
+          description: 'Say the item has arrived, so the buyer is asked to confirm.',
+          availability: 'live',
+          href: dispatchHref(tradeId),
+        });
         rows.push(moreTimeRow(tradeId));
       } else rows.push(confirmDeliveryRow(tradeId, 'Confirm you have it · Buyer'));
       break;
@@ -264,7 +284,7 @@ export function tradeActions(status: WorkspaceStatus, role: TradeRole, tradeId: 
       href: trackHref(tradeId),
     });
   }
-  if (FUNDS_HELD.includes(status) && status !== 'FUNDED') {
+  if (EVIDENCE_STATUSES.includes(status)) {
     rows.push({
       id: 'evidence',
       title: 'Trade evidence · Safe',

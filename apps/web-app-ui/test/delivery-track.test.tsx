@@ -74,9 +74,30 @@ describe('CWT-S10 tracking and custody', () => {
 
   it('says the shipment could not be loaded and tries again, while the timeline still shows', async () => {
     serve(workspaceTrade('SHIPPED', 'BUYER'), { 'GET /trades/:id/inspection': new Error('boom') });
-    expect(await screen.findByText(/We couldn't load the shipment details/)).toBeTruthy();
+    expect(await screen.findByText(/We couldn’t load the shipment details/)).toBeTruthy();
     expect(screen.getByText('Handover complete')).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
+  });
+
+  it('says in the words of the connection that the shipment could not be loaded offline', async () => {
+    const online = vi.spyOn(window.navigator, 'onLine', 'get').mockReturnValue(false);
+    serve(workspaceTrade('SHIPPED', 'BUYER'), { 'GET /trades/:id/inspection': new Error('boom') });
+    expect(await screen.findByText(/You’re offline, so we can’t load the shipment details/)).toBeTruthy();
+    online.mockRestore();
+  });
+
+  it('says when the expected time could not be loaded instead of hiding it', async () => {
+    serve(workspaceTrade('SHIPPED', 'BUYER'), { 'GET /trades/:id/delivery-deadline': new Error('boom') });
+    expect(await screen.findByText(/We couldn’t load the expected delivery time/)).toBeTruthy();
+    expect(screen.getByText('Tracking KT-883192')).toBeTruthy();
+  });
+
+  it('tracks a trade released after a dispute, and offers Report delivery only to a seller in transit', async () => {
+    serve(workspaceTrade('RESOLVED_RELEASED', 'BUYER'));
+    expect(await screen.findByText('Delivered', { selector: 'b' })).toBeTruthy();
+    cleanup();
+    serve(workspaceTrade('SHIPPED', 'SELLER'));
+    expect(await screen.findByRole('button', { name: 'Report delivery' })).toBeTruthy();
   });
 
   it('says no tracking is recorded when the platform has none', async () => {

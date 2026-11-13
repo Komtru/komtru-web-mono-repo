@@ -18,4 +18,5 @@
 - **Custody timeline is Seller, Courier, You**; the reference's third node is "Park Hub · Not received". There is no hub in the MVP.
 - **"Last update" reads "Handed to the courier · <time>"** from the platform's record of the handover; the reference's "Collected from seller" implies courier scan events, which the platform does not have. **"Expected" reads "By <deadline>"** from the delivery deadline, not a courier estimate. A "Vehicle" row (the plate) is added; courier tracking events are not drawn because none exist.
 - **Primary button reads "Delivery details"**, not "Pickup details" (no pickup in the self-arranged path).
+- A seller whose parcel is in transit also sees "Report delivery". A failed read of the shipment or the deadline is said in place (in the words of the connection when offline) while the timeline still shows.
 - The screen shows for both sides (the reference labels it buyer) and words the first and last node for the reader. Before handover it says "Not handed over yet".

@@ -72,10 +72,18 @@ describe('CWT-S09 waybill and handover', () => {
     await expectNoAxeViolations(container, SHELL_RULES);
   });
 
-  it('ships once with the platform’s ids, however often it is pressed, and then points to tracking', async () => {
-    const { container } = serve(workspaceTrade('FUNDED', 'SELLER'), {
-      'POST /trades/:id/ship/self-arranged': workspaceTrade('SHIPPED', 'SELLER'),
-    });
+  it('ships with the platform’s ids, shuts the button while the call runs, and then offers tracking and Report delivery', async () => {
+    let release: (value: unknown) => void = () => undefined;
+    const { container } = serve(workspaceTrade('FUNDED', 'SELLER'));
+    // The ship call stays open until the test lets it answer; every other call is answered as served above.
+    const answered = api.call.getMockImplementation() as CallFn;
+    api.call.mockImplementation((endpoint, input) =>
+      endpoint.path === '/trades/:id/ship/self-arranged'
+        ? new Promise((resolve) => {
+            release = resolve;
+          })
+        : answered(endpoint, input),
+    );
     await screen.findByLabelText('Waybill number');
     fill(container);
     fireEvent.click(screen.getByLabelText('The courier has collected the parcel'));
@@ -83,8 +91,10 @@ describe('CWT-S09 waybill and handover', () => {
       expect(confirm().disabled).toBe(false);
     });
     fireEvent.click(confirm());
+    await waitFor(() => {
+      expect(confirm().disabled).toBe(true);
+    });
     fireEvent.click(confirm());
-    expect(await screen.findByRole('heading', { name: 'Handover confirmed' })).toBeTruthy();
     const sent = callsTo(api.call, 'POST', '/trades/:id/ship/self-arranged');
     expect(sent).toHaveLength(1);
     expect(sent[0]?.body).toEqual({
@@ -93,9 +103,48 @@ describe('CWT-S09 waybill and handover', () => {
       driverPhone: '08012345678',
       vehiclePlate: 'LSR 123 AB',
     });
+    release(workspaceTrade('SHIPPED', 'SELLER'));
+    expect(await screen.findByRole('heading', { name: 'Handover confirmed' })).toBeTruthy();
     expect(screen.getByRole('link', { name: 'Track the delivery' }).getAttribute('href')).toBe(
       `/trade/${id(1)}/track`,
     );
+    // The step after handover stays reachable from here.
+    expect(screen.getByRole('button', { name: 'Report delivery' })).toBeTruthy();
+  });
+
+  it('lets the seller press Confirm handover again after a server failure, and sends it again', async () => {
+    let attempts = 0;
+    const { container } = serve(workspaceTrade('FUNDED', 'SELLER'), {
+      'POST /trades/:id/ship/self-arranged': () => {
+        attempts += 1;
+        return attempts === 1 ? new Error('boom') : workspaceTrade('SHIPPED', 'SELLER');
+      },
+    });
+    await screen.findByLabelText('Waybill number');
+    fill(container);
+    fireEvent.click(screen.getByLabelText('The courier has collected the parcel'));
+    await waitFor(() => {
+      expect(confirm().disabled).toBe(false);
+    });
+    fireEvent.click(confirm());
+    expect(await screen.findByText(/We couldn’t confirm the handover/)).toBeTruthy();
+    await waitFor(() => {
+      expect(confirm().disabled).toBe(false);
+    });
+    fireEvent.click(confirm());
+    expect(await screen.findByRole('heading', { name: 'Handover confirmed' })).toBeTruthy();
+    expect(callsTo(api.call, 'POST', '/trades/:id/ship/self-arranged')).toHaveLength(2);
+  });
+
+  it('lets a seller open the screen directly: the S08 checklist is a reminder, the evidence is the gate', async () => {
+    serve(workspaceTrade('FUNDED', 'SELLER'));
+    await screen.findByLabelText('Waybill number');
+    expect(confirm().disabled).toBe(true);
+  });
+
+  it('offers Report delivery to a seller whose trade has shipped', async () => {
+    serve(workspaceTrade('SHIPPED', 'SELLER'));
+    expect(await screen.findByRole('button', { name: 'Report delivery' })).toBeTruthy();
   });
 
   it('says what the platform refused and keeps what was typed', async () => {

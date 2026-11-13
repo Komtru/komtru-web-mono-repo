@@ -5,7 +5,15 @@ import { cleanup, fireEvent, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { Dispatch } from '../src/trade/delivery/Dispatch';
 import { expectNoAxeViolations } from './axe';
-import { SHELL_RULES, answerWith, id, renderWithApi, workspaceTrade, type CallFn } from './support/workspace';
+import {
+  SHELL_RULES,
+  answerWith,
+  callsTo,
+  id,
+  renderWithApi,
+  workspaceTrade,
+  type CallFn,
+} from './support/workspace';
 
 const api = vi.hoisted(() => ({ call: vi.fn<CallFn>() }));
 afterEach(cleanup);
@@ -19,7 +27,7 @@ const show = (trade: unknown) => {
 };
 
 describe('CWT-S08 dispatch readiness', () => {
-  it('shows the seller a protected payment, the terms and a checklist that gates the next step', async () => {
+  it('shows the seller a protected payment, the terms and a checklist reminder', async () => {
     const { container } = show(workspaceTrade('FUNDED', 'SELLER'));
     expect(await screen.findByText('Payment is protected')).toBeTruthy();
     expect(screen.getByText('Confirm the delivery route before handing the item over.')).toBeTruthy();
@@ -28,13 +36,10 @@ describe('CWT-S08 dispatch readiness', () => {
     expect(screen.getByText('48 hours minimum')).toBeTruthy();
     // No Park, no courier fee, no PIN: the MVP is the seller's own arrangement.
     expect(screen.queryByText(/Park|PIN|Delivery charge/)).toBeNull();
-    const next = screen.getByRole<HTMLButtonElement>('button', { name: 'Add waybill details' });
-    expect(next.disabled).toBe(true);
-    fireEvent.click(screen.getByLabelText('Package sealed and labelled'));
-    expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Add waybill details' }).disabled).toBe(
-      true,
-    );
-    fireEvent.click(screen.getByLabelText('Waybill or courier receipt ready'));
+    // The checklist is the seller's own reminder: ticking it does not unlock the way on, which is always open.
+    const tick = screen.getByLabelText<HTMLInputElement>('Package sealed and labelled');
+    fireEvent.click(tick);
+    expect(tick.checked).toBe(true);
     expect(screen.getByRole('link', { name: 'Add waybill details' }).getAttribute('href')).toBe(
       `/trade/${id(1)}/dispatch/waybill`,
     );
@@ -65,6 +70,18 @@ describe('CWT-S08 dispatch readiness', () => {
     expect(screen.getByRole('link', { name: 'Track the delivery' }).getAttribute('href')).toBe(
       `/trade/${id(1)}/track`,
     );
+  });
+
+  it('lets a seller whose trade has shipped report the delivery, and then says it was reported', async () => {
+    answerWith(api.call, {
+      'GET /trades/:id': workspaceTrade('SHIPPED', 'SELLER'),
+      'POST /trades/:id/report-delivered': workspaceTrade('UNCONFIRMED_DELIVERY', 'SELLER'),
+    });
+    renderWithApi(api.call, <Dispatch id={id(1)} />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Report delivery' }));
+    expect(await screen.findByRole('heading', { name: 'Delivery reported' })).toBeTruthy();
+    expect(callsTo(api.call, 'POST', '/trades/:id/report-delivered')).toHaveLength(1);
+    expect(screen.queryByRole('button', { name: 'Report delivery' })).toBeNull();
   });
 
   it('refuses the buyer in words, with nothing to press (permission denied)', async () => {

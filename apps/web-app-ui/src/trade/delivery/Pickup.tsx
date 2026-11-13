@@ -5,7 +5,7 @@ import { useInspection } from '@komtru/api-client/react';
 import { ActionStack, Button, InfoCard, InfoRow, Skeleton } from '@komtru/ui-kit';
 import { addressLine, hoursLabel } from '../format';
 import { trackHref } from '../workspace-state';
-import { Frame, Refusal, TradeGate, tradeHref } from './parts';
+import { Frame, Refusal, SubReadFailed, TradeGate, tradeHref } from './parts';
 
 const TITLE = 'Delivery Details';
 const ON_THE_WAY = ['FUNDED', 'SHIPPED', 'UNCONFIRMED_DELIVERY'];
@@ -69,12 +69,7 @@ function Details({ trade }: { trade: TradeView }): React.JSX.Element {
         </InfoCard>
       )}
       {listening && inspection.isError && (
-        <p role="alert" className="mb-[14px] text-[12px] text-risk-on-soft">
-          We couldn&apos;t load the shipment details.{' '}
-          <button type="button" className="underline" onClick={() => void inspection.refetch()}>
-            Try again
-          </button>
-        </p>
+        <SubReadFailed noun="the shipment details" onRetry={() => void inspection.refetch()} />
       )}
       {buyer && trade.terms !== null && (
         <p className="mb-[14px] text-[11.5px] leading-[1.6] text-trust-gray">
