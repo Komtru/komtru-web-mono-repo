@@ -13,6 +13,13 @@ import {
   tabHref,
   tabItems,
   tradeActions,
+  dispatchHref,
+  waybillHref,
+  trackHref,
+  pickupHref,
+  evidenceHref,
+  addEvidenceHref,
+  shipHref,
   workspaceStanding,
   type TradeRole,
 } from '../src/trade/workspace-state';
@@ -99,6 +106,18 @@ describe('the tabs', () => {
   });
 });
 
+describe('the delivery and evidence sheets (F-028)', () => {
+  it('addresses each sheet beneath the trade, and sends the seller to dispatch readiness first', () => {
+    expect(dispatchHref(ID)).toBe(`/trade/${ID}/dispatch`);
+    expect(waybillHref(ID)).toBe(`/trade/${ID}/dispatch/waybill`);
+    expect(trackHref(ID)).toBe(`/trade/${ID}/track`);
+    expect(pickupHref(ID)).toBe(`/trade/${ID}/pickup`);
+    expect(evidenceHref(ID)).toBe(`/trade/${ID}/evidence`);
+    expect(addEvidenceHref(ID)).toBe(`/trade/${ID}/evidence/new`);
+    expect(shipHref(ID)).toBe(dispatchHref(ID));
+  });
+});
+
 describe('what can be done', () => {
   const live = (status: (typeof WORKSPACE_STATUSES)[number], role: TradeRole) =>
     tradeActions(status, role, ID)
@@ -119,7 +138,16 @@ describe('what can be done', () => {
         'PENDING_PAYMENT BUYER': ['view-terms', 'fund', 'cancel'],
         'PENDING_PAYMENT SELLER': ['view-terms', 'cancel'],
       };
-      expect(live(status, role).sort()).toEqual((expected[key] ?? ['view-terms']).sort());
+      // F-028: the delivery and evidence sheets are on offer, for either side, once the item has shipped.
+      const tracked = ['SHIPPED', 'UNCONFIRMED_DELIVERY', 'INSPECTION'].includes(status) ? ['track'] : [];
+      const evidenced = ['SHIPPED', 'UNCONFIRMED_DELIVERY', 'INSPECTION', 'DISPUTED', 'COMPLETED'].includes(
+        status,
+      )
+        ? ['evidence']
+        : [];
+      expect(live(status, role).sort()).toEqual(
+        [...(expected[key] ?? ['view-terms']), ...tracked, ...evidenced].sort(),
+      );
     },
   );
 

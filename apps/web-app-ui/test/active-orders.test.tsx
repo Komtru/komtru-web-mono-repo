@@ -67,7 +67,7 @@ describe('Active Orders (AC8)', () => {
     renderWithApi(api.call, <ActiveOrders />);
     await screen.findByRole('heading', { name: 'Ready to ship' });
     const ready = within(screen.getByRole('list', { name: 'Ready to ship' })).getByRole('link');
-    expect(ready.getAttribute('href')).toBe(`/trade/${id(1)}/ship`);
+    expect(ready.getAttribute('href')).toBe(`/trade/${id(1)}/dispatch`);
     const transit = within(screen.getByRole('list', { name: 'In transit' })).getByRole('link');
     expect(transit.getAttribute('href')).toBe(`/trade/${id(2)}`);
   });
