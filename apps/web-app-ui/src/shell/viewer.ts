@@ -16,7 +16,8 @@ const sealerFor = (secret: string): SessionSealer => {
  *
  * The signed-in person's facts — has sold, is a certified merchant — arrive sealed in `komtru_session`,
  * written by the auth route on every sign-in and refresh (`describeViewer`), because a page render holds no
- * credential to ask the platform with. So they are as fresh as the last refresh, and a page load refreshes.
+ * credential to ask the platform with. So they are as fresh as the last token refresh, which the client
+ * makes lazily: on its first call after a page load, and whenever the access token lapses.
  *
  * Anything short of a hint this app sealed, unexpired, for a consumer session, is the anonymous viewer —
  * the smallest shell, so nothing appears that the person turns out not to have. A missing session secret is
