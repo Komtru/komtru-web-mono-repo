@@ -33,8 +33,11 @@ sequence (CWT-S03 to CWT-S07, which are TW-03's states), and the expired trade (
 - **No funding deadline on the wire.** The trade view carries no expiry time and nothing in the trade service sets one
   for `PENDING_PAYMENT`, so TW-01's "Funding window 05:58:12 remaining" strip and every "six hours" line are not drawn.
   Owner question O1.
-- **Only the current terms version is returned.** CWT-S02 lists the earlier versions as superseded without amounts or
-  proposer, as `versionSteps` already does for CWT-07. Owner question O2.
+- **Only the current terms version is returned.** The amount of an earlier version is on no route (owner question O2).
+  Who proposed each version and when is in the trade's activity (one item per version), so CWT-S02 draws that and
+  falls back to "Superseded" when the activity cannot account for every version.
+- **EX-01 has no production path yet.** Nothing sweeps a trade waiting for payment to EXPIRED (only an invitation
+  expires), so the screen is built and wired for when a funding-window sweep exists (O1).
 - **Terms are locked once accepted** and no endpoint edits them, so TW-02's inputs are read-only rows.
 - **No wallet.** CWT-S03's "Komtru Wallet" and TW-03's "Supported wallet" methods are not offered.
 - **Withdrawal** is F-022's confirmation sheet on the Actions tab; TW-01's "Withdraw from trade" links to it.

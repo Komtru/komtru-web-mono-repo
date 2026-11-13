@@ -3,7 +3,7 @@
 - **Reference:** `docs/design-reference/Komtru — UI Living Master v2.html` line 10954 — Trade Workspace — Supporting Screens
 - **Built:** http://localhost:3123/trade/0190b0a0-0000-7000-8000-000000000001/fund
 - **Frame:** mobile, 340px reference frame; compared at 340 × 660
-- **Differing pixels:** 18,232 of 224,400 (8.12%)
+- **Differing pixels:** 18,455 of 224,400 (8.22%)
 - **Side by side:** `CWT-S06.png` (reference · built · heat map) — **heat map:** `CWT-S06.diff.png`
 
 ## Deviations
@@ -12,5 +12,5 @@
 
 **Real differences (intended, and why)**
 
-- **"Funds protected" hero** (F-024's V3 wording) for the reference's "Funds are protected" and a longer sentence that also says whether the seller has been told; the confirmed-at banner (V3) is kept above the reference's "Dispatch is now eligible" banner.
+- **The screen says what is true of the trade's status.** The same address serves every status after payment. While the money is held (FUNDED and onward to settlement) it reads "Funds protected", "Held until settlement"; "Dispatch is now eligible" is drawn only for a funded trade the seller has not yet shipped. For SETTLED and RESOLVED_RELEASED it reads "Payment released" with "Seller payout: Paid"; for refunded trades "Payment refunded" with "Not paid". The hero is "Funds protected" (F-024's V3 wording) for the reference's "Funds are protected"; the confirmed-at banner is kept without repeating the reference.
 - **"View delivery" opens the trade's overview**, where the seller's dispatch shows; "View payment details" is replaced by "Back to trade timeline", because the payment details are on this screen already.

@@ -3,7 +3,7 @@
 - **Reference:** `docs/design-reference/Komtru — UI Living Master v2.html` line 10971 — Trade Workspace — Supporting Screens
 - **Built:** http://localhost:3123/trade/0190b0a0-0000-7000-8000-000000000001/fund
 - **Frame:** mobile, 340px reference frame; compared at 340 × 660
-- **Differing pixels:** 21,302 of 224,400 (9.49%)
+- **Differing pixels:** 21,321 of 224,400 (9.50%)
 - **Side by side:** `CWT-S07.png` (reference · built · heat map) — **heat map:** `CWT-S07.diff.png`
 
 ## Deviations
@@ -12,5 +12,5 @@
 
 **Real differences (intended, and why)**
 
-- **Three actions, not two.** "Try payment again" starts a fresh payment (F-024's restart) and "Return to trade" is as drawn; "I've sent it, check again" is kept from AB4 because a bank transfer that arrives late is the common case and the buyer should not have to start again.
+- **The primary is "I've sent it, check again", not "Try payment again".** Checking only reads; starting again abandons the reference a bank transfer may already be travelling to, and the buyer would pay twice. The reference's "Try payment again" is therefore a secondary that opens a confirmation ("A new payment gets a new reference, and the one you already used stops being valid") before it starts a new payment. The prose above the buttons says to check again before paying a second time.
 - **The hero and the "Payment needs attention" banner are one block**: F-024's AB4 hero ("We couldn't confirm this payment") carries the reference's sentence "No protected-funds state has been created". The "Trade" row reads "Awaiting funding"; an expired trade shows EX-01 instead.

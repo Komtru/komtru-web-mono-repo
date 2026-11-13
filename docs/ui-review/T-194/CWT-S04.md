@@ -3,7 +3,7 @@
 - **Reference:** `docs/design-reference/Komtru — UI Living Master v2.html` line 10919 — Trade Workspace — Supporting Screens
 - **Built:** http://localhost:3123/trade/0190b0a0-0000-7000-8000-000000000001/fund
 - **Frame:** mobile, 340px reference frame; compared at 340 × 660
-- **Differing pixels:** 11,754 of 224,400 (5.24%)
+- **Differing pixels:** 33,007 of 224,400 (14.71%)
 - **Side by side:** `CWT-S04.png` (reference · built · heat map) — **heat map:** `CWT-S04.diff.png`
 
 ## Deviations
@@ -13,4 +13,5 @@
 **Real differences (intended, and why)**
 
 - **Method reads "Bank transfer"** (the default choice) where the reference shows a saved card, and the fee rows are Amount, Buyer Protection Fee and Total where it shows Amount, Delivery, Total. The item card has no "KMT-90428 · TechEdge NG" sub line.
+- **Amounts have one source.** Amount, Buyer Protection Fee and Total are all from the payment attempt once one exists and all from the trade's fee snapshot before, never mixed, so the lines add up to the total. The seller's delivery-charge disclosure from the choice step ("paid to the seller outside Komtru protection and not part of this total") is repeated under the fee card when the seller committed one.
 - **This step is new to the funding flow.** F-024 went from the choice straight to the payment; the review sits between them and "Back" returns to the choice with the method kept. "Confirm & pay" opens Paystack's checkout (card) or the transfer step (bank transfer).

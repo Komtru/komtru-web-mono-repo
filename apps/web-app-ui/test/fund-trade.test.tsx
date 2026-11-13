@@ -663,15 +663,13 @@ describe('F-023 review: the money paths', () => {
     const pay = await screen.findByRole('button', { name: 'Confirm & pay' });
     fireEvent.click(pay);
     await waitFor(() => expect(opened).toHaveLength(1));
-    expect((screen.getByRole('button', { name: 'Confirm & pay' }) as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Confirm & pay' }).disabled).toBe(true);
     fireEvent.click(screen.getByRole('button', { name: 'Confirm & pay' }));
     expect(opened).toHaveLength(1);
     expect(callsTo(api.call, 'POST', '/trades/:code/payment/initiate')).toHaveLength(1);
     release();
     await waitFor(() =>
-      expect((screen.getByRole('button', { name: 'Confirm & pay' }) as HTMLButtonElement).disabled).toBe(
-        false,
-      ),
+      expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Confirm & pay' }).disabled).toBe(false),
     );
   });
 });

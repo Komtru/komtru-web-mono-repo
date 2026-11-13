@@ -7,20 +7,20 @@ choosing a method and pressing "Continue to payment". Pixel scores are the harne
 built screens sit inside the app shell and the reference does not, so every score carries the shell and its offset (see each
 file's first deviation). Content-only scores were not computed.
 
-| Screen  | Route                           | State shot                             | Differing pixels |
-| ------- | ------------------------------- | -------------------------------------- | ---------------- |
-| TW-01   | `/trade/<id>` (buyer)           | agreed, awaiting funding               | 10.36%           |
-| TW-02   | `/trade/<id>/fulfilment`        | accepted fulfilment terms              | 10.29%           |
-| TW-03   | `/trade/<id>/fund`              | payment started, awaiting the provider | 10.46%           |
-| TW-04   | `/trade/<id>/policies`          | policies                               | 15.84%           |
-| EX-01   | `/trade/<id>` (buyer)           | agreed trade, expired unfunded         | 15.35%           |
-| CWT-S01 | `/trade/<id>/agreement`         | accepted terms                         | 11.62%           |
-| CWT-S02 | `/trade/<id>/agreement/history` | version history                        | 13.92%           |
-| CWT-S03 | `/trade/<id>/fund`              | no payment yet, choose a method        | 8.48%            |
-| CWT-S04 | `/trade/<id>/fund`              | after "Continue to payment": review    | 5.24%            |
-| CWT-S05 | `/trade/<id>/fund`              | platform is verifying                  | 14.93%           |
-| CWT-S06 | `/trade/<id>/fund` (funded)     | funds protected                        | 8.12%            |
-| CWT-S07 | `/trade/<id>/fund`              | not confirmed                          | 9.49%            |
+| Screen  | Route                           | State shot                          | Differing pixels |
+| ------- | ------------------------------- | ----------------------------------- | ---------------- |
+| TW-01   | `/trade/<id>` (buyer)           | agreed, awaiting funding            | 10.36%           |
+| TW-02   | `/trade/<id>/fulfilment`        | accepted fulfilment terms           | 10.29%           |
+| TW-03   | `/trade/<id>/fund`              | payment started, not completed      | 10.47%           |
+| TW-04   | `/trade/<id>/policies`          | policies                            | 15.62%           |
+| EX-01   | `/trade/<id>` (buyer)           | agreed trade, expired unfunded      | 15.35%           |
+| CWT-S01 | `/trade/<id>/agreement`         | accepted terms                      | 11.62%           |
+| CWT-S02 | `/trade/<id>/agreement/history` | version history                     | 14.25%           |
+| CWT-S03 | `/trade/<id>/fund`              | no payment yet, choose a method     | 8.48%            |
+| CWT-S04 | `/trade/<id>/fund`              | after "Continue to payment": review | 14.71%           |
+| CWT-S05 | `/trade/<id>/fund`              | platform is verifying               | 14.93%           |
+| CWT-S06 | `/trade/<id>/fund` (funded)     | funds protected                     | 8.22%            |
+| CWT-S07 | `/trade/<id>/fund`              | not confirmed                       | 9.50%            |
 
 ## Judgement
 
