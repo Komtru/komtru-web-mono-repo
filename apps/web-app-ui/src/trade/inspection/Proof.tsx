@@ -8,7 +8,7 @@ import { whenLabel } from '../format';
 
 type Read = NonNullable<ReturnType<typeof useInspection>['data']>;
 
-function ProofTile({ fileId, label }: { fileId: string; label: string }): React.JSX.Element {
+export function ProofTile({ fileId, label }: { fileId: string; label: string }): React.JSX.Element {
   const file = useFileUrl(fileId);
   const frame =
     'aspect-square w-full overflow-hidden rounded-md border border-solid border-border-hairline bg-surface-secondary object-cover';
