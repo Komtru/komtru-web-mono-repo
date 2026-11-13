@@ -413,7 +413,7 @@ list a trade.
 - **Absorbs:** T-195 (todo)
 - **Backend scope:** Served by F-026 and F-027.
 - **Frontend scope:** Trade Workspace supporting sheets for delivery and evidence, CWT-S08–CWT-S13. _6 v2 screens._
-- **Status:** Not started
+- **Status:** UI merged except CWT-S13 (2026-11-13) — T-195 merged; five of six screens built. S13 evidence submit is a seam: no party-facing call attaches a file to a trade or case, and S12's Delivery and Inspection groups await a media-list read. Blocked on an owner decision for that backend ticket, so not Done.
 - **Depends on:** F-022
 - **MVP:** yes
 
@@ -1190,7 +1190,7 @@ Every ticket in `docs/tickets/`, in id order, with the feature that absorbs it.
 | T-192 | Create a trade: buyer starts, seller completes                            | Not started   | F-018   | Not started                  |
 | T-193 | Create a trade: seller starts, buyer completes                            | Not started   | F-019   | Not started                  |
 | T-194 | Trade workspace supporting screens: funding, terms, agreement and payment | Not started   | F-023   | Not started                  |
-| T-195 | Trade workspace supporting screens: delivery and evidence                 | Not started   | F-028   | Not started                  |
+| T-195 | Trade workspace supporting screens: delivery and evidence                 | Done          | F-028   | UI merged except CWT-S13     |
 | T-196 | Trade workspace supporting screens: resolution and issue reporting        | Not started   | F-032   | Not started                  |
 | T-197 | Proof media: capture, check and compare                                   | Not started   | F-029   | Not started                  |
 | T-198 | Lifecycle exceptions and trade extras                                     | Not started   | F-031   | Not started                  |
