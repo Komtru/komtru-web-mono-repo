@@ -3,6 +3,7 @@
 // PM-2: the camera, guided. Taking a shot inside Komtru names the file as taken on this device, and the guide says what
 // each shot is for. The camera can be refused or missing; both leave the same way out, a plain file picker.
 import { Button, Chip, Sheet } from '@komtru/ui-kit';
+import { createPortal } from 'react-dom';
 import { useCamera } from './camera';
 import { captureName, nextShot, shotChips, SHOTS } from './rules';
 
@@ -48,7 +49,8 @@ export function CameraSheet({
     });
   };
 
-  return (
+  // Drawn on the page's body, after the tab bar: the sheet and the bar share a stacking level, and the later one wins.
+  const sheet = (
     <Sheet open={open} onClose={onClose} title="Take photos">
       <p className="mb-[10px] text-center text-[11px] text-slate">
         {String(Math.min(photosTaken + 1, SHOTS.length))} of {String(SHOTS.length)}
@@ -157,4 +159,5 @@ export function CameraSheet({
       </div>
     </Sheet>
   );
+  return open ? createPortal(sheet, document.body) : null;
 }

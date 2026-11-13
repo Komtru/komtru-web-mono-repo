@@ -23,15 +23,15 @@ export interface GridItem {
 const TILE = 'relative aspect-square w-full overflow-hidden rounded-[10px]';
 const FILL = 'bg-[linear-gradient(135deg,var(--stone-gray),var(--cloud-gray))]';
 
-const PlayBadge = (): React.JSX.Element => (
-  <span
+/** The video tile's play mark, centred: a video still on this device has no frame to show, so it is a dark tile. */
+const PlayCentre = (): React.JSX.Element => (
+  <svg
     aria-hidden
-    className="absolute right-[6px] bottom-[6px] flex h-[20px] w-[20px] items-center justify-center rounded-[50%] bg-[rgba(13,20,32,.75)]"
+    viewBox="0 0 24 24"
+    className="absolute inset-0 m-auto h-[22px] w-[22px] fill-pure-white stroke-none"
   >
-    <svg viewBox="0 0 24 24" className="h-[9px] w-[9px] fill-pure-white stroke-none">
-      <path d="M8 5v14l11-7z" />
-    </svg>
-  </span>
+    <path d="M8 5v14l11-7z" />
+  </svg>
 );
 
 /** A file the platform holds, signed when it is shown. Says so when it cannot be loaded, and offers another try. */
@@ -69,7 +69,7 @@ function Tile({ item, onRemove }: { item: GridItem; onRemove: ((id: string) => v
   if (item.fileId !== undefined) return <FileTile fileId={item.fileId} label={item.label} />;
   return (
     <div
-      className={`${TILE} ${FILL}${item.flagged === true ? ' outline outline-2 -outline-offset-2 outline-risk' : ''}`}
+      className={`${TILE} ${item.kind === 'video' ? 'bg-komtru-midnight' : FILL}${item.flagged === true ? ' outline outline-2 -outline-offset-2 outline-risk' : ''}`}
     >
       {/* A video still on this device is drawn as a dark tile with the play badge: a preview frame would need a decoder. */}
       {item.src !== undefined && item.kind !== 'video' ? (
@@ -78,7 +78,7 @@ function Tile({ item, onRemove }: { item: GridItem; onRemove: ((id: string) => v
       ) : (
         <span className="sr-only">{item.label}</span>
       )}
-      {item.kind === 'video' && <PlayBadge />}
+      {item.kind === 'video' && <PlayCentre />}
       {onRemove !== undefined && (
         <button
           type="button"

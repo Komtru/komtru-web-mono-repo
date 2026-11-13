@@ -288,9 +288,9 @@ export function ProofCapture({ needs, onChange, initial = [], step }: ProofCaptu
         </>
       )}
 
-      {required > 0 && (
+      {required > 0 && flagged === undefined && (
         <>
-          <SectionLabel>What’s required</SectionLabel>
+          {!(progress.ready && media.length > 0) && <SectionLabel>What’s required</SectionLabel>}
           <TermList aria-label="What’s required">
             <TermRow label="Photos">
               <Chip tone={progress.photos.met ? 'verified' : 'awaiting'}>
