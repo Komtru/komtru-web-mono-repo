@@ -153,7 +153,7 @@ describe('agreed, awaiting funding (CWT-01)', () => {
     show();
     expect(await screen.findByRole('heading', { name: 'Terms agreed' })).toBeTruthy();
     expect(screen.getByText('Awaiting funding')).toBeTruthy();
-    expect(screen.getByRole('link', { name: 'Fund this trade' }).getAttribute('href')).toBe(
+    expect(screen.getByRole('link', { name: 'Continue to funding' }).getAttribute('href')).toBe(
       `/trade/${id(1)}/fund`,
     );
     expect(screen.queryByText(/Payment isn't available in the app yet/)).toBeNull();
