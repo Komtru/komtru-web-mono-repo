@@ -16,7 +16,7 @@ import { addressLine, hoursLabel, naira } from '../format';
 import { readRequest } from '../create/read';
 import { ItemSummary, PartyHeader } from '../parts';
 import { tabHref } from '../workspace-state';
-import { agreementHref, historyHref } from './routes';
+import { historyHref } from './routes';
 import { TradeFrame } from './TradeFrame';
 
 /** What the trade has nothing agreed to show for: a proposal still being answered, or one that ended unaccepted. */
@@ -41,7 +41,10 @@ export function deliveryWords(trade: TradeView): string {
   const reading = readRequest(trade);
   if (reading.mode === 'PARK') return `Park · ${reading.parkName ?? 'the chosen Park'}`;
   const charge = reading.deliveryChargeMinor;
-  const to = trade.terms?.deliveryAddress == null ? undefined : addressLine(trade.terms.deliveryAddress);
+  const to =
+    trade.terms?.deliveryAddress === null || trade.terms?.deliveryAddress === undefined
+      ? undefined
+      : addressLine(trade.terms.deliveryAddress);
   if (reading.mode === 'COURIER') {
     return ['Courier', charge === undefined ? undefined : naira(charge)].filter(Boolean).join(' · ');
   }
