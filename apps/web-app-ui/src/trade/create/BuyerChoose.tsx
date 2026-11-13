@@ -29,6 +29,7 @@ import { useEffect, useRef, useState } from 'react';
 import { AddressPicker } from '../AddressPicker';
 import { isProblem, itemSub, itemTitle, naira, partyName, problemMessage } from '../format';
 import { ConfirmSheet } from '../parts';
+import { ProofReview } from '../proof/ProofReview';
 import { Agreement } from './parts';
 import { readRequest } from './read';
 import { parkAvailable, promiseLabel, waitingKeys } from './request';
@@ -293,6 +294,7 @@ export function BuyerChoose({ trade }: { trade: TradeView }): React.JSX.Element 
       {stage === 1 && (
         <>
           {card}
+          <ProofReview seller={seller} total={trade.proofMediaCount} />
           <Agreement
             sellerName={seller}
             sellerLocation={request.sellerLocation}
