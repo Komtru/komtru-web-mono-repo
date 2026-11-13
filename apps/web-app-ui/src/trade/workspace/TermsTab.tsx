@@ -4,6 +4,7 @@ import type { TradeView } from '@komtru/api-client';
 import { ActionStack, Button, ReadyBanner, SectionLabel, VersionTimeline } from '@komtru/ui-kit';
 import { ItemSummary, PartyHeader, TermsRows, versionSteps } from '../parts';
 import { tabHref } from '../workspace-state';
+import { agreementHref, historyHref } from '../terms/AgreementScreen';
 import { FeeList } from './shared';
 
 /** CWT-07: the agreed version, which is the reference for fulfilment, inspection and any later dispute. */
@@ -21,6 +22,12 @@ export function TermsTab({ trade }: { trade: TradeView }): React.JSX.Element {
       <SectionLabel>Agreement history</SectionLabel>
       <VersionTimeline aria-label="Versions of this agreement" steps={versionSteps(trade)} />
       <ActionStack>
+        <Button asChild variant="secondary">
+          <a href={agreementHref(trade.id)}>View the agreement</a>
+        </Button>
+        <Button asChild variant="secondary">
+          <a href={historyHref(trade.id)}>Version history</a>
+        </Button>
         <Button asChild variant="secondary">
           <a href={tabHref(trade.id, 'overview')}>Back to overview</a>
         </Button>
