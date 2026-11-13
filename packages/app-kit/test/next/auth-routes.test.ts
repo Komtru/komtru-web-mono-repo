@@ -1,7 +1,11 @@
 import type { SessionScope } from '@komtru/shared-types';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { readAppConfig, type AppConfig } from '../../src/config.js';
-import { createAuthRouteHandlers, komtruAuthRoute } from '../../src/next/auth-routes.js';
+import {
+  createAuthRouteHandlers,
+  komtruAuthRoute,
+  type DescribeContext,
+} from '../../src/next/auth-routes.js';
 import { createMemoryRefreshStore } from '../../src/next/auth-guards.js';
 import { createSessionSealer } from '../../src/session.js';
 
@@ -754,7 +758,7 @@ describe('the facts sealed with a session (F-037)', () => {
   const describing = (
     describeSession: (
       accessToken: string,
-      signal: AbortSignal,
+      context: DescribeContext,
     ) => Promise<Record<string, boolean> | undefined>,
     extra: Partial<Parameters<typeof createAuthRouteHandlers>[0]> = {},
   ) =>
@@ -806,7 +810,7 @@ describe('the facts sealed with a session (F-037)', () => {
 
   it('gives up on a read that does not answer in time', async () => {
     const h = describing(
-      (_token, signal) =>
+      (_token, { signal }) =>
         new Promise((_resolve, reject) => {
           signal.addEventListener('abort', () => reject(new DOMException('aborted', 'AbortError')));
         }),
@@ -836,5 +840,102 @@ describe('the facts sealed with a session (F-037)', () => {
     const response = await h.login(post({ identifier: 'a@b.c', password: 'x' }));
     expect(response.status).toBe(200);
     expect(asked).toBe(false);
+  });
+});
+
+describe('the facts sealed with a session, further (F-037 review)', () => {
+  /** A JWT-shaped access token; only its `sub` claim is ever read, to tell people apart. */
+  const jwt = (sub: string, n = 1) =>
+    `h.${btoa(JSON.stringify({ sub, n })).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')}.s`;
+
+  const sessionCookie = (response: Response) =>
+    cookiesOf(response)
+      .find((c) => c.startsWith('komtru_session='))
+      ?.split(';')[0]
+      ?.slice('komtru_session='.length);
+
+  const describing = (
+    describeSession: (
+      accessToken: string,
+      context: DescribeContext,
+    ) => Promise<Record<string, boolean> | undefined>,
+    scope: SessionScope = 'CONSUMER',
+  ) => createAuthRouteHandlers({ config: configFor(scope), sealer, fetch: backend.fetch, describeSession });
+
+  it("hands the describer the real client's forwarded chain and user agent", async () => {
+    const seen: Record<string, string>[] = [];
+    const h = describing((_token, { forwarded }) => {
+      seen.push(forwarded);
+      return Promise.resolve({ hasSold: true });
+    });
+    await h.login(
+      post(
+        { identifier: 'a@b.c', password: 'x' },
+        { 'x-forwarded-for': '203.0.113.7', 'user-agent': 'phone' },
+      ),
+    );
+    expect(seen).toEqual([{ 'x-forwarded-for': '203.0.113.7', 'user-agent': 'phone' }]);
+
+    seen.length = 0;
+    backend.reply(200, { ...session, accessToken: 'at-2', refreshToken: 'rt-2' });
+    await h.refresh(post(undefined, { cookie: 'komtru_rt=rt-1', 'x-forwarded-for': '198.51.100.4' }));
+    expect(seen[0]?.['x-forwarded-for']).toBe('198.51.100.4');
+  });
+
+  it("keeps the facts of the person's own hint when a refresh's read fails", async () => {
+    let answer: Record<string, boolean> | undefined = { hasSold: true, certifiedMerchant: false };
+    const h = describing(() => (answer ? Promise.resolve(answer) : Promise.reject(new Error('down'))));
+    backend.reply(200, { ...session, accessToken: jwt('user-1') });
+    const first = sessionCookie(await h.login(post({ identifier: 'a@b.c', password: 'x' })))!;
+
+    answer = undefined;
+    backend.reply(200, { ...session, accessToken: jwt('user-1', 2), refreshToken: 'rt-2' });
+    const response = await h.refresh(post(undefined, { cookie: `komtru_rt=rt-1; komtru_session=${first}` }));
+    expect((await sealer.open(sessionCookie(response)))?.facts).toEqual({
+      hasSold: true,
+      certifiedMerchant: false,
+    });
+  });
+
+  it("never carries another person's facts, or facts with no subject to compare", async () => {
+    let answer: Record<string, boolean> | undefined = { hasSold: true };
+    const h = describing(() => (answer ? Promise.resolve(answer) : Promise.reject(new Error('down'))));
+    backend.reply(200, { ...session, accessToken: jwt('user-1') });
+    const first = sessionCookie(await h.login(post({ identifier: 'a@b.c', password: 'x' })))!;
+
+    answer = undefined;
+    backend.reply(200, { ...session, accessToken: jwt('user-2'), refreshToken: 'rt-2' });
+    const other = await h.refresh(post(undefined, { cookie: `komtru_rt=rt-1; komtru_session=${first}` }));
+    expect(await sealer.open(sessionCookie(other))).not.toHaveProperty('facts');
+
+    backend.reply(200, { ...session, accessToken: 'not-a-jwt', refreshToken: 'rt-3' });
+    const opaque = await h.refresh(post(undefined, { cookie: `komtru_rt=rt-2; komtru_session=${first}` }));
+    expect(await sealer.open(sessionCookie(opaque))).not.toHaveProperty('facts');
+  });
+
+  it('a sign-in whose read fails seals no facts, whatever hint the browser still holds', async () => {
+    const good = describing(() => Promise.resolve({ hasSold: true }));
+    backend.reply(200, { ...session, accessToken: jwt('user-1') });
+    const first = sessionCookie(await good.login(post({ identifier: 'a@b.c', password: 'x' })))!;
+
+    const failing = describing(() => Promise.reject(new Error('down')));
+    backend.reply(200, { ...session, accessToken: jwt('user-1', 2) });
+    const response = await failing.login(
+      post({ identifier: 'a@b.c', password: 'x' }, { cookie: `komtru_session=${first}` }),
+    );
+    expect(await sealer.open(sessionCookie(response))).not.toHaveProperty('facts');
+  });
+
+  it('does not describe a session that is not a consumer one', async () => {
+    let asked = false;
+    const h = describing(() => {
+      asked = true;
+      return Promise.resolve({ hasSold: true });
+    }, 'STAFF');
+    backend.reply(200, { ...session, scope: 'STAFF' });
+    const response = await h.login(post({ identifier: 'a@b.c', password: 'x' }));
+    expect(response.status).toBe(200);
+    expect(asked).toBe(false);
+    expect(await sealer.open(sessionCookie(response))).not.toHaveProperty('facts');
   });
 });
