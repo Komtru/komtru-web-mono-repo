@@ -5,6 +5,10 @@
 //                   Server Action, not to any other route.
 //   komtru_session  a sealed hint saying which scope the session has and when it lapses, so
 //                   middleware can turn a consumer away from ops.komtru.com without a round trip.
+//                   It may also carry the app's own facts about the person (F-037: has sold, is
+//                   certified), read when the session was issued, because a page render holds no
+//                   credential to ask the backend with. Facts decide what a page shows, never what
+//                   the person may do: the backend authorises every call.
 //
 // The hint is HMAC-sealed because middleware would otherwise be enforcing a value the caller
 // chooses: a cookie header is attacker-controlled, httpOnly or not. Sealing makes the middleware's
@@ -23,10 +27,37 @@ export const MIN_SECRET_LENGTH = 32;
 
 const VERSION = 'v1';
 
+/**
+ * Yes-or-no facts about the person, named by the app that seals them. Booleans only, and few: the cookie
+ * rides on every request, and anything richer belongs in a read.
+ */
+export type SessionFacts = Readonly<Record<string, boolean>>;
+
+/** Enough for an app's shell; a bound so a hint can never grow into a payload. */
+export const MAX_SESSION_FACTS = 8;
+const FACT_NAME = /^[A-Za-z][A-Za-z0-9]{0,31}$/;
+
+/**
+ * The facts in a payload, or `undefined` for anything that is not a small object of named booleans. Not
+ * a refusal of the session: a hint sealed by an older or newer build is still a real session, and the
+ * safe reading of facts it cannot understand is "none" — the smallest shell.
+ */
+const readFacts = (value: unknown): SessionFacts | undefined => {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return undefined;
+  const entries = Object.entries(value);
+  if (entries.length > MAX_SESSION_FACTS) return undefined;
+  for (const [name, fact] of entries) {
+    if (!FACT_NAME.test(name) || typeof fact !== 'boolean') return undefined;
+  }
+  return Object.fromEntries(entries);
+};
+
 export interface SessionHint {
   scope: SessionScope;
   /** Epoch milliseconds. Advisory for the client, binding for `open`. */
   expiresAt: number;
+  /** Absent when the app asked for none, the read failed, or the hint predates them. */
+  facts?: SessionFacts;
 }
 
 export interface SessionSealer {
@@ -78,8 +109,15 @@ export function createSessionSealer(secret: string): SessionSealer {
 
   const seal = async (hint: SessionHint): Promise<string> => {
     // Seconds, not milliseconds: the payload rides in a cookie on every request.
+    const facts = readFacts(hint.facts);
     const body = toBase64Url(
-      encoder.encode(JSON.stringify({ s: hint.scope, e: Math.floor(hint.expiresAt / 1000) })),
+      encoder.encode(
+        JSON.stringify({
+          s: hint.scope,
+          e: Math.floor(hint.expiresAt / 1000),
+          ...(facts === undefined ? {} : { f: facts }),
+        }),
+      ),
     );
     const signed = `${VERSION}.${body}`;
     const mac = await crypto.subtle.sign('HMAC', await keyPromise, encoder.encode(signed));
@@ -109,7 +147,7 @@ export function createSessionSealer(secret: string): SessionSealer {
 
       const payload: unknown = JSON.parse(new TextDecoder().decode(fromBase64Url(body)));
       if (typeof payload !== 'object' || payload === null) return null;
-      const { s, e } = payload as { s?: unknown; e?: unknown };
+      const { s, e, f } = payload as { s?: unknown; e?: unknown; f?: unknown };
 
       // A valid signature proves the payload is ours. It does not prove the scope is still a scope:
       // a hint sealed before `SESSION_SCOPES` changed would otherwise be let through under a name
@@ -119,7 +157,8 @@ export function createSessionSealer(secret: string): SessionSealer {
 
       const expiresAt = e * 1000;
       if (expiresAt <= now) return null;
-      return { scope: scope.data, expiresAt };
+      const facts = readFacts(f);
+      return { scope: scope.data, expiresAt, ...(facts === undefined ? {} : { facts }) };
     } catch {
       // Every failure here is a cookie someone made up. Middleware runs on every navigation, so a
       // throw would be a 500 on every page of the app rather than a redirect to sign in.

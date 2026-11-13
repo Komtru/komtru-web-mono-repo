@@ -84,6 +84,45 @@ describe('the sealed session hint', () => {
   });
 });
 
+describe('the facts a session hint carries (F-037)', () => {
+  const withFacts: SessionHint = {
+    ...hint,
+    scope: 'CONSUMER',
+    facts: { hasSold: true, certifiedMerchant: false },
+  };
+
+  it('opens the facts it sealed', async () => {
+    expect(await sealer.open(await sealer.seal(withFacts), 1_000)).toEqual(withFacts);
+  });
+
+  it('still opens a hint sealed before facts existed, with none', async () => {
+    const opened = await sealer.open(
+      await signWith('a'.repeat(32), { s: 'CONSUMER', e: 2_000_000_000 }),
+      1_000,
+    );
+    expect(opened).toEqual({ scope: 'CONSUMER', expiresAt: 2_000_000_000_000 });
+    expect(opened).not.toHaveProperty('facts');
+  });
+
+  it('refuses a hint whose facts were edited', async () => {
+    const sealed = await sealer.seal({ ...withFacts, facts: { hasSold: false } });
+    const [version, payload, signature] = sealed.split('.');
+    const forged = JSON.parse(fromB64url(payload!)) as { f: Record<string, boolean> };
+    forged.f.hasSold = true;
+    expect(
+      await sealer.open([version, b64url(JSON.stringify(forged)), signature].join('.'), 1_000),
+    ).toBeNull();
+  });
+
+  it.each([['not an object'], [['hasSold']], [{ hasSold: 'yes' }], [{ 'bad key': true }], [null]])(
+    'drops facts it cannot read (%j) rather than guessing, and keeps the session',
+    async (f) => {
+      const resealed = await signWith('a'.repeat(32), { s: 'CONSUMER', e: 2_000_000_000, f });
+      expect(await sealer.open(resealed, 1_000)).toEqual({ scope: 'CONSUMER', expiresAt: 2_000_000_000_000 });
+    },
+  );
+});
+
 describe('requireSessionSecret', () => {
   it('refuses a secret too short to be one', () => {
     expect(() => requireSessionSecret({ KOMTRU_SESSION_SECRET: 'short' })).toThrow(/KOMTRU_SESSION_SECRET/);

@@ -744,3 +744,97 @@ describe('token mode', () => {
     expect(response.status).toBe(403);
   });
 });
+
+describe('the facts sealed with a session (F-037)', () => {
+  const hintOf = async (response: Response) => {
+    const cookie = cookiesOf(response).find((c) => c.startsWith('komtru_session='));
+    return sealer.open(cookie?.split(';')[0]?.slice('komtru_session='.length));
+  };
+
+  const describing = (
+    describeSession: (
+      accessToken: string,
+      signal: AbortSignal,
+    ) => Promise<Record<string, boolean> | undefined>,
+    extra: Partial<Parameters<typeof createAuthRouteHandlers>[0]> = {},
+  ) =>
+    createAuthRouteHandlers({
+      config: configFor('CONSUMER'),
+      sealer,
+      fetch: backend.fetch,
+      describeSession,
+      ...extra,
+    });
+
+  it('asks with the new access token on sign-in and seals the answer beside the scope', async () => {
+    const seen: string[] = [];
+    const h = describing((token) => {
+      seen.push(token);
+      return Promise.resolve({ hasSold: true, certifiedMerchant: false });
+    });
+    const response = await h.login(post({ identifier: 'a@b.c', password: 'x' }));
+    expect(response.status).toBe(200);
+    expect(seen).toEqual(['at-1']);
+    expect(await hintOf(response)).toMatchObject({
+      scope: 'CONSUMER',
+      facts: { hasSold: true, certifiedMerchant: false },
+    });
+    // Facts are for this app's pages, never the browser's script.
+    expect(await response.json()).not.toHaveProperty('facts');
+  });
+
+  it('asks again on every refresh, with the rotated token, so the facts follow the account', async () => {
+    const seen: string[] = [];
+    const h = describing((token) => {
+      seen.push(token);
+      return Promise.resolve({ hasSold: true });
+    });
+    backend.reply(200, { ...session, accessToken: 'at-2', refreshToken: 'rt-2' });
+    const response = await h.refresh(post(undefined, { cookie: 'komtru_rt=rt-1' }));
+    expect(seen).toEqual(['at-2']);
+    expect((await hintOf(response))?.facts).toEqual({ hasSold: true });
+  });
+
+  it('signs the person in with no facts when the read fails, never refusing the session', async () => {
+    const h = describing(() => Promise.reject(new Error('backend down')));
+    const response = await h.login(post({ identifier: 'a@b.c', password: 'x' }));
+    expect(response.status).toBe(200);
+    const opened = await hintOf(response);
+    expect(opened?.scope).toBe('CONSUMER');
+    expect(opened).not.toHaveProperty('facts');
+  });
+
+  it('gives up on a read that does not answer in time', async () => {
+    const h = describing(
+      (_token, signal) =>
+        new Promise((_resolve, reject) => {
+          signal.addEventListener('abort', () => reject(new DOMException('aborted', 'AbortError')));
+        }),
+      { describeTimeoutMs: 20 },
+    );
+    const response = await h.login(post({ identifier: 'a@b.c', password: 'x' }));
+    expect(response.status).toBe(200);
+    expect(await hintOf(response)).not.toHaveProperty('facts');
+  });
+
+  it('gives up even on a read that ignores its signal', async () => {
+    const h = describing(() => new Promise(() => undefined), { describeTimeoutMs: 20 });
+    const response = await h.login(post({ identifier: 'a@b.c', password: 'x' }));
+    expect(response.status).toBe(200);
+    expect(await hintOf(response)).not.toHaveProperty('facts');
+  });
+
+  it('does not ask in token mode, where there is no cookie to seal into', async () => {
+    let asked = false;
+    const h = describing(
+      () => {
+        asked = true;
+        return Promise.resolve({ hasSold: true });
+      },
+      { tokenMode: { store: createMemoryRefreshStore({ ttlMs: 1000 }) } },
+    );
+    const response = await h.login(post({ identifier: 'a@b.c', password: 'x' }));
+    expect(response.status).toBe(200);
+    expect(asked).toBe(false);
+  });
+});

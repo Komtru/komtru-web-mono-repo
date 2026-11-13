@@ -25,6 +25,7 @@ import {
   secureCookieFor,
   sessionCookies,
   type KomtruCookie,
+  type SessionFacts,
   type SessionSealer,
 } from '../session.js';
 
@@ -33,6 +34,12 @@ const DEFAULT_TIMEOUT_MS = 15_000;
 
 /** M1's 30-day sliding window. The backend's own expiry is the truth; this bounds the cookie. */
 export const REFRESH_MAX_AGE_SECONDS = 30 * 24 * 60 * 60;
+
+/**
+ * How long a sign-in or refresh waits for `describeSession` before sealing no facts. Short: it is on the
+ * path of every sign-in, and a missing fact only costs a row the shell would otherwise show.
+ */
+export const DEFAULT_DESCRIBE_TIMEOUT_MS = 3_000;
 
 /** The backend serves one login route and decides the scope from the account (`/v1/auth/login`). */
 export const DEFAULT_LOGIN_PATH = '/auth/login';
@@ -71,6 +78,14 @@ export interface AuthRouteOptions {
   refreshMaxAgeSeconds?: number;
   /** How long to wait for the backend before answering 502. Matches api-client's own default. */
   timeoutMs?: number;
+  /**
+   * The app's facts about the person, read with the access token just issued and sealed into the session
+   * hint so a page render can see them (F-037). Called on every sign-in and every refresh, cookie mode
+   * only. A failure, a timeout or `undefined` seals no facts; it never refuses the session.
+   */
+  describeSession?: (accessToken: string, signal: AbortSignal) => Promise<SessionFacts | undefined>;
+  /** Bound on `describeSession`. */
+  describeTimeoutMs?: number;
 }
 
 /** Fixed one-minute windows. The backend's own limiter is the fine one; this is the coarse door. */
@@ -244,6 +259,8 @@ export function createAuthRouteHandlers({
   now = Date.now,
   refreshMaxAgeSeconds = REFRESH_MAX_AGE_SECONDS,
   timeoutMs = DEFAULT_TIMEOUT_MS,
+  describeSession,
+  describeTimeoutMs = DEFAULT_DESCRIBE_TIMEOUT_MS,
 }: AuthRouteOptions): AuthRouteHandlers {
   const doFetch = fetchImpl ?? globalThis.fetch.bind(globalThis);
 
@@ -340,6 +357,21 @@ export function createAuthRouteHandlers({
     }
   };
 
+  /** The app's facts for a session just issued, or none: this read must never cost the sign-in. */
+  const factsFor = async (accessToken: string): Promise<SessionFacts | undefined> => {
+    if (describeSession === undefined) return undefined;
+    const signal = AbortSignal.timeout(describeTimeoutMs);
+    // Raced as well as signalled: a describer that ignores its signal must not hold the sign-in open.
+    const timedOut = new Promise<undefined>((resolve) => {
+      signal.addEventListener('abort', () => resolve(undefined), { once: true });
+    });
+    try {
+      return await Promise.race([describeSession(accessToken, signal), timedOut]);
+    } catch {
+      return undefined;
+    }
+  };
+
   /** The browser gets the session minus the one field that must never leave this process. */
   const issue = async (backendBody: Record<string, unknown>): Promise<Response> => {
     const parsed = backendSessionSchema.safeParse(backendBody);
@@ -371,7 +403,12 @@ export function createAuthRouteHandlers({
       tokenMode.store.put(parsed.data.accessToken, refreshToken);
       return json(forBrowser, 200);
     }
-    const sealed = await sealer.seal({ scope: parsed.data.scope, expiresAt: expiryOf(refreshMaxAgeSeconds) });
+    const facts = await factsFor(parsed.data.accessToken);
+    const sealed = await sealer.seal({
+      scope: parsed.data.scope,
+      expiresAt: expiryOf(refreshMaxAgeSeconds),
+      ...(facts === undefined ? {} : { facts }),
+    });
     return json(
       forBrowser,
       200,
