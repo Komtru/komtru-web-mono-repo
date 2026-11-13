@@ -63,7 +63,10 @@ export function CameraSheet({
           playsInline
           aria-label="Camera"
           className={`absolute inset-0 h-full w-full object-cover ${state === 'live' ? '' : 'hidden'}`}
-        />
+        >
+          {/* A live camera picture carries no speech to caption. */}
+          <track kind="captions" label="No captions" />
+        </video>
         {state === 'live' && (
           <>
             <div

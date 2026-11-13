@@ -446,7 +446,7 @@ export function ProofCapture({ needs, onChange, initial = [], step }: ProofCaptu
 
       <div className="flex flex-col gap-[8px]">
         {retake}
-        {!hasFlags && picker}
+        {picker}
         {hasFlags && (
           <Button
             type="button"

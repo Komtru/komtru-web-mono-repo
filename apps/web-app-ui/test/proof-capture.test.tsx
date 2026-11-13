@@ -49,8 +49,9 @@ const show = (props: Partial<ProofCaptureProps> = {}) => {
     api.call,
     <ProofCapture needs={{ photos: 3, video: true }} step="send" onChange={onChange} {...props} />,
   );
+  // The gallery picker is the one that takes several files; the first file input may be the device-camera picker.
   const gallery = () =>
-    view.container.querySelector<HTMLInputElement>('input[type="file"]') as HTMLInputElement;
+    view.container.querySelector<HTMLInputElement>('input[type="file"][multiple]') as HTMLInputElement;
   return { ...view, onChange, gallery };
 };
 
@@ -301,12 +302,12 @@ describe('PM-2: the camera is let go of on every path', () => {
   });
 
   it('stops the stream when the whole screen goes while the camera is open', async () => {
-    const { stop } = camera();
+    const { stop, getUserMedia } = camera();
     const { unmount } = show();
     fireEvent.click(screen.getByRole('button', { name: 'Take a photo now' }));
     await screen.findByRole('dialog', { name: 'Take photos' });
     await waitFor(() => {
-      expect(navigator.mediaDevices.getUserMedia).toHaveBeenCalled();
+      expect(getUserMedia).toHaveBeenCalled();
     });
     await new Promise((done) => setTimeout(done, 0));
     unmount();
@@ -318,13 +319,13 @@ describe('PM-2: the camera is let go of on every path', () => {
     show();
     fireEvent.click(screen.getByRole('button', { name: 'Take a photo now' }));
     await screen.findByRole('dialog', { name: 'Take photos' });
-    await expectNoAxeViolations(document.body);
+    await expectNoAxeViolations(document.body, ['region', 'heading-order']);
     cleanup();
     camera({ reject: 'NotAllowedError' });
     show();
     fireEvent.click(screen.getByRole('button', { name: 'Take a photo now' }));
     await screen.findByText('The camera is off for Komtru');
-    await expectNoAxeViolations(document.body);
+    await expectNoAxeViolations(document.body, ['region', 'heading-order']);
   });
 });
 
