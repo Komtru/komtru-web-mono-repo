@@ -736,3 +736,4 @@ VALUE` cannot work here at all (drizzle runs every pending migration in one tran
   - format:check is clean.
 - Feature costs: F-037 seam (implement+review+fix+merge) 5h-cost=21 week-cost=2.
 - Next: the F-030 UI layer (T-119), then F-023, F-028 and F-029 in journey order. F-030, F-044 and F-045 remain Backend done, UI outstanding. The relay test is flaky under turbo load and is a candidate for F-005.
+- **Concurrent work:** during this run, while this run's lock was held, another session merged F-028 (`5cf0239`, `946904d`) into `main`. It also left worktrees `f-023-workspace-terms` and `f-029-proof-media` in flight. F-028 was already on `main` when this run did its post-merge checks, so those checks covered it. The next run should resume F-023 and F-029 as in-flight work before starting F-030 UI. It should also find out why that session did not honour `.claude/manager.lock`.
