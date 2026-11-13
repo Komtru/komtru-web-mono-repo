@@ -130,7 +130,7 @@ One app for every consumer with no buyer or seller views (design C22, §6.3), pl
 - **Screens (v2):** Seller-6, AB5, AB6, WF1, PR1
 - **Depends on:** T-073, T-110, T-190
 - **Notes:** Payouts live under Account and are available to anyone who has sold, not only merchants.
-- **Status:** Done (2026-11-11). Plan: `docs/superpowers/plans/2026-11-11-f-037-payouts-ui.md`. Review: 10 items fixed (2 must-fix: the withdraw idempotency key is kept across ambiguous 408/409/5xx failures and background refetches). Screens Seller-6, AB5, AB6, WF1, PR1 under `/account/payouts`. The Account Payouts row shows only when `viewer.hasSold`, which waits on the viewer seam (owner question in RUN_LOG).
+- **Status:** Done (2026-11-11). Plan: `docs/superpowers/plans/2026-11-11-f-037-payouts-ui.md`. Review: 10 items fixed (2 must-fix: the withdraw idempotency key is kept across ambiguous 408/409/5xx failures and background refetches). Screens Seller-6, AB5, AB6, WF1, PR1 under `/account/payouts`. The Account Payouts row shows only when `viewer.hasSold`. The viewer seam was filled on 2026-11-13 (plan `docs/superpowers/plans/2026-11-13-f-037-viewer-seam.md`, review: 1 must-fix and 5 should-fix items fixed): `GET /me/viewer` facts are sealed into the `komtru_session` hint at sign-in and refresh.
 
 ### T-125 — Seller insights
 

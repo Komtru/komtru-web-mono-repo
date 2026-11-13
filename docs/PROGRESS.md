@@ -7,11 +7,11 @@ behind it is [`BUILD_PLAN.md`](BUILD_PLAN.md). The unit of work is the feature, 
 thing in an app.
 
 ```
-MVP   ██████████████····················  22/52   (42%)
-Total █████████·························  22/80   (28%)
+MVP   ███████████████···················  23/52   (44%)
+Total ██████████························  23/80   (29%)
 ```
 
-30 MVP features left, 28 deferred past it.
+29 MVP features left, 28 deferred past it.
 
 ## Backend done, UI outstanding
 
@@ -20,7 +20,6 @@ The engine exists and only the UI is missing, so these are the highest-value wor
 | Feature | Title                                                  | Journey                  | MVP |
 | ------- | ------------------------------------------------------ | ------------------------ | --- |
 | F-030   | Cancel a trade and get a refund                        | Issues & resolution      | yes |
-| F-037   | Get paid out                                           | Complete & grow          | yes |
 | F-044   | Account basics, addresses, documents and system states | Account, trust & support | yes |
 | F-045   | Verify yourself, and close or recover an account       | Account, trust & support | yes |
 
@@ -37,7 +36,7 @@ The engine exists and only the UI is missing, so these are the highest-value wor
 | Fulfil & dispatch                       | 1    | 1     | 1        | 1         |
 | Deliver & inspect                       | 1    | 3     | 1        | 3         |
 | Issues & resolution                     | 0    | 7     | 0        | 6         |
-| Complete & grow                         | 0    | 3     | 0        | 1         |
+| Complete & grow                         | 1    | 3     | 1        | 1         |
 | Sell on Komtru                          | 0    | 4     | 0        | 3         |
 | Account, trust & support                | 0    | 5     | 0        | 3         |
 | TrustOps console                        | 3    | 11    | 3        | 3         |
@@ -48,22 +47,23 @@ The engine exists and only the UI is missing, so these are the highest-value wor
 
 ## Ready features (every dependency done), MVP first
 
-| Feature | Title                                                | Journey                                 | MVP |
-| ------- | ---------------------------------------------------- | --------------------------------------- | --- |
-| F-005   | Deterministic integration test suite                 | Platform (not a user journey)           | yes |
-| F-023   | Terms, agreement and payment detail in the workspace | The trade workspace                     | yes |
-| F-028   | Delivery and evidence in the workspace               | Deliver & inspect                       | yes |
-| F-029   | Capture and compare proof media                      | Deliver & inspect                       | yes |
-| F-075   | Hosting and real deploy jobs                         | Launch & assurance (not a user journey) | yes |
-| F-078   | Definition-of-done audit and first push              | Launch & assurance (not a user journey) | yes |
-| F-014   | Sign in with Google, Apple or Facebook               | Arrive & verify                         |     |
-| F-020   | Verify a phone IMEI before proposing                 | Propose & agree                         |     |
-| F-025   | Top up and pay from a Komtru Wallet                  | Fund & protect                          |     |
-| F-047   | Message the other party                              | Account, trust & support                |     |
-| F-048   | Raise and resolve a support ticket                   | Account, trust & support                |     |
-| F-052   | Fraud signals and restrictions                       | TrustOps console                        |     |
-| F-054   | Directory, roles, approvals and impersonation        | TrustOps console                        |     |
-| F-065   | Logistics companies, teams and the partner portal    | Logistics partner                       |     |
+| Feature | Title                                                 | Journey                                 | MVP |
+| ------- | ----------------------------------------------------- | --------------------------------------- | --- |
+| F-005   | Deterministic integration test suite                  | Platform (not a user journey)           | yes |
+| F-023   | Terms, agreement and payment detail in the workspace  | The trade workspace                     | yes |
+| F-028   | Delivery and evidence in the workspace                | Deliver & inspect                       | yes |
+| F-029   | Capture and compare proof media                       | Deliver & inspect                       | yes |
+| F-040   | Apply for merchant certification and have it reviewed | Sell on Komtru                          | yes |
+| F-075   | Hosting and real deploy jobs                          | Launch & assurance (not a user journey) | yes |
+| F-078   | Definition-of-done audit and first push               | Launch & assurance (not a user journey) | yes |
+| F-014   | Sign in with Google, Apple or Facebook                | Arrive & verify                         |     |
+| F-020   | Verify a phone IMEI before proposing                  | Propose & agree                         |     |
+| F-025   | Top up and pay from a Komtru Wallet                   | Fund & protect                          |     |
+| F-047   | Message the other party                               | Account, trust & support                |     |
+| F-048   | Raise and resolve a support ticket                    | Account, trust & support                |     |
+| F-052   | Fraud signals and restrictions                        | TrustOps console                        |     |
+| F-054   | Directory, roles, approvals and impersonation         | TrustOps console                        |     |
+| F-065   | Logistics companies, teams and the partner portal     | Logistics partner                       |     |
 
 ## Remaining MVP features
 

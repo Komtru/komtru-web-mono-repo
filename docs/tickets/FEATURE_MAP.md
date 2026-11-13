@@ -518,14 +518,15 @@ list a trade.
 
 - **Journey:** Complete & grow
 - **Actor:** seller
-- **Absorbs:** T-073 (done), T-124 (todo)
+- **Absorbs:** T-073 (done), T-124 (done)
 - **Backend scope:** Payout accounts, preferences and payouts against the ledger (T-073).
 - **Frontend scope:** Seller Payouts (AB5, AB6, WF1, PR1) and the seller money tab (Seller-6). _5 v2 screens._
-- **Status:** Backend done, UI outstanding
+- **Status:** Done
 - **Depends on:** none
 - **MVP:** yes
 - **Progress note (2026-11-11):** T-073 (backend) merged; next: T-124 Seller Payouts UI (AB5, AB6, WF1, PR1, Seller-6) over the merged `/me/payout-accounts` and `/me/payouts` routes.
 - **Progress note (2026-11-11, later):** T-124 UI merged to `main`. Both layers are built, but the feature stays `Backend done, UI outstanding` because no user can reach the screens yet: the Account Payouts row needs `viewer.hasSold`, and `resolveViewer` still returns the anonymous viewer. Next: fill the viewer seam (owner answered yes on 2026-11-12: `resolveViewer` returns the signed-in viewer with `hasSold`), then mark Done. Resume as in-flight work.
+- **Progress note (2026-11-13):** Viewer seam filled and merged: `resolveViewer` reads `hasSold` and `certifiedMerchant` from the sealed session hint (backend `GET /me/viewer`), so a signed-in seller reaches `/account/payouts` from Account. `parkAgent` stays `'none'` until T-091. Feature Done.
 
 #### F-038 — Leave a review
 
