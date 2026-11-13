@@ -11,12 +11,12 @@ headless Chromium has no camera. The harness and stand-in lived outside the repo
 | ------ | --------------------------------------------- | ---------------------------------- | ---------------- |
 | PM-1   | the proof step (`ProofUpload`/`ProofCapture`) | 2 of 3 photos, video outstanding   | 9.55%            |
 | PM-2   | the guided camera (`CameraSheet`)             | shot 3 of 4, live stream           | 11.44%           |
-| PM-3   | the proof step                                | a flagged file                     | 13.81%           |
-| PM-4   | the proof step                                | 4 photos and 1 video               | 11.55%           |
-| PM-5   | `ProofReview` on CT-S7                        | five signed files                  | 25.54%           |
-| PM-6   | `/trade/<id>/evidence`                        | inspection, with dispatch evidence | 24.39%           |
-| PM-7   | `/trade/<id>/inspect`                         | buyer, Seller's proof pane         | 24.41%           |
-| PM-8   | `/trade/<id>/record`                          | settled                            | 15.05%           |
+| PM-3   | the proof step                                | a flagged file                     | 13.86%           |
+| PM-4   | the proof step                                | 4 photos and 1 video               | 11.67%           |
+| PM-5   | `ProofReview` on CT-S7                        | a count, no listing                | 29.51%           |
+| PM-6   | `/trade/<id>/evidence`                        | inspection, with dispatch evidence | 21.88%           |
+| PM-7   | `/trade/<id>/inspect`                         | buyer, Seller's proof pane         | 24.43%           |
+| PM-8   | `/trade/<id>/record`                          | settled                            | 15.09%           |
 
 ## Judgement
 
@@ -24,4 +24,7 @@ headless Chromium has no camera. The harness and stand-in lived outside the repo
 term rows, evidence groups) follow the reference. PM-5, PM-6 and PM-7 score higher because the photo tiles are solid
 stand-in images against the reference's pale placeholder tiles and the screens sit lower under their shell headers. What the
 platform cannot state is not drawn as fact: originality and "taken on a camera", a human review, hub scans, the buyer's
-inspection photos, the retention period, and (a blocking gap) the seller's files before the trade is agreed.
+inspection photos, a retention period, and rules the app does not enforce (that proof is locked or cannot change). One
+blocking gap, corrected after review: the buyer already holds access grants on the seller's proof files before accepting,
+but no read lists the file ids (the trade view carries only a count, and the inspection read is empty until shipment), so
+CT-S7 can say how many files there are and not show them. Exposing the ids is an owner decision, so no backend change was made.

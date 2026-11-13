@@ -1,10 +1,9 @@
 # PM-6 — Active trade — the evidence trail (T-197)
 
 - **Reference:** `docs/design-reference/Komtru — UI Living Master v2.html` line 11301 — Trade execution · Proof media
-- **Built:** /trade/<id>/evidence (new route; also linked from Trade Actions)
-- **State shot:** inspection, both people, five proof files and a dispatch photo
+- **Built:** http://localhost:3130/trade/0190b0a0-0000-7000-8000-000000000001/evidence
 - **Frame:** mobile, 340px reference frame; compared at 340 × 660
-- **Differing pixels:** 54,739 of 224,400 (24.39%)
+- **Differing pixels:** 49,107 of 224,400 (21.88%)
 - **Side by side:** `PM-6.png` (reference · built · heat map) — **heat map:** `PM-6.diff.png`
 
 ## Deviations
@@ -16,6 +15,7 @@
 
 **Real differences (intended, and why)**
 
-- **Groups the platform can state.** "Seller's proof" (fixed when the Trade was agreed, with the agreed time), "Added by the seller · dispatch" (the waybill photo, number and time), "Added at delivery" (the delivery records, as rows). The reference's hub scan group and "Your inspection photos" thumbnails are not drawn: no hub-scan or inspection photo exists on the platform. The buyer sees a line saying inspection photos aren't kept with the Trade yet.
-- **The trade code** is a line under the header, not in the top bar (`ScreenHeader` has no right-hand slot). Group labels are sentence-case section labels as the rest of the app draws them.
-- Before the item ships the platform does not release the files, so the page says how many there are and that they open once shipped.
+- **Hosted by F-028's evidence page** (`/trade/<id>/evidence`, which already uses `DeliveryPage`/`TradeGate` and is linked from the workspace and Add evidence); this ticket supplies the body, `Trail`. Its intro line, the evidence-flow note and the Back button are F-028's.
+- **Groups the platform can state.** "Seller's proof" ("Shown when the Trade was agreed" with the agreed time; anything added after sits beside it), "Added by the seller · dispatch" (waybill number and time; the waybill photo only for the seller, since the platform grants it to them alone, and the buyer is told it is kept private), "Added at delivery" (the delivery records, as rows). The reference's hub scan group and the inspection photos are not drawn: none exists on the platform. The buyer sees a line saying inspection photos aren't kept with the Trade yet.
+- **The reference's "can't be changed or removed" is not stated**: the app enforces no such rule on the page. The trade code is not drawn in the header (`ScreenHeader` has no right-hand slot).
+- Before the item ships the page says evidence appears once it has shipped (F-028's wording).

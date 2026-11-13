@@ -1,10 +1,9 @@
 # PM-8 — After completion — the Trade record (T-197)
 
 - **Reference:** `docs/design-reference/Komtru — UI Living Master v2.html` line 11334 — Trade execution · Proof media
-- **Built:** /trade/<id>/record (new route; the reference's /trades/KMT-…/record. The app's trade routes are by id)
-- **State shot:** completed trade, five proof files and a dispatch photo
+- **Built:** http://localhost:3130/trade/0190b0a0-0000-7000-8000-000000000002/record
 - **Frame:** mobile, 340px reference frame; compared at 340 × 660
-- **Differing pixels:** 33,762 of 224,400 (15.05%)
+- **Differing pixels:** 33,871 of 224,400 (15.09%)
 - **Side by side:** `PM-8.png` (reference · built · heat map) — **heat map:** `PM-8.diff.png`
 
 ## Deviations
@@ -16,6 +15,6 @@
 
 **Real differences (intended, and why)**
 
-- **Kept-evidence rows are what the platform recorded:** seller's proof (a count of photos or videos; the platform does not say which are videos), dispatch (the waybill photo) and delivery (the records). The reference's "Delivery · 1 photo · hub scan" and "Inspection · 3 photos" rows are not drawn: neither exists. The thumbnails are the first four proof files.
-- **"Kept for 12 months, then archived" is not drawn.** No retention rule exists on the platform. The banner keeps the true sentences: only the two people in the Trade and Komtru can see it, and a later listing edit doesn't change it.
-- The item card shows the item and price with no "Completed 6 Oct" date (the trade view carries no completion time); the Completed chip is below it. A trade that has not completed shows a note and a way to the evidence page; a refunded one shows "Refunded".
+- **Kept-evidence rows are what the platform recorded:** seller's proof (a count of photos or videos; the platform does not say which are videos), dispatch ("1 photo · waybill" for the seller; "Waybill noted" for the buyer, whose access to the waybill photo the platform withholds) and delivery (the records). The reference's "Delivery · 1 photo · hub scan" and "Inspection · 3 photos" rows are not drawn: neither exists. The thumbnails are the first four proof files.
+- **Privacy and retention.** "Kept for 12 months, then archived" is not drawn (no retention rule exists), and neither is "only the two people and Komtru can see it" or "later listing edits don't change it". The banner says what is true: these files are held privately with the Trade, not made public, and shared only with the people in it.
+- The item card shows the item and price with no "Completed 6 Oct" date (the trade view carries no completion time); the Completed chip is below it. A trade that has not completed shows a note and a way to the evidence page; a refunded one shows "Refunded". Route is `/trade/<id>/record`, as the app's trade routes are by id.

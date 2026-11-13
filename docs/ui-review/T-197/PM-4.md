@@ -1,10 +1,9 @@
 # PM-4 — Proof of the item — ready (T-197)
 
 - **Reference:** `docs/design-reference/Komtru — UI Living Master v2.html` line 11264 — Trade execution · Proof media
-- **Built:** /dev-proof/pm4 (harness)
-- **State shot:** requirements met: 4 photos and 1 video
+- **Built:** http://localhost:3130/dev-proof/pm4
 - **Frame:** mobile, 340px reference frame; compared at 340 × 660
-- **Differing pixels:** 25,917 of 224,400 (11.55%)
+- **Differing pixels:** 26,190 of 224,400 (11.67%)
 - **Side by side:** `PM-4.png` (reference · built · heat map) — **heat map:** `PM-4.diff.png`
 
 ## Deviations
@@ -17,5 +16,5 @@
 **Real differences (intended, and why)**
 
 - **Prose.** The reference says "all taken on your camera"; a file chosen from the gallery is not known to be taken on the camera, so the built line is "added from this device".
-- **Continue** is not drawn: the screens that mount the proof step have their own Continue/Send. The timeline ("What happens next") is the ui-kit `VersionTimeline`, with the reference's three steps and copy; it is drawn for sending a proposal and left out when the seller is accepting.
+- **Continue** is not drawn: the screens that mount the proof step have their own Continue/Send. The "What happens next" timeline is the ui-kit `VersionTimeline` with the reference's three steps, reworded to what the platform does: "The buyer is given access with the offer", "You can change it until you send", "It's kept with the Trade once it's agreed". The reference's "locked when the Trade is agreed" and "change it until they accept" are rules the app does not enforce, so they are not stated. Drawn when sending a proposal, left out when accepting.
 - Remove controls on the tiles are not in the reference.
