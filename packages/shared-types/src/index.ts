@@ -12,4 +12,5 @@ export * from './money.js';
 export * from './pagination.js';
 export * from './payouts.js';
 export * from './trades.js';
+export * from './viewer.js';
 export * from './refunds.js';
