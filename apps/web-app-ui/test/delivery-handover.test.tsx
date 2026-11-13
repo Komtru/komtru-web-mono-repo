@@ -49,7 +49,7 @@ const fill = (container: HTMLElement) => {
     target: { files: [new File(['x'], 'receipt.jpg', { type: 'image/jpeg' })] },
   });
 };
-const confirm = () => screen.getByRole<HTMLButtonElement>('button', { name: /Confirm handover/ });
+const confirm = () => screen.getByRole<HTMLButtonElement>('button', { name: /Confirm(ing)? handover/ });
 
 describe('CWT-S09 waybill and handover', () => {
   it('keeps Confirm handover shut until the evidence is given and the courier has the parcel', async () => {
