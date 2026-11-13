@@ -30,7 +30,8 @@ import {
 import { ItemSummary } from '../parts';
 import { extensionPending, releasePaused } from '../workspace-copy';
 import { Deadline } from '../workspace/shared';
-import { DeliveryEvidence, SellerProof } from './Proof';
+import { InspectCompare, MatchChecks } from '../proof/ProofReview';
+import { DeliveryEvidence } from './Proof';
 import { MoreTimeSheet, ReleaseSheet } from './sheets';
 
 const tradeHref = (id: string) => `/trade/${id}`;
@@ -202,10 +203,10 @@ function BuyerInspect({ trade, read, query }: Parts): React.JSX.Element {
       )}
       <ItemSummary trade={trade} />
       <SectionLabel>Seller’s proof — before shipping</SectionLabel>
-      <SellerProof read={read} seller={seller} />
+      <InspectCompare read={read} seller={seller} />
       <SectionLabel>Delivery — what you received</SectionLabel>
       <DeliveryEvidence read={read} deliveredTo={deliveredTo} />
-      <SectionLabel>Does everything match what was agreed?</SectionLabel>
+      <MatchChecks />
       <p className="mb-[14px] text-[12.5px] leading-[1.5] text-slate">
         Check the item against the agreed terms before confirming. Confirming releases the payment and can’t
         be undone.

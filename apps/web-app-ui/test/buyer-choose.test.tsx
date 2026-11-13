@@ -201,7 +201,9 @@ describe('CT-S7 Review and accept', () => {
     const view = renderWithApi(api.call, <TradeScreen id={id(1)} />);
     await toS7();
     expect(screen.getByRole('heading', { name: 'Terms' })).toBeTruthy();
-    expect(screen.getByText('TechEdge NG', { selector: 'dd, div, span' })).toBeTruthy();
+    // The seller is named in the agreement and again as who showed the proof (PM-5).
+    expect(screen.getAllByText('TechEdge NG', { selector: 'dd, div, span' }).length).toBeGreaterThan(0);
+    expect(screen.getByText('Until you accept')).toBeTruthy();
     expect(screen.getByText('12 Computer Village Rd, Ikeja')).toBeTruthy();
     expect(screen.getByText(/Courier · 12 Allen Avenue, Ikeja/)).toBeTruthy();
     expect(screen.getByText('5–7 days')).toBeTruthy();
