@@ -7,11 +7,11 @@ behind it is [`BUILD_PLAN.md`](BUILD_PLAN.md). The unit of work is the feature, 
 thing in an app.
 
 ```
-MVP   ████████████████··················  24/52   (46%)
-Total ██████████························  24/80   (30%)
+MVP   ████████████████··················  25/52   (48%)
+Total ███████████·······················  25/80   (31%)
 ```
 
-28 MVP features left, 28 deferred past it.
+27 MVP features left, 28 deferred past it.
 
 ## Backend done, UI outstanding
 
@@ -34,7 +34,7 @@ The engine exists and only the UI is missing, so these are the highest-value wor
 | The trade workspace                     | 2    | 2     | 2        | 2         |
 | Fund & protect                          | 1    | 2     | 1        | 1         |
 | Fulfil & dispatch                       | 1    | 1     | 1        | 1         |
-| Deliver & inspect                       | 1    | 3     | 1        | 3         |
+| Deliver & inspect                       | 2    | 3     | 2        | 3         |
 | Issues & resolution                     | 0    | 7     | 0        | 6         |
 | Complete & grow                         | 1    | 3     | 1        | 1         |
 | Sell on Komtru                          | 0    | 4     | 0        | 3         |
@@ -51,7 +51,6 @@ The engine exists and only the UI is missing, so these are the highest-value wor
 | ------- | ----------------------------------------------------- | --------------------------------------- | --- |
 | F-005   | Deterministic integration test suite                  | Platform (not a user journey)           | yes |
 | F-028   | Delivery and evidence in the workspace                | Deliver & inspect                       | yes |
-| F-029   | Capture and compare proof media                       | Deliver & inspect                       | yes |
 | F-040   | Apply for merchant certification and have it reviewed | Sell on Komtru                          | yes |
 | F-068   | Desktop: propose, agree and fund                      | Desktop & tablet journeys               | yes |
 | F-075   | Hosting and real deploy jobs                          | Launch & assurance (not a user journey) | yes |
@@ -73,7 +72,6 @@ The engine exists and only the UI is missing, so these are the highest-value wor
 | F-015   | Home, search, categories and find-a-trade-by-code               | Home & discover                         | yes |
 | F-016   | View a seller's profile and Trust Passport                      | Home & discover                         | yes |
 | F-028   | Delivery and evidence in the workspace                          | Deliver & inspect                       | yes |
-| F-029   | Capture and compare proof media                                 | Deliver & inspect                       | yes |
 | F-031   | Lifecycle exceptions: expiry, withdrawal and inspection updates | Issues & resolution                     | yes |
 | F-032   | Report an issue and open a dispute                              | Issues & resolution                     | yes |
 | F-033   | Resolution execution: the return track                          | Issues & resolution                     | yes |
@@ -101,11 +99,11 @@ The same work counted per ticket. Useful for the detail in `docs/tickets/`, not 
 it counts backend and frontend layers separately, which is how the build drifted.
 
 ```
-MVP   ███████████████████████···········  74/109  (68%)
-Total ███████████████···················  74/168  (44%)
+MVP   ███████████████████████···········  75/109  (69%)
+Total ███████████████···················  75/168  (45%)
 ```
 
-35 MVP tickets left, 59 deferred past it.
+34 MVP tickets left, 59 deferred past it.
 
 ### Tickets in progress
 
@@ -121,7 +119,6 @@ Total ███████████████··············�
 | T-055  | Merchant applications and certification                           | yes |
 | T-080  | Disputes core                                                     | yes |
 | T-119  | Cancellation and refunds                                          | yes |
-| T-197  | Proof media: capture, check and compare                           | yes |
 | T-198  | Lifecycle exceptions and trade extras                             | yes |
 | T-208  | Desktop: propose, agree and fund                                  | yes |
 | T-213  | Tablet: fulfil, deliver, inspect and payouts                      | yes |
@@ -170,7 +167,6 @@ Total ███████████████··············�
 | T-182  | Security review                                                    | yes |
 | T-183  | Definition-of-done audit and first push                            | yes |
 | T-196  | Trade workspace supporting screens: resolution and issue reporting | yes |
-| T-197  | Proof media: capture, check and compare                            | yes |
 | T-198  | Lifecycle exceptions and trade extras                              | yes |
 | T-199  | Resolution execution: return track                                 | yes |
 | T-200  | Resolution execution: replacement and mutual settlement            | yes |

@@ -424,7 +424,7 @@ list a trade.
 - **Absorbs:** T-197 (todo)
 - **Backend scope:** Served by F-008 (evidence storage) and F-027.
 - **Frontend scope:** Trade execution · Proof media, PM-1–PM-8: mandatory seller proof capture, quality checks and the buyer's side-by-side comparison. _8 v2 screens._
-- **Status:** Not started
+- **Status:** Done
 - **Depends on:** F-022
 - **MVP:** yes
 - **Note:** docs/MVP.md calls this 'the heart of inspection'. Split from F-027 because it is a self-contained capture-and-compare component used by fulfilment, inspection and disputes alike.
@@ -1193,7 +1193,7 @@ Every ticket in `docs/tickets/`, in id order, with the feature that absorbs it.
 | T-194 | Trade workspace supporting screens: funding, terms, agreement and payment | Done          | F-023   | Done                         |
 | T-195 | Trade workspace supporting screens: delivery and evidence                 | Done          | F-028   | UI merged except CWT-S13     |
 | T-196 | Trade workspace supporting screens: resolution and issue reporting        | Not started   | F-032   | Not started                  |
-| T-197 | Proof media: capture, check and compare                                   | Not started   | F-029   | Not started                  |
+| T-197 | Proof media: capture, check and compare                                   | Done          | F-029   | Done                         |
 | T-198 | Lifecycle exceptions and trade extras                                     | Not started   | F-031   | Not started                  |
 | T-199 | Resolution execution: return track                                        | Not started   | F-033   | Not started                  |
 | T-200 | Resolution execution: replacement and mutual settlement                   | Not started   | F-034   | Not started                  |
