@@ -22,6 +22,7 @@ import { cancellationRoutes } from './http/cancellation.routes.js';
 import { fulfilmentRoutes } from './http/fulfilment.routes.js';
 import { inspectionRoutes } from './http/inspection.routes.js';
 import { tradeRoutes } from './http/trade.routes.js';
+import { viewerRoutes } from './http/viewer.routes.js';
 import { deliveryDeadlineJob } from './jobs/deliveryDeadline.job.js';
 import { graceDeadlineJob } from './jobs/graceDeadline.job.js';
 import { inspectionDeadlineJob } from './jobs/inspectionDeadline.job.js';
@@ -137,6 +138,7 @@ export function createTradesModule(options: TradesModuleOptions): KomtruModule {
       ...fulfilmentRoutes(() => fulfilment),
       ...cancellationRoutes(() => fulfilment),
       ...inspectionRoutes(() => inspection),
+      ...viewerRoutes(() => deps),
     ],
     schedules: [
       deliveryDeadlineJob(() => fulfilment),
