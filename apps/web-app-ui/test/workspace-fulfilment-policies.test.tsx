@@ -74,9 +74,9 @@ describe('TW-02 fulfilment terms', () => {
     await screen.findByLabelText('Fulfilment terms');
     expect(screen.queryByRole('textbox')).toBeNull();
     expect(screen.getByText(/Accepted terms are locked/)).toBeTruthy();
-    expect(screen.getByRole('link', { name: 'Back to the trade' }).getAttribute('href')).toBe(
-      `/trade/${id(1)}`,
-    );
+    for (const link of screen.getAllByRole('link', { name: 'Back to the trade' })) {
+      expect(link.getAttribute('href')).toBe(`/trade/${id(1)}`);
+    }
   });
 
   it('says nothing is agreed for a proposal that has not been accepted', async () => {
