@@ -14,18 +14,26 @@
 import { komtruAuthRoute } from '@komtru/app-kit/next';
 import { createSessionSealer, readAppConfig, requireSessionSecret } from '@komtru/app-kit';
 import { appSpec } from '../../../../src/app-config';
+import { describeViewer } from '../../../../src/shell/viewer-facts';
 
 type Handler = ReturnType<typeof komtruAuthRoute>;
 
 let handler: Handler | undefined;
 
-const route = (): Handler =>
-  (handler ??= komtruAuthRoute({
-    // `readAppConfig`, not `readWebAppConfig`: signing in needs the API URL, and nothing here has
-    // any use for where the passport pages or the Park Agent app are served.
-    config: readAppConfig(appSpec, process.env),
+const route = (): Handler => {
+  if (handler !== undefined) return handler;
+  // `readAppConfig`, not `readWebAppConfig`: signing in needs the API URL, and nothing here has
+  // any use for where the passport pages or the Park Agent app are served.
+  const config = readAppConfig(appSpec, process.env);
+  handler = komtruAuthRoute({
+    config,
     sealer: createSessionSealer(requireSessionSecret(process.env)),
-  }));
+    // F-037: who the shell is drawn for (has sold, is certified), read with each new access token and
+    // sealed into the session hint, which is all `resolveViewer` can see from a page render.
+    describeSession: describeViewer({ apiUrl: config.apiUrl }),
+  });
+  return handler;
+};
 
 export const POST: Handler = (request, context) => route()(request, context);
 
