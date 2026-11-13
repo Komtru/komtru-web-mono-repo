@@ -7,6 +7,7 @@
 // it writes that cookie, so it reads the facts then (`describeViewer`) and seals them in.
 import { createApiClient, getViewerFacts } from '@komtru/api-client';
 import type { SessionFacts, SessionHint } from '@komtru/app-kit';
+import type { DescribeContext } from '@komtru/app-kit/next';
 import { ANONYMOUS_VIEWER, type Viewer } from './nav';
 
 /**
@@ -32,20 +33,25 @@ export interface DescribeViewerOptions {
 }
 
 /**
- * The auth route's `describeSession`: `GET /me/viewer` with the access token just issued. One attempt —
- * it sits on the path of every sign-in, and the route seals no facts if it throws.
+ * The auth route's `describeSession`: `GET /me/viewer` with the access token just issued, and the real
+ * client's forwarded chain and user agent. Without them the platform's per-IP budget on that route would
+ * count every person signing in as this one server. One attempt — it sits on the path of every sign-in,
+ * and the route seals no facts if it throws.
  */
 export function describeViewer({
   apiUrl,
   fetch,
-}: DescribeViewerOptions): (accessToken: string, signal: AbortSignal) => Promise<SessionFacts> {
+}: DescribeViewerOptions): (accessToken: string, context: DescribeContext) => Promise<SessionFacts> {
   const client = createApiClient({ baseUrl: apiUrl, retry: { maxAttempts: 1 }, ...(fetch ? { fetch } : {}) });
-  return async (accessToken, signal) => {
-    const facts = await client.call(
-      getViewerFacts,
-      {},
-      { signal, headers: { Authorization: `Bearer ${accessToken}` } },
-    );
+  return async (accessToken, { signal, forwarded }) => {
+    // Only the two headers forwarding is for, by name: anything else that arrived (an `authorization` in any
+    // casing above all) must not reach the platform beside the token this route was given.
+    const headers: Record<string, string> = { Authorization: `Bearer ${accessToken}` };
+    for (const [name, value] of Object.entries(forwarded)) {
+      const lower = name.toLowerCase();
+      if (lower === 'x-forwarded-for' || lower === 'user-agent') headers[lower] = value;
+    }
+    const facts = await client.call(getViewerFacts, {}, { signal, headers });
     return { hasSold: facts.hasSold, certifiedMerchant: facts.certifiedMerchant };
   };
 }

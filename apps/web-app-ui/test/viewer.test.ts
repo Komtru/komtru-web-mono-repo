@@ -107,11 +107,23 @@ describe('resolveViewer', () => {
 });
 
 describe('describeViewer', () => {
+  const context = { signal: new AbortController().signal, forwarded: {} };
   const answering = (status: number, body: unknown) => {
-    const calls: { url: string; authorization: string | null }[] = [];
+    const calls: {
+      url: string;
+      authorization: string | null;
+      forwardedFor: string | null;
+      agent: string | null;
+    }[] = [];
     const fetch = vi.fn((input: URL | RequestInfo, init?: RequestInit) => {
       const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
-      calls.push({ url, authorization: new Headers(init?.headers).get('authorization') });
+      const headers = new Headers(init?.headers);
+      calls.push({
+        url,
+        authorization: headers.get('authorization'),
+        forwardedFor: headers.get('x-forwarded-for'),
+        agent: headers.get('user-agent'),
+      });
       return Promise.resolve(
         new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } }),
       );
@@ -121,19 +133,36 @@ describe('describeViewer', () => {
 
   it('reads GET /me/viewer with the access token it was given', async () => {
     const { calls, describe } = answering(200, { hasSold: true, certifiedMerchant: false });
-    expect(await describe('at-1', new AbortController().signal)).toEqual({
+    expect(await describe('at-1', context)).toEqual({
       hasSold: true,
       certifiedMerchant: false,
     });
-    expect(calls).toEqual([{ url: 'https://api.komtru.test/v1/me/viewer', authorization: 'Bearer at-1' }]);
+    expect(calls).toEqual([
+      {
+        url: 'https://api.komtru.test/v1/me/viewer',
+        authorization: 'Bearer at-1',
+        forwardedFor: null,
+        agent: null,
+      },
+    ]);
+  });
+
+  it("forwards the real client's chain, so the platform's per-IP budget is theirs and not this server's", async () => {
+    const { calls, describe } = answering(200, { hasSold: false, certifiedMerchant: false });
+    await describe('at-1', {
+      signal: new AbortController().signal,
+      forwarded: { 'x-forwarded-for': '203.0.113.7', 'user-agent': 'phone', authorization: 'Bearer spoofed' },
+    });
+    expect(calls[0]).toMatchObject({
+      forwardedFor: '203.0.113.7',
+      agent: 'phone',
+      // The token this route was given wins over anything that arrived as a forwarded header.
+      authorization: 'Bearer at-1',
+    });
   });
 
   it('fails, rather than inventing facts, when the platform refuses or answers nonsense', async () => {
-    await expect(
-      answering(401, { code: 'UNAUTHENTICATED' }).describe('at-1', new AbortController().signal),
-    ).rejects.toThrow();
-    await expect(
-      answering(200, { hasSold: 'yes' }).describe('at-1', new AbortController().signal),
-    ).rejects.toThrow();
+    await expect(answering(401, { code: 'UNAUTHENTICATED' }).describe('at-1', context)).rejects.toThrow();
+    await expect(answering(200, { hasSold: 'yes' }).describe('at-1', context)).rejects.toThrow();
   });
 });
