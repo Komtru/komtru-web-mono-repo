@@ -73,6 +73,9 @@ export function ActionsTab({
         <Button asChild variant="secondary">
           <a href={tabHref(trade.id, 'activity')}>Open trade activity</a>
         </Button>
+        <Button asChild variant="secondary">
+          <a href={`/trade/${trade.id}/evidence`}>View trade evidence</a>
+        </Button>
       </ActionStack>
       <ConfirmSheet
         open={confirming}
