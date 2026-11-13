@@ -6,8 +6,6 @@ import {
   Button,
   NoteBanner,
   ReadyBanner,
-  ScreenColumn,
-  ScreenHeader,
   SectionLabel,
   TermList,
   TermRow,
@@ -25,7 +23,12 @@ import { TradeFrame } from './TradeFrame';
  */
 export function FulfilmentTerms({ id }: { id: string }): React.JSX.Element {
   return (
-    <TradeFrame id={id} title="Fulfilment Terms" loading="the fulfilment terms" back={`/trade/${id}`}>
+    <TradeFrame
+      id={id}
+      title="Fulfilment Terms"
+      loading="the fulfilment terms"
+      back={tabHref(id, 'overview')}
+    >
       {(trade) => {
         if (trade.terms === null || trade.acceptedAt === null) return <NothingAgreed trade={trade} />;
         return <Body trade={trade} terms={trade.terms} />;
@@ -51,12 +54,7 @@ function Body({
       : addressLine(terms.deliveryAddress);
   const minimum = standard.data;
   return (
-    <ScreenColumn>
-      <ScreenHeader
-        title="Fulfilment Terms"
-        backHref={tabHref(trade.id, 'overview')}
-        backLabel="Back to the trade"
-      />
+    <>
       {minimum !== undefined && (
         <ReadyBanner
           title={`${hoursLabel(minimum.inspectionWindowHours)} — ${minimum.categoryName} standard`}
@@ -85,6 +83,6 @@ function Body({
           <a href={tabHref(trade.id, 'overview')}>Back to the trade</a>
         </Button>
       </ActionStack>
-    </ScreenColumn>
+    </>
   );
 }

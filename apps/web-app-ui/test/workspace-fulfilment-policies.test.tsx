@@ -10,6 +10,8 @@ import {
   SHELL_RULES,
   answerWith,
   electronics,
+  fashion,
+  standardsPage,
   id,
   renderWithApi,
   workspaceTrade,
@@ -94,8 +96,8 @@ describe('TW-02 fulfilment terms', () => {
 });
 
 describe('TW-04 trade policies', () => {
-  const policies = () => {
-    serve(withCourier());
+  const policies = (catalogue: unknown = standardsPage()) => {
+    answerWith(api.call, { 'GET /trades/:id': withCourier(), 'GET /config/trade-standards': catalogue });
     return renderWithApi(api.call, <TradePolicies id={id(1)} />);
   };
 
@@ -108,10 +110,23 @@ describe('TW-04 trade policies', () => {
     ).toBeTruthy();
     expect(screen.getByText('Cancellation may be requested')).toBeTruthy();
     expect(screen.getByText('Use the return / dispute flow')).toBeTruthy();
-    expect(screen.getByText('48h minimum')).toBeTruthy();
+    expect(await screen.findByText('48h minimum')).toBeTruthy();
     expect(screen.getByText('24h minimum')).toBeTruthy();
     expect(screen.getByText('Damaged, not as described, incomplete')).toBeTruthy();
     expect(screen.getByText(/ask for more inspection time with a reason/)).toBeTruthy();
+  });
+
+  it('reads the minimums from the catalogue, so a changed standard changes this page', async () => {
+    policies(standardsPage([{ ...electronics, inspectionWindowHours: 60 }, fashion]));
+    expect(await screen.findByText('60h minimum')).toBeTruthy();
+    expect(screen.queryByText('48h minimum')).toBeNull();
+    expect(screen.getByText('24h minimum')).toBeTruthy();
+  });
+
+  it('says so, with a retry, when the catalogue cannot be read, and keeps the rest of the policy', async () => {
+    policies(new Error('down'));
+    expect(await screen.findByRole('button', { name: /Couldn't load them/ })).toBeTruthy();
+    expect(screen.getByText('Cancellation may be requested')).toBeTruthy();
   });
 
   it('continues to the trade', async () => {

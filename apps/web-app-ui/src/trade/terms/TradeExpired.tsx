@@ -1,6 +1,7 @@
 'use client';
 
-import type { TradeView } from '@komtru/api-client';
+import type { PaymentStatus, TradeView } from '@komtru/api-client';
+import { usePaymentStatus } from '@komtru/api-client/react';
 import {
   ActionStack,
   Button,
@@ -20,6 +21,10 @@ import { fundHref } from '../workspace-state';
  * The platform sends no funding deadline, so the screen says the window closed and never how long it was.
  */
 export function TradeExpired({ trade }: { trade: TradeView }): React.JSX.Element {
+  // Only the buyer can read the payment. Money that arrived for a trade no longer waiting for it goes to the team
+  // (T-072 decision 8), and the buyer is told it is being checked, never that nothing was paid.
+  const buyer = trade.yourRole === 'BUYER';
+  const payment = usePaymentStatus(trade.id, buyer);
   return (
     <ScreenColumn>
       <ScreenHeader title={trade.tradeCode} backHref="/trades" backLabel="Back to your trades" />
@@ -36,7 +41,7 @@ export function TradeExpired({ trade }: { trade: TradeView }): React.JSX.Element
       <SectionLabel>Status</SectionLabel>
       <TermList aria-label="Status">
         <TermRow label="Trade status">Expired</TermRow>
-        <TermRow label="Payment status">Not confirmed</TermRow>
+        {buyer && <TermRow label="Payment status">{paymentWords(payment)}</TermRow>}
         <TermRow label="Next step">Start a new trade</TermRow>
       </TermList>
       <p className="mb-[14px] text-[12.5px] leading-[1.6] text-slate">
@@ -56,4 +61,15 @@ export function TradeExpired({ trade }: { trade: TradeView }): React.JSX.Element
       </ActionStack>
     </ScreenColumn>
   );
+}
+
+function paymentWords(payment: {
+  isPending: boolean;
+  isError: boolean;
+  data: PaymentStatus | undefined;
+}): string {
+  if (payment.isPending) return 'Checking…';
+  if (payment.isError || payment.data === undefined) return "Couldn't be read";
+  const state = payment.data.displayState;
+  return state === 'CONFIRMED' || state === 'UNDER_REVIEW' ? 'Being checked by our team' : 'Not confirmed';
 }

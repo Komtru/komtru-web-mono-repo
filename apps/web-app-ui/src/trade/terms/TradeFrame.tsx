@@ -1,11 +1,15 @@
 'use client';
 
-// The shell every one-trade screen in `terms/` shares: it reads the trade and draws the four ways that can go
-// wrong (loading, offline, refused, failed) so each screen draws only what it is for. Nothing here is a trade
-// screen's own content.
+// The shell every one-trade screen in `terms/` shares: the header, then the trade read and the ways that can go
+// wrong (loading, offline, not yours or not there, failed) drawn under that same header, so a failed read is never
+// a dead end and each screen draws only its own content.
+//
+// "Not yours" and "not there" are one answer on purpose: the platform answers a non-party with the same 404 as a
+// trade that does not exist (`requireParty`), so that the existence of someone else's trade is not disclosed. The
+// screen says both things and does not pretend to know which.
 import type { TradeView } from '@komtru/api-client';
 import { useTrade } from '@komtru/api-client/react';
-import { LoadFailed, LoadingScreen, ScreenColumn, ScreenHeader } from '@komtru/ui-kit';
+import { Button, EmptyState, LoadingScreen, ScreenColumn, ScreenHeader } from '@komtru/ui-kit';
 import { isProblem, problemMessage } from '../format';
 
 export function TradeFrame({
@@ -13,44 +17,65 @@ export function TradeFrame({
   title,
   loading,
   back,
+  backLabel = 'Back to the trade',
   children,
 }: {
   id: string;
-  /** The header while loading: the screen's own title. */
+  /** The screen's own title. */
   title: string;
   /** What is being read ("the agreement"), for the loading label. */
   loading: string;
+  /** Where the header's back arrow goes. */
   back: string;
+  backLabel?: string;
   children: (trade: TradeView) => React.ReactNode;
 }): React.JSX.Element {
   const trade = useTrade(id);
-  if (trade.isPending) {
-    return (
-      <ScreenColumn>
-        <ScreenHeader title={title} backHref={back} backLabel="Back to the trade" />
-        <LoadingScreen label={`Loading ${loading}`} />
-      </ScreenColumn>
-    );
-  }
+  return (
+    <ScreenColumn>
+      <ScreenHeader title={title} backHref={back} backLabel={backLabel} />
+      <Content trade={trade} loading={loading}>
+        {children}
+      </Content>
+    </ScreenColumn>
+  );
+}
+
+function Content({
+  trade,
+  loading,
+  children,
+}: {
+  trade: ReturnType<typeof useTrade>;
+  loading: string;
+  children: (trade: TradeView) => React.ReactNode;
+}): React.ReactNode {
+  if (trade.isPending) return <LoadingScreen label={`Loading ${loading}`} />;
   if (trade.isError) {
-    if (isProblem(trade.error, 'FORBIDDEN')) {
+    if (isProblem(trade.error, 'NOT_FOUND')) {
       return (
-        <LoadFailed
-          title="This trade isn't yours to open"
-          body="Only the buyer and the seller of a trade can see it. Check you're signed in to the right account."
+        <EmptyState
+          tone="error"
+          title="We can't find this trade"
+          body="It may have been withdrawn, or it belongs to another account. Check you're signed in to the right one."
         />
       );
     }
     const offline = typeof navigator !== 'undefined' && !navigator.onLine;
     return (
-      <LoadFailed
+      <EmptyState
+        tone="error"
         title={offline ? "You're offline" : "Couldn't open this trade"}
         body={
           offline
             ? "We can't reach Komtru, and this page hasn't been saved on this device. Reconnect and try again."
             : problemMessage(trade.error, 'Check your connection and try again.')
         }
-        {...(isProblem(trade.error, 'NOT_FOUND') ? {} : { onRetry: () => void trade.refetch() })}
+        action={
+          <Button type="button" onClick={() => void trade.refetch()}>
+            Try again
+          </Button>
+        }
       />
     );
   }

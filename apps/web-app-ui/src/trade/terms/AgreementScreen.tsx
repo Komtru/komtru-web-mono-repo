@@ -1,17 +1,7 @@
 'use client';
 
 import type { TradeView } from '@komtru/api-client';
-import {
-  ActionStack,
-  Button,
-  EmptyState,
-  NoteBanner,
-  ScreenColumn,
-  ScreenHeader,
-  SectionLabel,
-  TermList,
-  TermRow,
-} from '@komtru/ui-kit';
+import { ActionStack, Button, EmptyState, NoteBanner, SectionLabel, TermList, TermRow } from '@komtru/ui-kit';
 import { addressLine, hoursLabel, naira } from '../format';
 import { readRequest } from '../create/read';
 import { ItemSummary, PartyHeader } from '../parts';
@@ -22,7 +12,7 @@ import { TradeFrame } from './TradeFrame';
 /** What the trade has nothing agreed to show for: a proposal still being answered, or one that ended unaccepted. */
 export function NothingAgreed({ trade }: { trade: TradeView }): React.JSX.Element {
   return (
-    <ScreenColumn>
+    <>
       <EmptyState
         title="Nothing has been agreed yet"
         body="The agreement appears here once both of you have accepted the same terms."
@@ -32,7 +22,7 @@ export function NothingAgreed({ trade }: { trade: TradeView }): React.JSX.Elemen
           </Button>
         }
       />
-    </ScreenColumn>
+    </>
   );
 }
 
@@ -54,17 +44,12 @@ export function deliveryWords(trade: TradeView): string {
 /** CWT-S01: the agreed version is the reference for fulfilment, inspection and any later dispute. */
 export function AgreementScreen({ id }: { id: string }): React.JSX.Element {
   return (
-    <TradeFrame id={id} title="Agreed Terms" loading="the agreement" back={`/trade/${id}`}>
+    <TradeFrame id={id} title="Agreed Terms" loading="the agreement" back={tabHref(id, 'overview')}>
       {(trade) => {
         if (trade.terms === null || trade.acceptedAt === null) return <NothingAgreed trade={trade} />;
         const { terms } = trade;
         return (
-          <ScreenColumn>
-            <ScreenHeader
-              title="Agreed Terms"
-              backHref={tabHref(trade.id, 'overview')}
-              backLabel="Back to the trade"
-            />
+          <>
             <p className="mb-[14px] text-[12.5px] leading-[1.6] text-slate">
               Version {String(terms.versionNumber)} is the authoritative agreement for this trade.
             </p>
@@ -94,7 +79,7 @@ export function AgreementScreen({ id }: { id: string }): React.JSX.Element {
                 <a href={historyHref(trade.id)}>Version history</a>
               </Button>
             </ActionStack>
-          </ScreenColumn>
+          </>
         );
       }}
     </TradeFrame>

@@ -5,9 +5,19 @@ import { ProblemError } from '@komtru/api-client';
 import { cleanup, fireEvent, screen, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { AgreementHistory } from '../src/trade/terms/AgreementHistory';
+import { TradePolicies } from '../src/trade/terms/TradePolicies';
 import { AgreementScreen } from '../src/trade/terms/AgreementScreen';
 import { expectNoAxeViolations } from './axe';
-import { SHELL_RULES, answerWith, id, renderWithApi, workspaceTrade, type CallFn } from './support/workspace';
+import {
+  SHELL_RULES,
+  activityRow,
+  answerWith,
+  id,
+  page,
+  renderWithApi,
+  workspaceTrade,
+  type CallFn,
+} from './support/workspace';
 
 const api = vi.hoisted(() => ({ call: vi.fn<CallFn>() }));
 beforeEach(() => {
@@ -22,7 +32,22 @@ const problem = (code: string, status: number) =>
     false,
   );
 
-const serve = (trade: unknown) => answerWith(api.call, { 'GET /trades/:id': trade });
+const versionEvents = [
+  activityRow(1, {
+    kind: 'PROPOSAL_SENT',
+    actor: 'YOU',
+    toStatus: null,
+    occurredAt: '2026-09-29T08:00:00.000Z',
+  }),
+  activityRow(2, {
+    kind: 'TERMS_CHANGED',
+    actor: 'OTHER_PARTY',
+    toStatus: null,
+    occurredAt: '2026-09-29T09:30:00.000Z',
+  }),
+];
+const serve = (trade: unknown, activity: unknown = page(versionEvents)) =>
+  answerWith(api.call, { 'GET /trades/:id': trade, 'GET /trades/:id/activity': activity });
 
 describe('CWT-S01 Agreed Terms', () => {
   it('names the authoritative version, the item, the other party and the locked commercial terms', async () => {
@@ -71,8 +96,10 @@ describe('CWT-S02 Agreement History', () => {
     expect(await screen.findByText('Version 2 · Accepted')).toBeTruthy();
     expect(screen.getByRole('heading', { name: 'Agreement History' })).toBeTruthy();
     const steps = screen.getByRole('list', { name: 'Versions of this agreement' });
-    expect(within(steps).getByText('Version 1')).toBeTruthy();
+    expect(within(steps).getByText('Version 1 · Buyer proposal')).toBeTruthy();
     expect(within(steps).getByText('Version 2 · Accepted')).toBeTruthy();
+    expect(within(steps).getByText(/Seller counter, accepted by buyer and seller/)).toBeTruthy();
+    expect(within(steps).getAllByText(/29 Sep/)).toHaveLength(2);
     expect(screen.getByText('KMT-9042800-NG')).toBeTruthy();
     expect(
       screen.getByText('Earlier proposals remain visible without replacing the accepted version.'),
@@ -83,6 +110,15 @@ describe('CWT-S02 Agreement History', () => {
     expect(screen.getByRole('link', { name: 'Return to trade' }).getAttribute('href')).toBe(
       `/trade/${id(1)}`,
     );
+  });
+
+  it('falls back to superseded versions, with the accepted amount, when the activity cannot account for them', async () => {
+    serve(workspaceTrade('PENDING_PAYMENT', 'BUYER'), page([]));
+    renderWithApi(api.call, <AgreementHistory id={id(1)} />);
+    const steps = await screen.findByRole('list', { name: 'Versions of this agreement' });
+    expect(within(steps).getByText('Version 1')).toBeTruthy();
+    expect(within(steps).getByText('Superseded')).toBeTruthy();
+    expect(within(steps).getByText(/accepted by buyer and seller/)).toBeTruthy();
   });
 
   it('has no serious accessibility violations', async () => {
@@ -117,17 +153,21 @@ describe('the states every one-trade screen shares', () => {
     online.mockRestore();
   });
 
-  it('says the trade is not theirs to open on a permission refusal, with no retry', async () => {
-    answerWith(api.call, { 'GET /trades/:id': problem('FORBIDDEN', 403) });
+  it("says it can't find the trade, whoever it belongs to, with no retry: the platform answers a non-party with the same 404", async () => {
+    answerWith(api.call, { 'GET /trades/:id': problem('NOT_FOUND', 404) });
     renderWithApi(api.call, <AgreementScreen id={id(1)} />);
-    expect(await screen.findByText("This trade isn't yours to open")).toBeTruthy();
+    expect(await screen.findByText("We can't find this trade")).toBeTruthy();
+    expect(screen.getByText(/belongs to another account/)).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'Try again' })).toBeNull();
   });
 
-  it('says a missing trade is missing, with no retry', async () => {
+  it('keeps the header and the way back on every failure, never a dead end', async () => {
     answerWith(api.call, { 'GET /trades/:id': problem('NOT_FOUND', 404) });
-    renderWithApi(api.call, <AgreementScreen id={id(1)} />);
-    expect(await screen.findByText("Couldn't open this trade")).toBeTruthy();
-    expect(screen.queryByRole('button', { name: 'Try again' })).toBeNull();
+    renderWithApi(api.call, <TradePolicies id={id(1)} />);
+    await screen.findByText("We can't find this trade");
+    expect(screen.getByRole('heading', { level: 1, name: 'Trade Policies' })).toBeTruthy();
+    expect(screen.getByRole('link', { name: 'Back to the trade' }).getAttribute('href')).toBe(
+      `/trade/${id(1)}`,
+    );
   });
 });

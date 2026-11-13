@@ -13,8 +13,22 @@ beforeEach(() => {
 });
 afterEach(cleanup);
 
-const show = (role: 'BUYER' | 'SELLER', over: Record<string, unknown> = {}) => {
-  answerWith(api.call, { 'GET /trades/:id': workspaceTrade('EXPIRED', role, over) });
+const payment = (displayState: string) => ({
+  tradeId: id(1),
+  tradeCode: 'KMT-9042800-NG',
+  displayState,
+  attempt: null,
+});
+
+const show = (
+  role: 'BUYER' | 'SELLER',
+  over: Record<string, unknown> = {},
+  paid: unknown = payment('NONE'),
+) => {
+  answerWith(api.call, {
+    'GET /trades/:id': workspaceTrade('EXPIRED', role, over),
+    'GET /trades/:code/payment/status': paid,
+  });
   return renderWithApi(api.call, <TradeScreen id={id(1)} />);
 };
 
@@ -26,6 +40,7 @@ describe('EX-01 trade expired', () => {
     const steps = screen.getByRole('list', { name: 'What happened' });
     expect(within(steps).getByText('Agreement accepted')).toBeTruthy();
     expect(within(steps).getByText('Funding window closed')).toBeTruthy();
+    expect(await screen.findByText('Not confirmed')).toBeTruthy();
     const status = screen.getByLabelText('Status');
     expect(within(status).getByText('Expired')).toBeTruthy();
     expect(within(status).getByText('Not confirmed')).toBeTruthy();
@@ -48,6 +63,18 @@ describe('EX-01 trade expired', () => {
     await screen.findByText('This trade has expired');
     expect(screen.getByRole('link', { name: 'Start a new trade' })).toBeTruthy();
     expect(screen.queryByRole('link', { name: 'Check payment status' })).toBeNull();
+  });
+
+  it('never says nothing was paid when the platform holds money for the trade: it is being checked', async () => {
+    show('BUYER', {}, payment('UNDER_REVIEW'));
+    expect(await screen.findByText('Being checked by our team')).toBeTruthy();
+    expect(screen.queryByText('Not confirmed')).toBeNull();
+  });
+
+  it('shows the seller no payment row, because the seller cannot read the payment', async () => {
+    show('SELLER');
+    await screen.findByText('This trade has expired');
+    expect(screen.queryByText('Payment status')).toBeNull();
   });
 
   it('keeps the ordinary closed screen for an invitation that expired before acceptance', async () => {
