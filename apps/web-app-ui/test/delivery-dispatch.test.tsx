@@ -41,7 +41,7 @@ describe('CWT-S08 dispatch readiness', () => {
     expect(screen.getByRole('link', { name: 'View agreement' }).getAttribute('href')).toBe(
       `/trade/${id(1)}/terms`,
     );
-    expect((screen.getByLabelText('Dispatch allowed') as HTMLInputElement).disabled).toBe(true);
+    expect(screen.getByLabelText<HTMLInputElement>('Dispatch allowed').disabled).toBe(true);
     expect(
       screen.getByText(
         'If payment is not protected, dispatch stays locked. This guard is enforced server-side.',

@@ -115,9 +115,11 @@ function Tracking({ trade }: { trade: TradeView }): React.JSX.Element {
             <InfoRow title="Last update" detail={`Handed to the courier · ${whenLabel(record.shippedAt)}`} />
           )}
           {record?.vehiclePlate !== undefined && <InfoRow title="Vehicle" detail={record.vehiclePlate} />}
-          {stage === 'IN_TRANSIT' && deadline.data?.deadline != null && (
-            <InfoRow title="Expected" detail={`By ${whenLabel(deadline.data.deadline.dueAt)}`} />
-          )}
+          {stage === 'IN_TRANSIT' &&
+            deadline.data?.deadline !== undefined &&
+            deadline.data.deadline !== null && (
+              <InfoRow title="Expected" detail={`By ${whenLabel(deadline.data.deadline.dueAt)}`} />
+            )}
         </InfoCard>
       )}
       <SectionLabel>Custody timeline</SectionLabel>
