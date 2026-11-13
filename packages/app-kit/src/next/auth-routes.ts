@@ -23,8 +23,12 @@ import {
   clearedCookies,
   REFRESH_COOKIE,
   secureCookieFor,
+  SESSION_COOKIE,
+  subjectDigest,
   sessionCookies,
   type KomtruCookie,
+  type SessionFacts,
+  type SessionHint,
   type SessionSealer,
 } from '../session.js';
 
@@ -33,6 +37,12 @@ const DEFAULT_TIMEOUT_MS = 15_000;
 
 /** M1's 30-day sliding window. The backend's own expiry is the truth; this bounds the cookie. */
 export const REFRESH_MAX_AGE_SECONDS = 30 * 24 * 60 * 60;
+
+/**
+ * How long a sign-in or refresh waits for `describeSession` before sealing no facts. Short: it is on the
+ * path of every sign-in, and a missing fact only costs a row the shell would otherwise show.
+ */
+export const DEFAULT_DESCRIBE_TIMEOUT_MS = 3_000;
 
 /** The backend serves one login route and decides the scope from the account (`/v1/auth/login`). */
 export const DEFAULT_LOGIN_PATH = '/auth/login';
@@ -47,6 +57,13 @@ export const DEFAULT_MFA_CHALLENGE_PATH = '/auth/mfa/challenge';
  * answers with a reset token and nothing else.
  */
 export const DEFAULT_VERIFY_OTP_PATH = '/auth/verify-otp';
+
+export interface DescribeContext {
+  /** Aborts when `describeTimeoutMs` runs out. */
+  signal: AbortSignal;
+  /** `forwardHeaders(request)`: without it the backend sees this server as every caller. */
+  forwarded: Record<string, string>;
+}
 
 export interface AuthRouteOptions {
   config: AppConfig;
@@ -71,6 +88,16 @@ export interface AuthRouteOptions {
   refreshMaxAgeSeconds?: number;
   /** How long to wait for the backend before answering 502. Matches api-client's own default. */
   timeoutMs?: number;
+  /**
+   * The app's facts about the person, read with the access token just issued and sealed into the session
+   * hint so a page render can see them (F-037). Called on every sign-in and every refresh of a CONSUMER
+   * session, cookie mode only. `forwarded` is the real client's chain and user agent, for the backend's
+   * per-IP limits. A failure, a timeout or `undefined` never refuses the session: a sign-in seals no facts,
+   * and a refresh keeps the facts of the hint it replaces when that hint is the same person's.
+   */
+  describeSession?: (accessToken: string, context: DescribeContext) => Promise<SessionFacts | undefined>;
+  /** Bound on `describeSession`. */
+  describeTimeoutMs?: number;
 }
 
 /** Fixed one-minute windows. The backend's own limiter is the fine one; this is the coarse door. */
@@ -244,6 +271,8 @@ export function createAuthRouteHandlers({
   now = Date.now,
   refreshMaxAgeSeconds = REFRESH_MAX_AGE_SECONDS,
   timeoutMs = DEFAULT_TIMEOUT_MS,
+  describeSession,
+  describeTimeoutMs = DEFAULT_DESCRIBE_TIMEOUT_MS,
 }: AuthRouteOptions): AuthRouteHandlers {
   const doFetch = fetchImpl ?? globalThis.fetch.bind(globalThis);
 
@@ -340,8 +369,68 @@ export function createAuthRouteHandlers({
     }
   };
 
+  /** The app's facts for a session just issued, or none: this read must never cost the sign-in. */
+  const factsFor = async (
+    accessToken: string,
+    forwarded: Record<string, string>,
+  ): Promise<SessionFacts | undefined> => {
+    if (describeSession === undefined) return undefined;
+    const controller = new AbortController();
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    // Raced as well as signalled: a describer that ignores its signal must not hold the sign-in open.
+    const timedOut = new Promise<undefined>((resolve) => {
+      timer = setTimeout(() => {
+        controller.abort();
+        resolve(undefined);
+      }, describeTimeoutMs);
+    });
+    try {
+      return await Promise.race([
+        describeSession(accessToken, { signal: controller.signal, forwarded }),
+        timedOut,
+      ]);
+    } catch {
+      return undefined;
+    } finally {
+      clearTimeout(timer);
+    }
+  };
+
+  /**
+   * What a session's hint says: the app's facts and whose they are. Only CONSUMER sessions are described
+   * (the viewer read is a consumer route). When the read gives nothing on a refresh, the facts of the hint
+   * being replaced are kept, but only if it is the same scope and the same person: a refresh that hiccups
+   * should not take a seller's Payouts row away, and must never hand one person's facts to another.
+   */
+  const describe = async (
+    session: { accessToken: string; scope: SessionHint['scope'] },
+    forwarded: Record<string, string>,
+    previous: SessionHint | null,
+  ): Promise<Pick<SessionHint, 'facts' | 'subject'>> => {
+    if (session.scope !== 'CONSUMER') return {};
+    const subject = await subjectDigest(session.accessToken);
+    const read = await factsFor(session.accessToken, forwarded);
+    const facts =
+      read ??
+      (previous !== null &&
+      previous.scope === session.scope &&
+      subject !== undefined &&
+      previous.subject === subject
+        ? previous.facts
+        : undefined);
+    return {
+      ...(facts === undefined ? {} : { facts }),
+      ...(subject === undefined ? {} : { subject }),
+    };
+  };
+
   /** The browser gets the session minus the one field that must never leave this process. */
-  const issue = async (backendBody: Record<string, unknown>): Promise<Response> => {
+  const issue = async (
+    backendBody: Record<string, unknown>,
+    forwarded: Record<string, string>,
+    /** The request's own hint, opened: present on a refresh, `null` on a sign-in. */
+    previous: SessionHint | null = null,
+  ): Promise<Response> => {
     const parsed = backendSessionSchema.safeParse(backendBody);
     if (!parsed.success) {
       return problem(
@@ -371,7 +460,12 @@ export function createAuthRouteHandlers({
       tokenMode.store.put(parsed.data.accessToken, refreshToken);
       return json(forBrowser, 200);
     }
-    const sealed = await sealer.seal({ scope: parsed.data.scope, expiresAt: expiryOf(refreshMaxAgeSeconds) });
+    const described = await describe(parsed.data, forwarded, previous);
+    const sealed = await sealer.seal({
+      scope: parsed.data.scope,
+      expiresAt: expiryOf(refreshMaxAgeSeconds),
+      ...described,
+    });
     return json(
       forBrowser,
       200,
@@ -455,7 +549,7 @@ export function createAuthRouteHandlers({
       );
     }
 
-    return issue(payload ?? {});
+    return issue(payload ?? {}, forwarded);
   };
 
   /** A verification is counted against the challenge it names, as a second step is against its token. */
@@ -558,7 +652,12 @@ export function createAuthRouteHandlers({
     return finishSignIn(result.payload, result.forwarded);
   };
 
-  const rotate = async (refreshToken: string, forwarded: Record<string, string>): Promise<Response> => {
+  const rotate = async (
+    refreshToken: string,
+    forwarded: Record<string, string>,
+    /** The request's own `komtru_session`, sealed: opened only once the backend has rotated. */
+    previousHint: string | undefined,
+  ): Promise<Response> => {
     let upstream: Response;
     try {
       upstream = await callBackend('/auth/refresh', { refreshToken }, forwarded);
@@ -583,7 +682,7 @@ export function createAuthRouteHandlers({
     // signed-in user out at once, over something that fixes itself.
     if (!upstream.ok) return json(payload ?? {}, upstream.status);
 
-    return issue(payload ?? {});
+    return issue(payload ?? {}, forwarded, await sealer.open(previousHint));
   };
 
   const refresh = async (request: Request): Promise<Response> => {
@@ -596,7 +695,13 @@ export function createAuthRouteHandlers({
     const inFlight = rotations.get(key);
     if (inFlight) return (await inFlight).clone();
 
-    const started = rotate(refreshToken, forwardHeaders(request)).finally(() => rotations.delete(key));
+    // Opened inside the single flight, not awaited here: an await between the lookup above and the
+    // `set` below would let two tabs with the same token both start a rotation.
+    const started = rotate(
+      refreshToken,
+      forwardHeaders(request),
+      readCookie(request, SESSION_COOKIE),
+    ).finally(() => rotations.delete(key));
     rotations.set(key, started);
     return (await started).clone();
   };

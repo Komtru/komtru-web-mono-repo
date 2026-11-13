@@ -75,7 +75,7 @@ export const ofLabel = (part: { have: number; need: number }): string =>
 // ---------------------------------------------------------------------------
 
 /** Shortest side, in pixels, below which a photo cannot show the item or read a label. */
-export const MIN_SIDE = 600;
+export const MIN_SIDE = 400;
 /** A file with nothing in it cannot show anything. */
 export const MIN_BYTES = 1;
 
@@ -88,6 +88,10 @@ export interface Check {
   note?: string;
 }
 
+/** Formats browsers genuinely cannot decode here (HEIC from an iPhone): not being readable says nothing about them. */
+export const isHeic = (facts: Pick<MediaFacts, 'name' | 'type'>): boolean =>
+  /^image\/hei[cf]/i.test(facts.type) || /\.hei[cf]$/i.test(facts.name);
+
 export interface MediaFacts {
   name: string;
   type: string;
@@ -95,6 +99,8 @@ export interface MediaFacts {
   lastModified?: number;
   width?: number;
   height?: number;
+  /** The browser tried to decode the image and could not: it is damaged, or not an image at all. */
+  unreadable?: boolean;
 }
 
 /** What the file is, as one string a screen can compare to spot the same file added twice. */
@@ -115,6 +121,9 @@ export function checkMedia(facts: MediaFacts, already: readonly string[] = []): 
     return { ok: false, reason: 'DUPLICATE', note: 'You’ve already added this one' };
   }
   if (!video) {
+    if (facts.unreadable === true && !isHeic(facts)) {
+      return { ok: false, reason: 'NOT_MEDIA', note: 'We couldn’t open this photo. It may be damaged' };
+    }
     const side =
       facts.width !== undefined && facts.height !== undefined
         ? Math.min(facts.width, facts.height)
@@ -126,16 +135,22 @@ export function checkMedia(facts: MediaFacts, already: readonly string[] = []): 
   return { ok: true };
 }
 
-/** The pixel size of an image, where the browser can say; nothing where it cannot (the check then skips it). */
-export async function readDimensions(file: File): Promise<{ width: number; height: number } | undefined> {
-  if (typeof createImageBitmap !== 'function' || !file.type.startsWith('image/')) return undefined;
+/**
+ * The pixel size of an image where the browser can say, `'UNREADABLE'` where it tried and could not decode it, and
+ * nothing where it cannot try (no decoder, a video, HEIC): the check then skips the size rule.
+ */
+export async function readDimensions(
+  file: File,
+): Promise<{ width: number; height: number } | 'UNREADABLE' | undefined> {
+  if (typeof createImageBitmap !== 'function' || !file.type.startsWith('image/') || isHeic(file))
+    return undefined;
   try {
     const bitmap = await createImageBitmap(file);
     const size = { width: bitmap.width, height: bitmap.height };
     bitmap.close();
     return size;
   } catch {
-    return undefined;
+    return 'UNREADABLE';
   }
 }
 

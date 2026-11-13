@@ -18,7 +18,7 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe('PM-5: the buyer reviews the proof before accepting', () => {
-  it('says who showed it, when it was taken and that it can change only until the buyer accepts', async () => {
+  it('says who showed it and when it was taken', async () => {
     const { container } = renderWithApi(
       api.call,
       <ProofReview
@@ -36,15 +36,18 @@ describe('PM-5: the buyer reviews the proof before accepting', () => {
     });
     const terms = screen.getByLabelText('Where the proof came from');
     expect(within(terms).getByText('TechEdge NG')).toBeTruthy();
-    expect(within(terms).getByText('Until you accept')).toBeTruthy();
     expect(within(terms).getByText('Taken')).toBeTruthy();
-    expect(screen.getByText(/this proof is saved with the Trade as its evidence/)).toBeTruthy();
+    expect(screen.getByText(/This proof stays with the Trade as its evidence/)).toBeTruthy();
     await expectNoAxeViolations(container);
   });
 
   it('says what it can: a count, where the platform does not yet let the buyer open the files', () => {
     renderWithApi(api.call, <ProofReview seller="TechEdge NG" total={4} />);
-    expect(screen.getByText('TechEdge NG showed 4 photos or videos')).toBeTruthy();
+    expect(screen.getByText('TechEdge NG attached 4 photos or videos')).toBeTruthy();
+    expect(
+      screen.getByText(/the platform lists a Trade’s files only once the item has shipped/),
+    ).toBeTruthy();
+    expect(screen.queryByText(/open once the Trade is agreed/)).toBeNull();
     expect(screen.queryByText('Taken')).toBeNull();
   });
 
@@ -90,6 +93,44 @@ describe('PM-7: compare with the seller’s proof', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Remove imei.jpg' }));
     expect(screen.queryByRole('img', { name: 'imei.jpg' })).toBeNull();
     await expectNoAxeViolations(container);
+  });
+
+  it('gives each of "My photos" its own key and its own Remove, even for two photos with the same name', async () => {
+    const created: string[] = [];
+    const revoked: string[] = [];
+    vi.stubGlobal(
+      'URL',
+      Object.assign(URL, {
+        createObjectURL: () => {
+          const url = `blob:test-${String(created.length)}`;
+          created.push(url);
+          return url;
+        },
+        revokeObjectURL: (url: string) => {
+          revoked.push(url);
+        },
+      }),
+    );
+    const { container, unmount } = renderWithApi(
+      api.call,
+      <InspectCompare read={read} seller="TechEdge NG" />,
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'My photos' }));
+    const input = container.querySelector<HTMLInputElement>('input[type="file"]') as HTMLInputElement;
+    const same = () => new File(['x'], 'imei.jpg', { type: 'image/jpeg' });
+    fireEvent.change(input, { target: { files: [same(), same()] } });
+    expect(await screen.findAllByRole('button', { name: 'Remove imei.jpg' })).toHaveLength(2);
+    fireEvent.click(screen.getAllByRole('button', { name: 'Remove imei.jpg' })[0] as HTMLElement);
+    expect(screen.getAllByRole('button', { name: 'Remove imei.jpg' })).toHaveLength(1);
+    fireEvent.change(input, { target: { files: [same()] } });
+    expect(await screen.findAllByRole('button', { name: 'Remove imei.jpg' })).toHaveLength(2);
+    fireEvent.click(screen.getAllByRole('button', { name: 'Remove imei.jpg' })[0] as HTMLElement);
+    expect(screen.getAllByRole('button', { name: 'Remove imei.jpg' })).toHaveLength(1);
+    // The preview of a removed photo is let go, and the rest go with the screen.
+    expect(revoked).toHaveLength(2);
+    unmount();
+    expect(revoked).toHaveLength(3);
+    vi.unstubAllGlobals();
   });
 
   it('lists the four checks and lets each be ticked', () => {

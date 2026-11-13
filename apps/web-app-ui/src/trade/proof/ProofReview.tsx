@@ -6,7 +6,7 @@
 // the buyer's own photos stay on this device, a compare aid and not evidence, and the screen says so.
 import type { useInspection } from '@komtru/api-client/react';
 import { NoteBanner, SectionLabel, TermList, TermRow } from '@komtru/ui-kit';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { whenLabel } from '../format';
 import { SellerProof } from '../inspection/Proof';
 import { type GridItem, MediaGrid } from './MediaGrid';
@@ -57,19 +57,18 @@ export function ProofReview({ seller, total, media = [] }: ProofReviewProps): Re
         <MediaGrid aria-label="The seller’s proof" items={items} />
       ) : (
         <NoteBanner
-          title={`${seller} showed ${`${String(total)} ${total === 1 ? 'photo or video' : 'photos or videos'}`}`}
+          title={`${seller} attached ${String(total)} ${total === 1 ? 'photo or video' : 'photos or videos'}`}
         >
-          They open once the Trade is agreed, and they’re what the item is compared with at inspection.
+          This app can’t show them yet: the platform lists a Trade’s files only once the item has shipped. At
+          inspection you compare the item with them.
         </NoteBanner>
       )}
       <TermList aria-label="Where the proof came from">
         <TermRow label="Shown by">{seller}</TermRow>
         {taken !== undefined && <TermRow label="Taken">{taken}</TermRow>}
-        <TermRow label="Can the seller change it?">Until you accept</TermRow>
       </TermList>
       <NoteBanner>
-        When you accept, this proof is saved with the Trade as its evidence. If the item arrives different,
-        it’s what we compare against.
+        This proof stays with the Trade as its evidence. At inspection, it’s what the item is compared with.
       </NoteBanner>
     </section>
   );
@@ -100,6 +99,22 @@ interface Mine {
 export function InspectCompare({ read, seller }: { read: Read; seller: string }): React.JSX.Element {
   const [side, setSide] = useState<'seller' | 'mine'>('seller');
   const [mine, setMine] = useState<Mine[]>([]);
+  // Ids come from a counter that only goes up, so two photos with the same name never share a key or a Remove.
+  const next = useRef(0);
+  const live = useRef<Mine[]>([]);
+  useEffect(() => {
+    live.current = mine;
+  }, [mine]);
+  // The previews live as long as the compare does.
+  useEffect(
+    () => () => {
+      if (typeof URL.revokeObjectURL !== 'function') return;
+      live.current.forEach((photo) => {
+        if (photo.src !== undefined) URL.revokeObjectURL(photo.src);
+      });
+    },
+    [],
+  );
   const items: GridItem[] = mine.map((photo) => ({
     id: photo.id,
     kind: 'photo',
@@ -108,16 +123,23 @@ export function InspectCompare({ read, seller }: { read: Read; seller: string })
   }));
 
   const choose = (files: File[]) => {
-    setMine((current) => [
-      ...current,
-      ...files
-        .filter((file) => file.type.startsWith('image/'))
-        .map((file, index) => ({
-          id: `mine-${String(current.length + index)}-${file.name}`,
+    const added = files
+      .filter((file) => file.type.startsWith('image/'))
+      .map((file) => {
+        next.current += 1;
+        return {
+          id: `mine-${String(next.current)}`,
           name: file.name,
           src: typeof URL.createObjectURL === 'function' ? URL.createObjectURL(file) : undefined,
-        })),
-    ]);
+        };
+      });
+    setMine((current) => [...current, ...added]);
+  };
+
+  const remove = (id: string) => {
+    const gone = mine.find((photo) => photo.id === id);
+    if (gone?.src !== undefined && typeof URL.revokeObjectURL === 'function') URL.revokeObjectURL(gone.src);
+    setMine((current) => current.filter((photo) => photo.id !== id));
   };
 
   return (
@@ -146,15 +168,7 @@ export function InspectCompare({ read, seller }: { read: Read; seller: string })
         <SellerProof read={read} seller={seller} />
       ) : (
         <section aria-label="My photos">
-          <MediaGrid
-            aria-label="My photos"
-            items={items}
-            slots={4}
-            columns={4}
-            onRemove={(id) => {
-              setMine((current) => current.filter((photo) => photo.id !== id));
-            }}
-          />
+          <MediaGrid aria-label="My photos" items={items} slots={4} columns={4} onRemove={remove} />
           <p className="mb-[10px] text-[11.5px] leading-[1.6] text-trust-gray">
             Your photos go here. Include the IMEI screen. They stay on this device to compare with; they
             aren’t sent to Komtru.

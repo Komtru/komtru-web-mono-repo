@@ -102,11 +102,11 @@ The same work counted per ticket. Useful for the detail in `docs/tickets/`, not 
 it counts backend and frontend layers separately, which is how the build drifted.
 
 ```
-MVP   ██████████████████████············  72/109  (66%)
-Total ███████████████···················  72/168  (43%)
+MVP   ███████████████████████···········  73/109  (67%)
+Total ███████████████···················  73/168  (43%)
 ```
 
-37 MVP tickets left, 59 deferred past it.
+36 MVP tickets left, 59 deferred past it.
 
 ### Tickets in progress
 
@@ -123,9 +123,9 @@ Total ███████████████··············�
 | T-080  | Disputes core                                                             | yes |
 | T-119  | Cancellation and refunds                                                  | yes |
 | T-194  | Trade workspace supporting screens: funding, terms, agreement and payment | yes |
-| T-195  | Trade workspace supporting screens: delivery and evidence                 | yes |
 | T-197  | Proof media: capture, check and compare                                   | yes |
 | T-198  | Lifecycle exceptions and trade extras                                     | yes |
+| T-213  | Tablet: fulfil, deliver, inspect and payouts                              | yes |
 | T-034  | Social login                                                              |     |
 | T-067  | IMEI verification                                                         |     |
 | T-076  | Chargebacks, reconciliation and settlement operations                     |     |
@@ -171,7 +171,6 @@ Total ███████████████··············�
 | T-182  | Security review                                                           | yes |
 | T-183  | Definition-of-done audit and first push                                   | yes |
 | T-194  | Trade workspace supporting screens: funding, terms, agreement and payment | yes |
-| T-195  | Trade workspace supporting screens: delivery and evidence                 | yes |
 | T-196  | Trade workspace supporting screens: resolution and issue reporting        | yes |
 | T-197  | Proof media: capture, check and compare                                   | yes |
 | T-198  | Lifecycle exceptions and trade extras                                     | yes |

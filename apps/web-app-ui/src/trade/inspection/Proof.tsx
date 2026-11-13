@@ -7,6 +7,9 @@ import { TermList, TermRow } from '@komtru/ui-kit';
 import { whenLabel } from '../format';
 import { FileTile } from '../proof/MediaGrid';
 
+/** F-028's name for the signed-file tile; the one implementation now lives in `proof/MediaGrid`. */
+export { FileTile as ProofTile };
+
 type Read = NonNullable<ReturnType<typeof useInspection>['data']>;
 
 /** "Seller's proof — before shipping": the media the seller attached when they accepted. */

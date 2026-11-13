@@ -192,7 +192,7 @@ describe('funds protected (CWT-02)', () => {
     // Shipping is built (F-026): the seller is led to it instead of told it is missing.
     expect(screen.queryByText("Marking the item shipped isn't in the app yet.")).toBeNull();
     expect(screen.getByRole('link', { name: 'Ship this order' }).getAttribute('href')).toBe(
-      `/trade/${id(1)}/ship`,
+      `/trade/${id(1)}/dispatch`,
     );
   });
 
@@ -552,11 +552,13 @@ describe('the actions tab (CWT-09)', () => {
       'Accept the item · Buyer',
       'Ask for more time · Buyer',
       'Report an issue · Buyer',
+      'Track delivery · Safe',
+      'Trade evidence · Safe',
       'Release funds · Guarded',
     ]);
     expect(within(rows[1]!).queryByText(/Not in the app yet/)).toBeNull();
     expect(within(rows[3]!).getByText(/Not in the app yet/)).toBeTruthy();
-    expect(within(list).getAllByRole('link')).toHaveLength(3);
+    expect(within(list).getAllByRole('link')).toHaveLength(5);
     expect(screen.queryByRole('button', { name: /accept|report|release|withdraw/i })).toBeNull();
     await expectNoAxeViolations(container, SHELL_RULES);
   });

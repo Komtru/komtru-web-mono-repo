@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useState, useSyncExternalStore } from 'react';
 
 /**
  * Where the camera stands:
@@ -16,6 +16,15 @@ export type CameraState = 'unsupported' | 'starting' | 'live' | 'denied' | 'unav
 export const cameraSupported = (): boolean =>
   typeof navigator !== 'undefined' && typeof navigator.mediaDevices?.getUserMedia === 'function';
 
+const noSubscription = (): (() => void) => () => undefined;
+
+/**
+ * Whether there is a camera API, read after mount: the server cannot know, so it renders the plain-picker branch and
+ * the browser switches once it has hydrated (reading `navigator` during render would not match the server's HTML).
+ */
+export const useCameraSupported = (): boolean =>
+  useSyncExternalStore(noSubscription, cameraSupported, () => false);
+
 const DENIED = new Set(['NotAllowedError', 'SecurityError', 'PermissionDeniedError']);
 
 export interface Camera {
@@ -30,7 +39,7 @@ export interface Camera {
 export function useCamera(active: boolean): Camera {
   const [video, attach] = useState<HTMLVideoElement | null>(null);
   const [opened, setOpened] = useState<CameraState>('starting');
-  const supported = cameraSupported();
+  const supported = useCameraSupported();
 
   useEffect(() => {
     if (!active || !supported || video === null) return;

@@ -7,6 +7,7 @@ import {
   secureCookieFor,
   SESSION_COOKIE,
   sessionCookies,
+  subjectDigest,
   type SessionHint,
 } from '../src/session.js';
 
@@ -81,6 +82,75 @@ describe('the sealed session hint', () => {
 
   it('still accepts a hint in its last millisecond', async () => {
     expect(await sealer.open(await sealer.seal(hint), hint.expiresAt - 1)).toEqual(hint);
+  });
+});
+
+describe('the facts a session hint carries (F-037)', () => {
+  const withFacts: SessionHint = {
+    ...hint,
+    scope: 'CONSUMER',
+    facts: { hasSold: true, certifiedMerchant: false },
+  };
+
+  it('opens the facts it sealed', async () => {
+    expect(await sealer.open(await sealer.seal(withFacts), 1_000)).toEqual(withFacts);
+  });
+
+  it('still opens a hint sealed before facts existed, with none', async () => {
+    const opened = await sealer.open(
+      await signWith('a'.repeat(32), { s: 'CONSUMER', e: 2_000_000_000 }),
+      1_000,
+    );
+    expect(opened).toEqual({ scope: 'CONSUMER', expiresAt: 2_000_000_000_000 });
+    expect(opened).not.toHaveProperty('facts');
+  });
+
+  it('refuses a hint whose facts were edited', async () => {
+    const sealed = await sealer.seal({ ...withFacts, facts: { hasSold: false } });
+    const [version, payload, signature] = sealed.split('.');
+    const forged = JSON.parse(fromB64url(payload!)) as { f: Record<string, boolean> };
+    forged.f.hasSold = true;
+    expect(
+      await sealer.open([version, b64url(JSON.stringify(forged)), signature].join('.'), 1_000),
+    ).toBeNull();
+  });
+
+  it.each([['not an object'], [['hasSold']], [{ hasSold: 'yes' }], [{ 'bad key': true }], [null]])(
+    'drops facts it cannot read (%j) rather than guessing, and keeps the session',
+    async (f) => {
+      const resealed = await signWith('a'.repeat(32), { s: 'CONSUMER', e: 2_000_000_000, f });
+      expect(await sealer.open(resealed, 1_000)).toEqual({ scope: 'CONSUMER', expiresAt: 2_000_000_000_000 });
+    },
+  );
+});
+
+describe('sealing facts and a subject (F-037 review)', () => {
+  it('throws on facts open would drop: that is a bug in the app asking', async () => {
+    for (const facts of [
+      { 'bad key': true },
+      { hasSold: 'yes' },
+      Object.fromEntries([...'abcdefghi'].map((k) => [k, true])),
+    ]) {
+      await expect(sealer.seal({ ...hint, facts: facts as never })).rejects.toThrow(TypeError);
+    }
+  });
+
+  it('throws on a subject that is not a digest', async () => {
+    await expect(sealer.seal({ ...hint, subject: 'user-1' })).rejects.toThrow(TypeError);
+  });
+
+  it('round-trips a subject digest, and digests only a JWT with a sub', async () => {
+    const token = `h.${b64url(JSON.stringify({ sub: 'user-1' }))}.s`;
+    const subject = await subjectDigest(token);
+    expect(subject).toMatch(/^[A-Za-z0-9_-]{22}$/);
+    expect(subject).not.toContain('user');
+    expect(await subjectDigest(`h.${b64url(JSON.stringify({ sub: 'user-2' }))}.s`)).not.toBe(subject);
+    expect(await sealer.open(await sealer.seal({ ...hint, subject: subject! }), 1_000)).toEqual({
+      ...hint,
+      subject,
+    });
+    expect(await subjectDigest('opaque')).toBeUndefined();
+    expect(await subjectDigest(`h.${b64url(JSON.stringify({ n: 1 }))}.s`)).toBeUndefined();
   });
 });
 

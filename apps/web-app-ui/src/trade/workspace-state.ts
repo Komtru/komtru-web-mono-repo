@@ -97,7 +97,28 @@ export const tabHref = (tradeId: string, tab: WorkspaceTab): string =>
 export const fundHref = (tradeId: string): string => `/trade/${tradeId}/fund`;
 
 /** Where the seller ships a funded trade (F-026). Its own route: a flow, not a view of the trade. */
-export const shipHref = (tradeId: string): string => `/trade/${tradeId}/ship`;
+export const shipHref = (tradeId: string): string => `/trade/${tradeId}/dispatch`;
+// F-028 (CWT-S08 to CWT-S13): the delivery and evidence sheets behind the workspace, each its own route.
+export const dispatchHref = (tradeId: string): string => `/trade/${tradeId}/dispatch`;
+export const waybillHref = (tradeId: string): string => `/trade/${tradeId}/dispatch/waybill`;
+export const trackHref = (tradeId: string): string => `/trade/${tradeId}/track`;
+export const pickupHref = (tradeId: string): string => `/trade/${tradeId}/pickup`;
+export const evidenceHref = (tradeId: string): string => `/trade/${tradeId}/evidence`;
+/**
+ * Where there is evidence to browse (CWT-S12): from shipment on, including the two outcomes that follow a dispute
+ * (the platform's own `EVIDENCE_VISIBLE`). The Evidence screen and the Actions row read this one list.
+ */
+export const EVIDENCE_STATUSES: readonly WorkspaceStatus[] = [
+  'SHIPPED',
+  'UNCONFIRMED_DELIVERY',
+  'INSPECTION',
+  'DISPUTED',
+  'COMPLETED',
+  'SETTLED',
+  'RESOLVED_RELEASED',
+  'RESOLVED_REFUNDED',
+];
+export const addEvidenceHref = (tradeId: string): string => `/trade/${tradeId}/evidence/new`;
 /** Inspect & Confirm (Z4/Z5), and for the seller the answer to a request for more time (BEI2). */
 export const inspectHref = (tradeId: string): string => `/trade/${tradeId}/inspect`;
 /** DE1: the seller asks the buyer for more time to deliver. */
@@ -207,7 +228,13 @@ export function tradeActions(status: WorkspaceStatus, role: TradeRole, tradeId: 
       break;
     case 'SHIPPED':
       if (!buyer) {
-        later('report-delivered', 'Report delivery · Seller', "Reporting delivery isn't in the app yet.");
+        rows.push({
+          id: 'report-delivered',
+          title: 'Report delivery · Seller',
+          description: 'Say the item has arrived, so the buyer is asked to confirm.',
+          availability: 'live',
+          href: dispatchHref(tradeId),
+        });
         rows.push(moreTimeRow(tradeId));
       } else rows.push(confirmDeliveryRow(tradeId, 'Confirm you have it · Buyer'));
       break;
@@ -245,6 +272,26 @@ export function tradeActions(status: WorkspaceStatus, role: TradeRole, tradeId: 
       break;
     default:
       break;
+  }
+
+  // F-028: follow the parcel and browse what is on record, from the moment it has shipped.
+  if (['SHIPPED', 'UNCONFIRMED_DELIVERY', 'INSPECTION'].includes(status)) {
+    rows.push({
+      id: 'track',
+      title: 'Track delivery · Safe',
+      description: 'See who has the item and what is recorded of its journey.',
+      availability: 'live',
+      href: trackHref(tradeId),
+    });
+  }
+  if (EVIDENCE_STATUSES.includes(status)) {
+    rows.push({
+      id: 'evidence',
+      title: 'Trade evidence · Safe',
+      description: 'Browse the photos and receipts kept with this trade, by event.',
+      availability: 'live',
+      href: evidenceHref(tradeId),
+    });
   }
 
   if (PRE_FUNDING.includes(status)) {

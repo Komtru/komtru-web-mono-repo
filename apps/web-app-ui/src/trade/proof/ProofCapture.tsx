@@ -18,11 +18,11 @@ import {
   TermRow,
   VersionTimeline,
 } from '@komtru/ui-kit';
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { CameraSheet } from './CameraSheet';
-import { cameraSupported } from './camera';
+import { useCameraSupported } from './camera';
 import { type GridItem, MediaGrid } from './MediaGrid';
-import { useOnline } from './online';
+import { useOnline } from '../../shell/OfflineStatus';
 import { checkMedia, fingerprint, ofLabel, proofProgress, readDimensions, type Needs } from './rules';
 
 /** The file the platform stores the seller's proof under: private to the trade, never public. */
@@ -86,8 +86,14 @@ export function ProofCapture({ needs, onChange, initial = [], step }: ProofCaptu
   const online = useOnline();
   const [media, setMedia] = useState<Attached[]>(initial);
   const [busy, setBusy] = useState(0);
-  const [failure, setFailure] = useState<string | undefined>(undefined);
-  const [flagged, setFlagged] = useState<Flagged | undefined>(undefined);
+  const [failures, setFailures] = useState<string[]>([]);
+  // Every file the check turned away, not only the last: a batch can hold several, and a good file's upload must never
+  // clear another file's flag. A flag leaves when the person removes it or retakes it, nothing else.
+  const [flagged, setFlagged] = useState<Flagged[]>([]);
+  const cameraOk = useCameraSupported();
+  const alertHeading = useRef<HTMLHeadingElement>(null);
+  // The next good photo replaces a flagged one: set by Retake, so a plain add from the gallery never clears a flag.
+  const retaking = useRef(false);
   const [camera, setCamera] = useState(false);
   // Ids start at 1 and never repeat, so removing one and adding another cannot reuse a slot's key.
   const counter = useRef(
@@ -95,6 +101,29 @@ export function ProofCapture({ needs, onChange, initial = [], step }: ProofCaptu
   );
   // What is attached, kept current between the awaits of one batch (state alone would be a render behind).
   const attached = useRef<Attached[]>(initial);
+  const flagCounter = useRef(0);
+
+  // Move focus to the PM-3 heading when a file is first turned away, and again when more are: the alert is read and the
+  // person lands where the way forward is. (The effect only moves focus; it sets no state.)
+  const flagCount = flagged.length;
+  useEffect(() => {
+    if (flagCount > 0) alertHeading.current?.focus();
+  }, [flagCount]);
+  // Previews of files turned away are let go when the screen goes. Attached files keep theirs: a screen that unmounts
+  // this between stages hands them back through `initial`.
+  const flaggedNow = useRef<Flagged[]>([]);
+  useEffect(() => {
+    flaggedNow.current = flagged;
+  }, [flagged]);
+  useEffect(
+    () => () => {
+      if (typeof URL.revokeObjectURL !== 'function') return;
+      flaggedNow.current.forEach((flag) => {
+        if (flag.src !== undefined) URL.revokeObjectURL(flag.src);
+      });
+    },
+    [],
+  );
 
   const counts = {
     photos: media.filter((item) => item.kind !== 'video').length,
@@ -116,19 +145,36 @@ export function ProofCapture({ needs, onChange, initial = [], step }: ProofCaptu
     );
   };
 
+  const dropFlag = (id: string) => {
+    setFlagged((current) => {
+      const gone = current.find((flag) => flag.id === id);
+      if (gone?.src !== undefined && typeof URL.revokeObjectURL === 'function') URL.revokeObjectURL(gone.src);
+      return current.filter((flag) => flag.id !== id);
+    });
+  };
+
   const add = async (files: File[]) => {
-    setFailure(undefined);
+    setFailures([]);
     setBusy((count) => count + files.length);
+    const turnedAway: Flagged[] = [];
+    const failed: string[] = [];
     for (const file of files) {
       try {
         const size = await readDimensions(file);
         const check = checkMedia(
-          { name: file.name, type: file.type, size: file.size, lastModified: file.lastModified, ...size },
+          {
+            name: file.name,
+            type: file.type,
+            size: file.size,
+            lastModified: file.lastModified,
+            ...(size === 'UNREADABLE' ? { unreadable: true } : size),
+          },
           attached.current.flatMap((item) => (item.fp === undefined ? [] : [item.fp])),
         );
         if (!check.ok) {
-          setFlagged({
-            id: `flag-${file.name}`,
+          flagCounter.current += 1;
+          turnedAway.push({
+            id: `flag-${String(flagCounter.current)}`,
             name: file.name,
             note: check.note ?? '',
             src: preview(file),
@@ -150,9 +196,18 @@ export function ProofCapture({ needs, onChange, initial = [], step }: ProofCaptu
             ...(src === undefined ? {} : { src }),
           },
         ]);
-        setFlagged(undefined);
+        if (retaking.current) {
+          // The photo that was asked for again has come: the one it replaces is dropped.
+          retaking.current = false;
+          setFlagged((current) => {
+            const [first, ...rest] = current;
+            if (first?.src !== undefined && typeof URL.revokeObjectURL === 'function')
+              URL.revokeObjectURL(first.src);
+            return rest;
+          });
+        }
       } catch (error) {
-        setFailure(
+        failed.push(
           error instanceof UploadError && error.reason === 'TOO_LARGE'
             ? `${file.name} is too large. Choose a smaller file.`
             : `${file.name} didn't upload. Check your connection and add it again.`,
@@ -161,6 +216,8 @@ export function ProofCapture({ needs, onChange, initial = [], step }: ProofCaptu
         setBusy((count) => count - 1);
       }
     }
+    if (turnedAway.length > 0) setFlagged((current) => [...current, ...turnedAway]);
+    if (failed.length > 0) setFailures(failed);
   };
 
   const items: GridItem[] = [
@@ -170,37 +227,34 @@ export function ProofCapture({ needs, onChange, initial = [], step }: ProofCaptu
       label: item.alt ?? `Attachment ${String(index + 1)}`,
       ...(item.src === undefined ? {} : { src: item.src }),
     })),
-    ...(flagged === undefined
-      ? []
-      : [
-          {
-            id: flagged.id,
-            kind: 'photo' as const,
-            label: flagged.name,
-            flagged: true,
-            ...(flagged.src === undefined ? {} : { src: flagged.src }),
-          },
-        ]),
+    ...flagged.map((flag) => ({
+      id: flag.id,
+      kind: 'photo' as const,
+      label: flag.name,
+      flagged: true,
+      ...(flag.src === undefined ? {} : { src: flag.src }),
+    })),
   ];
+  const hasFlags = flagged.length > 0;
 
   const verb = step === 'send' ? 'send this proposal' : 'accept';
   const takeEnabled = online && busy === 0;
-  const retake = cameraSupported() ? (
+  const retake = cameraOk ? (
     <Button
       type="button"
       disabled={!takeEnabled}
       onClick={() => {
-        setFlagged(undefined);
+        retaking.current = hasFlags;
         setCamera(true);
       }}
     >
-      {flagged === undefined ? 'Take a photo now' : 'Retake this photo'}
+      {!hasFlags ? 'Take a photo now' : 'Retake this photo'}
     </Button>
   ) : (
     // No camera to open: the device's own camera app takes the picture and hands it back, so it is still taken now.
     <Button asChild>
       <label className={`block text-center ${PICK_CLASS}`}>
-        {flagged === undefined ? 'Take a photo now' : 'Retake this photo'}
+        {!hasFlags ? 'Take a photo now' : 'Retake this photo'}
         <input
           type="file"
           accept="image/*"
@@ -208,7 +262,7 @@ export function ProofCapture({ needs, onChange, initial = [], step }: ProofCaptu
           disabled={!takeEnabled}
           className="sr-only"
           onChange={(event) => {
-            setFlagged(undefined);
+            retaking.current = hasFlags;
             void add([...(event.target.files ?? [])]);
             event.target.value = '';
           }}
@@ -243,17 +297,27 @@ export function ProofCapture({ needs, onChange, initial = [], step }: ProofCaptu
           Photos can’t be added until you’re back online. What you’ve added is kept here.
         </OfflineBanner>
       )}
-      {failure !== undefined && <RiskBanner>{failure}</RiskBanner>}
-      {flagged !== undefined ? (
-        // PM-3: plain, non-accusing wording; one clear way forward.
-        <>
-          <h3 className="mb-[3px] font-display text-[19px] font-semibold tracking-[-.01em]">
-            One photo needs replacing
+      {failures.map((failure) => (
+        <RiskBanner key={failure}>{failure}</RiskBanner>
+      ))}
+      {hasFlags ? (
+        // PM-3: plain, non-accusing wording; one clear way forward. Announced, and focus moves here, so a person who
+        // cannot see the outlined tile still hears that a photo was turned away.
+        <div role="alert">
+          <h3
+            ref={alertHeading}
+            tabIndex={-1}
+            className="mb-[3px] font-display text-[19px] font-semibold tracking-[-.01em] focus:outline-none"
+          >
+            {flagged.length === 1
+              ? 'One photo needs replacing'
+              : `${String(flagged.length)} photos need replacing`}
           </h3>
           <p className="mb-[16px] text-[12.5px] leading-[1.55] text-slate">
-            We check uploads so buyers can trust what they see. This one needs another look.
+            We check uploads so buyers can trust what they see.{' '}
+            {flagged.length === 1 ? 'This one needs another look.' : 'These need another look.'}
           </p>
-        </>
+        </div>
       ) : progress.ready && media.length > 0 ? (
         // PM-4
         <>
@@ -274,7 +338,7 @@ export function ProofCapture({ needs, onChange, initial = [], step }: ProofCaptu
         </>
       )}
 
-      {flagged === undefined && !progress.ready && (
+      {!hasFlags && !progress.ready && (
         <>
           <NoteBanner>
             Items with clear photos build immediate trust with buyers and have fewer disputes. Take the photos
@@ -288,7 +352,7 @@ export function ProofCapture({ needs, onChange, initial = [], step }: ProofCaptu
         </>
       )}
 
-      {required > 0 && flagged === undefined && (
+      {required > 0 && !hasFlags && (
         <>
           {!(progress.ready && media.length > 0) && <SectionLabel>What’s required</SectionLabel>}
           <TermList aria-label="What’s required">
@@ -315,17 +379,25 @@ export function ProofCapture({ needs, onChange, initial = [], step }: ProofCaptu
         items={items}
         slots={Math.max(required, 3)}
         onRemove={(id) => {
-          if (id === flagged?.id) setFlagged(undefined);
-          else report(media.filter((item) => item.id !== id));
+          if (flagged.some((flag) => flag.id === id)) dropFlag(id);
+          else {
+            const gone = media.find((item) => item.id === id);
+            if (gone?.src !== undefined && typeof URL.revokeObjectURL === 'function') {
+              URL.revokeObjectURL(gone.src);
+            }
+            report(media.filter((item) => item.id !== id));
+          }
         }}
         className="mt-[10px]"
       />
 
-      {flagged !== undefined && (
+      {hasFlags && (
         <>
-          <Banner tone="risk" title={flagged.name}>
-            {flagged.note}
-          </Banner>
+          {flagged.map((flag) => (
+            <Banner key={flag.id} tone="risk" title={flag.name}>
+              {flag.note}
+            </Banner>
+          ))}
           <NoteBanner>
             Took it yourself? Retake it with your camera — it only takes a moment. Asking a person to review a
             photo isn’t in the app yet.
@@ -333,15 +405,16 @@ export function ProofCapture({ needs, onChange, initial = [], step }: ProofCaptu
           <SectionLabel>Why this matters</SectionLabel>
           <TermList aria-label="Why this matters">
             <TermRow label="Buyers rely on it">It’s the Trade’s proof</TermRow>
-            <TermRow label="If it’s ever disputed">It’s what we compare against</TermRow>
+            <TermRow label="If it’s ever disputed">It’s part of the Trade’s evidence</TermRow>
           </TermList>
           <p className="mt-[6px] mb-[12px] text-[11.5px] leading-[1.6] text-trust-gray">
-            AI-generated, stock and downloaded images aren’t accepted.
+            Show the item itself, in your own photos. Pictures of somewhere else, or of another item, don’t
+            help the buyer.
           </p>
         </>
       )}
 
-      {progress.ready && media.length > 0 && flagged === undefined && step === 'send' && (
+      {progress.ready && media.length > 0 && !hasFlags && step === 'send' && (
         <>
           <SectionLabel>What happens next</SectionLabel>
           <VersionTimeline
@@ -350,20 +423,20 @@ export function ProofCapture({ needs, onChange, initial = [], step }: ProofCaptu
             steps={[
               {
                 id: 'review',
-                title: 'The buyer reviews it with the offer',
+                title: 'The buyer is given access with the offer',
                 detail: 'Video first, then photos',
                 state: 'done',
               },
               {
                 id: 'change',
-                title: 'You can change it until they accept',
+                title: 'You can change it until you send',
                 detail: 'Free to retake or replace',
                 state: 'active',
               },
               {
                 id: 'lock',
-                title: 'It’s locked when the Trade is agreed',
-                detail: 'It becomes the Trade’s evidence',
+                title: 'It’s kept with the Trade once it’s agreed',
+                detail: 'The buyer compares the item with it at inspection',
                 state: 'pending',
               },
             ]}
@@ -373,17 +446,20 @@ export function ProofCapture({ needs, onChange, initial = [], step }: ProofCaptu
 
       <div className="flex flex-col gap-[8px]">
         {retake}
-        {flagged === undefined && picker}
-        {flagged !== undefined && (
+        {!hasFlags && picker}
+        {hasFlags && (
           <Button
             type="button"
             variant="ghost"
             className="mx-auto"
             onClick={() => {
-              setFlagged(undefined);
+              flagged.forEach((flag) => {
+                dropFlag(flag.id);
+              });
+              retaking.current = false;
             }}
           >
-            Remove it
+            {flagged.length === 1 ? 'Remove it' : 'Remove them'}
           </Button>
         )}
       </div>

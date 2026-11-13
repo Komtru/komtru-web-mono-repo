@@ -375,7 +375,7 @@ function ShipForm({ trade }: { trade: TradeView }): React.JSX.Element {
 }
 
 /** One photo of the waybill receipt: picked, uploaded straight to private storage, and shown by its file name. */
-function ReceiptPicker({
+export function ReceiptPicker({
   receipt,
   uploading,
   failure,

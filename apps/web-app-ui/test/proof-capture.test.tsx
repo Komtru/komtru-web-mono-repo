@@ -138,7 +138,7 @@ describe('PM-3: a photo that needs another look', () => {
     expect(await screen.findByRole('heading', { name: 'One photo needs replacing' })).toBeTruthy();
     expect(screen.getByText('photo_2.jpg')).toBeTruthy();
     expect(screen.getByText('Too small to show the item clearly')).toBeTruthy();
-    expect(screen.getByText(/AI-generated, stock and downloaded images aren’t accepted/)).toBeTruthy();
+    expect(screen.queryByText(/AI-generated/)).toBeNull();
     expect(screen.getByText(/isn’t in the app yet/)).toBeTruthy();
     expect(screen.getByText('Retake this photo')).toBeTruthy();
     expect(callsTo(api.call, 'POST', '/files/upload-url')).toHaveLength(0);
@@ -160,6 +160,103 @@ describe('PM-3: a photo that needs another look', () => {
   });
 });
 
+describe('PM-3: a batch with files turned away in it', () => {
+  const empty = (name: string) => new File([], name, { type: 'image/jpeg' });
+
+  it('keeps every file turned away, and a good file in the same batch does not clear the flag', async () => {
+    const { gallery, onChange } = show();
+    fireEvent.change(gallery(), { target: { files: [empty('tiny.jpg'), file('good.jpg')] } });
+    expect(await screen.findByRole('heading', { name: 'One photo needs replacing' })).toBeTruthy();
+    expect(screen.getByText('tiny.jpg', { selector: 'b, div, span' })).toBeTruthy();
+    await waitFor(() => {
+      expect(onChange).toHaveBeenCalledTimes(1);
+    });
+    expect(screen.getByRole('heading', { name: 'One photo needs replacing' })).toBeTruthy();
+    // Another good file, later, still leaves the flag where it is.
+    fireEvent.change(gallery(), { target: { files: [file('also-good.jpg')] } });
+    await waitFor(() => {
+      expect(onChange).toHaveBeenCalledTimes(2);
+    });
+    expect(screen.getByRole('heading', { name: 'One photo needs replacing' })).toBeTruthy();
+  });
+
+  it('shows all of several files turned away, not just the last', async () => {
+    const { gallery } = show();
+    fireEvent.change(gallery(), { target: { files: [empty('bad1.jpg'), empty('bad2.jpg')] } });
+    expect(await screen.findByRole('heading', { name: '2 photos need replacing' })).toBeTruthy();
+    expect(screen.getAllByText(/^bad[12]\.jpg$/, { selector: 'b, div, span' })).toHaveLength(2);
+    fireEvent.click(screen.getByRole('button', { name: 'Remove them' }));
+    expect(screen.queryByRole('heading', { name: /need replacing/ })).toBeNull();
+  });
+
+  it('announces it and moves focus to the heading, so it is heard without seeing the outlined tile', async () => {
+    const { gallery } = show();
+    fireEvent.change(gallery(), { target: { files: [empty('bad.jpg')] } });
+    const heading = await screen.findByRole('heading', { name: 'One photo needs replacing' });
+    expect(heading.closest('[role="alert"]')).not.toBeNull();
+    await waitFor(() => {
+      expect(document.activeElement).toBe(heading);
+    });
+  });
+
+  it('replaces the flagged photo only when the retake comes, and keeps the flag if the camera is closed first', async () => {
+    camera();
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue({ drawImage: vi.fn() } as never);
+    vi.spyOn(HTMLCanvasElement.prototype, 'toBlob').mockImplementation((done) => {
+      done(new Blob(['x'], { type: 'image/jpeg' }));
+    });
+    Object.defineProperty(HTMLVideoElement.prototype, 'videoWidth', { value: 1200, configurable: true });
+    Object.defineProperty(HTMLMediaElement.prototype, 'play', {
+      value: () => Promise.resolve(),
+      configurable: true,
+    });
+    const { gallery, onChange } = show();
+    fireEvent.change(gallery(), { target: { files: [empty('bad.jpg')] } });
+    await screen.findByRole('heading', { name: 'One photo needs replacing' });
+    fireEvent.click(screen.getByRole('button', { name: 'Retake this photo' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Take photos' });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Done' }));
+    expect(screen.getByRole('heading', { name: 'One photo needs replacing' })).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Retake this photo' }));
+    const again = await screen.findByRole('dialog', { name: 'Take photos' });
+    const shutter = within(again).getByRole<HTMLButtonElement>('button', { name: 'Take photo' });
+    await waitFor(() => {
+      expect(shutter.disabled).toBe(false);
+    });
+    fireEvent.click(shutter);
+    await waitFor(() => {
+      expect(onChange).toHaveBeenCalledTimes(1);
+    });
+    await waitFor(() => {
+      expect(screen.queryByRole('heading', { name: /needs replacing/ })).toBeNull();
+    });
+  });
+
+  it('turns away a photo the browser cannot open, but lets an iPhone HEIC through for the platform to judge', async () => {
+    vi.stubGlobal('createImageBitmap', vi.fn().mockRejectedValue(new Error('cannot decode')));
+    const { gallery, onChange } = show();
+    fireEvent.change(gallery(), { target: { files: [file('broken.jpg')] } });
+    expect(await screen.findByText('We couldn’t open this photo. It may be damaged')).toBeTruthy();
+    expect(callsTo(api.call, 'POST', '/files/upload-url')).toHaveLength(0);
+    fireEvent.change(gallery(), { target: { files: [file('IMG_1.heic', 'image/heic')] } });
+    await waitFor(() => {
+      expect(onChange).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  it('lets a legitimately small photo through', async () => {
+    vi.stubGlobal(
+      'createImageBitmap',
+      vi.fn().mockResolvedValue({ width: 599, height: 799, close: () => undefined }),
+    );
+    const { gallery, onChange } = show();
+    fireEvent.change(gallery(), { target: { files: [file('old-phone.jpg')] } });
+    await waitFor(() => {
+      expect(onChange).toHaveBeenCalledTimes(1);
+    });
+  });
+});
+
 describe('PM-4: ready', () => {
   it('says the proof is ready, counts extras, and says what happens to it next', async () => {
     const { gallery, container } = show();
@@ -173,9 +270,61 @@ describe('PM-4: ready', () => {
     expect(screen.getByText('4 of 3 ✓')).toBeTruthy();
     expect(screen.queryByText('Proof of the item needed')).toBeNull();
     const next = screen.getByLabelText('What happens next');
-    expect(within(next).getByText('You can change it until they accept')).toBeTruthy();
-    expect(within(next).getByText('It’s locked when the Trade is agreed')).toBeTruthy();
+    expect(within(next).getByText('You can change it until you send')).toBeTruthy();
+    expect(within(next).getByText('It’s kept with the Trade once it’s agreed')).toBeTruthy();
     await expectNoAxeViolations(container);
+  });
+});
+
+describe('PM-2: the camera is let go of on every path', () => {
+  it('stops a stream that arrives after the sheet has closed', async () => {
+    const stop = vi.fn();
+    let resolve: (stream: unknown) => void = () => undefined;
+    const getUserMedia = vi.fn(
+      () =>
+        new Promise((done) => {
+          resolve = done;
+        }),
+    );
+    vi.stubGlobal('navigator', { ...navigator, onLine: true, mediaDevices: { getUserMedia } });
+    show();
+    fireEvent.click(screen.getByRole('button', { name: 'Take a photo now' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Take photos' });
+    await waitFor(() => {
+      expect(getUserMedia).toHaveBeenCalled();
+    });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Done' }));
+    resolve({ getTracks: () => [{ stop }] });
+    await waitFor(() => {
+      expect(stop).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  it('stops the stream when the whole screen goes while the camera is open', async () => {
+    const { stop } = camera();
+    const { unmount } = show();
+    fireEvent.click(screen.getByRole('button', { name: 'Take a photo now' }));
+    await screen.findByRole('dialog', { name: 'Take photos' });
+    await waitFor(() => {
+      expect(navigator.mediaDevices.getUserMedia).toHaveBeenCalled();
+    });
+    await new Promise((done) => setTimeout(done, 0));
+    unmount();
+    expect(stop).toHaveBeenCalled();
+  });
+
+  it('passes the accessibility check with the camera sheet open, live and refused', async () => {
+    camera();
+    show();
+    fireEvent.click(screen.getByRole('button', { name: 'Take a photo now' }));
+    await screen.findByRole('dialog', { name: 'Take photos' });
+    await expectNoAxeViolations(document.body);
+    cleanup();
+    camera({ reject: 'NotAllowedError' });
+    show();
+    fireEvent.click(screen.getByRole('button', { name: 'Take a photo now' }));
+    await screen.findByText('The camera is off for Komtru');
+    await expectNoAxeViolations(document.body);
   });
 });
 

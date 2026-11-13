@@ -5,6 +5,10 @@
 //                   Server Action, not to any other route.
 //   komtru_session  a sealed hint saying which scope the session has and when it lapses, so
 //                   middleware can turn a consumer away from ops.komtru.com without a round trip.
+//                   It may also carry the app's own facts about the person (F-037: has sold, is
+//                   certified), read when the session was issued, because a page render holds no
+//                   credential to ask the backend with. Facts decide what a page shows, never what
+//                   the person may do: the backend authorises every call.
 //
 // The hint is HMAC-sealed because middleware would otherwise be enforcing a value the caller
 // chooses: a cookie header is attacker-controlled, httpOnly or not. Sealing makes the middleware's
@@ -23,10 +27,59 @@ export const MIN_SECRET_LENGTH = 32;
 
 const VERSION = 'v1';
 
+/**
+ * Yes-or-no facts about the person, named by the app that seals them. Booleans only, and few: the cookie
+ * rides on every request, and anything richer belongs in a read.
+ */
+export type SessionFacts = Readonly<Record<string, boolean>>;
+
+/** Enough for an app's shell; a bound so a hint can never grow into a payload. */
+export const MAX_SESSION_FACTS = 8;
+const FACT_NAME = /^[A-Za-z][A-Za-z0-9]{0,31}$/;
+
+/**
+ * The facts in a payload, or `undefined` for anything that is not a small object of named booleans. Not
+ * a refusal of the session: a hint sealed by an older or newer build is still a real session, and the
+ * safe reading of facts it cannot understand is "none" — the smallest shell.
+ */
+const readFacts = (value: unknown): SessionFacts | undefined => {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return undefined;
+  const entries = Object.entries(value);
+  if (entries.length > MAX_SESSION_FACTS) return undefined;
+  for (const [name, fact] of entries) {
+    if (!FACT_NAME.test(name) || typeof fact !== 'boolean') return undefined;
+  }
+  return Object.fromEntries(entries);
+};
+
+/** A digest, never the user id itself: the hint is signed, not encrypted, and is readable base64. */
+const SUBJECT = /^[A-Za-z0-9_-]{16,64}$/;
+
+/**
+ * The same facts, or a throw. Sealing something `open` would drop is a bug in the app that asked for
+ * it, and failing loudly here is how that bug gets found rather than shipped as a shell with no rows.
+ */
+const requireFacts = (value: SessionFacts): SessionFacts => {
+  const facts = readFacts(value);
+  if (facts === undefined) {
+    throw new TypeError(
+      `Session facts must be at most ${MAX_SESSION_FACTS} booleans named like ${String(FACT_NAME)}`,
+    );
+  }
+  return facts;
+};
+
 export interface SessionHint {
   scope: SessionScope;
   /** Epoch milliseconds. Advisory for the client, binding for `open`. */
   expiresAt: number;
+  /** Absent when the app asked for none, the read failed, or the hint predates them. */
+  facts?: SessionFacts;
+  /**
+   * Who the facts are about, as `subjectDigest` of the access token's `sub`: lets a refresh whose read
+   * failed keep the facts of the hint it replaces, and only when that hint is the same person's.
+   */
+  subject?: string;
 }
 
 export interface SessionSealer {
@@ -56,6 +109,25 @@ const fromBase64Url = (value: string): Uint8Array<ArrayBuffer> => {
   return bytes;
 };
 
+/**
+ * A short SHA-256 digest of the access token's `sub` claim, or `undefined` for a token that is not a JWT
+ * with one. The token is not verified here: it came from the backend over this server's own call, and the
+ * digest only ever decides whether two hints this app sealed are about the same person.
+ */
+export async function subjectDigest(accessToken: string): Promise<string | undefined> {
+  try {
+    const parts = accessToken.split('.');
+    if (parts.length !== 3) return undefined;
+    const claims: unknown = JSON.parse(new TextDecoder().decode(fromBase64Url(parts[1]!)));
+    const sub = (claims as { sub?: unknown } | null)?.sub;
+    if (typeof sub !== 'string' || sub === '') return undefined;
+    const digest = await crypto.subtle.digest('SHA-256', encoder.encode(sub));
+    return toBase64Url(new Uint8Array(digest)).slice(0, 22);
+  } catch {
+    return undefined;
+  }
+}
+
 export function requireSessionSecret(env: Record<string, string | undefined>): string {
   const secret = env[SESSION_SECRET_ENV];
   if (secret === undefined || secret.length < MIN_SECRET_LENGTH) {
@@ -78,8 +150,19 @@ export function createSessionSealer(secret: string): SessionSealer {
 
   const seal = async (hint: SessionHint): Promise<string> => {
     // Seconds, not milliseconds: the payload rides in a cookie on every request.
+    const facts = hint.facts === undefined ? undefined : requireFacts(hint.facts);
+    if (hint.subject !== undefined && !SUBJECT.test(hint.subject)) {
+      throw new TypeError('A session subject must be a digest from subjectDigest');
+    }
     const body = toBase64Url(
-      encoder.encode(JSON.stringify({ s: hint.scope, e: Math.floor(hint.expiresAt / 1000) })),
+      encoder.encode(
+        JSON.stringify({
+          s: hint.scope,
+          e: Math.floor(hint.expiresAt / 1000),
+          ...(facts === undefined ? {} : { f: facts }),
+          ...(hint.subject === undefined ? {} : { u: hint.subject }),
+        }),
+      ),
     );
     const signed = `${VERSION}.${body}`;
     const mac = await crypto.subtle.sign('HMAC', await keyPromise, encoder.encode(signed));
@@ -109,7 +192,7 @@ export function createSessionSealer(secret: string): SessionSealer {
 
       const payload: unknown = JSON.parse(new TextDecoder().decode(fromBase64Url(body)));
       if (typeof payload !== 'object' || payload === null) return null;
-      const { s, e } = payload as { s?: unknown; e?: unknown };
+      const { s, e, f, u } = payload as { s?: unknown; e?: unknown; f?: unknown; u?: unknown };
 
       // A valid signature proves the payload is ours. It does not prove the scope is still a scope:
       // a hint sealed before `SESSION_SCOPES` changed would otherwise be let through under a name
@@ -119,7 +202,14 @@ export function createSessionSealer(secret: string): SessionSealer {
 
       const expiresAt = e * 1000;
       if (expiresAt <= now) return null;
-      return { scope: scope.data, expiresAt };
+      const facts = readFacts(f);
+      const subject = typeof u === 'string' && SUBJECT.test(u) ? u : undefined;
+      return {
+        scope: scope.data,
+        expiresAt,
+        ...(facts === undefined ? {} : { facts }),
+        ...(subject === undefined ? {} : { subject }),
+      };
     } catch {
       // Every failure here is a cookie someone made up. Middleware runs on every navigation, so a
       // throw would be a 500 on every page of the app rather than a redirect to sign in.

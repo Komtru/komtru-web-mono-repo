@@ -202,8 +202,8 @@ describe('CT-S7 Review and accept', () => {
     await toS7();
     expect(screen.getByRole('heading', { name: 'Terms' })).toBeTruthy();
     // The seller is named in the agreement and again as who showed the proof (PM-5).
-    expect(screen.getAllByText('TechEdge NG', { selector: 'dd, div, span' }).length).toBeGreaterThan(0);
-    expect(screen.getByText('Until you accept')).toBeTruthy();
+    expect(screen.getAllByText('TechEdge NG', { selector: 'dd, div, span' })).toHaveLength(2);
+    expect(screen.getByLabelText('Where the proof came from')).toBeTruthy();
     expect(screen.getByText('12 Computer Village Rd, Ikeja')).toBeTruthy();
     expect(screen.getByText(/Courier · 12 Allen Avenue, Ikeja/)).toBeTruthy();
     expect(screen.getByText('5–7 days')).toBeTruthy();

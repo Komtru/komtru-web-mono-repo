@@ -39,6 +39,12 @@ describe('the trades module', () => {
     expect(new Set(labels).size).toBe(labels.length);
   });
 
+  it('mounts the viewer facts read the app shell is drawn from (F-037)', () => {
+    const labels = (module().routes ?? []).map(routeLabel);
+    expect(labels).toContain('GET /me/viewer');
+    expect(new Set(labels).size).toBe(labels.length);
+  });
+
   it('schedules the delivery, inspection and grace sweeps every five minutes, for the worker', () => {
     const jobs = (module().schedules ?? []).filter((job) => job.name !== 'trades.inspection-reminders');
     expect(jobs.map((job) => job.name).sort()).toEqual([

@@ -1,44 +1,29 @@
 'use client';
 
-// PM-6 and PM-8: what the Trade holds as evidence. The seller's agreed proof is fixed and everything new is added beside
-// it, each group saying who added it and when (PM-6); once the Trade is complete the same media is kept as a record
-// (PM-8). Both read what the platform recorded and draw nothing it did not: no hub scans, no inspection photos, no
-// retention period, because none is recorded.
+// PM-6 and PM-8: what the Trade holds as evidence. `Trail` is the body of the evidence page (F-028 hosts it at
+// `/trade/[id]/evidence`): the seller's proof as it was when the Trade was agreed and what was added beside it, each
+// group saying who added it and when. `TradeRecord` (PM-8) is the same media after completion. Both read what the
+// platform recorded and draw nothing it did not: no hub scans, no inspection photos, no retention period.
 import type { TradeView } from '@komtru/api-client';
-import { useInspection, useTrade } from '@komtru/api-client/react';
+import { useInspection } from '@komtru/api-client/react';
 import {
   ActionStack,
   Button,
   Chip,
-  LoadFailed,
-  LoadingScreen,
   NoteBanner,
-  OfflineBanner,
-  ScreenColumn,
-  ScreenHeader,
   SectionLabel,
+  Skeleton,
   TermList,
   TermRow,
 } from '@komtru/ui-kit';
-import { isProblem, problemMessage, whenLabel } from '../format';
 import { ItemSummary } from '../parts';
+import { ReadFailed, Frame, Refusal, TradeGate } from '../delivery/parts';
+import { whenLabel } from '../format';
+import { EVIDENCE_STATUSES, evidenceHref } from '../workspace-state';
 import { type GridItem, MediaGrid } from './MediaGrid';
-import { useOnline } from './online';
 
 type Read = NonNullable<ReturnType<typeof useInspection>['data']>;
 
-const tradeHref = (id: string) => `/trade/${id}`;
-/** The statuses from which the platform shows the proof and the delivery evidence (the same list it reads from). */
-const EVIDENCE_VISIBLE = new Set([
-  'SHIPPED',
-  'UNCONFIRMED_DELIVERY',
-  'INSPECTION',
-  'COMPLETED',
-  'SETTLED',
-  'DISPUTED',
-  'RESOLVED_REFUNDED',
-  'RESOLVED_RELEASED',
-]);
 const COMPLETE = new Set(['COMPLETED', 'SETTLED', 'RESOLVED_REFUNDED', 'RESOLVED_RELEASED']);
 
 const SIGNAL: Record<string, string> = {
@@ -49,64 +34,6 @@ const SIGNAL: Record<string, string> = {
 const count = (n: number, one: string, many: string): string => `${String(n)} ${n === 1 ? one : many}`;
 const CAPTION = 'mt-[6px] mb-[14px] text-[11.5px] leading-[1.6] text-trust-gray';
 
-function Frame({
-  title,
-  id,
-  code,
-  children,
-}: {
-  title: string;
-  id: string;
-  code?: string | undefined;
-  children: React.ReactNode;
-}) {
-  const online = useOnline();
-  return (
-    <ScreenColumn>
-      <ScreenHeader title={title} backHref={tradeHref(id)} backLabel="Back to the trade" />
-      {code !== undefined && <p className="mb-[10px] text-[11px] text-slate">{code}</p>}
-      {!online && (
-        <OfflineBanner title="You’re offline">
-          You can’t open the evidence until you’re back online.
-        </OfflineBanner>
-      )}
-      {children}
-    </ScreenColumn>
-  );
-}
-
-/** What is read, and what a screen says while it is not there yet or cannot be there. */
-function useEvidence(id: string) {
-  const trade = useTrade(id);
-  const visible = trade.data !== undefined && EVIDENCE_VISIBLE.has(trade.data.status);
-  const inspection = useInspection(id, visible);
-  return { trade, inspection, visible };
-}
-
-function Loading({ title, id, label }: { title: string; id: string; label: string }): React.JSX.Element {
-  return (
-    <Frame title={title} id={id}>
-      <LoadingScreen label={label} />
-    </Frame>
-  );
-}
-
-function Failed({ error, retry }: { error: unknown; retry: () => void }): React.JSX.Element {
-  // Only the two people in the Trade can open its evidence: a refusal is final, not something trying again fixes.
-  const closed = isProblem(error, 'NOT_FOUND') || isProblem(error, 'FORBIDDEN');
-  return (
-    <LoadFailed
-      title={closed ? 'Only the people in this Trade can see its evidence' : 'Couldn’t open the evidence'}
-      body={
-        closed
-          ? 'Check you’re signed in to the account that’s in this Trade.'
-          : problemMessage(error, 'Check your connection and try again.')
-      }
-      {...(closed ? {} : { onRetry: retry })}
-    />
-  );
-}
-
 const proofItems = (read: Read): GridItem[] =>
   (read.sellerProof?.media ?? []).map((file, index) => ({
     id: file.fileId,
@@ -114,77 +41,57 @@ const proofItems = (read: Read): GridItem[] =>
     label: `Seller’s proof ${String(index + 1)}`,
   }));
 
-const BackToTrade = ({ id }: { id: string }): React.JSX.Element => (
-  <ActionStack>
-    <Button asChild variant="secondary">
-      <a href={tradeHref(id)}>Back to the Trade</a>
-    </Button>
-  </ActionStack>
-);
-
 /** PM-6: what was shown, what was added and by whom. */
-export function EvidenceTrail({ id }: { id: string }): React.JSX.Element {
-  const { trade, inspection, visible } = useEvidence(id);
-  const title = 'Trade Evidence';
-  if (trade.isPending) return <Loading title={title} id={id} label="Loading the trade" />;
-  if (trade.data === undefined) return <Failed error={trade.error} retry={() => void trade.refetch()} />;
-  const view = trade.data;
-  if (visible && inspection.isPending) return <Loading title={title} id={id} label="Loading the evidence" />;
-  if (visible && inspection.data === undefined) {
-    return <Failed error={inspection.error} retry={() => void inspection.refetch()} />;
-  }
-  const read = inspection.data;
-  return (
-    <Frame title={title} id={id} code={view.tradeCode}>
-      <Trail trade={view} read={read} />
-      <BackToTrade id={id} />
-    </Frame>
-  );
-}
-
-function Trail({ trade, read }: { trade: TradeView; read: Read | undefined }): React.JSX.Element {
-  const proof = read === undefined ? [] : proofItems(read);
-  const shipment = read?.deliveryEvidence.selfArranged ?? null;
-  const signals = read?.deliveryEvidence.signals ?? [];
-  const receipt = shipment?.receiptFileId;
-  const buyer = trade.yourRole === 'BUYER';
+export function Trail({ trade, read }: { trade: TradeView; read: Read }): React.JSX.Element {
+  const proof = proofItems(read);
+  const shipment = read.deliveryEvidence.selfArranged;
+  const signals = read.deliveryEvidence.signals ?? [];
+  const seller = trade.yourRole === 'SELLER';
+  // The waybill photo is the seller's own: the platform grants it to them only, so the buyer is told it is private.
+  const receipt = seller ? shipment?.receiptFileId : undefined;
   return (
     <>
-      <SectionLabel>Seller’s proof</SectionLabel>
-      <div className="mb-[6px]">
-        <Chip tone="verified">Fixed when the Trade was agreed</Chip>
-      </div>
-      {read === undefined ? (
-        <NoteBanner title={`${count(trade.proofMediaCount, 'photo or video', 'photos or videos')} shown`}>
-          The files open once the item has shipped. Until then they’re held with the Trade.
-        </NoteBanner>
-      ) : proof.length === 0 ? (
-        <p className="mt-[10px] mb-[14px] text-[12px] text-slate">No proof was attached to this Trade.</p>
-      ) : (
-        <MediaGrid aria-label="Seller’s proof" items={proof} className="mt-[10px]" />
-      )}
-      {trade.acceptedAt !== null && (
-        <p className={CAPTION}>Agreed {whenLabel(trade.acceptedAt)}. It can’t be changed or removed.</p>
-      )}
+      <section aria-label="Seller’s proof">
+        <SectionLabel>Seller’s proof</SectionLabel>
+        <div className="mb-[6px]">
+          <Chip tone="verified">Shown when the Trade was agreed</Chip>
+        </div>
+        {proof.length === 0 ? (
+          <p className="mt-[10px] mb-[14px] text-[12px] text-slate">
+            No proof photos were attached to this trade.
+          </p>
+        ) : (
+          <MediaGrid aria-label="Seller’s proof files" items={proof} className="mt-[10px]" />
+        )}
+        {trade.acceptedAt !== null && (
+          <p className={CAPTION}>
+            Agreed {whenLabel(trade.acceptedAt)}. Anything added after that is shown beside it, not over it.
+          </p>
+        )}
+      </section>
 
       {shipment !== null && (
-        <>
+        <section aria-label="Dispatch">
           <SectionLabel>Added by the seller · dispatch</SectionLabel>
           {receipt !== undefined && (
             <MediaGrid
-              aria-label="Dispatch"
-              items={[{ id: receipt, fileId: receipt, label: 'Waybill photo' }]}
+              aria-label="Dispatch files"
+              items={[{ id: receipt, fileId: receipt, label: 'Waybill receipt' }]}
             />
           )}
           <p className={CAPTION}>
             Waybill {shipment.waybillNumber} · {whenLabel(shipment.shippedAt)}
-            {receipt === undefined ? '' : ' · waybill photo included'}
+            {receipt !== undefined
+              ? ' · waybill photo included'
+              : seller
+                ? ''
+                : ' · the waybill photo is kept private'}
           </p>
-        </>
+        </section>
       )}
 
       {signals.length > 0 && (
-        <>
+        <section aria-label="Delivery">
           <SectionLabel>Added at delivery</SectionLabel>
           <TermList aria-label="Delivery record">
             {signals.map((signal) => (
@@ -194,55 +101,77 @@ function Trail({ trade, read }: { trade: TradeView; read: Read | undefined }): R
               </TermRow>
             ))}
           </TermList>
-        </>
+        </section>
       )}
 
-      {buyer && (
-        <>
+      {!seller && (
+        <section aria-label="Your inspection photos">
           <SectionLabel>Your inspection photos</SectionLabel>
           <p className={CAPTION}>
             Photos you take at inspection aren’t kept with the Trade yet. Use them to compare, from the
             inspection screen.
           </p>
-        </>
+        </section>
       )}
+      <NoteBanner>
+        Chat attachments can be linked to the trade, but case evidence should be submitted through the
+        evidence flow.
+      </NoteBanner>
     </>
   );
 }
 
 /** PM-8: after completion, the media kept with the Trade. */
 export function TradeRecord({ id }: { id: string }): React.JSX.Element {
-  const { trade, inspection, visible } = useEvidence(id);
+  return (
+    <TradeGate id={id} title="Trade Record">
+      {(trade) => <Record trade={trade} />}
+    </TradeGate>
+  );
+}
+
+function Record({ trade }: { trade: TradeView }): React.JSX.Element {
   const title = 'Trade Record';
-  if (trade.isPending) return <Loading title={title} id={id} label="Loading the trade" />;
-  if (trade.data === undefined) return <Failed error={trade.error} retry={() => void trade.refetch()} />;
-  const view = trade.data;
-  if (!COMPLETE.has(view.status)) {
+  const readable = (EVIDENCE_STATUSES as readonly string[]).includes(trade.status);
+  const complete = COMPLETE.has(trade.status);
+  const inspection = useInspection(trade.id, readable && complete);
+  if (!complete) {
     return (
-      <Frame title={title} id={id}>
-        <NoteBanner title="The record is kept when the Trade is complete">
+      <Frame title={title} id={trade.id}>
+        <NoteBanner title="The record is there once the Trade is complete">
           Until then, what the Trade holds so far is on its evidence page.
         </NoteBanner>
         <ActionStack>
           <Button asChild variant="secondary">
-            <a href={`${tradeHref(id)}/evidence`}>View all evidence</a>
+            <a href={evidenceHref(trade.id)}>View all evidence</a>
           </Button>
         </ActionStack>
       </Frame>
     );
   }
-  if (visible && inspection.isPending) return <Loading title={title} id={id} label="Loading the record" />;
-  if (inspection.data === undefined) {
-    return <Failed error={inspection.error} retry={() => void inspection.refetch()} />;
+  if (!readable)
+    return <Refusal id={trade.id} title={title} why="There is no evidence recorded for this Trade." />;
+  if (inspection.isPending) {
+    return (
+      <Frame title={title} id={trade.id}>
+        <Skeleton width="full" lines={4} />
+      </Frame>
+    );
+  }
+  if (inspection.isError) {
+    return (
+      <ReadFailed error={inspection.error} noun="the record" onRetry={() => void inspection.refetch()} />
+    );
   }
   const read = inspection.data;
   const proof = proofItems(read);
   const shipment = read.deliveryEvidence.selfArranged;
   const signals = read.deliveryEvidence.signals ?? [];
-  const refunded = view.status.includes('REFUNDED');
+  const seller = trade.yourRole === 'SELLER';
+  const refunded = trade.status.includes('REFUNDED');
   return (
-    <Frame title={title} id={id}>
-      <ItemSummary trade={view} />
+    <Frame title={title} id={trade.id}>
+      <ItemSummary trade={trade} />
       <div className="mb-[4px]">
         <Chip tone="verified">{refunded ? 'Refunded' : 'Completed'}</Chip>
       </div>
@@ -253,21 +182,23 @@ export function TradeRecord({ id }: { id: string }): React.JSX.Element {
         </TermRow>
         {shipment !== null && (
           <TermRow label="Dispatch">
-            {shipment.receiptFileId === undefined ? 'Waybill noted' : '1 photo · waybill'}
+            {seller && shipment.receiptFileId !== undefined ? '1 photo · waybill' : 'Waybill noted'}
           </TermRow>
         )}
         {signals.length > 0 && (
           <TermRow label="Delivery">{count(signals.length, 'record', 'records')}</TermRow>
         )}
       </TermList>
-      {proof.length > 0 && <MediaGrid aria-label="Seller’s proof" items={proof.slice(0, 4)} columns={4} />}
+      {proof.length > 0 && (
+        <MediaGrid aria-label="Seller’s proof files" items={proof.slice(0, 4)} columns={4} />
+      )}
       <NoteBanner>
-        Only the two people in the Trade and Komtru can see it. If the seller edits the listing later, this
-        doesn’t change.
+        These files are held privately with the Trade. They aren’t made public, and they’re shared only with
+        the people in it.
       </NoteBanner>
       <ActionStack>
         <Button asChild variant="secondary">
-          <a href={`${tradeHref(id)}/evidence`}>View all evidence</a>
+          <a href={evidenceHref(trade.id)}>View all evidence</a>
         </Button>
         <Button asChild variant="ghost">
           <a href="/trades" className="mx-auto block text-center">
