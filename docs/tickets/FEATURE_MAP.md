@@ -348,7 +348,7 @@ list a trade.
 - **Absorbs:** T-194 (todo)
 - **Backend scope:** Served by F-017 and F-024.
 - **Frontend scope:** Trade Workspace — Funding & Terms (TW-01–TW-04) and supporting sheets CWT-S01–CWT-S07 (terms, agreement, payment detail), plus the EX-01 lifecycle exception. _12 v2 screens._
-- **Status:** Not started
+- **Status:** Done
 - **Depends on:** F-022
 - **MVP:** yes
 
@@ -1190,7 +1190,7 @@ Every ticket in `docs/tickets/`, in id order, with the feature that absorbs it.
 | T-191 | Rework T-110 shells to the v2 desktop, tablet and mode switch             | Done          | F-012   | Done                         |
 | T-192 | Create a trade: buyer starts, seller completes                            | Not started   | F-018   | Not started                  |
 | T-193 | Create a trade: seller starts, buyer completes                            | Not started   | F-019   | Not started                  |
-| T-194 | Trade workspace supporting screens: funding, terms, agreement and payment | Not started   | F-023   | Not started                  |
+| T-194 | Trade workspace supporting screens: funding, terms, agreement and payment | Done          | F-023   | Done                         |
 | T-195 | Trade workspace supporting screens: delivery and evidence                 | Done          | F-028   | UI merged except CWT-S13     |
 | T-196 | Trade workspace supporting screens: resolution and issue reporting        | Not started   | F-032   | Not started                  |
 | T-197 | Proof media: capture, check and compare                                   | Not started   | F-029   | Not started                  |

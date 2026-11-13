@@ -7,11 +7,11 @@ behind it is [`BUILD_PLAN.md`](BUILD_PLAN.md). The unit of work is the feature, 
 thing in an app.
 
 ```
-MVP   ███████████████···················  23/52   (44%)
-Total ██████████························  23/80   (29%)
+MVP   ████████████████··················  24/52   (46%)
+Total ██████████························  24/80   (30%)
 ```
 
-29 MVP features left, 28 deferred past it.
+28 MVP features left, 28 deferred past it.
 
 ## Backend done, UI outstanding
 
@@ -31,7 +31,7 @@ The engine exists and only the UI is missing, so these are the highest-value wor
 | Arrive & verify                         | 3    | 4     | 3        | 3         |
 | Home & discover                         | 0    | 2     | 0        | 2         |
 | Propose & agree                         | 3    | 5     | 3        | 3         |
-| The trade workspace                     | 1    | 2     | 1        | 2         |
+| The trade workspace                     | 2    | 2     | 2        | 2         |
 | Fund & protect                          | 1    | 2     | 1        | 1         |
 | Fulfil & dispatch                       | 1    | 1     | 1        | 1         |
 | Deliver & inspect                       | 1    | 3     | 1        | 3         |
@@ -50,10 +50,10 @@ The engine exists and only the UI is missing, so these are the highest-value wor
 | Feature | Title                                                 | Journey                                 | MVP |
 | ------- | ----------------------------------------------------- | --------------------------------------- | --- |
 | F-005   | Deterministic integration test suite                  | Platform (not a user journey)           | yes |
-| F-023   | Terms, agreement and payment detail in the workspace  | The trade workspace                     | yes |
 | F-028   | Delivery and evidence in the workspace                | Deliver & inspect                       | yes |
 | F-029   | Capture and compare proof media                       | Deliver & inspect                       | yes |
 | F-040   | Apply for merchant certification and have it reviewed | Sell on Komtru                          | yes |
+| F-068   | Desktop: propose, agree and fund                      | Desktop & tablet journeys               | yes |
 | F-075   | Hosting and real deploy jobs                          | Launch & assurance (not a user journey) | yes |
 | F-078   | Definition-of-done audit and first push               | Launch & assurance (not a user journey) | yes |
 | F-014   | Sign in with Google, Apple or Facebook                | Arrive & verify                         |     |
@@ -72,7 +72,6 @@ The engine exists and only the UI is missing, so these are the highest-value wor
 | F-005   | Deterministic integration test suite                            | Platform (not a user journey)           | yes |
 | F-015   | Home, search, categories and find-a-trade-by-code               | Home & discover                         | yes |
 | F-016   | View a seller's profile and Trust Passport                      | Home & discover                         | yes |
-| F-023   | Terms, agreement and payment detail in the workspace            | The trade workspace                     | yes |
 | F-028   | Delivery and evidence in the workspace                          | Deliver & inspect                       | yes |
 | F-029   | Capture and compare proof media                                 | Deliver & inspect                       | yes |
 | F-031   | Lifecycle exceptions: expiry, withdrawal and inspection updates | Issues & resolution                     | yes |
@@ -102,11 +101,11 @@ The same work counted per ticket. Useful for the detail in `docs/tickets/`, not 
 it counts backend and frontend layers separately, which is how the build drifted.
 
 ```
-MVP   ███████████████████████···········  73/109  (67%)
-Total ███████████████···················  73/168  (43%)
+MVP   ███████████████████████···········  74/109  (68%)
+Total ███████████████···················  74/168  (44%)
 ```
 
-36 MVP tickets left, 59 deferred past it.
+35 MVP tickets left, 59 deferred past it.
 
 ### Tickets in progress
 
@@ -116,26 +115,26 @@ Total ███████████████··············�
 
 ### Tickets ready to start (MVP first)
 
-| Ticket | Title                                                                     | MVP |
-| ------ | ------------------------------------------------------------------------- | --- |
-| T-029  | Isolate the integration suite's shared Redis and queues                   | yes |
-| T-055  | Merchant applications and certification                                   | yes |
-| T-080  | Disputes core                                                             | yes |
-| T-119  | Cancellation and refunds                                                  | yes |
-| T-194  | Trade workspace supporting screens: funding, terms, agreement and payment | yes |
-| T-197  | Proof media: capture, check and compare                                   | yes |
-| T-198  | Lifecycle exceptions and trade extras                                     | yes |
-| T-213  | Tablet: fulfil, deliver, inspect and payouts                              | yes |
-| T-034  | Social login                                                              |     |
-| T-067  | IMEI verification                                                         |     |
-| T-076  | Chargebacks, reconciliation and settlement operations                     |     |
-| T-085  | Logistics schema and Park seed                                            |     |
-| T-100  | Support tickets (M10)                                                     |     |
-| T-101  | Risk and fraud (M13)                                                      |     |
-| T-103  | Administration: impersonation and admin action log (M14, adapted)         |     |
-| T-108  | Trade messaging                                                           |     |
-| T-155  | Location catalog management                                               |     |
-| T-219  | TrustOps: people development                                              |     |
+| Ticket | Title                                                             | MVP |
+| ------ | ----------------------------------------------------------------- | --- |
+| T-029  | Isolate the integration suite's shared Redis and queues           | yes |
+| T-055  | Merchant applications and certification                           | yes |
+| T-080  | Disputes core                                                     | yes |
+| T-119  | Cancellation and refunds                                          | yes |
+| T-197  | Proof media: capture, check and compare                           | yes |
+| T-198  | Lifecycle exceptions and trade extras                             | yes |
+| T-208  | Desktop: propose, agree and fund                                  | yes |
+| T-213  | Tablet: fulfil, deliver, inspect and payouts                      | yes |
+| T-034  | Social login                                                      |     |
+| T-067  | IMEI verification                                                 |     |
+| T-076  | Chargebacks, reconciliation and settlement operations             |     |
+| T-085  | Logistics schema and Park seed                                    |     |
+| T-100  | Support tickets (M10)                                             |     |
+| T-101  | Risk and fraud (M13)                                              |     |
+| T-103  | Administration: impersonation and admin action log (M14, adapted) |     |
+| T-108  | Trade messaging                                                   |     |
+| T-155  | Location catalog management                                       |     |
+| T-219  | TrustOps: people development                                      |     |
 
 ### Tickets blocked on an owner decision
 
@@ -147,41 +146,40 @@ Total ███████████████··············�
 
 ### Remaining MVP tickets
 
-| Ticket | Title                                                                     | MVP |
-| ------ | ------------------------------------------------------------------------- | --- |
-| T-005  | Hosting confirmation and real deploy jobs                                 | yes |
-| T-029  | Isolate the integration suite's shared Redis and queues                   | yes |
-| T-055  | Merchant applications and certification                                   | yes |
-| T-056  | Listings lifecycle, images and stock                                      | yes |
-| T-057  | Search and discovery (M19)                                                | yes |
-| T-063  | Orders and multi-item trades (M9)                                         | yes |
-| T-080  | Disputes core                                                             | yes |
-| T-081  | Evidence comparison and dispute read models                               | yes |
-| T-102  | Reputation and ratings (M12)                                              | yes |
-| T-113  | Home and discovery                                                        | yes |
-| T-114  | Seller profile and Trust Passport                                         | yes |
-| T-119  | Cancellation and refunds                                                  | yes |
-| T-120  | Disputes (buyer and seller)                                               | yes |
-| T-121  | Apply for merchant certification                                          | yes |
-| T-122  | Shop and listings                                                         | yes |
-| T-126  | Trust, account and settings                                               | yes |
-| T-143  | Disputes                                                                  | yes |
-| T-154  | Merchant certification review                                             | yes |
-| T-180  | End-to-end critical paths                                                 | yes |
-| T-182  | Security review                                                           | yes |
-| T-183  | Definition-of-done audit and first push                                   | yes |
-| T-194  | Trade workspace supporting screens: funding, terms, agreement and payment | yes |
-| T-196  | Trade workspace supporting screens: resolution and issue reporting        | yes |
-| T-197  | Proof media: capture, check and compare                                   | yes |
-| T-198  | Lifecycle exceptions and trade extras                                     | yes |
-| T-199  | Resolution execution: return track                                        | yes |
-| T-200  | Resolution execution: replacement and mutual settlement                   | yes |
-| T-202  | Seller shop settings and catalogue import                                 | yes |
-| T-204  | Account basics, money documents and system states                         | yes |
-| T-205  | Account security and lifecycle                                            | yes |
-| T-207  | Desktop: arrive, home and discover                                        | yes |
-| T-208  | Desktop: propose, agree and fund                                          | yes |
-| T-209  | Desktop: fulfil, deliver, inspect and complete                            | yes |
-| T-212  | Tablet: arrive, home, discover, propose and fund                          | yes |
-| T-213  | Tablet: fulfil, deliver, inspect and payouts                              | yes |
-| T-221  | Desktop and tablet: issues and resolution                                 | yes |
+| Ticket | Title                                                              | MVP |
+| ------ | ------------------------------------------------------------------ | --- |
+| T-005  | Hosting confirmation and real deploy jobs                          | yes |
+| T-029  | Isolate the integration suite's shared Redis and queues            | yes |
+| T-055  | Merchant applications and certification                            | yes |
+| T-056  | Listings lifecycle, images and stock                               | yes |
+| T-057  | Search and discovery (M19)                                         | yes |
+| T-063  | Orders and multi-item trades (M9)                                  | yes |
+| T-080  | Disputes core                                                      | yes |
+| T-081  | Evidence comparison and dispute read models                        | yes |
+| T-102  | Reputation and ratings (M12)                                       | yes |
+| T-113  | Home and discovery                                                 | yes |
+| T-114  | Seller profile and Trust Passport                                  | yes |
+| T-119  | Cancellation and refunds                                           | yes |
+| T-120  | Disputes (buyer and seller)                                        | yes |
+| T-121  | Apply for merchant certification                                   | yes |
+| T-122  | Shop and listings                                                  | yes |
+| T-126  | Trust, account and settings                                        | yes |
+| T-143  | Disputes                                                           | yes |
+| T-154  | Merchant certification review                                      | yes |
+| T-180  | End-to-end critical paths                                          | yes |
+| T-182  | Security review                                                    | yes |
+| T-183  | Definition-of-done audit and first push                            | yes |
+| T-196  | Trade workspace supporting screens: resolution and issue reporting | yes |
+| T-197  | Proof media: capture, check and compare                            | yes |
+| T-198  | Lifecycle exceptions and trade extras                              | yes |
+| T-199  | Resolution execution: return track                                 | yes |
+| T-200  | Resolution execution: replacement and mutual settlement            | yes |
+| T-202  | Seller shop settings and catalogue import                          | yes |
+| T-204  | Account basics, money documents and system states                  | yes |
+| T-205  | Account security and lifecycle                                     | yes |
+| T-207  | Desktop: arrive, home and discover                                 | yes |
+| T-208  | Desktop: propose, agree and fund                                   | yes |
+| T-209  | Desktop: fulfil, deliver, inspect and complete                     | yes |
+| T-212  | Tablet: arrive, home, discover, propose and fund                   | yes |
+| T-213  | Tablet: fulfil, deliver, inspect and payouts                       | yes |
+| T-221  | Desktop and tablet: issues and resolution                          | yes |
