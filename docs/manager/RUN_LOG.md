@@ -6,6 +6,10 @@ cost and to find work to resume.
 
 ## Waiting on the owner
 
+- **F-037 viewer seam defaults** (merged 2026-11-13; listed in `docs/superpowers/plans/2026-11-13-f-037-viewer-seam.md`):
+  - **new:** "has sold" means being the seller on a COMPLETED, SETTLED or RESOLVED_RELEASED trade. Funded, in-flight and refunded sales do not count. Is that the right line?
+  - **new:** the viewer's facts are only as fresh as the last token refresh. A seller whose first sale has just completed sees Payouts after the next refresh, not at once. Is that acceptable?
+  - **new:** `certifiedMerchant` is now real, so a certified merchant's shell is locked to Sell (design §6.3). `parkAgent` stays `none` until T-091.
 - **F-030 / T-066 / T-075 refund and cancellation defaults** (on branch `f-030-cancel-refund`, not merged; listed in `docs/superpowers/plans/2026-11-11-f-030-refunds-backend.md`):
   - **new:** the reference screen's 12-hour auto-approve of a cancellation request is in no spec, so it is not built. Should it be?
   - **new:** "Contest" is a plain decline, with no TrustOps hold. A declined request cannot be asked again.
@@ -706,3 +710,29 @@ VALUE` cannot work here at all (drizzle runs every pending migration in one tran
 - Feature costs, together: 5h-cost=52 week-cost=7. That covers F-019 (finish, review, fix, merge) and F-030 (fix, merge).
 - Next: the F-030 UI layer (T-119), then F-023, F-028 and F-029 in journey order. F-037, F-044 and F-045 remain Backend done,
   UI outstanding. Watch backend-api for flaky tests under turbo load.
+
+## 2026-11-13 13:00 WAT — run summary
+
+- Usage at start: 5h 4%, week 69%. At end: 5h 25%, week 71%.
+- Capacity: 1 (est about 30, est_week 4). The only other candidate, the F-030 UI (T-119), is also web-app-ui, so the two could not run in parallel.
+- Features: F-037 (merged, Done).
+- F-037 viewer seam (opus, because the feature absorbs T-073 and the work is session security). This closes the owner's 2026-11-12 yes.
+  - Backend: new route `GET /me/viewer` in trades, returning `{hasSold, certifiedMerchant}`, CONSUMER only, at 60 per minute per user and IP.
+  - Session hint: app-kit's auth route seals those facts into the HMAC-signed `komtru_session` hint on sign-in and refresh, through a `describeSession` option.
+  - `resolveViewer` opens the hint, falling back to anonymous.
+  - No migration. Test prefix `komtru_f037`, Redis db 3.
+- Review:
+  - 1 must-fix: the viewer read did not forward `x-forwarded-for`, so the IP rate limit keyed every user on the web server.
+  - 5 should-fix items:
+    - keep the facts on a failed refresh read, for the same subject only (a digest of `sub`);
+    - skip the read for non-CONSUMER sessions;
+    - add tests for the STAFF 403 and the 429;
+    - fix a timeout listener leak;
+    - make `seal` strict.
+  - All were fixed.
+- Merge checks:
+  - In the worktree: package build, then lint and typecheck for the five touched packages, and the format check. The fixer's full suites passed: backend-api 5513, web-app-ui 790, app-kit 280, api-client 290, shared-types 203.
+  - On `main`: package build, then turbo lint, typecheck and test with infra on, across the touched packages and the apps that consume app-kit, gave 27/28. Only backend-api test failed: 1 failure, the `relay.int.test.ts` "waits for an older uncommitted transaction" timing test, at 4.6s under load. It passed 3 out of 3 times alone. The merge touched no platform/events code.
+  - format:check is clean.
+- Feature costs: F-037 seam (implement+review+fix+merge) 5h-cost=21 week-cost=2.
+- Next: the F-030 UI layer (T-119), then F-023, F-028 and F-029 in journey order. F-030, F-044 and F-045 remain Backend done, UI outstanding. The relay test is flaky under turbo load and is a candidate for F-005.
