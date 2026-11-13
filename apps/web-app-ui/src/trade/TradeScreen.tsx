@@ -37,6 +37,7 @@ import { BuyerChoose } from './create/BuyerChoose';
 import { isRequestShaped, isRequestSpec, isSellerOffer } from './create/request';
 import { SellerRequest } from './create/SellerRequest';
 import { ProofUpload } from './ProofUpload';
+import { TradeExpired } from './terms/TradeExpired';
 import { Workspace } from './workspace/Workspace';
 import { isWorkspaceStatus, type WorkspaceTab } from './workspace-state';
 
@@ -105,9 +106,11 @@ function TradeState({ trade, tab }: { trade: TradeView; tab: WorkspaceTab }): Re
       if (trade.yourRole === 'BUYER' && isSellerOffer(trade.initiatorRole, trade.terms?.itemSpec))
         return <BuyerChoose trade={trade} />;
       return <AnswerProposal trade={trade} />;
+    case 'EXPIRED':
+      // EX-01: an agreement that was accepted and never funded. An invitation that lapsed is the plain closed screen.
+      return trade.acceptedAt === null ? <Closed trade={trade} /> : <TradeExpired trade={trade} />;
     case 'DECLINED':
     case 'CANCELLED':
-    case 'EXPIRED':
       return <Closed trade={trade} />;
     default:
       return <MovedOn trade={trade} />;
