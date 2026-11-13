@@ -31,7 +31,7 @@ describe.runIf(infraEnabled)('GET /me/viewer', () => {
     await redis.quit();
   });
 
-  const appFor = (userId: string | null) => {
+  const appFor = (userId: string | null, scope: 'CONSUMER' | 'STAFF' = 'CONSUMER') => {
     const app = express();
     app.use(express.json());
     const router = express.Router();
@@ -40,7 +40,7 @@ describe.runIf(infraEnabled)('GET /me/viewer', () => {
       {
         logger: testLogger,
         resolveActor: () =>
-          Promise.resolve(userId === null ? ANONYMOUS_ACTOR : actorFor(testPrincipal(userId))),
+          Promise.resolve(userId === null ? ANONYMOUS_ACTOR : actorFor(testPrincipal(userId, { scope }))),
         rateLimit: createRateLimitGate({ redis, logger: testLogger, keyPrefix: `viewer-${randomUUID()}` }),
         idempotency: (_input, run) => run(),
       },
@@ -68,6 +68,18 @@ describe.runIf(infraEnabled)('GET /me/viewer', () => {
 
   it('answers nobody who is not signed in', async () => {
     expect((await appFor(null).get('/v1/me/viewer')).status).toBe(401);
+  });
+
+  it('refuses a session that is not a consumer one', async () => {
+    expect((await appFor(await person(t), 'STAFF').get('/v1/me/viewer')).status).toBe(403);
+  });
+
+  it('answers 429 once the per-person budget is spent', async () => {
+    const app = appFor(await person(t));
+    for (let call = 0; call < 60; call += 1) expect((await app.get('/v1/me/viewer')).status).toBe(200);
+    const refused = await app.get('/v1/me/viewer');
+    expect(refused.status).toBe(429);
+    expect(refused.headers['retry-after']).toBeDefined();
   });
 
   it('says nothing has been sold, and no certification, for someone who has done nothing', async () => {
