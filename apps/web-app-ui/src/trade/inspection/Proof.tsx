@@ -2,39 +2,12 @@
 
 // Z4's two columns of evidence. The seller's pre-shipment media come from private storage as short-lived signed
 // URLs (read per file, never kept in the page), and the delivery evidence is what the platform recorded.
-import { useFileUrl, type useInspection } from '@komtru/api-client/react';
-import { Skeleton, TermList, TermRow } from '@komtru/ui-kit';
+import type { useInspection } from '@komtru/api-client/react';
+import { TermList, TermRow } from '@komtru/ui-kit';
 import { whenLabel } from '../format';
+import { FileTile } from '../proof/MediaGrid';
 
 type Read = NonNullable<ReturnType<typeof useInspection>['data']>;
-
-function ProofTile({ fileId, label }: { fileId: string; label: string }): React.JSX.Element {
-  const file = useFileUrl(fileId);
-  const frame =
-    'aspect-square w-full overflow-hidden rounded-md border border-solid border-border-hairline bg-surface-secondary object-cover';
-  if (file.isPending) return <Skeleton width="full" lines={3} />;
-  if (file.isError) {
-    return (
-      <p
-        role="alert"
-        className="flex aspect-square items-center justify-center rounded-md bg-surface-secondary p-[8px] text-center text-[11px] text-risk-on-soft"
-      >
-        <span>
-          {label} didn’t load.{' '}
-          <button type="button" className="underline" onClick={() => void file.refetch()}>
-            Try again
-          </button>
-        </span>
-      </p>
-    );
-  }
-  return file.data.contentType.startsWith('video/') ? (
-    <video src={file.data.url} controls className={frame} aria-label={label} />
-  ) : (
-    // eslint-disable-next-line @next/next/no-img-element -- a short-lived signed URL, not an optimisable asset
-    <img src={file.data.url} alt={label} className={frame} />
-  );
-}
 
 /** "Seller's proof — before shipping": the media the seller attached when they accepted. */
 export function SellerProof({ read, seller }: { read: Read; seller: string }): React.JSX.Element {
@@ -50,7 +23,7 @@ export function SellerProof({ read, seller }: { read: Read; seller: string }): R
         <ul className="mb-[14px] grid list-none grid-cols-3 gap-[8px] p-0">
           {media.map((item, index) => (
             <li key={item.fileId}>
-              <ProofTile fileId={item.fileId} label={`Seller’s proof ${String(index + 1)}`} />
+              <FileTile fileId={item.fileId} label={`Seller’s proof ${String(index + 1)}`} />
             </li>
           ))}
         </ul>
