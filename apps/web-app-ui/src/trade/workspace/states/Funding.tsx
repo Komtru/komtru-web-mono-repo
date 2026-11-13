@@ -2,14 +2,13 @@
 
 import { useDeliveryDeadline } from '@komtru/api-client/react';
 import { ActionStack, Button, CodeCard, SectionLabel, StatusHero, VersionTimeline } from '@komtru/ui-kit';
-import { BACK_TO_TRADES, ItemSummary, versionSteps } from '../../parts';
 import { stateCopy } from '../../workspace-copy';
-import { fundHref, shipHref } from '../../workspace-state';
+import { shipHref } from '../../workspace-state';
+import { AwaitingFundingBody } from '../../terms/AwaitingFundingBody';
 import { DeliveryTime } from '../DeliveryTime';
 import {
   BannerView,
   Deadline,
-  FeeList,
   Fulfilment,
   FurtherViews,
   MoneyRows,
@@ -18,35 +17,11 @@ import {
 } from '../shared';
 
 /**
- * CWT-01, and TC-06 before it: the agreement is recorded and nobody has paid. The buyer is led to fund it
- * (F-024, `/trade/[id]/fund`); the seller is told they will hear when the buyer has.
+ * CWT-01 and TW-01, and TC-06 before them: the agreement is recorded and nobody has paid. The body is
+ * `terms/AwaitingFundingBody`; the buyer is led to fund it (F-024, `/trade/[id]/fund`).
  */
 export function AwaitingFunding({ trade, role }: BodyProps): React.JSX.Element {
-  const copy = stateCopy('PENDING_PAYMENT', role, { version: trade.terms?.versionNumber });
-  return (
-    <>
-      {copy.hero && (
-        <StatusHero tone="success" as="h2" title={copy.hero.title}>
-          {copy.hero.body}
-        </StatusHero>
-      )}
-      {copy.banner && <BannerView banner={copy.banner} />}
-      <ItemSummary trade={trade} />
-      <FeeList trade={trade} role={role} />
-      <SectionLabel>Agreement history</SectionLabel>
-      <VersionTimeline aria-label="Versions of this agreement" steps={versionSteps(trade)} />
-      <p className="mt-[12px] text-[11.5px] leading-[1.6] text-trust-gray">{copy.nextStep}</p>
-      {role === 'BUYER' && (
-        <ActionStack className="mt-[12px]">
-          <Button asChild>
-            <a href={fundHref(trade.id)}>Fund this trade</a>
-          </Button>
-        </ActionStack>
-      )}
-      <CodeCard label="Trade Code" code={trade.tradeCode} className="mt-[16px]" />
-      <ActionStack>{BACK_TO_TRADES}</ActionStack>
-    </>
-  );
+  return <AwaitingFundingBody trade={trade} role={role} />;
 }
 
 /** CWT-02 (and Customer-3's buyer view): paid for, waiting on the seller to ship. */

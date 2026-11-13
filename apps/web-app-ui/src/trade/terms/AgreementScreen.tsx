@@ -16,10 +16,8 @@ import { addressLine, hoursLabel, naira } from '../format';
 import { readRequest } from '../create/read';
 import { ItemSummary, PartyHeader } from '../parts';
 import { tabHref } from '../workspace-state';
+import { agreementHref, historyHref } from './routes';
 import { TradeFrame } from './TradeFrame';
-
-export const agreementHref = (tradeId: string): string => `/trade/${tradeId}/agreement`;
-export const historyHref = (tradeId: string): string => `/trade/${tradeId}/agreement/history`;
 
 /** What the trade has nothing agreed to show for: a proposal still being answered, or one that ended unaccepted. */
 export function NothingAgreed({ trade }: { trade: TradeView }): React.JSX.Element {
@@ -39,7 +37,7 @@ export function NothingAgreed({ trade }: { trade: TradeView }): React.JSX.Elemen
 }
 
 /** The delivery row's words: how it goes, from the terms' own item specification. */
-function deliveryWords(trade: TradeView): string {
+export function deliveryWords(trade: TradeView): string {
   const reading = readRequest(trade);
   if (reading.mode === 'PARK') return `Park · ${reading.parkName ?? 'the chosen Park'}`;
   const charge = reading.deliveryChargeMinor;

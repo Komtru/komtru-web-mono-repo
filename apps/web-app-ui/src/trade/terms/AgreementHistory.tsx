@@ -13,7 +13,8 @@ import {
 import { naira, whenLabel } from '../format';
 import { versionSteps } from '../parts';
 import { tabHref } from '../workspace-state';
-import { NothingAgreed, agreementHref } from './AgreementScreen';
+import { NothingAgreed } from './AgreementScreen';
+import { agreementHref } from './routes';
 import { TradeFrame } from './TradeFrame';
 
 /**

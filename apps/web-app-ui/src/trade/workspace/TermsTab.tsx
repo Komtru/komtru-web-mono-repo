@@ -4,7 +4,7 @@ import type { TradeView } from '@komtru/api-client';
 import { ActionStack, Button, ReadyBanner, SectionLabel, VersionTimeline } from '@komtru/ui-kit';
 import { ItemSummary, PartyHeader, TermsRows, versionSteps } from '../parts';
 import { tabHref } from '../workspace-state';
-import { agreementHref, historyHref } from '../terms/AgreementScreen';
+import { agreementHref, historyHref } from '../terms/routes';
 import { FeeList } from './shared';
 
 /** CWT-07: the agreed version, which is the reference for fulfilment, inspection and any later dispute. */
