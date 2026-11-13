@@ -354,6 +354,7 @@ describe('AB4: not confirmed', () => {
     });
     show();
     fireEvent.click(await screen.findByRole('button', { name: 'Try payment again' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Start again' }));
     expect(await screen.findByLabelText('What you pay')).toBeTruthy();
     expect(callsTo(api.call, 'POST', '/trades/:code/payment/initiate')[0]).toMatchObject({
       body: { restart: true },
@@ -382,6 +383,7 @@ describe('AB4: when the platform refuses', () => {
     serve(status('NOT_CONFIRMED'), { 'POST /trades/:code/payment/initiate': refusal });
     show();
     fireEvent.click(await screen.findByRole('button', { name: 'Try payment again' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Start again' }));
     expect(await screen.findByRole('alert')).toBeTruthy();
     expect(screen.getByRole('heading', { level: 2, name: "We couldn't confirm this payment" })).toBeTruthy();
   });
@@ -394,7 +396,7 @@ describe('V3: funds protected', () => {
     expect(await screen.findByRole('heading', { level: 2, name: 'Funds protected' })).toBeTruthy();
     expect(screen.getByText(/₦458,780 is now held in escrow/)).toBeTruthy();
     expect(screen.getByText('Confirmed 10 Nov · 10:14')).toBeTruthy();
-    expect(screen.getByText(`Reference: ${REFERENCE}`)).toBeTruthy();
+    expect(within(screen.getByLabelText('Protected payment')).getByText(REFERENCE)).toBeTruthy();
     expect(screen.getByRole('link', { name: 'View delivery' }).getAttribute('href')).toBe(`/trade/${id(1)}`);
     expect(screen.getByRole('link', { name: 'Back to trade timeline' }).getAttribute('href')).toBe(
       `/trade/${id(1)}/activity`,
@@ -488,14 +490,15 @@ describe('F-023: the payment sequence in the v2 reference (TW-03, CWT-S03 to CWT
     expect(screen.getByText(/Your funds are protected for this trade/)).toBeTruthy();
     expect(screen.queryByText(/wallet/i)).toBeNull();
     expect(screen.getByRole('link', { name: 'Cancel' }).getAttribute('href')).toBe(`/trade/${id(1)}`);
-    expect(screen.queryByText('Awaiting provider confirmation')).toBeNull();
+    expect(screen.queryByText('A payment was started and not completed')).toBeNull();
   });
 
   it('TW-03: says payment is awaiting the provider when an attempt has been started and not confirmed', async () => {
     serve(status('AWAITING_PAYMENT', { status: 'INITIATED' }));
     show();
-    expect(await screen.findByText('Awaiting provider confirmation')).toBeTruthy();
-    expect(screen.getByText(/Do not dispatch while payment is pending/)).toBeTruthy();
+    expect(await screen.findByText('A payment was started and not completed')).toBeTruthy();
+    expect(screen.getByText(/Nothing has been charged or confirmed yet/)).toBeTruthy();
+    expect(screen.queryByText(/Keep this screen open/)).toBeNull();
   });
 
   it('CWT-S04: reviews the item, the amounts and the method before anything is charged', async () => {
@@ -566,5 +569,109 @@ describe('F-023: the payment sequence in the v2 reference (TW-03, CWT-S03 to CWT
       `/trade/${id(1)}`,
     );
     await expectNoAxeViolations(container, SHELL_RULES);
+  });
+});
+
+describe('F-023 review: the money paths', () => {
+  it('CWT-S07: checking again is the primary action and survives; starting again needs a confirmation that names the risk', async () => {
+    serve(status('NOT_CONFIRMED'), {
+      'POST /trades/:code/payment/confirm': status('VERIFYING'),
+      'POST /trades/:code/payment/initiate': initiated(),
+    });
+    show();
+    const buttons = (await screen.findAllByRole('button')).map((b) => b.textContent);
+    expect(buttons.indexOf("I've sent it — check again")).toBeLessThan(buttons.indexOf('Try payment again'));
+    fireEvent.click(screen.getByRole('button', { name: 'Try payment again' }));
+    expect(await screen.findByText(/the one you already used stops being valid/)).toBeTruthy();
+    expect(callsTo(api.call, 'POST', '/trades/:code/payment/initiate')).toHaveLength(0);
+    fireEvent.click(screen.getByRole('button', { name: 'Keep it' }));
+    fireEvent.click(screen.getByRole('button', { name: "I've sent it — check again" }));
+    await waitFor(() => expect(callsTo(api.call, 'POST', '/trades/:code/payment/confirm')).toHaveLength(1));
+    expect(callsTo(api.call, 'POST', '/trades/:code/payment/initiate')).toHaveLength(0);
+  });
+
+  it.each([
+    ['FUNDED', /Dispatch is now eligible/, 'Held until settlement', 'Funds protected'],
+    ['SHIPPED', null, 'Held until settlement', 'Funds protected'],
+    ['SETTLED', null, 'Paid', 'Payment released'],
+    ['RESOLVED_RELEASED', null, 'Paid', 'Payment released'],
+    ['RESOLVED_REFUNDED', null, 'Not paid', 'Payment refunded'],
+    ['CANCELLED_REFUNDED', null, 'Not paid', 'Payment refunded'],
+  ])('CWT-S06 on %s says only what is true of that status', async (tradeStatus, dispatch, payout, hero) => {
+    serve(status('CONFIRMED'), {}, workspaceTrade(tradeStatus));
+    show();
+    expect(await screen.findByRole('heading', { level: 2, name: hero })).toBeTruthy();
+    const rows = screen.getByLabelText('Protected payment');
+    expect(within(rows).getByText(payout)).toBeTruthy();
+    if (dispatch === null) expect(screen.queryByText('Dispatch is now eligible')).toBeNull();
+    else expect(screen.getByText('Dispatch is now eligible')).toBeTruthy();
+    if (tradeStatus !== 'FUNDED' && tradeStatus !== 'SHIPPED') {
+      expect(screen.queryByText(/still not released/)).toBeNull();
+      expect(screen.queryByText(/is now held in escrow/)).toBeNull();
+    }
+  });
+
+  it('CWT-S04: the three amounts come from the attempt once there is one, and add up', async () => {
+    serve(
+      status('AWAITING_PAYMENT', {
+        status: 'INITIATED',
+        amountMinor: '46000000',
+        itemAmountMinor: '45300000',
+        buyerProtectionFeeMinor: '700000',
+      }),
+    );
+    show();
+    fireEvent.click(await screen.findByRole('button', { name: 'Continue to payment' }));
+    const fees = await screen.findByLabelText('What you pay');
+    expect(within(fees).getByText('Amount').nextElementSibling?.textContent).toBe('₦453,000.00');
+    expect(within(fees).getByText('Buyer Protection Fee').nextElementSibling?.textContent).toBe('₦7,000.00');
+    expect(within(fees).getByText('Total').nextElementSibling?.textContent).toBe('₦460,000.00');
+  });
+
+  it('CWT-S04: repeats the seller delivery charge disclosure before the buyer commits', async () => {
+    serve(
+      status('NONE'),
+      {},
+      workspaceTrade('PENDING_PAYMENT', 'BUYER', {
+        terms: {
+          ...workspaceTrade('PENDING_PAYMENT').terms,
+          itemSpec: { brand: 'Apple', deliveryMode: 'COURIER', deliveryChargeMinor: '250000' },
+        },
+      }),
+    );
+    show();
+    fireEvent.click(await screen.findByRole('button', { name: 'Continue to payment' }));
+    await screen.findByRole('heading', { level: 1, name: 'Review Payment' });
+    expect(screen.getByText(/outside Komtru protection and is not part of this total/)).toBeTruthy();
+  });
+
+  it('holds the card button until the checkout is open, so a second tap opens no second one', async () => {
+    serve(status('NONE'), { 'POST /trades/:code/payment/initiate': initiated() });
+    let release: () => void = () => undefined;
+    const opened: PaystackInline[] = [];
+    const slow: Checkout = {
+      open: (setup) => {
+        opened.push(setup);
+        return new Promise<void>((resolve) => {
+          release = resolve;
+        });
+      },
+    };
+    renderWithApi(api.call, <FundTrade id={id(1)} checkout={slow} />);
+    fireEvent.click(await screen.findByLabelText(/Debit card or USSD/));
+    fireEvent.click(screen.getByRole('button', { name: 'Continue to payment' }));
+    const pay = await screen.findByRole('button', { name: 'Confirm & pay' });
+    fireEvent.click(pay);
+    await waitFor(() => expect(opened).toHaveLength(1));
+    expect((screen.getByRole('button', { name: 'Confirm & pay' }) as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.click(screen.getByRole('button', { name: 'Confirm & pay' }));
+    expect(opened).toHaveLength(1);
+    expect(callsTo(api.call, 'POST', '/trades/:code/payment/initiate')).toHaveLength(1);
+    release();
+    await waitFor(() =>
+      expect((screen.getByRole('button', { name: 'Confirm & pay' }) as HTMLButtonElement).disabled).toBe(
+        false,
+      ),
+    );
   });
 });

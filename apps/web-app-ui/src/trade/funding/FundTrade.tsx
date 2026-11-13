@@ -32,7 +32,7 @@ import { useEffect, useState } from 'react';
 import { isProblem, naira, nairaShort, partyName, problemMessage, whenLabel } from '../format';
 import { isRequestSpec } from '../create/request';
 import { readRequest } from '../create/read';
-import { ItemSummary } from '../parts';
+import { ConfirmSheet, ItemSummary } from '../parts';
 import { channelsFor, paystackCheckout, type Checkout, type PayMethod } from './checkout';
 
 export type { Checkout } from './checkout';
@@ -136,6 +136,10 @@ function Funding({
   const [step, setStep] = useState<'choose' | 'review' | 'transfer'>(via ?? 'choose');
   const [method, setMethod] = useState<PayMethod>('transfer');
   const [opened, setOpened] = useState(false);
+  // Held from the tap on a pay button until Paystack's checkout is on screen: loading its script can take seconds on a
+  // slow connection, and a second tap in that time would open a second modal over the first.
+  const [submitting, setSubmitting] = useState(false);
+  const [restarting, setRestarting] = useState(false);
   const [problem, setProblem] = useState<string | undefined>(undefined);
   const state = payment.displayState;
   const funded = isFundedTradeStatus(trade.status);
@@ -177,16 +181,20 @@ function Funding({
             setProblem("Paystack couldn't take this payment. Try again, or choose another way to pay."),
         },
       )
-      .catch(() => setProblem("Paystack's checkout didn't open. Check your connection and try again."));
+      .catch(() => setProblem("Paystack's checkout didn't open. Check your connection and try again."))
+      .finally(() => setSubmitting(false));
   };
 
   const onPay = () => {
+    if (submitting) return;
+    setSubmitting(true);
     setProblem(undefined);
     initiate.mutate(
       {},
       {
         onSuccess: (answer) => openCheckout(answer.inline),
         onError: (error) => {
+          setSubmitting(false);
           if (isProblem(error, 'CONFLICT')) {
             // Already paid for, or a payment in flight: re-read, and say so in case the status has not moved.
             void queryClient.invalidateQueries({ queryKey: tradeKeys.one(trade.id) });
@@ -207,15 +215,19 @@ function Funding({
       { restart: true },
       {
         onSuccess: () => {
+          setRestarting(false);
           setStep('choose');
           setOpened(false);
         },
-        onError: (error) => setProblem(problemMessage(error, "We couldn't start a new payment. Try again.")),
+        onError: (error) => {
+          setRestarting(false);
+          setProblem(problemMessage(error, "We couldn't start a new payment. Try again."));
+        },
       },
     );
   };
 
-  const busy = initiate.isPending || confirm.isPending;
+  const busy = initiate.isPending || confirm.isPending || submitting;
   const notice = problem === undefined ? null : <RiskBanner>{problem}</RiskBanner>;
 
   if (state === 'CONFIRMED' || funded) {
@@ -234,14 +246,30 @@ function Funding({
         busy={busy}
         onCheckAgain={onConfirm}
         onRestart={onRestart}
+        restarting={restarting}
+        setRestarting={setRestarting}
       />
     );
   }
 
   const fees = trade.fees;
   if (fees === null) return <NothingToPay id={trade.id} why="This trade has no agreed amount to pay yet." />;
-  const total = payment.attempt?.amountMinor ?? fees.buyerTotalMinor;
+  // One source for all three lines: the attempt's own amounts once one exists, the trade's fee snapshot before. Never
+  // a mix, or the lines stop adding up to the total on the screen where the buyer commits.
+  const shown = payment.attempt ?? {
+    itemAmountMinor: fees.itemAmountMinor,
+    buyerProtectionFeeMinor: fees.buyerProtectionFeeMinor,
+    amountMinor: fees.buyerTotalMinor,
+  };
+  const total = shown.amountMinor;
   const deliveryCharge = readRequest(trade).deliveryChargeMinor;
+  const deliveryNote =
+    deliveryCharge === undefined ? null : (
+      <p className="-mt-[8px] mb-[16px] text-[11.5px] leading-[1.5] text-slate">
+        The seller&apos;s delivery charge of {naira(deliveryCharge)} is paid to the seller outside Komtru
+        protection and is not part of this total.
+      </p>
+    );
 
   if (step === 'review') {
     const method_ = method === 'transfer' ? 'Bank transfer' : 'Debit card or USSD';
@@ -260,12 +288,13 @@ function Funding({
           aria-label="What you pay"
           className="mb-[16px] rounded-md border border-solid border-border-hairline bg-surface-primary p-[14px]"
         >
-          <FeeRow label="Amount">{naira(fees.itemAmountMinor)}</FeeRow>
-          <FeeRow label="Buyer Protection Fee">{naira(fees.buyerProtectionFeeMinor)}</FeeRow>
+          <FeeRow label="Amount">{naira(shown.itemAmountMinor)}</FeeRow>
+          <FeeRow label="Buyer Protection Fee">{naira(shown.buyerProtectionFeeMinor)}</FeeRow>
           <FeeRow label="Total" total>
             {naira(total)}
           </FeeRow>
         </dl>
+        {deliveryNote}
         <TermList aria-label="Payment method">
           <TermRow label="Method">{method_}</TermRow>
         </TermList>
@@ -334,18 +363,13 @@ function Funding({
         className="mb-[16px] rounded-md border border-solid border-border-hairline bg-surface-primary p-[14px]"
       >
         <FeeRow label="Trade reference">{trade.tradeCode}</FeeRow>
-        <FeeRow label="Item price">{naira(fees.itemAmountMinor)}</FeeRow>
-        <FeeRow label="Buyer Protection Fee">{naira(fees.buyerProtectionFeeMinor)}</FeeRow>
+        <FeeRow label="Item price">{naira(shown.itemAmountMinor)}</FeeRow>
+        <FeeRow label="Buyer Protection Fee">{naira(shown.buyerProtectionFeeMinor)}</FeeRow>
         <FeeRow label="Total to pay" total>
-          {naira(fees.buyerTotalMinor)}
+          {naira(total)}
         </FeeRow>
       </dl>
-      {deliveryCharge !== undefined && (
-        <p className="-mt-[8px] mb-[16px] text-[11.5px] leading-[1.5] text-slate">
-          The seller&apos;s delivery charge of {naira(deliveryCharge)} is paid to the seller outside Komtru
-          protection and is not part of this total.
-        </p>
-      )}
+      {deliveryNote}
       <fieldset className="m-0 border-0 p-0">
         <legend className="p-0">
           <SectionLabel as="p">Choose how to pay</SectionLabel>
@@ -381,9 +405,10 @@ function Funding({
         Your funds are protected for this trade. Seller payout stays locked until an authorised settlement
         outcome.
       </NoteBanner>
-      {payment.attempt !== null && state === 'AWAITING_PAYMENT' && (
-        <WarnBanner title="Awaiting provider confirmation">
-          Keep this screen open or return to the trade. Do not dispatch while payment is pending.
+      {state === 'AWAITING_PAYMENT' && (
+        <WarnBanner title="A payment was started and not completed">
+          Nothing has been charged or confirmed yet. Finish paying below, or return to the trade. Do not
+          dispatch while payment is pending.
         </WarnBanner>
       )}
       {notice}
@@ -449,6 +474,8 @@ function NotConfirmed({
   busy,
   onCheckAgain,
   onRestart,
+  restarting,
+  setRestarting,
 }: {
   trade: TradeView;
   payment: PaymentStatus;
@@ -456,6 +483,8 @@ function NotConfirmed({
   busy: boolean;
   onCheckAgain: () => void;
   onRestart: () => void;
+  restarting: boolean;
+  setRestarting: (open: boolean) => void;
 }): React.JSX.Element {
   const attempt = payment.attempt;
   return (
@@ -473,26 +502,64 @@ function NotConfirmed({
         <TermRow label="Trade">Awaiting funding</TermRow>
       </TermList>
       <p className="mb-[14px] text-[12.5px] leading-[1.6] text-slate">
-        Do not dispatch. You can retry an eligible payment method or return to the trade. If you contact
+        Do not dispatch. If you sent a transfer, check again before paying a second time. If you contact
         support, quote <span className="font-mono">{trade.tradeCode}</span>.
       </p>
       {notice}
       <ActionStack>
-        <Button type="button" disabled={busy} onClick={onRestart}>
-          Try payment again
-        </Button>
-        <Button type="button" variant="secondary" disabled={busy} onClick={onCheckAgain}>
+        {/* The safe action is the primary one: checking only reads. Starting again abandons the reference a
+            transfer may already be travelling to, so it is a quieter choice that asks first. */}
+        <Button type="button" disabled={busy} onClick={onCheckAgain}>
           I&apos;ve sent it — check again
+        </Button>
+        <Button
+          type="button"
+          variant="secondary"
+          disabled={busy}
+          onClick={() => {
+            setRestarting(true);
+          }}
+        >
+          Try payment again
         </Button>
         <Button asChild variant="secondary">
           <a href={tradeHref(trade.id)}>Return to trade</a>
         </Button>
       </ActionStack>
+      <ConfirmSheet
+        open={restarting}
+        title="Start the payment again?"
+        confirm="Start again"
+        pending={busy}
+        onConfirm={onRestart}
+        onClose={() => {
+          setRestarting(false);
+        }}
+      >
+        <p className="text-[12.5px] leading-[1.5] text-slate">
+          A new payment gets a new reference, and the one you already used stops being valid. If you have sent
+          a transfer, don&apos;t start again: check again instead, or the money may need our team to return
+          it.
+        </p>
+      </ConfirmSheet>
     </Frame>
   );
 }
 
-/** CWT-S06 (and V3): the money is held; the moment that unlocks the seller's dispatch. */
+/** What happened to the money, from the trade's own status: held, paid out to the seller, or returned. */
+type Outcome = 'held' | 'released' | 'refunded';
+const outcomeOf = (status: string): Outcome =>
+  status === 'SETTLED' || status === 'RESOLVED_RELEASED'
+    ? 'released'
+    : status === 'RESOLVED_REFUNDED' || status === 'CANCELLED_REFUNDED'
+      ? 'refunded'
+      : 'held';
+
+/**
+ * CWT-S06 (and V3): the money is held, paid out or returned, and the screen says which, because this address stays
+ * open for every status after payment. "Held until settlement" and "dispatch is eligible" are true only while the
+ * money is held and the seller has not shipped; they are not said of a trade that has since settled or refunded.
+ */
 function Protected({
   trade,
   payment,
@@ -505,38 +572,58 @@ function Protected({
   const attempt = payment.attempt;
   const amount = attempt?.amountMinor ?? trade.fees?.buyerTotalMinor;
   const seller = trade.counterparty ? partyName(trade.counterparty) : 'The seller';
+  const outcome = outcomeOf(trade.status);
+  const paid = amount === undefined ? 'Your payment' : nairaShort(amount);
+  const awaitingDispatch = trade.status === 'FUNDED' || !funded;
   return (
     <Frame title="Fund & Protect" back={tradeHref(trade.id)}>
-      <StatusHero tone="success" as="h2" title="Funds protected" className="pt-[32px]">
-        {amount === undefined ? 'Your payment' : nairaShort(amount)} is now held in escrow.{' '}
-        {funded
-          ? `${seller} is told it's safe to dispatch.`
-          : `${seller} will be told it's safe to dispatch as soon as the trade updates.`}
-      </StatusHero>
+      {outcome === 'held' && (
+        <StatusHero tone="success" as="h2" title="Funds protected" className="pt-[32px]">
+          {paid} is now held in escrow.
+          {trade.status === 'FUNDED' && ` ${seller} is told it's safe to dispatch.`}
+          {!funded && ` ${seller} will be told it's safe to dispatch as soon as the trade updates.`}
+        </StatusHero>
+      )}
+      {outcome === 'released' && (
+        <StatusHero tone="success" as="h2" title="Payment released" className="pt-[32px]">
+          {paid} was held in escrow and has been released to {seller}. This trade is settled.
+        </StatusHero>
+      )}
+      {outcome === 'refunded' && (
+        <StatusHero tone="info" as="h2" title="Payment refunded" className="pt-[32px]">
+          {paid} was held in escrow and has been returned to you. Nothing was paid to {seller}.
+        </StatusHero>
+      )}
       <TermList aria-label="Protected payment">
-        {amount !== undefined && <TermRow label="Protected amount">{naira(amount)}</TermRow>}
+        {amount !== undefined && (
+          <TermRow label={outcome === 'held' ? 'Protected amount' : 'Amount paid'}>{naira(amount)}</TermRow>
+        )}
         {attempt !== null && <TermRow label="Payment reference">{attempt.reference}</TermRow>}
-        <TermRow label="Payment state">Protected</TermRow>
-        <TermRow label="Seller payout">Held until settlement</TermRow>
+        <TermRow label="Payment state">
+          {outcome === 'held' ? 'Protected' : outcome === 'released' ? 'Released to the seller' : 'Refunded'}
+        </TermRow>
+        <TermRow label="Seller payout">
+          {outcome === 'held' ? 'Held until settlement' : outcome === 'released' ? 'Paid' : 'Not paid'}
+        </TermRow>
       </TermList>
       {payment.displayState === 'UNDER_REVIEW' && (
         <NoteBanner>
           Another payment for this trade is being checked by our team. You don&apos;t need to pay again.
         </NoteBanner>
       )}
-      {attempt !== null && attempt.displayState === 'CONFIRMED' && (
-        <ReadyBanner
-          title={attempt.confirmedAt === null ? 'Confirmed' : `Confirmed ${whenLabel(attempt.confirmedAt)}`}
-        >
-          Reference: {attempt.reference}
+      {attempt !== null && attempt.displayState === 'CONFIRMED' && attempt.confirmedAt !== null && (
+        <ReadyBanner title={`Confirmed ${whenLabel(attempt.confirmedAt)}`}>
+          The payment provider confirmed this payment.
         </ReadyBanner>
       )}
-      <ReadyBanner title="Dispatch is now eligible">
-        This follows the trade state and fulfilment terms. Seller payout is still not released.
-      </ReadyBanner>
+      {outcome === 'held' && awaitingDispatch && (
+        <ReadyBanner title="Dispatch is now eligible">
+          This follows the trade state and fulfilment terms. Seller payout is still not released.
+        </ReadyBanner>
+      )}
       <ActionStack>
         <Button asChild>
-          <a href={tradeHref(trade.id)}>View delivery</a>
+          <a href={tradeHref(trade.id)}>{outcome === 'held' ? 'View delivery' : 'View the trade'}</a>
         </Button>
         <Button asChild variant="secondary">
           <a href={`${tradeHref(trade.id)}/activity`}>Back to trade timeline</a>
