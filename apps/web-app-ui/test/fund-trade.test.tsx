@@ -160,7 +160,7 @@ describe('V1: choose how to pay', () => {
     expect(screen.queryByText(/Wallet/)).toBeNull();
     const methods = screen.getAllByRole('radio');
     expect(methods.map((m) => (m as HTMLInputElement).checked)).toEqual([true, false]);
-    expect(screen.getByRole('button', { name: 'Continue with bank transfer' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Continue to payment' })).toBeTruthy();
     expect(callsTo(api.call, 'POST', '/trades/:code/payment/initiate')).toHaveLength(0);
     await expectNoAxeViolations(container, SHELL_RULES);
   });
@@ -172,7 +172,8 @@ describe('V1: choose how to pay', () => {
     });
     show();
     fireEvent.click(await screen.findByLabelText(/Debit card or USSD/));
-    fireEvent.click(screen.getByRole('button', { name: 'Continue with card or USSD' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Continue to payment' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Confirm & pay' }));
     await waitFor(() => expect(fake.opened).toHaveLength(1));
     expect(fake.opened[0]).toMatchObject({
       key: 'pk_test_x',
@@ -187,7 +188,7 @@ describe('V1: choose how to pay', () => {
       body: {},
     });
     fake.succeed();
-    expect(await screen.findByText('Confirming your payment')).toBeTruthy();
+    expect(await screen.findByText('Verifying your payment')).toBeTruthy();
     expect(callsTo(api.call, 'POST', '/trades/:code/payment/confirm')).toHaveLength(1);
   });
 
@@ -200,7 +201,8 @@ describe('V1: choose how to pay', () => {
       ),
     });
     show();
-    fireEvent.click(await screen.findByRole('button', { name: 'Continue with bank transfer' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Continue to payment' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Confirm & pay' }));
     fireEvent.click(await screen.findByRole('button', { name: 'Show account details' }));
     expect(await screen.findByText('Add and verify an email address to pay.')).toBeTruthy();
     expect(fake.opened).toHaveLength(0);
@@ -214,7 +216,8 @@ describe('V2: bank transfer', () => {
       'POST /trades/:code/payment/confirm': status('VERIFYING'),
     });
     const { container } = show();
-    fireEvent.click(await screen.findByRole('button', { name: 'Continue with bank transfer' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Continue to payment' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Confirm & pay' }));
     expect(await screen.findByRole('heading', { level: 1, name: 'Bank Transfer' })).toBeTruthy();
     expect(screen.getByText('Transfer exactly').nextElementSibling?.textContent).toBe('₦458,780.00');
     await expectNoAxeViolations(container, SHELL_RULES);
@@ -223,7 +226,7 @@ describe('V2: bank transfer', () => {
     await waitFor(() => expect(fake.opened).toHaveLength(1));
     expect(fake.opened[0]?.channels).toEqual(['bank_transfer']);
     fake.succeed();
-    expect(await screen.findByText('Confirming your payment')).toBeTruthy();
+    expect(await screen.findByText('Verifying your payment')).toBeTruthy();
   });
 
   it('lets a buyer who closed the checkout after sending say so', async () => {
@@ -232,12 +235,13 @@ describe('V2: bank transfer', () => {
       'POST /trades/:code/payment/confirm': status('VERIFYING'),
     });
     show();
-    fireEvent.click(await screen.findByRole('button', { name: 'Continue with bank transfer' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Continue to payment' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Confirm & pay' }));
     fireEvent.click(await screen.findByRole('button', { name: 'Show account details' }));
     await waitFor(() => expect(fake.opened).toHaveLength(1));
     fake.close();
     fireEvent.click(await screen.findByRole('button', { name: 'I have sent the funds' }));
-    expect(await screen.findByText('Confirming your payment')).toBeTruthy();
+    expect(await screen.findByText('Verifying your payment')).toBeTruthy();
   });
 
   it('opens straight on the transfer step from its own address, and steps back to the methods', async () => {
@@ -254,7 +258,8 @@ describe('V2: bank transfer', () => {
     show();
     fireEvent.click(await screen.findByLabelText(/Debit card or USSD/));
     fireEvent.click(screen.getByLabelText(/Bank transfer/));
-    fireEvent.click(screen.getByRole('button', { name: 'Continue with bank transfer' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Continue to payment' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Confirm & pay' }));
     expect(await screen.findByRole('heading', { level: 1, name: 'Bank Transfer' })).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Back to payment methods' }));
     expect(await screen.findByLabelText('What you pay')).toBeTruthy();
@@ -264,7 +269,8 @@ describe('V2: bank transfer', () => {
   it('says so when Paystack cannot take the payment, and lets the buyer try again', async () => {
     serve(status('NONE'), { 'POST /trades/:code/payment/initiate': initiated() });
     show();
-    fireEvent.click(await screen.findByRole('button', { name: 'Continue with bank transfer' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Continue to payment' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Confirm & pay' }));
     fireEvent.click(await screen.findByRole('button', { name: 'Show account details' }));
     await waitFor(() => expect(fake.opened).toHaveLength(1));
     fake.fail();
@@ -276,7 +282,8 @@ describe('V2: bank transfer', () => {
   it('says the trade is already being paid for when the platform refuses a second payment', async () => {
     serve(status('NONE'), { 'POST /trades/:code/payment/initiate': problem('CONFLICT', 409) });
     show();
-    fireEvent.click(await screen.findByRole('button', { name: 'Continue with bank transfer' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Continue to payment' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Confirm & pay' }));
     fireEvent.click(await screen.findByRole('button', { name: 'Show account details' }));
     expect(await screen.findByText(/already been paid for, or a payment is in progress/)).toBeTruthy();
     expect(fake.opened).toHaveLength(0);
@@ -285,7 +292,8 @@ describe('V2: bank transfer', () => {
   it('never adds a channel the platform did not offer', async () => {
     serve(status('NONE'), { 'POST /trades/:code/payment/initiate': initiated(['card']) });
     show();
-    fireEvent.click(await screen.findByRole('button', { name: 'Continue with bank transfer' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Continue to payment' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Confirm & pay' }));
     fireEvent.click(await screen.findByRole('button', { name: 'Show account details' }));
     await waitFor(() => expect(fake.opened).toHaveLength(1));
     expect(fake.opened[0]?.channels).toEqual(['card']);
@@ -296,7 +304,7 @@ describe('AB3: verifying', () => {
   it('names what is being waited on and how long, with no bare spinner', async () => {
     serve(status('VERIFYING'));
     const { container } = show();
-    const loader = (await screen.findByText('Confirming your payment')).closest('[role="status"]');
+    const loader = (await screen.findByText('Verifying your payment')).closest('[role="status"]');
     expect(loader).not.toBeNull();
     expect(within(loader as HTMLElement).getByText(/usually under 30 seconds/)).toBeTruthy();
     expect(screen.queryByRole('button', { name: /pay|transfer/i })).toBeNull();
@@ -314,7 +322,7 @@ describe('AB3 to V3: polling', () => {
     let answer = 'VERIFYING';
     serve(() => status(answer));
     show();
-    expect(await screen.findByText('Confirming your payment')).toBeTruthy();
+    expect(await screen.findByText('Verifying your payment')).toBeTruthy();
     answer = 'CONFIRMED';
     await vi.advanceTimersByTimeAsync(PAYMENT_POLL_MS + 50);
     expect(await screen.findByRole('heading', { level: 2, name: 'Funds protected' })).toBeTruthy();
@@ -337,7 +345,7 @@ describe('AB4: not confirmed', () => {
     expect(screen.getByText(/KMT-9042800-NG/)).toBeTruthy();
     await expectNoAxeViolations(container, SHELL_RULES);
     fireEvent.click(screen.getByRole('button', { name: "I've sent it — check again" }));
-    expect(await screen.findByText('Confirming your payment')).toBeTruthy();
+    expect(await screen.findByText('Verifying your payment')).toBeTruthy();
   });
 
   it('starts again with a new reference, back at the choice of method', async () => {
@@ -345,7 +353,7 @@ describe('AB4: not confirmed', () => {
       'POST /trades/:code/payment/initiate': initiated(),
     });
     show();
-    fireEvent.click(await screen.findByRole('button', { name: 'Start the payment again' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Try payment again' }));
     expect(await screen.findByLabelText('What you pay')).toBeTruthy();
     expect(callsTo(api.call, 'POST', '/trades/:code/payment/initiate')[0]).toMatchObject({
       body: { restart: true },
@@ -373,7 +381,7 @@ describe('AB4: when the platform refuses', () => {
   ])('stays on AB4 and says why after %s to start again', async (_, refusal) => {
     serve(status('NOT_CONFIRMED'), { 'POST /trades/:code/payment/initiate': refusal });
     show();
-    fireEvent.click(await screen.findByRole('button', { name: 'Start the payment again' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Try payment again' }));
     expect(await screen.findByRole('alert')).toBeTruthy();
     expect(screen.getByRole('heading', { level: 2, name: "We couldn't confirm this payment" })).toBeTruthy();
   });
@@ -387,8 +395,9 @@ describe('V3: funds protected', () => {
     expect(screen.getByText(/₦458,780 is now held in escrow/)).toBeTruthy();
     expect(screen.getByText('Confirmed 10 Nov · 10:14')).toBeTruthy();
     expect(screen.getByText(`Reference: ${REFERENCE}`)).toBeTruthy();
+    expect(screen.getByRole('link', { name: 'View delivery' }).getAttribute('href')).toBe(`/trade/${id(1)}`);
     expect(screen.getByRole('link', { name: 'Back to trade timeline' }).getAttribute('href')).toBe(
-      `/trade/${id(1)}`,
+      `/trade/${id(1)}/activity`,
     );
     await expectNoAxeViolations(container, SHELL_RULES);
   });
@@ -467,5 +476,95 @@ describe('everything else', () => {
     show();
     expect(await screen.findByText("This trade isn't waiting for payment.")).toBeTruthy();
     expect(screen.queryByRole('radio')).toBeNull();
+  });
+});
+
+describe('F-023: the payment sequence in the v2 reference (TW-03, CWT-S03 to CWT-S07)', () => {
+  it('TW-03 and CWT-S03: names the trade, says the funds are protected, and offers no wallet', async () => {
+    serve(status('NONE'));
+    show();
+    const fees = await screen.findByLabelText('What you pay');
+    expect(within(fees).getByText('Trade reference').nextElementSibling?.textContent).toBe('KMT-9042800-NG');
+    expect(screen.getByText(/Your funds are protected for this trade/)).toBeTruthy();
+    expect(screen.queryByText(/wallet/i)).toBeNull();
+    expect(screen.getByRole('link', { name: 'Cancel' }).getAttribute('href')).toBe(`/trade/${id(1)}`);
+    expect(screen.queryByText('Awaiting provider confirmation')).toBeNull();
+  });
+
+  it('TW-03: says payment is awaiting the provider when an attempt has been started and not confirmed', async () => {
+    serve(status('AWAITING_PAYMENT', { status: 'INITIATED' }));
+    show();
+    expect(await screen.findByText('Awaiting provider confirmation')).toBeTruthy();
+    expect(screen.getByText(/Do not dispatch while payment is pending/)).toBeTruthy();
+  });
+
+  it('CWT-S04: reviews the item, the amounts and the method before anything is charged', async () => {
+    serve(status('NONE'), { 'POST /trades/:code/payment/initiate': initiated() });
+    const { container } = show();
+    fireEvent.click(await screen.findByLabelText(/Debit card or USSD/));
+    fireEvent.click(screen.getByRole('button', { name: 'Continue to payment' }));
+    expect(await screen.findByRole('heading', { level: 1, name: 'Review Payment' })).toBeTruthy();
+    const fees = screen.getByLabelText('What you pay');
+    expect(within(fees).getByText('Total').nextElementSibling?.textContent).toBe('₦458,780.00');
+    expect(within(screen.getByLabelText('Payment method')).getByText('Debit card or USSD')).toBeTruthy();
+    expect(screen.getByText(/only after the payment provider confirms/)).toBeTruthy();
+    expect(callsTo(api.call, 'POST', '/trades/:code/payment/initiate')).toHaveLength(0);
+    await expectNoAxeViolations(container, SHELL_RULES);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Back' }));
+    expect(await screen.findByLabelText<HTMLInputElement>(/Debit card or USSD/)).toMatchObject({
+      checked: true,
+    });
+  });
+
+  it('CWT-S05: lists the reference, amount and states, says waiting is not protected, and checks again on request', async () => {
+    serve(status('VERIFYING'));
+    const { container } = show();
+    const rows = await screen.findByLabelText('Payment');
+    expect(within(rows).getByText(REFERENCE)).toBeTruthy();
+    expect(within(rows).getByText('₦458,780.00')).toBeTruthy();
+    expect(within(rows).getByText('Processing')).toBeTruthy();
+    expect(within(rows).getByText('Awaiting confirmation')).toBeTruthy();
+    expect(screen.getByText(/not the same as protected funds/)).toBeTruthy();
+    expect(screen.getByRole('link', { name: 'Return to trade' }).getAttribute('href')).toBe(
+      `/trade/${id(1)}`,
+    );
+    await expectNoAxeViolations(container, SHELL_RULES);
+
+    const before = callsTo(api.call, 'GET', '/trades/:code/payment/status').length;
+    fireEvent.click(screen.getByRole('button', { name: 'Check status' }));
+    await waitFor(() =>
+      expect(callsTo(api.call, 'GET', '/trades/:code/payment/status').length).toBeGreaterThan(before),
+    );
+    expect(callsTo(api.call, 'POST', '/trades/:code/payment/confirm')).toHaveLength(0);
+  });
+
+  it('CWT-S06: states the protected amount, reference and that the payout is held, and that dispatch is eligible', async () => {
+    serve(status('CONFIRMED'), {}, workspaceTrade('FUNDED'));
+    const { container } = show();
+    const rows = await screen.findByLabelText('Protected payment');
+    expect(within(rows).getByText('Protected amount').nextElementSibling?.textContent).toBe('₦458,780.00');
+    expect(within(rows).getByText(REFERENCE)).toBeTruthy();
+    expect(within(rows).getByText('Protected')).toBeTruthy();
+    expect(within(rows).getByText('Held until settlement')).toBeTruthy();
+    expect(screen.getByText('Dispatch is now eligible')).toBeTruthy();
+    await expectNoAxeViolations(container, SHELL_RULES);
+  });
+
+  it('CWT-S07: says no protected state exists, lists what was tried, and offers to try again or go back', async () => {
+    serve(status('NOT_CONFIRMED'));
+    const { container } = show();
+    expect(await screen.findByText(/No protected-funds state has been created/)).toBeTruthy();
+    const rows = screen.getByLabelText('Payment');
+    expect(within(rows).getByText('₦458,780.00')).toBeTruthy();
+    expect(within(rows).getByText(REFERENCE)).toBeTruthy();
+    expect(within(rows).getByText('Not confirmed')).toBeTruthy();
+    expect(within(rows).getByText('Awaiting funding')).toBeTruthy();
+    expect(screen.getByText(/Do not dispatch/)).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Try payment again' })).toBeTruthy();
+    expect(screen.getByRole('link', { name: 'Return to trade' }).getAttribute('href')).toBe(
+      `/trade/${id(1)}`,
+    );
+    await expectNoAxeViolations(container, SHELL_RULES);
   });
 });
