@@ -42,13 +42,13 @@ sequence (CWT-S03 to CWT-S07, which are TW-03's states), and the expired trade (
 ## Steps (each committed when green)
 
 1. [x] Plan (this file).
-2. [ ] `TradeFrame` and the agreement pages CWT-S01, CWT-S02 with routes and links from the Terms tab.
-3. [ ] TW-01: the awaiting-funding detail.
-4. [ ] TW-02 fulfilment terms and TW-04 policies with routes.
-5. [ ] EX-01 trade expired, wired into `TradeScreen`.
-6. [ ] Payment sequence in `FundTrade`: TW-03/CWT-S03 reference rows, CWT-S04 review step, CWT-S05, CWT-S06, CWT-S07.
-7. [ ] Axe checks, whole-package verification.
-8. [ ] Visual check against the v2 master (`docs/ui-review/T-194/`).
+2. [x] `TradeFrame` and the agreement pages CWT-S01, CWT-S02 with routes and links from the Terms tab.
+3. [x] TW-01: the awaiting-funding detail.
+4. [x] TW-02 fulfilment terms and TW-04 policies with routes.
+5. [x] EX-01 trade expired, wired into `TradeScreen`.
+6. [x] Payment sequence in `FundTrade`: TW-03/CWT-S03 reference rows, CWT-S04 review step, CWT-S05, CWT-S06, CWT-S07.
+7. [x] Axe checks, whole-package verification.
+8. [x] Visual check against the v2 master (`docs/ui-review/T-194/`).
 
 Tests: jsdom component tests against a faked api-client call (`test/support/workspace.tsx`), one file per screen group,
 each ending with the axe check. Playwright e2e is waived: the repo has no e2e harness (T-192, T-193 precedent).
