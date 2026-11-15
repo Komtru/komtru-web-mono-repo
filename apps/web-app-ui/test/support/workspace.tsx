@@ -152,25 +152,24 @@ export const fileRead = (n: number, contentType = 'image/jpeg') => ({
 export const refundRow = (
   status: Refund['status'] = 'PROCESSED',
   over: Record<string, unknown> = {},
-): Refund =>
-  ({
-    id: id(501),
-    tradeId: id(1),
-    reference: 'refund-501',
-    status,
-    scope: 'FULL',
-    reason: 'MUTUAL_AGREEMENT',
-    currency: 'NGN',
-    itemAmountMinor: '45200000',
-    feeAmountMinor: '678000',
-    amountMinor: '45878000',
-    buyerProtectionFeeTreatment: 'REFUND',
-    failureReason: null,
-    requestedAt: '2026-11-14T10:00:00.000Z',
-    completedAt: status === 'PROCESSED' ? '2026-11-14T10:20:00.000Z' : null,
-    failedAt: null,
-    ...over,
-  }) as Refund;
+): Refund => ({
+  id: id(501),
+  tradeId: id(1),
+  reference: 'refund-501',
+  status,
+  scope: 'FULL',
+  reason: 'MUTUAL_AGREEMENT',
+  currency: 'NGN',
+  itemAmountMinor: '45200000',
+  feeAmountMinor: '678000',
+  amountMinor: '45878000',
+  buyerProtectionFeeTreatment: 'REFUND',
+  failureReason: null,
+  requestedAt: '2026-11-14T10:00:00.000Z',
+  completedAt: status === 'PROCESSED' ? '2026-11-14T10:20:00.000Z' : null,
+  failedAt: null,
+  ...over,
+});
 
 export const refundsRead = (...refunds: Refund[]) => ({ refunds });
 
