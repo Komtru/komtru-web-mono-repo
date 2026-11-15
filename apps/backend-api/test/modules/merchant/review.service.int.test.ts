@@ -23,7 +23,7 @@ import {
 import { infraEnabled } from '../../support/db-urls.js';
 import { useTestDatabase } from '../../support/db.js';
 import { outboxEventTypes, seedUser } from '../identity/support.js';
-import { completeDraft, logger, stubPorts, type StubPorts } from './support.js';
+import { completeDraft, logger, matching, stubPorts, type StubPorts } from './support.js';
 
 describe.runIf(infraEnabled)('the staff review service (T-055)', () => {
   const t = useTestDatabase();
@@ -82,10 +82,10 @@ describe.runIf(infraEnabled)('the staff review service (T-055)', () => {
       expect(all.total).toBe(3);
       expect(all.items.map((item) => item.businessName)).toEqual(['Both Ltd', 'Phones Ltd', 'Laptops Ltd']);
       expect(all.items[0]).toMatchObject({
-        caseNumber: expect.stringMatching(/^C-\d{6}$/),
+        caseNumber: matching(/^C-\d{6}$/),
         status: 'SUBMITTED',
         categories: ['PHONES', 'LAPTOPS'],
-        applicantPublicId: expect.stringMatching(/^KMT-/),
+        applicantPublicId: matching(/^KMT-/),
       });
 
       const byCategory = await listApplications(db(), {
@@ -284,7 +284,8 @@ describe.runIf(infraEnabled)('the staff review service (T-055)', () => {
       const p = ports();
       const { applicationId, draft } = await submitted(p);
       const first = draft.documents[0];
-      if (first) p.files.set(first.fileId, { ...(p.files.get(first.fileId) as never), status: 'TOMBSTONED' });
+      const file = first ? p.files.get(first.fileId) : undefined;
+      if (first && file) p.files.set(first.fileId, { ...file, status: 'TOMBSTONED' });
       const detail = await getApplicationDetail(
         { db: db(), ports: p, logger },
         { applicationId, viewer: await staffActor() },

@@ -23,7 +23,12 @@ import {
 } from '../../cases/index.js';
 import { VERIFICATION_LEVELS, users } from '../../identity/index.js';
 import { TRADE_STATUSES, trades } from '../../trades/index.js';
-import { validateChangeItems, type ChangeItem, type DocumentType } from '../domain/application.js';
+import {
+  DOCUMENT_LABELS,
+  validateChangeItems,
+  type ChangeItem,
+  type DocumentType,
+} from '../domain/application.js';
 import type { EvidenceMatrix } from '../domain/evidence.js';
 import { merchantApplicationDecided } from '../domain/events.js';
 import { canTransition, type MerchantApplicationStatus } from '../domain/status.js';
@@ -36,7 +41,7 @@ import {
 import { certifyApplication, type Certified } from './certification.service.js';
 import { caseSubjectFor, formOf, refreshCaseFacts } from './evidence.service.js';
 import { logEvent } from './log.js';
-import { DOCUMENT_LABELS, type MerchantPorts } from './ports.js';
+import type { MerchantPorts } from './ports.js';
 
 export interface ReviewDeps {
   db: Db;

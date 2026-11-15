@@ -1,6 +1,7 @@
 // A stand-in for the six questions the merchant module asks of other modules (services/ports.ts), so
 // the services are tested against a real database without a Cloudinary account, a catalogue or a queue.
 import { randomUUID } from 'node:crypto';
+import { expect } from 'vitest';
 import type {
   EvidenceJob,
   FileFacts,
@@ -132,3 +133,8 @@ export function completeDraft(ports: StubPorts, userId: string) {
     ],
   };
 }
+
+// Asymmetric matchers typed as `unknown`, so nesting one inside an object literal does not widen it to `any`.
+export const anyString = (): unknown => expect.any(String);
+export const matching = (pattern: RegExp): unknown => expect.stringMatching(pattern);
+export const arrayWith = (items: unknown[]): unknown => expect.arrayContaining(items);

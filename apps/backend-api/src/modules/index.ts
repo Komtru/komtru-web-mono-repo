@@ -30,6 +30,7 @@ import {
   type AvatarPorts,
 } from './identity/index.js';
 import { ledgerModule } from './ledger/index.js';
+import { merchantModule } from './merchant/index.js';
 import { notifyModule } from './notify/index.js';
 import { createSocketModule } from './socket/index.js';
 import { TERMINAL_STATUSES, createTradesModule, trades } from './trades/index.js';
@@ -155,6 +156,10 @@ export const createModules: ModuleBuilder = (deps) => {
     }),
     // After identity, whose audit log and role grants every staff change to a case reads and writes.
     casesModule,
+    // After identity (capability, audit), files (KYC documents), geo, config (categories), ledger (the payout
+    // account), trust (the CAC lookup) and cases (the review case), all read through their barrels. Before
+    // notify, which subscribes to the decisions it publishes.
+    merchantModule,
     notifyModule,
     socket,
   ];

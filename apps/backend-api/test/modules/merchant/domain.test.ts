@@ -13,6 +13,7 @@ import {
 } from '../../../src/modules/merchant/domain/application.js';
 import { slugCandidates, slugify } from '../../../src/modules/merchant/domain/slug.js';
 import { deriveFacts, type EvidenceMatrix } from '../../../src/modules/merchant/domain/evidence.js';
+import { decisionLine } from '../../../src/modules/merchant/domain/notification.js';
 
 const FORM: ApplicationForm = {
   businessName: 'Techedge Nigeria Ltd',
@@ -174,5 +175,36 @@ describe('the evidence facts the advisory reads', () => {
     for (const value of Object.values(facts)) {
       expect(['string', 'number', 'boolean']).toContain(typeof value);
     }
+  });
+});
+
+describe('the decision notice', () => {
+  it('congratulates on approval and never mentions the reason', () => {
+    expect(decisionLine({ outcome: 'APPROVED', reason: 'internal note', requested: [] })).toMatch(
+      /certified/,
+    );
+    expect(decisionLine({ outcome: 'APPROVED', reason: 'internal note', requested: [] })).not.toMatch(
+      /internal/,
+    );
+  });
+
+  it('names what to change in plain words, then gives the reviewer’s reason', () => {
+    const line = decisionLine({
+      outcome: 'CHANGES_REQUESTED',
+      reason: 'The scan is cut off.',
+      requested: [
+        { kind: 'DOCUMENT', key: 'CAC_CERTIFICATE' },
+        { kind: 'FIELD', key: 'cacRcNumber' },
+      ],
+    });
+    expect(line).toContain('CAC certificate, CAC registration number');
+    expect(line).toContain('The scan is cut off.');
+    expect(line).not.toMatch(/cacRcNumber|CAC_CERTIFICATE/);
+  });
+
+  it('gives the reason on rejection', () => {
+    expect(decisionLine({ outcome: 'REJECTED', reason: 'The CAC number is not yours.', requested: [] })).toBe(
+      'We could not approve it. The CAC number is not yours.',
+    );
   });
 });

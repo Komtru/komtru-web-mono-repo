@@ -12,7 +12,7 @@ import {
 import { infraEnabled } from '../../support/db-urls.js';
 import { useTestDatabase } from '../../support/db.js';
 import { outboxEventTypes, seedUser } from '../identity/support.js';
-import { addFile, completeDraft, logger, stubPorts, CITY_ID, STATE_ID } from './support.js';
+import { addFile, arrayWith, completeDraft, logger, stubPorts, STATE_ID } from './support.js';
 
 describe.runIf(infraEnabled)('the applicant service (T-055)', () => {
   const t = useTestDatabase();
@@ -94,7 +94,7 @@ describe.runIf(infraEnabled)('the applicant service (T-055)', () => {
         }),
       ).rejects.toMatchObject({
         status: 422,
-        fieldErrors: expect.arrayContaining([
+        fieldErrors: arrayWith([
           expect.objectContaining({ path: 'cacRcNumber' }),
           expect.objectContaining({ path: 'categories' }),
           expect.objectContaining({ path: 'cityId' }),
@@ -170,7 +170,7 @@ describe.runIf(infraEnabled)('the applicant service (T-055)', () => {
       ).rejects.toMatchObject({
         status: 422,
         title: 'The application is not complete',
-        fieldErrors: expect.arrayContaining([
+        fieldErrors: arrayWith([
           { path: 'businessName', message: 'is required' },
           { path: 'cacRcNumber', message: 'is required' },
           { path: 'payoutAccountId', message: 'is required' },

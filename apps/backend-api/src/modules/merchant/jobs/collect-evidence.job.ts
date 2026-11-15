@@ -12,14 +12,15 @@
 import { eq } from 'drizzle-orm';
 import type { Db } from '../../../db/index.js';
 import type { Logger } from '../../../platform/logger.js';
+import { COLLECT_EVIDENCE_QUEUE } from '../domain/queues.js';
 import { merchantApplications } from '../infrastructure/postgres/schema/applications.js';
 import { refreshCaseFacts } from '../services/evidence.service.js';
 import type { EvidenceJob, MerchantPorts } from '../services/ports.js';
 
-export const COLLECT_EVIDENCE_QUEUE = 'merchant.collect-evidence';
-
 /** Re-checks at 30 seconds, 5 minutes and an hour. A lookup slower than that is a person's to chase. */
 export const RECHECK_DELAYS_MS = [30_000, 300_000, 3_600_000] as const;
+
+export { COLLECT_EVIDENCE_QUEUE };
 
 export interface CollectEvidenceDeps {
   db: Db;

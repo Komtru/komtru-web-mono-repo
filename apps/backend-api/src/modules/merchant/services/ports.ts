@@ -2,7 +2,6 @@
 // services below never name `files`, `geo`, `config`, `ledger` or the queue. `module.ts` is the only file
 // that binds these to the real barrels, so a service is testable with a stub and a module boundary is a
 // list of six functions.
-import type { DocumentType } from '../domain/application.js';
 
 export interface FileFacts {
   id: string;
@@ -67,10 +66,3 @@ export interface MerchantPorts {
   /** After commit, allowed to fail: the application is already submitted. */
   enqueueEvidence(job: EvidenceJob, delayMs?: number): Promise<void>;
 }
-
-export const DOCUMENT_LABELS: Record<DocumentType, string> = {
-  CAC_CERTIFICATE: 'CAC certificate',
-  STATUS_REPORT: 'CAC status report',
-  MEMORANDUM: 'Memorandum and articles',
-  DIRECTOR_ID: 'Proprietor or director ID',
-};

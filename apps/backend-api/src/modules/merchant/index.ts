@@ -18,3 +18,6 @@ export {
   type ChangeItem,
   type DocumentType,
 } from './domain/application.js';
+export { decisionLine, type DecisionNotice } from './domain/notification.js';
+export { endCertification, type EndKind } from './services/certification.service.js';
+export { createMerchantModule, merchantModule } from './module.js';

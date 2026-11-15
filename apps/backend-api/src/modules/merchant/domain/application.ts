@@ -76,3 +76,26 @@ export function validateChangeItems(
   }
   return { ok: true };
 }
+
+/** What the applicant and the reviewer call each document and field. Plain words, not column names. */
+export const DOCUMENT_LABELS: Record<DocumentType, string> = {
+  CAC_CERTIFICATE: 'CAC certificate',
+  STATUS_REPORT: 'CAC status report',
+  MEMORANDUM: 'Memorandum and articles',
+  DIRECTOR_ID: 'Proprietor or director ID',
+};
+
+export const FIELD_LABELS: Record<FormField, string> = {
+  businessName: 'Business name',
+  businessType: 'Business type',
+  addressLine: 'Registered address',
+  stateId: 'State',
+  cityId: 'City',
+  categories: 'Categories',
+  cacRcNumber: 'CAC registration number',
+  payoutAccountId: 'Payout account',
+};
+
+/** The label for a requested change, whichever kind it is; an unknown key is shown as it came. */
+export const labelFor = (item: Pick<ChangeItem, 'kind' | 'key'>): string =>
+  (item.kind === 'DOCUMENT' ? DOCUMENT_LABELS : FIELD_LABELS)[item.key as never] ?? item.key;

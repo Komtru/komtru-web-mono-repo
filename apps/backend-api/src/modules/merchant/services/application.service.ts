@@ -19,6 +19,7 @@ import { registerCase } from '../../cases/index.js';
 import { users } from '../../identity/index.js';
 import { isValidRcNumber, normaliseRcNumber } from '../../trust/index.js';
 import {
+  DOCUMENT_LABELS,
   DOCUMENT_TYPES,
   cacDocumentsPresent,
   missingDocuments,
@@ -40,7 +41,7 @@ import {
 import { merchantProfiles } from '../infrastructure/postgres/schema/profiles.js';
 import { factsFor, caseSubjectId, formOf } from './evidence.service.js';
 import { logEvent } from './log.js';
-import { DOCUMENT_LABELS, type MerchantPorts } from './ports.js';
+import type { MerchantPorts } from './ports.js';
 
 export interface ApplicationDeps {
   db: Db;

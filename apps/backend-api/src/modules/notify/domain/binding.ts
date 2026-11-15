@@ -18,6 +18,7 @@ import {
   otpPurposeLabel,
 } from '../../identity/index.js';
 import { identitySessionReuseDetectedEvent } from '@komtru/shared-types';
+import { decisionLine, merchantApplicationDecided } from '../../merchant/index.js';
 import { TRADE_NOTIFICATION_PLANS, resolveTradeAudience } from '../../trades/index.js';
 import type { Tx } from '../../../platform/events/publish.js';
 
@@ -191,6 +192,25 @@ export const BINDINGS: NotificationBinding[] = [
           requestedName: payload.requestedName,
           stateName: payload.stateName,
           outcomeLine: cityRequestOutcomeLine(payload),
+        },
+      },
+    ],
+  }),
+
+  // T-055: the applicant hears every decision on their merchant application, in staff's own words.
+  defineBinding({
+    subscriber: 'notify.on-merchant-application-decided',
+    event: merchantApplicationDecided,
+    templateKey: 'merchant.application.decided',
+    recipients: (payload) => [
+      {
+        userId: payload.userId,
+        variables: {
+          outcomeLine: decisionLine({
+            outcome: payload.outcome,
+            reason: payload.reason,
+            requested: payload.requested,
+          }),
         },
       },
     ],
