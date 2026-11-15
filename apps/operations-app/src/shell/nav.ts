@@ -1,5 +1,5 @@
-// The console's navigation, as data: the twelve sections of the OP-01 sidebar, each with the
-// permission that opens it.
+// The console's navigation, as data: the sections of the OP-01 sidebar, each with the permission that
+// opens it. Twelve from T-140, and "Merchant Applications" from T-154.
 //
 // Hiding an item is a courtesy, not the boundary. The backend checks the permission on every call a
 // section makes; what this table buys is that a KYC analyst is not shown a Payments section they
@@ -14,6 +14,7 @@ export const SECTION_IDS = [
   'trades',
   'disputes',
   'identity',
+  'merchant-applications',
   'risk',
   'hubs',
   'custody',
@@ -62,8 +63,15 @@ export const SECTIONS: readonly Section[] = [
     id: 'identity',
     label: 'Identity / KYB',
     href: '/identity',
-    summary: 'Identity checks, merchant applications and duplicate-identity flags.',
-    permissions: ['verification.view', 'merchant.application.view', 'duplicate_flag.view'],
+    summary: 'Identity checks and duplicate-identity flags.',
+    permissions: ['verification.view', 'duplicate_flag.view'],
+  },
+  {
+    id: 'merchant-applications',
+    label: 'Merchant Applications',
+    href: '/merchant-applications',
+    summary: 'People applying to sell as certified merchants, reviewed on the evidence.',
+    permissions: ['merchant.application.view'],
   },
   {
     id: 'risk',

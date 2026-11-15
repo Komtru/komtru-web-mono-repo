@@ -1,23 +1,24 @@
 # Console sidebar: section to permission mapping (T-140)
 
-Source of truth: `apps/operations-app/src/shell/nav.ts`. A section is drawn, and its page opens, when the signed-in person holds **at least one** of its permissions. Codes are the T-037 catalogue (`apps/backend-api/src/modules/identity/domain/rbac/catalog.ts`); a test fails if the console's copy of the list drifts from it.
+Source of truth: `apps/operations-app/src/shell/nav.ts`. T-154 added the Merchant Applications row (thirteen sections now) and took `merchant.application.view` out of Identity / KYB, so the permission opens one section, not two. A section is drawn, and its page opens, when the signed-in person holds **at least one** of its permissions. Codes are the T-037 catalogue (`apps/backend-api/src/modules/identity/domain/rbac/catalog.ts`); a test fails if the console's copy of the list drifts from it.
 
 Hiding an item is a courtesy and not the boundary. The backend checks the permission on every call, and the console's middleware only turns away a session that is not `STAFF`.
 
-| Section               | Path           | Opens with any of                                                       | Why                                                                                              |
-| --------------------- | -------------- | ----------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
-| Work Queue            | `/queue`       | `cases.view`                                                            | The universal case list (T-141) reads cases.                                                     |
-| Trades                | `/trades`      | `trade.view`, `trade.view_all`                                          | In-scope or any trade.                                                                           |
-| Disputes              | `/disputes`    | `dispute.view`                                                          | Reading a case is the floor for the whole section; deciding and assigning are actions inside it. |
-| Identity / KYB        | `/identity`    | `verification.view`, `merchant.application.view`, `duplicate_flag.view` | Three queues share one case layout (T-144, T-154), so any one of the three views opens it.       |
-| Fraud & Risk          | `/risk`        | `risk.view`                                                             | The fraud review queue.                                                                          |
-| Park Hubs             | `/hubs`        | `park.view`                                                             | Read the Park network.                                                                           |
-| Parcels / Custody     | `/custody`     | `logistics.manage`, `park.view`                                         | Custody runs through the Park network; shipment exceptions are the logistics operator's.         |
-| Payments / Settlement | `/payments`    | `payment.view`, `payout.view`, `reconciliation.view`                    | Any of the three money reads.                                                                    |
-| Trust Graph           | `/trust-graph` | `risk.view`, `duplicate_flag.view`                                      | The investigation view (device graph, duplicate identities); the fraud analyst's tool.           |
-| Audit / Trust Trail   | `/audit`       | `audit.view`, `compliance.view`                                         | The audit log and the compliance access log.                                                     |
-| Policies              | `/policies`    | `config.view`                                                           | Read platform configuration; editing needs `config.manage` inside the section.                   |
-| Reports               | `/reports`     | `analytics.view`, `analytics.run_report`                                | Dashboards or on-demand reports.                                                                 |
+| Section               | Path                     | Opens with any of                                    | Why                                                                                                                                 |
+| --------------------- | ------------------------ | ---------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| Work Queue            | `/queue`                 | `cases.view`                                         | The universal case list (T-141) reads cases.                                                                                        |
+| Trades                | `/trades`                | `trade.view`, `trade.view_all`                       | In-scope or any trade.                                                                                                              |
+| Disputes              | `/disputes`              | `dispute.view`                                       | Reading a case is the floor for the whole section; deciding and assigning are actions inside it.                                    |
+| Identity / KYB        | `/identity`              | `verification.view`, `duplicate_flag.view`           | Two queues share one case layout (T-144), so either view opens it.                                                                  |
+| Merchant Applications | `/merchant-applications` | `merchant.application.view`                          | T-154's own sidebar item, with the count of applications awaiting a person. Deciding needs `merchant.application.decide` inside it. |
+| Fraud & Risk          | `/risk`                  | `risk.view`                                          | The fraud review queue.                                                                                                             |
+| Park Hubs             | `/hubs`                  | `park.view`                                          | Read the Park network.                                                                                                              |
+| Parcels / Custody     | `/custody`               | `logistics.manage`, `park.view`                      | Custody runs through the Park network; shipment exceptions are the logistics operator's.                                            |
+| Payments / Settlement | `/payments`              | `payment.view`, `payout.view`, `reconciliation.view` | Any of the three money reads.                                                                                                       |
+| Trust Graph           | `/trust-graph`           | `risk.view`, `duplicate_flag.view`                   | The investigation view (device graph, duplicate identities); the fraud analyst's tool.                                              |
+| Audit / Trust Trail   | `/audit`                 | `audit.view`, `compliance.view`                      | The audit log and the compliance access log.                                                                                        |
+| Policies              | `/policies`              | `config.view`                                        | Read platform configuration; editing needs `config.manage` inside the section.                                                      |
+| Reports               | `/reports`               | `analytics.view`, `analytics.run_report`             | Dashboards or on-demand reports.                                                                                                    |
 
 Rules that follow from this:
 

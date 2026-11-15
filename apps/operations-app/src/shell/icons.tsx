@@ -40,6 +40,12 @@ export const SECTION_ICONS: Record<SectionId, React.ReactNode> = {
       <path d="M14 10h4M14 14h4M6 16c.6-1.3 1.7-2 3-2s2.4.7 3 2" />
     </Icon>
   ),
+  'merchant-applications': (
+    <Icon>
+      <path d="M4 9l1.5-4h13L20 9M4 9v10h16V9M4 9c0 1.7 1.3 3 3 3s3-1.3 3-3c0 1.7 1.3 3 3 3s3-1.3 3-3c0 1.7 1.3 3 3 3" />
+      <path d="M10 19v-4h4v4" />
+    </Icon>
+  ),
   risk: (
     <Icon>
       <path d="M12 3l9 16H3L12 3zM12 10v4M12 17h.01" />

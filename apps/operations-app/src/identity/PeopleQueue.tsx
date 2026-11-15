@@ -49,7 +49,7 @@ function ReviewLink({ requestId, who }: { requestId: string; who: string }): Rea
   );
 }
 
-function ListStates<T>({
+export function ListStates<T>({
   result,
   caption,
   noun,
