@@ -139,3 +139,39 @@ describe('CT1 cancel this trade (before payment)', () => {
     expect(screen.queryByRole('heading', { name: 'Trade cancelled' })).toBeNull();
   });
 });
+
+describe('CT1 while the payment status is being read again', () => {
+  it('takes the cancel away while a refetch is in flight, so a cached "no payment" never stands in for the live status', async () => {
+    const { QueryClient, QueryClientProvider } = await import('@tanstack/react-query');
+    const { ApiClientProvider } = await import('@komtru/api-client/react');
+    const { render } = await import('@testing-library/react');
+    answerWith(api.call, {
+      'GET /trades/:id': workspaceTrade('PENDING_PAYMENT', 'BUYER'),
+      'GET /trades/:code/payment/status': paymentRead('NONE'),
+    });
+    const answer = api.call.getMockImplementation();
+    let reads = 0;
+    api.call.mockImplementation((endpoint, input, options) => {
+      if (endpoint.path === '/trades/:code/payment/status' && (reads += 1) > 1) {
+        // Every read after the first hangs: the live status has not come back yet.
+        return new Promise(() => undefined);
+      }
+      return answer === undefined
+        ? Promise.reject(new Error('no handler'))
+        : answer(endpoint, input, options);
+    });
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={client}>
+        <ApiClientProvider client={{ call: api.call } as never}>
+          <CancelTrade id={id(1)} />
+        </ApiClientProvider>
+      </QueryClientProvider>,
+    );
+    expect(await screen.findByRole('button', { name: 'Yes, cancel this trade' })).toBeTruthy();
+    void client.invalidateQueries({ queryKey: ['trades', id(1), 'payment'] });
+    await vi.waitFor(() => {
+      expect(screen.queryByRole('button', { name: 'Yes, cancel this trade' })).toBeNull();
+    });
+  });
+});

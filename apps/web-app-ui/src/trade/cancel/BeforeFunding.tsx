@@ -37,13 +37,17 @@ export function BeforeFunding({
   const [noMoneySent, setNoMoneySent] = useState(false);
   const [problem, setProblem] = useState<string | undefined>(undefined);
 
+  // A read in flight is not an answer: a cached "no payment" must not stand in for the live status, so the cancel is
+  // withdrawn while the platform is being asked again (a transfer may have moved to verifying or confirmed since).
   const read: PaymentRead = !buyerOnUnpaid
     ? { state: 'not-needed' }
-    : payment.isError
-      ? { state: 'failed' }
-      : payment.data === undefined
-        ? { state: 'loading' }
-        : { state: 'read', displayState: payment.data.displayState };
+    : payment.isFetching
+      ? { state: 'loading' }
+      : payment.isError
+        ? { state: 'failed' }
+        : payment.data === undefined
+          ? { state: 'loading' }
+          : { state: 'read', displayState: payment.data.displayState };
   const guard = paymentGuard(read);
 
   const submit = () => {
