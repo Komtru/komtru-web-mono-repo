@@ -75,6 +75,12 @@ describe('PM-8: the Trade record', () => {
     expect(await screen.findByText('1 photo · waybill')).toBeTruthy();
   });
 
+  it('does not call a trade "Refunded" when the status only means a refund was decided', async () => {
+    serve(workspaceTrade('RESOLVED_REFUNDED', 'BUYER'));
+    expect(await screen.findByText('Refund decided')).toBeTruthy();
+    expect(screen.queryByText('Refunded')).toBeNull();
+  });
+
   it('is not there until the Trade is complete, and points to the evidence so far', async () => {
     serve(workspaceTrade('INSPECTION', 'BUYER'));
     expect(await screen.findByText('The record is there once the Trade is complete')).toBeTruthy();

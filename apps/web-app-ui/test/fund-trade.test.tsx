@@ -596,7 +596,7 @@ describe('F-023 review: the money paths', () => {
     ['SETTLED', null, 'Paid', 'Payment released'],
     ['RESOLVED_RELEASED', null, 'Paid', 'Payment released'],
     ['RESOLVED_REFUNDED', null, 'Not paid', 'Payment refunded'],
-    ['CANCELLED_REFUNDED', null, 'Not paid', 'Payment refunded'],
+    ['CANCELLED_REFUNDED', null, 'Not paid', 'Cancelled after payment'],
   ])('CWT-S06 on %s says only what is true of that status', async (tradeStatus, dispatch, payout, hero) => {
     serve(status('CONFIRMED'), {}, workspaceTrade(tradeStatus));
     show();
@@ -609,6 +609,17 @@ describe('F-023 review: the money paths', () => {
       expect(screen.queryByText(/still not released/)).toBeNull();
       expect(screen.queryByText(/is now held in escrow/)).toBeNull();
     }
+  });
+
+  it('does not say a cancelled-after-payment trade’s money was returned: the status only means a refund was decided', async () => {
+    serve(status('CONFIRMED'), {}, workspaceTrade('CANCELLED_REFUNDED'));
+    show();
+    expect(await screen.findByRole('heading', { level: 2, name: 'Cancelled after payment' })).toBeTruthy();
+    expect(screen.queryByText(/returned to you|has been returned/)).toBeNull();
+    const rows = screen.getByLabelText('Protected payment');
+    expect(within(rows).queryByText('Refunded')).toBeNull();
+    expect(within(rows).getByText('Cancelled after payment')).toBeTruthy();
+    expect(screen.getByText(/refund shows on the trade/)).toBeTruthy();
   });
 
   it('CWT-S04: the three amounts come from the attempt once there is one, and add up', async () => {

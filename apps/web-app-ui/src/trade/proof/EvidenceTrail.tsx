@@ -173,7 +173,7 @@ function Record({ trade }: { trade: TradeView }): React.JSX.Element {
     <Frame title={title} id={trade.id}>
       <ItemSummary trade={trade} />
       <div className="mb-[4px]">
-        <Chip tone="verified">{refunded ? 'Refunded' : 'Completed'}</Chip>
+        <Chip tone="verified">{refunded ? 'Refund decided' : 'Completed'}</Chip>
       </div>
       <SectionLabel>Evidence kept with this Trade</SectionLabel>
       <TermList aria-label="Evidence kept with this Trade">

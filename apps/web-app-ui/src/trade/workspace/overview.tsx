@@ -1,6 +1,7 @@
 'use client';
 
 import type { WorkspaceStatus } from '../workspace-state';
+import { RefundOutcome } from '../cancel/RefundOutcome';
 import type { BodyProps } from './shared';
 import { DeliveryToConfirm, InTransit } from './states/Delivery';
 import { Disputed, Outcome, Settlement, TradeComplete } from './states/Ending';
@@ -36,7 +37,9 @@ export function Overview({
       return <TradeComplete trade={trade} role={role} />;
     case 'RESOLVED_RELEASED':
     case 'RESOLVED_REFUNDED':
-    case 'CANCELLED_REFUNDED':
       return <Outcome trade={trade} role={role} status={status} />;
+    case 'CANCELLED_REFUNDED':
+      // F-030: the refund's own row decides what is said about the money (CR3, SC2).
+      return <RefundOutcome trade={trade} role={role} />;
   }
 }

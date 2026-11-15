@@ -69,10 +69,16 @@ describe('what the workspace says, for each side', () => {
   });
 
   it('says a refund or decision is recorded, never that money has arrived', () => {
-    for (const status of ['RESOLVED_RELEASED', 'RESOLVED_REFUNDED', 'CANCELLED_REFUNDED'] as const) {
+    for (const status of ['RESOLVED_RELEASED', 'RESOLVED_REFUNDED'] as const) {
       expect(stateCopy(status, 'BUYER').banner?.body).toContain(
         'not a confirmation that the money has arrived',
       );
     }
+  });
+
+  it('does not promise a refund for a trade cancelled after payment: the refund row says that', () => {
+    const copy = stateCopy('CANCELLED_REFUNDED', 'BUYER');
+    expect(copy.hero?.body).toBe('The trade was cancelled after payment.');
+    expect(JSON.stringify(copy)).not.toMatch(/refunded|You are refunded|arrived/);
   });
 });

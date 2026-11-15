@@ -86,6 +86,10 @@ describe('where a trade stands', () => {
     }
   });
 
+  it('does not call a cancelled-after-payment trade "Refunded": the refund row says where the money is', () => {
+    expect(workspaceStanding('CANCELLED_REFUNDED').chip.label).toBe('Cancelled · refund');
+  });
+
   it('is what the trades list calls the same trade, so the two never disagree', () => {
     for (const status of WORKSPACE_STATUSES) {
       if (status === 'PENDING_PAYMENT') continue; // the list says "Terms agreed" until it is paid for
@@ -205,7 +209,7 @@ describe('what can be done', () => {
   });
 
   it('says plainly that a step is not in the app yet, instead of offering a control that does nothing', () => {
-    const later = tradeActions('FUNDED', 'SELLER', ID).filter((row) => row.availability === 'later');
+    const later = tradeActions('INSPECTION', 'BUYER', ID).filter((row) => row.availability === 'later');
     expect(later.length).toBeGreaterThan(0);
     for (const row of later) expect(row.href).toBeUndefined();
   });
@@ -237,6 +241,32 @@ describe('what can be done', () => {
       expect(tradeActions(status, 'BUYER', ID).some((row) => row.id === 'release')).toBe(true);
     },
   );
+
+  describe('cancelling a funded trade (F-030)', () => {
+    const ids = (role: TradeRole, cancellation?: { canRequest: boolean; canCancelAsSeller: boolean }) =>
+      tradeActions('FUNDED', role, ID, cancellation).map((row) => row.id);
+
+    it('offers the buyer no cancel row until the platform’s read says they may ask', () => {
+      expect(ids('BUYER')).not.toContain('ask-cancel');
+      expect(ids('BUYER', { canRequest: false, canCancelAsSeller: false })).not.toContain('ask-cancel');
+      expect(ids('BUYER', { canRequest: true, canCancelAsSeller: false })).toContain('ask-cancel');
+    });
+
+    it('offers the seller can’t-fulfil only when the platform’s read says so', () => {
+      expect(ids('SELLER')).not.toContain('cannot-fulfil');
+      expect(ids('SELLER', { canRequest: false, canCancelAsSeller: false })).not.toContain('cannot-fulfil');
+      expect(ids('SELLER', { canRequest: false, canCancelAsSeller: true })).toContain('cannot-fulfil');
+    });
+
+    it('words the rows as a refund being requested, not as an outcome', () => {
+      const rows = [
+        ...tradeActions('FUNDED', 'BUYER', ID, { canRequest: true, canCancelAsSeller: false }),
+        ...tradeActions('FUNDED', 'SELLER', ID, { canRequest: false, canCancelAsSeller: true }),
+      ].filter((row) => row.id === 'ask-cancel' || row.id === 'cannot-fulfil');
+      expect(rows).toHaveLength(2);
+      for (const row of rows) expect(row.description).toMatch(/refund is requested/i);
+    });
+  });
 
   it('does not offer a withdrawal once the trade has been paid for', () => {
     for (const status of WORKSPACE_STATUSES.filter((s) => s !== 'PENDING_PAYMENT')) {

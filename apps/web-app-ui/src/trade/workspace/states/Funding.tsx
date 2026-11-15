@@ -2,6 +2,7 @@
 
 import { useDeliveryDeadline } from '@komtru/api-client/react';
 import { ActionStack, Button } from '@komtru/ui-kit';
+import { CancellationNotice } from '../../cancel/CancellationNotice';
 import { stateCopy } from '../../workspace-copy';
 import { shipHref } from '../../workspace-state';
 import { AwaitingFundingBody } from '../../terms/AwaitingFundingBody';
@@ -30,6 +31,7 @@ export function FundsProtected({ trade, role }: BodyProps): React.JSX.Element {
   const copy = stateCopy('FUNDED', role);
   return (
     <>
+      <CancellationNotice trade={trade} />
       {copy.banner && <BannerView banner={copy.banner} />}
       <Deadline
         label={copy.deadlineLabel ?? 'Ship by'}
