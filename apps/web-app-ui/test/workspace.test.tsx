@@ -16,6 +16,7 @@ import {
   id,
   inspectionRead,
   page,
+  paymentRead,
   refundRow,
   refundsRead,
   renderWithApi,
@@ -625,12 +626,23 @@ describe('the actions tab (CWT-09)', () => {
       },
     );
 
-    it('shows an agreed trade that was cancelled as CT2, saying only that no payment was confirmed', async () => {
-      serve(workspaceTrade('CANCELLED', 'BUYER', { acceptedAt: '2026-09-30T08:41:00.000Z' }));
+    it('shows an agreed trade that was cancelled as CT2, and says nothing is to settle only when no payment is on record', async () => {
+      serve(workspaceTrade('CANCELLED', 'BUYER', { acceptedAt: '2026-09-30T08:41:00.000Z' }), {
+        'GET /trades/:code/payment/status': paymentRead('NONE'),
+      });
       show();
       expect(await screen.findByRole('heading', { name: 'Trade cancelled' })).toBeTruthy();
-      expect(screen.getByText(/never confirmed a payment on this trade/)).toBeTruthy();
+      expect(await screen.findByText(/never confirmed a payment on this trade/)).toBeTruthy();
       expect(screen.queryByText(/ended without any payment/)).toBeNull();
+    });
+
+    it('does not say nothing is to settle when a payment has landed on the cancelled trade', async () => {
+      serve(workspaceTrade('CANCELLED', 'BUYER', { acceptedAt: '2026-09-30T08:41:00.000Z' }), {
+        'GET /trades/:code/payment/status': paymentRead('CONFIRMED'),
+      });
+      show();
+      expect(await screen.findByText(/may have reached Komtru/)).toBeTruthy();
+      expect(screen.queryByText(/nothing to settle/)).toBeNull();
     });
 
     it.each(['FUNDED', 'SHIPPED', 'INSPECTION', 'DISPUTED', 'COMPLETED'])(
