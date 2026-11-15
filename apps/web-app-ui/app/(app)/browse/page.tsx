@@ -1,21 +1,15 @@
-import type { Metadata } from 'next';
-import { AppShell } from '../../../src/shell/AppShell';
-import { Placeholder } from '../../../src/shell/Placeholder';
-import { resolveMode, resolveViewer } from '../../../src/shell/viewer';
+import { redirect } from 'next/navigation';
 
-export const metadata: Metadata = { title: 'Discover' };
-
-/** Discover: search, categories and seller discovery: T-113 builds what goes inside the shell. */
-export default async function BrowsePage(): Promise<React.JSX.Element> {
-  const viewer = await resolveViewer();
-  const mode = await resolveMode(viewer);
-
-  return (
-    <AppShell tab="discover" viewer={viewer} mode={mode}>
-      <Placeholder
-        title="Find a seller or an item"
-        body="Search by item, seller or category. Ranking follows verification and fulfilment history, never paid placement."
-      />
-    </AppShell>
-  );
+/**
+ * Discover's old destination. The catalogue and category browse are deferred with the listings, so `/browse` no
+ * longer exists as a screen; discovery is trade search (F-015). A bookmarked `?q=` still lands on its results.
+ */
+export default async function BrowsePage({
+  searchParams,
+}: {
+  searchParams: Promise<{ q?: string | string[] }>;
+}): Promise<never> {
+  const { q } = await searchParams;
+  const query = typeof q === 'string' && q.trim() !== '' ? `?q=${encodeURIComponent(q)}` : '';
+  redirect(`/search${query}`);
 }

@@ -38,6 +38,7 @@ import { isRequestShaped, isRequestSpec, isSellerOffer } from './create/request'
 import { SellerRequest } from './create/SellerRequest';
 import { ProofUpload } from './ProofUpload';
 import { TradeExpired } from './terms/TradeExpired';
+import { TradeCancelled } from './cancel/TradeCancelled';
 import { Workspace } from './workspace/Workspace';
 import { isWorkspaceStatus, type WorkspaceTab } from './workspace-state';
 
@@ -109,8 +110,17 @@ function TradeState({ trade, tab }: { trade: TradeView; tab: WorkspaceTab }): Re
     case 'EXPIRED':
       // EX-01: an agreement that was accepted and never funded. An invitation that lapsed is the plain closed screen.
       return trade.acceptedAt === null ? <Closed trade={trade} /> : <TradeExpired trade={trade} />;
-    case 'DECLINED':
     case 'CANCELLED':
+      // CT2: an agreement that was withdrawn before it was funded. A proposal withdrawn earlier is the plain closed screen.
+      return trade.acceptedAt === null ? (
+        <Closed trade={trade} />
+      ) : (
+        <ScreenColumn>
+          <ScreenHeader title={trade.tradeCode} backHref="/trades" backLabel="Back to your trades" />
+          <TradeCancelled trade={trade} />
+        </ScreenColumn>
+      );
+    case 'DECLINED':
       return <Closed trade={trade} />;
     default:
       return <MovedOn trade={trade} />;

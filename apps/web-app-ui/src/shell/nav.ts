@@ -45,8 +45,9 @@ const TAB: Record<TabId, Tab> = {
   home: { id: 'home', label: 'Home', href: '/home' },
   trades: { id: 'trades', label: 'Trades', href: '/trades' },
   messages: { id: 'messages', label: 'Messages', href: '/messages' },
-  // The v2 mobile nav links Discover to `/browse`.
-  discover: { id: 'discover', label: 'Discover', href: '/browse' },
+  // Discover is the search and find-a-trade surface (F-015). The v2 nav links it to `/browse`, but the browse
+  // catalogue is deferred with the listings, so the tab goes to search instead.
+  discover: { id: 'discover', label: 'Discover', href: '/search' },
   account: { id: 'account', label: 'Account', href: '/account' },
   shop: { id: 'shop', label: 'Shop', href: '/shop' },
   orders: { id: 'orders', label: 'Orders', href: '/orders' },
@@ -98,7 +99,7 @@ export const modeCookie = (mode: Mode, secure: boolean): string =>
 /**
  * Where the global search and Trade Code bar sends a query: a Trade Code goes to that code's own page,
  * which opens the trade for a party or the person it invited (and says "no trade found for you" to
- * anyone else); anything else is Discover's results; an empty query goes nowhere. A code is only put
+ * anyone else); anything else is a search of the person's own trades; an empty query goes nowhere. A code is only put
  * in the path in its canonical `KMT-<digits>-NG` form, which `tradeCodeSchema` produces from what was
  * typed, so no input can name another route or host. Everything else is encoded as a query value.
  */
@@ -107,7 +108,7 @@ export function searchDestination(query: string): string | undefined {
   if (text === '') return undefined;
   const code = tradeCodeSchema.safeParse(text);
   if (code.success) return `/trades/${code.data}`;
-  return `/browse?q=${encodeURIComponent(text)}`;
+  return `/search?q=${encodeURIComponent(text)}`;
 }
 
 const isSegmentPrefix = (pathname: string, prefix: string): boolean =>

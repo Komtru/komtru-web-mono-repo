@@ -35,7 +35,7 @@ export function SearchBar(): React.JSX.Element {
   return (
     <GlobalSearch
       label="Search"
-      placeholder="Search trades or sellers — or enter a Trade Code"
+      placeholder="Search your trades — or enter a Trade Code"
       onSearch={(query) => {
         const to = searchDestination(query);
         if (to !== undefined) router.push(to);

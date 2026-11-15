@@ -1,6 +1,6 @@
 // What the workspace suites share beyond `support/trade`: a trade past the agreement, the platform's other reads
 // of it (deadline, inspection, activity), and a socket that behaves as socket.io-client does.
-import type { ApiClient } from '@komtru/api-client';
+import type { ApiClient, Refund } from '@komtru/api-client';
 import { ApiClientProvider, RealtimeProvider } from '@komtru/api-client/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render } from '@testing-library/react';
@@ -146,4 +146,65 @@ export const fileRead = (n: number, contentType = 'image/jpeg') => ({
   url: `https://files.test/${String(n)}.jpg?sig=1`,
   expiresAt: '2026-11-11T12:30:00.000Z',
   contentType,
+});
+
+/** One refund row, as `GET /trades/:id/refunds` lists it. The amounts are the ledger's: tests never derive them. */
+export const refundRow = (
+  status: Refund['status'] = 'PROCESSED',
+  over: Record<string, unknown> = {},
+): Refund => ({
+  id: id(501),
+  tradeId: id(1),
+  reference: 'refund-501',
+  status,
+  scope: 'FULL',
+  reason: 'MUTUAL_AGREEMENT',
+  currency: 'NGN',
+  itemAmountMinor: '45200000',
+  feeAmountMinor: '678000',
+  amountMinor: '45878000',
+  buyerProtectionFeeTreatment: 'REFUND',
+  failureReason: null,
+  requestedAt: '2026-11-14T10:00:00.000Z',
+  completedAt: status === 'PROCESSED' ? '2026-11-14T10:20:00.000Z' : null,
+  failedAt: null,
+  ...over,
+});
+
+export const refundsRead = (...refunds: Refund[]) => ({ refunds });
+
+/** A cancellation request, as the trade's cancellation read carries it. */
+export const cancellationRequest = (over: Record<string, unknown> = {}) => ({
+  id: id(401),
+  requestedByRole: 'BUYER',
+  reason: 'CHANGED_MIND',
+  note: null,
+  status: 'PENDING',
+  responseNote: null,
+  respondedAt: null,
+  createdAt: '2026-11-14T09:00:00.000Z',
+  ...over,
+});
+
+/** `GET /trades/:id/cancellation`: what the reader may do, decided by the platform. */
+export const cancellationRead = (
+  tradeStatus: string,
+  yourRole: 'BUYER' | 'SELLER',
+  over: Record<string, unknown> = {},
+) => ({
+  tradeId: id(1),
+  tradeStatus,
+  yourRole,
+  request: null,
+  refundRequested: false,
+  ...over,
+  actions: { canRequest: false, canRespond: false, canCancelAsSeller: false, ...(over.actions as object) },
+});
+
+/** `GET /trades/:id/payment/status`. */
+export const paymentRead = (displayState: string) => ({
+  tradeId: id(1),
+  tradeCode: 'KMT-9042800-NG',
+  displayState,
+  attempt: null,
 });

@@ -45,8 +45,8 @@ describe('the tab bar, the sidebar and the top nav (v2: DX-03, DX-04, TX-02)', (
     expect(BELL_HREF).toBe('/alerts');
   });
 
-  it('points Discover at /browse, as the v2 mobile nav does', () => {
-    expect(tabsFor(viewer(), 'buy').find((tab) => tab.id === 'discover')?.href).toBe('/browse');
+  it('points Discover at search, because the browse catalogue is deferred', () => {
+    expect(tabsFor(viewer(), 'buy').find((tab) => tab.id === 'discover')?.href).toBe('/search');
   });
 
   it('never draws a role switcher or a seller tab bar as a destination', () => {
@@ -133,11 +133,11 @@ describe('the global search and Trade Code bar', () => {
   });
 
   it('treats a string too short to be a code as a search', () => {
-    expect(searchDestination('kmt-9')).toBe('/browse?q=kmt-9');
+    expect(searchDestination('kmt-9')).toBe('/search?q=kmt-9');
   });
 
-  it('sends anything else to Discover’s results, encoded', () => {
-    expect(searchDestination('iPhone 13 & case')).toBe('/browse?q=iPhone%2013%20%26%20case');
+  it('sends anything else to the search of the person’s own trades, encoded', () => {
+    expect(searchDestination('iPhone 13 & case')).toBe('/search?q=iPhone%2013%20%26%20case');
   });
 
   it('goes nowhere on an empty query', () => {
@@ -145,17 +145,17 @@ describe('the global search and Trade Code bar', () => {
   });
 
   it.each([
-    ['//evil.com', '/browse?q=%2F%2Fevil.com'],
-    ['https://x', '/browse?q=https%3A%2F%2Fx'],
-    ['KMT-1/../x', '/browse?q=KMT-1%2F..%2Fx'],
-    ['KMT-1?x', '/browse?q=KMT-1%3Fx'],
-    ['KMT 9', '/browse?q=KMT%209'],
-    ['100%', '/browse?q=100%25'],
-    ['KMT-1 KMT-2', '/browse?q=KMT-1%20KMT-2'],
-  ])('keeps hostile input %j inside Discover, as a query value', (query, expected) => {
+    ['//evil.com', '/search?q=%2F%2Fevil.com'],
+    ['https://x', '/search?q=https%3A%2F%2Fx'],
+    ['KMT-1/../x', '/search?q=KMT-1%2F..%2Fx'],
+    ['KMT-1?x', '/search?q=KMT-1%3Fx'],
+    ['KMT 9', '/search?q=KMT%209'],
+    ['100%', '/search?q=100%25'],
+    ['KMT-1 KMT-2', '/search?q=KMT-1%20KMT-2'],
+  ])('keeps hostile input %j inside search, as a query value', (query, expected) => {
     const to = searchDestination(query);
     expect(to).toBe(expected);
-    expect(to?.startsWith('/browse?q=')).toBe(true);
+    expect(to?.startsWith('/search?q=')).toBe(true);
   });
 });
 

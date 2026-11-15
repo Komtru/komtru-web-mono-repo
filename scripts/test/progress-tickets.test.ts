@@ -1,6 +1,7 @@
 // tools/tickets/progress.py is what the owner reads the build's progress from. These tests pin the
 // two things that silently went wrong before: MVP.md's ticket scrape counted deferred tickets named
 // in prose (80 against a stated 77), and the feature view must agree with FEATURE_MAP.md.
+// The stated count is now 72; see the comment on the assertion.
 import { spawnSync } from 'node:child_process';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
@@ -30,7 +31,8 @@ describe('progress.py MVP ticket scrape', () => {
     const [ids, declared, problems] = JSON.parse(run.out) as [string[], number, string[]];
     expect(problems).toEqual([]);
     expect(ids).toHaveLength(declared);
-    expect(declared).toBe(77);
+    // 72 since the owner's 2026-11-15 catalogue cut: T-056, T-057, T-063, T-122 and T-202 moved to Deferred.
+    expect(declared).toBe(72);
     for (const deferred of ['T-201', 'T-210', 'T-214']) expect(ids).not.toContain(deferred);
   });
 

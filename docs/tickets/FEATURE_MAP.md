@@ -247,10 +247,10 @@ list a trade.
 
 - **Journey:** Home & discover
 - **Actor:** buyer
-- **Absorbs:** T-113 (todo)
+- **Absorbs:** T-113 (done)
 - **Backend scope:** None new. `GET /trades` and `GET /trades/by-code/:code` already ship in the trades module. The M19 listing index (T-057) is deferred with the catalogue.
 - **Frontend scope:** Home — Mobile Web and its additional states (Z1, H-01–H-03, Customer-1, AC1 empty state), trade search (SE1, SE2) and Find a Trade by code (F1, F2). Browse Categories (K1, K2) is deferred with the catalogue. _10 v2 screens._
-- **Status:** Not started
+- **Status:** Done
 - **Depends on:** none
 - **MVP:** yes
 - **Note:** The screen the owner's complaint is about: AC1 is the 'Your trades will appear here' placeholder.
@@ -416,9 +416,10 @@ list a trade.
 - **Absorbs:** T-195 (todo)
 - **Backend scope:** Served by F-026 and F-027.
 - **Frontend scope:** Trade Workspace supporting sheets for delivery and evidence, CWT-S08–CWT-S13. _6 v2 screens._
-- **Status:** UI merged except CWT-S13 (2026-11-13) — T-195 merged; five of six screens built. S13 evidence submit is a seam: no party-facing call attaches a file to a trade or case, and S12's Delivery and Inspection groups await a media-list read. Blocked on an owner decision for that backend ticket, so not Done.
+- **Status:** Backend done, UI outstanding
 - **Depends on:** F-022
 - **MVP:** yes
+- **Note:** UI merged except CWT-S13 (2026-11-13) — T-195 merged, five of six screens built. S13 evidence submit is a seam: no party-facing call attaches a file to a trade or case, and S12's Delivery and Inspection groups await a media-list read. Blocked on an owner decision for that backend ticket, so not Done. **The status line carried this prose until 2026-11-15**, which is not one of the three legal values and so broke `scripts/test/progress-tickets.test.ts`; the detail belongs here.
 
 #### F-029 — Capture and compare proof media
 
@@ -438,10 +439,10 @@ list a trade.
 
 - **Journey:** Issues & resolution
 - **Actor:** buyer, seller
-- **Absorbs:** T-066 (done), T-075 (done), T-119 (todo)
+- **Absorbs:** T-066 (done), T-075 (done), T-119 (done)
 - **Backend scope:** Post-funding cancellation and can't-fulfil refunds; refunds against the ledger with the Q4 fee rule (T-066, T-075).
 - **Frontend scope:** Cancel a Trade (CT1, CT2, AR1) and Cancel After Funding (CR1–CR3, SC1, SC2). _8 v2 screens._
-- **Status:** Backend done, UI outstanding
+- **Status:** Done
 - **Note (2026-11-12):** backend layer (T-066, T-075, migration 0049) merged; next: the T-119 UI layer (CT1, CT2, AR1, CR1–CR3, SC1, SC2).
 - **Depends on:** none
 - **MVP:** yes
