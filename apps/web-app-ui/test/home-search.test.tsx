@@ -132,6 +132,35 @@ describe('Search your trades (SE1)', () => {
     expect(screen.queryByRole('heading', { name: 'No trades match "drone"' })).toBeNull();
   });
 
+  it('says only that it cannot tell yet when a later page fails and nothing matches, never "still reading" or "no match"', async () => {
+    answerWith(api.call, {
+      'GET /trades': ({ query }: { query?: Record<string, unknown> }) =>
+        query?.cursor === undefined ? page([speaker], 'c2') : new Error('offline'),
+    });
+    search();
+    await screen.findByRole('searchbox', { name: 'Search your trades' });
+    type('drone');
+    expect(await screen.findByRole('alert')).toBeTruthy();
+    expect(
+      screen.getByText("Couldn't read all of your trades, so we can't tell yet whether one matches."),
+    ).toBeTruthy();
+    expect(screen.queryByRole('status', { name: 'Still reading your trades' })).toBeNull();
+    expect(screen.queryByRole('heading', { name: 'No trades match "drone"' })).toBeNull();
+    expect(screen.queryByText(/Still reading/)).toBeNull();
+  });
+
+  it('warns that some may be missing, beside the results it has, when a later page fails', async () => {
+    answerWith(api.call, {
+      'GET /trades': ({ query }: { query?: Record<string, unknown> }) =>
+        query?.cursor === undefined ? page([speaker], 'c2') : new Error('offline'),
+    });
+    search();
+    await screen.findByRole('searchbox', { name: 'Search your trades' });
+    type('speaker');
+    expect(await screen.findByRole('region', { name: 'Results — "speaker"' })).toBeTruthy();
+    expect(screen.getByText("Couldn't read all of your trades, so some may not appear here.")).toBeTruthy();
+  });
+
   it('passes the accessibility check with results on screen', async () => {
     const { container } = search();
     await screen.findByRole('searchbox', { name: 'Search your trades' });

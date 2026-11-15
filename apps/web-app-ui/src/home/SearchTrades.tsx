@@ -85,7 +85,9 @@ export function SearchTrades({ initialQuery }: { initialQuery: string }): React.
             </div>
           )}
 
+          {/* With a later page unread, neither "still reading" nor "no match" can ever resolve: the alert below says so. */}
           {results.length === 0 &&
+            !all.nextPageFailed &&
             (all.complete ? (
               <EmptyState
                 title={`No trades match "${text}"`}
@@ -110,7 +112,9 @@ export function SearchTrades({ initialQuery }: { initialQuery: string }): React.
           {all.nextPageFailed && (
             <div role="alert" className="mt-[8px]">
               <p className="mb-[8px] text-[12px] font-semibold text-risk-on-soft">
-                Couldn&apos;t read all of your trades, so some may not appear here.
+                {results.length === 0
+                  ? "Couldn't read all of your trades, so we can't tell yet whether one matches."
+                  : "Couldn't read all of your trades, so some may not appear here."}
               </p>
               <Button type="button" variant="secondary" onClick={all.retry}>
                 Try again
