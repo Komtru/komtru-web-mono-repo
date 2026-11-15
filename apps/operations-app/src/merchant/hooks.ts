@@ -10,12 +10,14 @@ import {
   assignMerchantApplication,
   countMerchantApplications,
   getMerchantApplication,
+  getMerchantDocument,
   listMerchantApplications,
   listTradeStandards,
   rejectMerchantApplication,
   requestMerchantChanges,
   type MerchantApplicationStatus,
   type MerchantChangeItem,
+  type MerchantDocumentType,
   type MerchantQueueItem,
 } from '@komtru/api-client';
 import { useApiClient } from '@komtru/app-kit/react';
@@ -103,8 +105,29 @@ export function useMerchantApplication(id: string, enabled: boolean) {
     enabled,
     queryFn: ({ signal }) => client.call(getMerchantApplication, { params: { id } }, { signal }),
     retry: false,
-    // The signed document URLs last minutes, not hours: an open page refreshes them before they lapse.
-    refetchInterval: REFRESH_MS * 4,
+    // No refetch on a timer: the application carries no signed links, so there is nothing to keep fresh,
+    // and a page left open must not write to anyone's access log.
+  });
+}
+
+/**
+ * One document, signed when `enabled` turns true (a reviewer pressed View) and not before. Every call is
+ * a row in `file_access_log`, so it never refetches on a timer or on window focus: the link stays the
+ * one that was issued, and a PDF being read does not jump back to page one.
+ */
+export function useMerchantDocument(id: string, docType: MerchantDocumentType, enabled: boolean) {
+  const client = useApiClient();
+  return useQuery({
+    queryKey: ['merchant', 'document', id, docType] as const,
+    enabled,
+    queryFn: ({ signal }) => client.call(getMerchantDocument, { params: { id, docType } }, { signal }),
+    retry: false,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
+    refetchInterval: false,
+    // A short life in the cache: a link reopened ten minutes later is a new, logged view.
+    gcTime: 60_000,
+    staleTime: Infinity,
   });
 }
 

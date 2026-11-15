@@ -29,6 +29,7 @@ const APPROVE = '/admin/merchant/applications/:id/approve';
 const REJECT = '/admin/merchant/applications/:id/reject';
 const CHANGES = '/admin/merchant/applications/:id/request-changes';
 const COUNT = '/admin/merchant/applications/count';
+const DOC = '/admin/merchant/applications/:id/documents/:docType';
 
 const trail = {
   items: [
@@ -65,13 +66,7 @@ afterEach(cleanup);
 
 describe('the merchant application case (OP-61, T-154)', () => {
   it('shows what is known in the case layout: the application, its documents, the evidence, the applicant and the trail', async () => {
-    // Photos, not PDFs: axe cannot message a frame inside jsdom, and the frame is covered by the next test.
-    const photos = detail(1).documents.map((document) => ({
-      ...document,
-      contentType: 'image/jpeg',
-      url: document.url === null ? null : 'https://files.test/photo.jpg',
-    }));
-    serve(DECIDER, detail(1, { ...owned, documents: photos }));
+    serve(DECIDER, detail(1, owned));
     const { container } = renderWithQuery(<MerchantCase applicationId={APPLICATION} />);
 
     expect(await screen.findByText('C-002901')).toBeTruthy();
@@ -97,21 +92,69 @@ describe('the merchant application case (OP-61, T-154)', () => {
     await expectNoAxeViolations(container, SHELL_RULES);
   });
 
-  it('views the documents inline: a PDF in a frame, a photo as an image, and says so when a file is unavailable', async () => {
-    serve(DECIDER, detail(1, owned));
+  it('signs nothing until a reviewer presses View, then draws that document inline', async () => {
+    serve(DECIDER, detail(1, owned), {
+      [`GET ${DOC}`]: (input: { params?: Record<string, string> }) =>
+        input.params?.docType === 'DIRECTOR_ID'
+          ? {
+              docType: 'DIRECTOR_ID',
+              label: 'Proprietor or director ID',
+              url: 'https://files.test/id.jpg',
+              expiresAt: null,
+              contentType: 'image/jpeg',
+            }
+          : {
+              docType: 'CAC_CERTIFICATE',
+              label: 'CAC certificate',
+              url: 'https://files.test/cac.pdf',
+              expiresAt: null,
+              contentType: 'application/pdf',
+            },
+    });
     renderWithQuery(<MerchantCase applicationId={APPLICATION} />);
     const documents = await screen.findByRole('region', { name: 'Documents' });
-    expect(within(documents).getByTitle('CAC certificate').getAttribute('src')).toBe(
+    // Opening the page asked for no document: each one is a logged view.
+    expect(callsTo(api.call, DOC)).toHaveLength(0);
+    expect(within(documents).queryByTitle('CAC certificate')).toBeNull();
+    expect(within(documents).getByText('Closed to reviewers')).toBeTruthy();
+
+    fireEvent.click(within(documents).getByRole('button', { name: 'View CAC certificate' }));
+    expect((await within(documents).findByTitle('CAC certificate')).getAttribute('src')).toBe(
       'https://files.test/cac.pdf',
     );
+    expect(callsTo(api.call, DOC)).toHaveLength(1);
+    expect(callsTo(api.call, DOC)[0]?.[1].params).toEqual({ id: APPLICATION, docType: 'CAC_CERTIFICATE' });
+
+    fireEvent.click(within(documents).getByRole('button', { name: 'View Proprietor or director ID' }));
     expect(
-      within(documents).getByRole('img', { name: 'Proprietor or director ID' }).getAttribute('src'),
+      (await within(documents).findByRole('img', { name: 'Proprietor or director ID' })).getAttribute('src'),
     ).toBe('https://files.test/id.jpg');
-    expect(within(documents).getByText(/This file is not available/)).toBeTruthy();
-    const open = within(documents).getAllByRole('link', { name: 'Open in a new tab' });
-    expect(open).toHaveLength(2);
-    expect(open[0]?.getAttribute('rel')).toContain('noopener');
-    expect(within(documents).getByText(/Every view of a document is recorded against you/)).toBeTruthy();
+    expect(callsTo(api.call, DOC)).toHaveLength(2);
+
+    // A bearer link is never offered to copy or open elsewhere.
+    expect(within(documents).queryByRole('link')).toBeNull();
+    expect(documents.innerHTML).not.toContain('target="_blank"');
+  });
+
+  it('says so when a document cannot be opened, and does not refetch a link on a timer', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      serve(DECIDER, detail(1, owned), {
+        [`GET ${DOC}`]: () => {
+          throw new Error('gone');
+        },
+      });
+      renderWithQuery(<MerchantCase applicationId={APPLICATION} />);
+      const documents = await screen.findByRole('region', { name: 'Documents' });
+      fireEvent.click(within(documents).getByRole('button', { name: 'View CAC certificate' }));
+      expect(await within(documents).findByText(/This file is not available/)).toBeTruthy();
+      const itemCalls = callsTo(api.call, ITEM).length;
+      vi.advanceTimersByTime(30 * 60_000);
+      expect(callsTo(api.call, ITEM).length).toBe(itemCalls);
+      expect(callsTo(api.call, DOC)).toHaveLength(1);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('draws the evidence matrix: identity level, the CAC lookup, the documents and the bank name-match', async () => {

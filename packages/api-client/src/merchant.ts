@@ -194,15 +194,14 @@ export const merchantApplicationDetailSchema = merchantQueueItemSchema.extend({
     categories: z.array(z.string()),
     cacRcNumber: z.string().nullable(),
   }),
+  /** Listed, never signed: a document is signed, and the view logged, when a person asks (`getMerchantDocument`). */
   documents: z.array(
     z.object({
       docType: z.enum(MERCHANT_DOCUMENT_TYPES),
       label: z.string(),
-      fileId: z.uuid(),
       contentType: z.string().nullable(),
-      /** A short-lived signed URL, or null when the file cannot be served. */
-      url: z.string().nullable(),
-      expiresAt: iso.nullable(),
+      /** False once the application is decided or with the applicant: reviewers' access ends with the decision. */
+      viewable: z.boolean(),
     }),
   ),
   evidence: merchantEvidenceSchema,
@@ -264,6 +263,27 @@ export const getMerchantApplication = defineEndpoint({
   path: '/admin/merchant/applications/:id',
   scope: 'STAFF',
   schema: { params: applicationParams, response: merchantApplicationDetailSchema },
+});
+
+/**
+ * One document, signed for the caller and written to the access log. The link is a bearer link, good for a
+ * few minutes: anyone holding it can fetch the bytes until it expires, with no further log row. It is
+ * drawn inline and never offered as a link to open elsewhere.
+ */
+export const getMerchantDocument = defineEndpoint({
+  method: 'get',
+  path: '/admin/merchant/applications/:id/documents/:docType',
+  scope: 'STAFF',
+  schema: {
+    params: z.object({ id: z.uuid(), docType: z.enum(MERCHANT_DOCUMENT_TYPES) }),
+    response: z.object({
+      docType: z.enum(MERCHANT_DOCUMENT_TYPES),
+      label: z.string(),
+      url: z.string(),
+      expiresAt: iso.nullable(),
+      contentType: z.string(),
+    }),
+  },
 });
 
 export const assignMerchantApplication = defineEndpoint({

@@ -9,6 +9,7 @@ import {
   assignMerchantApplication,
   countMerchantApplications,
   getMerchantApplication,
+  getMerchantDocument,
   getMyMerchantApplication,
   listMerchantApplications,
   rejectMerchantApplication,
@@ -56,10 +57,8 @@ const detail = {
     {
       docType: 'CAC_CERTIFICATE',
       label: 'CAC certificate',
-      fileId: id(5),
       contentType: 'application/pdf',
-      url: 'https://files.test/x',
-      expiresAt: '2026-11-14T08:05:00.000Z',
+      viewable: true,
     },
   ],
   evidence: {
@@ -150,6 +149,26 @@ describe('the merchant certification endpoints', () => {
         advisory: { ...detail.advisory, label: 'Decision' },
       }).success,
     ).toBe(false);
+  });
+
+  it('signs a document only when asked, and the detail carries no link and no file id', async () => {
+    expect(JSON.stringify(detail)).not.toMatch(/url|fileId/);
+    expect(getMerchantDocument).toMatchObject({
+      path: '/admin/merchant/applications/:id/documents/:docType',
+      scope: 'STAFF',
+    });
+    const { client, urls } = clientFor({
+      docType: 'CAC_CERTIFICATE',
+      label: 'CAC certificate',
+      url: 'https://files.test/x',
+      expiresAt: '2026-11-14T08:05:00.000Z',
+      contentType: 'application/pdf',
+    });
+    const view = await client.call(getMerchantDocument, {
+      params: { id: id(1), docType: 'CAC_CERTIFICATE' },
+    });
+    expect(view.url).toBe('https://files.test/x');
+    expect(urls[0]).toContain(`/admin/merchant/applications/${id(1)}/documents/CAC_CERTIFICATE`);
   });
 
   it('requires a policy citation on every decision, and names at least one change to request', () => {

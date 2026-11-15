@@ -53,7 +53,7 @@ import {
   statusLabel,
   statusTone,
 } from './format';
-import { merchantCalls, useMerchantAction, useMerchantApplication } from './hooks';
+import { merchantCalls, useMerchantAction, useMerchantApplication, useMerchantDocument } from './hooks';
 import { MERCHANT_HREF, MerchantFrame } from './shared';
 
 type Detail = MerchantApplicationDetail;
@@ -103,6 +103,68 @@ function ApplicationPanel({ item }: { item: Detail }): React.JSX.Element {
 
 const isImage = (type: string | null): boolean => type !== null && type.startsWith('image/');
 
+/**
+ * One document, signed only when a reviewer presses View. Drawn inline, never as a link to open elsewhere:
+ * the signed address is a bearer link that anyone holding it could use for a few minutes with no further
+ * log row, so it is not put in front of anyone to copy.
+ */
+function DocumentView({
+  applicationId,
+  document,
+}: {
+  applicationId: string;
+  document: Detail['documents'][number];
+}): React.JSX.Element {
+  const [shown, setShown] = useState(false);
+  const view = useMerchantDocument(applicationId, document.docType, shown);
+  return (
+    <figure className="m-0">
+      <figcaption className="mb-[6px] flex flex-wrap items-center justify-between gap-[8px] text-[12.5px]">
+        <b>{document.label}</b>
+        {document.viewable ? (
+          <Button
+            type="button"
+            variant="secondary"
+            onClick={() => setShown(!shown)}
+            aria-label={`${shown ? 'Hide' : 'View'} ${document.label}`}
+            className={SMALL}
+          >
+            {shown ? 'Hide' : 'View'}
+          </Button>
+        ) : (
+          <span className="text-[11.5px] text-slate">Closed to reviewers</span>
+        )}
+      </figcaption>
+      {shown && view.isPending && (
+        <p role="status" className="text-[12px] text-slate">
+          Opening the document…
+        </p>
+      )}
+      {shown && view.isError && (
+        <p className="rounded-md border border-dashed border-border-hairline p-[14px] text-[12px] text-slate">
+          This file is not available. It may have been removed, or your role may not include it.
+        </p>
+      )}
+      {shown &&
+        view.data !== undefined &&
+        (isImage(view.data.contentType) ? (
+          // eslint-disable-next-line @next/next/no-img-element -- a short-lived signed URL, never optimised or cached
+          <img
+            src={view.data.url}
+            alt={document.label}
+            className="max-h-[420px] w-full rounded-md border border-solid border-border-hairline object-contain"
+          />
+        ) : (
+          <iframe
+            title={document.label}
+            src={view.data.url}
+            className="h-[420px] w-full rounded-md border border-solid border-border-hairline"
+          />
+        ))}
+    </figure>
+  );
+}
+
 function Documents({ item }: { item: Detail }): React.JSX.Element {
   return (
     <Panel heading="Documents">
@@ -111,44 +173,13 @@ function Documents({ item }: { item: Detail }): React.JSX.Element {
       ) : (
         <div className="grid gap-[14px]">
           {item.documents.map((document) => (
-            <figure key={document.fileId} className="m-0">
-              <figcaption className="mb-[6px] flex flex-wrap items-center justify-between gap-[8px] text-[12.5px]">
-                <b>{document.label}</b>
-                {document.url !== null && (
-                  <a
-                    href={document.url}
-                    target="_blank"
-                    rel="noreferrer noopener"
-                    className="text-[11.5px] font-semibold text-trust-indigo"
-                  >
-                    Open in a new tab
-                  </a>
-                )}
-              </figcaption>
-              {document.url === null ? (
-                <p className="rounded-md border border-dashed border-border-hairline p-[14px] text-[12px] text-slate">
-                  This file is not available. It may have been removed, or your role may not include it.
-                </p>
-              ) : isImage(document.contentType) ? (
-                // eslint-disable-next-line @next/next/no-img-element -- a short-lived signed URL, never optimised or cached
-                <img
-                  src={document.url}
-                  alt={document.label}
-                  className="max-h-[420px] w-full rounded-md border border-solid border-border-hairline object-contain"
-                />
-              ) : (
-                <iframe
-                  title={document.label}
-                  src={document.url}
-                  className="h-[420px] w-full rounded-md border border-solid border-border-hairline"
-                />
-              )}
-            </figure>
+            <DocumentView key={document.docType} applicationId={item.applicationId} document={document} />
           ))}
         </div>
       )}
       <p className="mt-[10px] text-[11.5px] text-slate">
-        Every view of a document is recorded against you. The links expire after a few minutes.
+        A document is opened when you press View, and that view is recorded against you. You can open them
+        only while the application awaits a decision.
       </p>
     </Panel>
   );
