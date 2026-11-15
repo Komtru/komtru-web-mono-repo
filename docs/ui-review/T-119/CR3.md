@@ -15,8 +15,8 @@
 
 **Real differences (intended, and why)**
 
-- **"Issued" only when the refund is `PROCESSED`.** The built screen reads the trade's refund row. `REQUESTED` and `PROCESSING` read "Refund on its way" and "is being sent back"; `FAILED` and `NEEDS_REVIEW` read "Your refund hasn't completed" with "Your money is held by Komtru, not lost", the platform's own reason and the refund reference; no refund row says nothing about money. Extra shots of the on-its-way, held and no-row states are listed in the README.
-- **The amounts are the ledger's, as sent.** The hero and "The refund" rows show the refund total, the item amount, and the buyer protection fee with what the platform did with it ("Returned with your refund" or "Kept by Komtru"). Nothing is added up or subtracted on the screen. The fee row is dropped when its amount is zero.
+- **"Issued" only when the refund is `PROCESSED`.** The built screen reads the trade's refund row. `REQUESTED` and `PROCESSING` read "Refund on its way" and "is being sent back"; `FAILED` and `NEEDS_REVIEW` read "Your refund hasn't completed" with only the platform's own reason and the refund reference (no claim about where the money is); no refund row says nothing about money. Extra shots of the on-its-way, held and no-row states are listed in the README.
+- **The amounts are the ledger's, as sent.** The hero and "The refund" rows show the refund total, the item amount, and the buyer protection fee with what the platform did with it ("Returned with your refund", or a "Kept by Komtru" row with no amount when the platform returns a zero fee because it kept it). Nothing is added up or subtracted on the screen. The fee row is dropped when its amount is zero.
 - **No "Usually arrives within 2 hours, always within 24".** No platform field promises an arrival time, and the refund's bank timing is the bank's.
-- **The status chip reads "Cancelled", not "Refunded".** The status means the ledger decided a refund, not that the money has gone back; the same chip is used in the trades list.
+- **The status chip reads "Cancelled · refund", not "Refunded".** The status means the ledger decided a refund, not that the money has gone back; the same chip is used in the trades list.
 - A trade overview state (`CANCELLED_REFUNDED`), inside the workspace header and tabs the reference does not draw.

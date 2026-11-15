@@ -264,7 +264,7 @@ function CannotFulfil({ trade, read }: { trade: TradeView; read: Cancellation })
         }}
       >
         <p className="text-[12.5px] leading-[1.5] text-slate">
-          This ends the trade and refunds {buyer}. It can’t be undone.
+          This ends the trade and requests {buyer}’s refund. It can’t be undone.
         </p>
       </ConfirmSheet>
     </Frame>

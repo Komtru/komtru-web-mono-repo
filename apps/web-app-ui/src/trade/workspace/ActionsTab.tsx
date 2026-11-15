@@ -1,20 +1,53 @@
 'use client';
 
 import type { TradeView } from '@komtru/api-client';
+import { useCancellation } from '@komtru/api-client/react';
 import { ActionStack, Button, InfoCard, InfoRow } from '@komtru/ui-kit';
 import { cancelHref, tabHref, tradeActions, type TradeRole, type WorkspaceStatus } from '../workspace-state';
 
 /** CWT-09: what the person can do with the trade now, from its state and their side of it. */
-export function ActionsTab({
-  trade,
-  status,
-  role,
-}: {
+export function ActionsTab(props: {
   trade: TradeView;
   status: WorkspaceStatus;
   role: TradeRole;
 }): React.JSX.Element {
-  const rows = tradeActions(status, role, trade.id);
+  // Cancelling a funded trade is offered only when the platform's own read says this reader may (F-030).
+  return props.status === 'FUNDED' ? <WithCancellation {...props} /> : <Actions {...props} />;
+}
+
+function WithCancellation(props: {
+  trade: TradeView;
+  status: WorkspaceStatus;
+  role: TradeRole;
+}): React.JSX.Element {
+  const read = useCancellation(props.trade.id);
+  return (
+    <Actions
+      {...props}
+      {...(read.data === undefined || read.isFetching
+        ? {}
+        : {
+            cancellation: {
+              canRequest: read.data.actions.canRequest,
+              canCancelAsSeller: read.data.actions.canCancelAsSeller,
+            },
+          })}
+    />
+  );
+}
+
+function Actions({
+  trade,
+  status,
+  role,
+  cancellation,
+}: {
+  trade: TradeView;
+  status: WorkspaceStatus;
+  role: TradeRole;
+  cancellation?: { canRequest: boolean; canCancelAsSeller: boolean };
+}): React.JSX.Element {
+  const rows = tradeActions(status, role, trade.id, cancellation);
   const canWithdraw = rows.some((row) => row.id === 'cancel');
 
   return (

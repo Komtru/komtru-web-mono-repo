@@ -20,13 +20,13 @@ deliberate deviations listed in each screen's file.
 
 **States shot by hand, not by the harness** (no reference frame; PNGs are not committed): CT1 with a payment attempt
 open (cancel held behind the "I haven't sent any money" tick), CT1 with a payment verifying (no cancel offered), CR3
-with the refund processing, held (`FAILED`, with the platform's reason and the reference) and with no refund row, and a
+with the refund processing, `FAILED` (with the platform's reason and the reference) and with no refund row, and a
 funded trade with a refund requested. Each is also a unit test.
 
 **The money rule these screens follow.** A screen never asserts a financial state it has not read for that trade. Refund
 amounts and the fee treatment are the refund row's, as sent. "Issued" is said only of a `PROCESSED` refund. CT1 does not
 say "no money has moved": it reads the buyer's payment status and offers nothing while a payment may be on its way.
-Approving a cancellation and the seller's can't-fulfil ask once. The deviations name every reference promise that is
+Approving or declining a cancellation and the seller's can't-fulfil ask once. The deviations name every reference promise that is
 not built (12-hour auto-approval, TrustOps hold on contest, "arrives within 2 hours", the 24-hour auto-release
 reopening window).
 

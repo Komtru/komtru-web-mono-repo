@@ -430,6 +430,27 @@ describe('disputed, settlement and completion (CWT-05, CWT-06, Customer-5)', () 
   );
 });
 
+describe('F-030 on the actions tab', () => {
+  it('offers the buyer "Ask to cancel" only when the platform says they may, and not while a request is waiting', async () => {
+    serve(workspaceTrade('FUNDED', 'BUYER'), {
+      'GET /trades/:id/cancellation': cancellationRead('FUNDED', 'BUYER', { actions: { canRequest: true } }),
+    });
+    show('actions');
+    expect(await screen.findByText('Ask to cancel · Buyer')).toBeTruthy();
+    cleanup();
+    api.call.mockReset();
+    serve(workspaceTrade('FUNDED', 'BUYER'), {
+      'GET /trades/:id/cancellation': cancellationRead('FUNDED', 'BUYER', { request: cancellationRequest() }),
+    });
+    show('actions');
+    await screen.findByLabelText('Actions on this trade');
+    await waitFor(() => {
+      expect(callsTo(api.call, 'GET', '/trades/:id/cancellation').length).toBeGreaterThan(0);
+    });
+    expect(screen.queryByText('Ask to cancel · Buyer')).toBeNull();
+  });
+});
+
 describe('F-030 on the overview', () => {
   it('says a refund has been requested on a funded trade, instead of showing the funds as untouched', async () => {
     serve(workspaceTrade('FUNDED', 'BUYER'), {

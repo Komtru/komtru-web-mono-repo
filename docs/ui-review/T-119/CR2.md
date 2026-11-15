@@ -16,7 +16,7 @@
 **Real differences (intended, and why)**
 
 - **No countdown strip and no auto-approval.** "Respond within 12h — auto-approved if you don't" is not built: the platform never approves for a silent seller, and a request stays open until answered, the item ships, or the delivery deadline passes. Saying otherwise would tell the seller something false.
-- **"Contest — I've already shipped" is "Decline — I've already shipped".** The platform's decline is a plain decline with an optional note; it does not hold the refund for TrustOps. The reference's "contesting will hold the refund for TrustOps" line is replaced by "If you've already shipped, decline and the trade carries on."
+- **"Contest — I've already shipped" is "Decline the request", and it asks once.** The platform's decline is a plain decline with an optional note; it does not hold the refund for TrustOps, and it ends the buyer's ability to ask again, so a confirmation sheet says so. The screen does not claim the seller has shipped, because the platform holds no such fact for a funded trade.
 - **Approving asks once.** Approve refunds the buyer and cannot be undone, so it opens a confirmation sheet ("Approve and refund") before anything is sent. The reference sends on the first tap.
 - Added an optional "Note to the buyer" field (the platform takes one).
-- Buttons come from `canRespond`; a buyer opening the address, a lapsed request and an answered one say so with no control.
+- Buttons come from `canRespond`; a buyer opening the address, a lapsed request, an answered one, a request on a held trade and one with a refund already on its way each say so with no control.

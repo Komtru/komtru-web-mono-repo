@@ -15,6 +15,6 @@
 
 **Real differences (intended, and why)**
 
-- **Says only what the status proves.** The reference says "TechEdge NG has been notified. Since no funds were ever protected, there's nothing left to settle." The built screen says the other side has been notified only for the person who just cancelled, and "Komtru never confirmed a payment on this trade, so there is nothing to settle" (a funded trade is refunded, never `CANCELLED`). For the buyer it adds a line to keep the receipt and contact support with the trade code if they did send a payment, because a transfer can land after a cancel.
+- **Says only what the status proves.** The reference says "TechEdge NG has been notified. Since no funds were ever protected, there's nothing left to settle." The built screen says the other side has been notified only for the person who just cancelled. It says "Komtru never confirmed a payment on this trade, so there is nothing to settle" only to a buyer whose own payment status reads `NONE` or `AWAITING_PAYMENT`; a payment that is verifying, confirmed, under review or not confirmed is told "may have reached Komtru after it was cancelled" and to contact support with the trade code; the seller, and a buyer whose status is loading or unreadable, are told only that the trade was cancelled before it was funded.
 - **No "won't appear on your Trust History" line.** No spec or platform field backs it.
 - It is a state of the trade page (`/trade/[id]` when the agreed trade is `CANCELLED`), reached right after CT1 on the cancel route as well.

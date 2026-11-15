@@ -62,7 +62,7 @@ export function workspaceStanding(status: WorkspaceStatus): WorkspaceStanding {
     case 'CANCELLED_REFUNDED':
       // The status means the ledger decided a refund, not that the money has gone back: a refund can still be on its
       // way, or held after the provider failed it. The overview says which, from the trade's own refund row.
-      return { chip: { tone: 'resolved', label: 'Cancelled' }, stage: undefined, closed: true };
+      return { chip: { tone: 'resolved', label: 'Cancelled · refund' }, stage: undefined, closed: true };
   }
 }
 
@@ -191,7 +191,17 @@ const confirmDeliveryRow = (tradeId: string, title: string): TradeActionRow => (
  * cancelling after payment (F-030). Everything else names the feature that will own it. SEAM(F-032 disputes,
  * reporting an issue): turn a `later` row into a `live` one when the flow exists, and nothing else here changes.
  */
-export function tradeActions(status: WorkspaceStatus, role: TradeRole, tradeId: string): TradeActionRow[] {
+export function tradeActions(
+  status: WorkspaceStatus,
+  role: TradeRole,
+  tradeId: string,
+  /**
+   * What the platform's cancellation read allows this reader (F-030). The row for cancelling a funded trade is offered
+   * only when it says so: a trade with a request already waiting, a hold or a refund on its way offers none, and one
+   * whose read has not come back offers none either.
+   */
+  cancellation?: { canRequest: boolean; canCancelAsSeller: boolean },
+): TradeActionRow[] {
   const rows: TradeActionRow[] = [
     {
       id: 'view-terms',
@@ -228,23 +238,25 @@ export function tradeActions(status: WorkspaceStatus, role: TradeRole, tradeId: 
         });
         rows.push(moreTimeRow(tradeId));
       }
-      rows.push(
-        buyer
-          ? {
-              id: 'ask-cancel',
-              title: 'Ask to cancel · Buyer',
-              description: 'Ask the seller to cancel before the item ships. If they agree you are refunded.',
-              availability: 'live',
-              href: cancelHref(tradeId),
-            }
-          : {
-              id: 'cannot-fulfil',
-              title: 'Can’t fulfil · Seller',
-              description: 'Cancel the trade because you can’t deliver. The buyer is refunded.',
-              availability: 'live',
-              href: cancelHref(tradeId),
-            },
-      );
+      if (buyer && cancellation?.canRequest === true) {
+        rows.push({
+          id: 'ask-cancel',
+          title: 'Ask to cancel · Buyer',
+          description:
+            'Ask the seller to cancel before the item ships. If they agree, a refund is requested for you.',
+          availability: 'live',
+          href: cancelHref(tradeId),
+        });
+      }
+      if (!buyer && cancellation?.canCancelAsSeller === true) {
+        rows.push({
+          id: 'cannot-fulfil',
+          title: 'Can’t fulfil · Seller',
+          description: 'Cancel the trade because you can’t deliver. A refund is requested for the buyer.',
+          availability: 'live',
+          href: cancelHref(tradeId),
+        });
+      }
       break;
     case 'SHIPPED':
       if (!buyer) {

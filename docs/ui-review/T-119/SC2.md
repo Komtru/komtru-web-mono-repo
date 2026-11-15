@@ -15,7 +15,7 @@
 
 **Real differences (intended, and why)**
 
-- **The stage line follows the refund row, not the status.** The reference says "Your ₦89,500 has already been refunded in full" and "Refund already sent". Built: "{amount} was sent back to your original payment method" only when the refund is `PROCESSED`; "is being sent back" while it is `REQUESTED` or `PROCESSING`; the held wording for `FAILED` or `NEEDS_REVIEW`. The amount is the refund row's `amountMinor`, not the trade price.
+- **The stage line follows the refund row, not the status.** The reference says "Your ₦89,500 has already been refunded in full" and "Refund already sent". Built: "{amount} was sent back to your original payment method" only when the refund is `PROCESSED`; "is being sent back" while it is `REQUESTED` or `PROCESSING`; the platform's reason and the reference for `FAILED` or `NEEDS_REVIEW`. The amount is the refund row's `amountMinor`, not the trade price.
 - **No arrival time** ("Usually arrives within 2 hours, always within 24"): not a platform promise.
 - "Find another seller" is "Start a new trade": the catalogue is cut from the MVP, and `/trade/new` is where a buyer starts one.
 - The reason is the seller's own code ("Reason given: out of stock.").
