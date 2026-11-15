@@ -562,7 +562,7 @@ list a trade.
 
 - **Journey:** Sell on Komtru
 - **Actor:** merchant, staff/TrustOps
-- **Absorbs:** T-055 (todo), T-051 (done), T-121 (todo), T-154 (todo)
+- **Absorbs:** T-055 (todo), T-051 (done), T-121 (todo), T-154 (done)
 - **Backend scope:** Merchant applications and certification; business verification with bank name-match, address and social proof. Business verification already built (T-051); certification outstanding (T-055).
 - **Frontend scope:** Become a Seller (SO1–SO5), business verification result (BVR1), the seller's verification tab (M2), and the TrustOps review screen OP-61. _8 v2 screens._
 - **Status:** Backend done, UI outstanding

@@ -19,6 +19,8 @@ The engine exists and only the UI is missing, so these are the highest-value wor
 
 | Feature | Title                                                  | Journey                  | MVP |
 | ------- | ------------------------------------------------------ | ------------------------ | --- |
+| F-028   | Delivery and evidence in the workspace                 | Deliver & inspect        | yes |
+| F-040   | Apply for merchant certification and have it reviewed  | Sell on Komtru           | yes |
 | F-044   | Account basics, addresses, documents and system states | Account, trust & support | yes |
 | F-045   | Verify yourself, and close or recover an account       | Account, trust & support | yes |
 
@@ -49,10 +51,8 @@ The engine exists and only the UI is missing, so these are the highest-value wor
 | Feature | Title                                                           | Journey                                 | MVP |
 | ------- | --------------------------------------------------------------- | --------------------------------------- | --- |
 | F-005   | Deterministic integration test suite                            | Platform (not a user journey)           | yes |
-| F-028   | Delivery and evidence in the workspace                          | Deliver & inspect                       | yes |
 | F-031   | Lifecycle exceptions: expiry, withdrawal and inspection updates | Issues & resolution                     | yes |
 | F-032   | Report an issue and open a dispute                              | Issues & resolution                     | yes |
-| F-040   | Apply for merchant certification and have it reviewed           | Sell on Komtru                          | yes |
 | F-068   | Desktop: propose, agree and fund                                | Desktop & tablet journeys               | yes |
 | F-072   | Tablet: arrive, home, discover, propose and fund                | Desktop & tablet journeys               | yes |
 | F-075   | Hosting and real deploy jobs                                    | Launch & assurance (not a user journey) | yes |
@@ -73,13 +73,11 @@ The engine exists and only the UI is missing, so these are the highest-value wor
 | ------- | --------------------------------------------------------------- | --------------------------------------- | --- |
 | F-005   | Deterministic integration test suite                            | Platform (not a user journey)           | yes |
 | F-016   | View a seller's profile and Trust Passport                      | Home & discover                         | yes |
-| F-028   | Delivery and evidence in the workspace                          | Deliver & inspect                       | yes |
 | F-031   | Lifecycle exceptions: expiry, withdrawal and inspection updates | Issues & resolution                     | yes |
 | F-032   | Report an issue and open a dispute                              | Issues & resolution                     | yes |
 | F-033   | Resolution execution: the return track                          | Issues & resolution                     | yes |
 | F-034   | Resolution execution: replacement and mutual settlement         | Issues & resolution                     | yes |
 | F-035   | Decide a dispute in TrustOps                                    | Issues & resolution                     | yes |
-| F-040   | Apply for merchant certification and have it reviewed           | Sell on Komtru                          | yes |
 | F-046   | Trust history, account and notification settings                | Account, trust & support                | yes |
 | F-067   | Desktop: arrive, home and discover                              | Desktop & tablet journeys               | yes |
 | F-068   | Desktop: propose, agree and fund                                | Desktop & tablet journeys               | yes |
@@ -98,11 +96,11 @@ The same work counted per ticket. Useful for the detail in `docs/tickets/`, not 
 it counts backend and frontend layers separately, which is how the build drifted.
 
 ```
-MVP   █████████████████████████·········  77/104  (74%)
-Total ████████████████··················  77/168  (46%)
+MVP   ██████████████████████████········  78/104  (75%)
+Total ████████████████··················  78/168  (46%)
 ```
 
-27 MVP tickets left, 64 deferred past it.
+26 MVP tickets left, 64 deferred past it.
 
 ### Tickets in progress
 
@@ -155,7 +153,6 @@ Total ████████████████·············
 | T-121  | Apply for merchant certification                                   | yes |
 | T-126  | Trust, account and settings                                        | yes |
 | T-143  | Disputes                                                           | yes |
-| T-154  | Merchant certification review                                      | yes |
 | T-180  | End-to-end critical paths                                          | yes |
 | T-182  | Security review                                                    | yes |
 | T-183  | Definition-of-done audit and first push                            | yes |
