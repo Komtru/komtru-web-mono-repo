@@ -179,6 +179,16 @@ async function assertCanApply(db: Pick<Db, 'select'>, userId: string): Promise<v
   if (profile?.status === 'CERTIFIED') {
     throw new ApiError(409, 'CONFLICT', 'You are already a certified merchant');
   }
+  // Losing certification is not undone through the ordinary queue: a risk-suspended or revoked seller
+  // would otherwise be one approval away from being re-certified by a reviewer who never saw why.
+  if (profile) {
+    throw new ApiError(
+      409,
+      'CONFLICT',
+      'Your merchant certification was ended',
+      'It cannot be applied for again here. Contact support.',
+    );
+  }
 }
 
 async function validateInput(deps: ApplicationDeps, userId: string, input: DraftInput): Promise<void> {
@@ -304,6 +314,19 @@ export async function saveDraft(
     if (!updated) throw notFound();
 
     for (const document of input.documents ?? []) {
+      // A replaced file is superseded: nobody should keep a grant on a document that is no longer the one.
+      const [previous] = await tx
+        .select({ fileId: merchantApplicationDocuments.fileId })
+        .from(merchantApplicationDocuments)
+        .where(
+          and(
+            eq(merchantApplicationDocuments.applicationId, app.id),
+            eq(merchantApplicationDocuments.docType, document.docType),
+          ),
+        );
+      if (previous && previous.fileId !== document.fileId) {
+        await deps.ports.revokeReviewerAccess(previous.fileId, tx);
+      }
       await tx
         .insert(merchantApplicationDocuments)
         .values({ applicationId: app.id, docType: document.docType, fileId: document.fileId })

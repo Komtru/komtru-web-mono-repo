@@ -9,12 +9,13 @@ import { ApiError } from '../../../platform/errors.js';
 import type { Logger } from '../../../platform/logger.js';
 import type { QueueFactory } from '../../../platform/queue/factory.js';
 import { listCurrentStandards } from '../../config/index.js';
-import { findFile, grantAccess, retrieveFile } from '../../files/index.js';
+import { findFile, grantKycReviewerAccess, retrieveFile, revokeAllGrants } from '../../files/index.js';
 import { getCitiesByIds } from '../../geo/index.js';
 import { rolesWithPermission } from '../../identity/index.js';
 import { payoutAccounts } from '../../ledger/index.js';
 import { requestBusinessEvidence } from '../../trust/index.js';
 import { COLLECT_EVIDENCE_QUEUE } from '../domain/queues.js';
+import { merchantApplicationDocuments } from './postgres/schema/applications.js';
 import type { EvidenceJob, MerchantPorts } from '../services/ports.js';
 
 export interface PortsRuntime {
@@ -46,9 +47,26 @@ export function bindPorts(runtime: PortsRuntime): MerchantPorts {
     },
 
     grantReviewerAccess: async (fileId) => {
-      for (const granteeRole of reviewerRoles()) {
-        await grantAccess(db, { fileId, granteeRole, reason: 'Merchant application review' });
+      // files cannot see applications, so the proof that this file is one a reviewer may be given is
+      // here: it must be attached to a merchant application. A KYC document of an identity check, or
+      // anyone else's, is refused whatever role is asked for.
+      const [attached] = await db
+        .select({ id: merchantApplicationDocuments.id })
+        .from(merchantApplicationDocuments)
+        .where(eq(merchantApplicationDocuments.fileId, fileId))
+        .limit(1);
+      if (!attached) {
+        throw new Error(
+          'merchant: refusing a reviewer grant on a file that is not attached to an application',
+        );
       }
+      for (const granteeRole of reviewerRoles()) {
+        await grantKycReviewerAccess(db, { fileId, granteeRole, reason: 'Merchant application review' });
+      }
+    },
+
+    revokeReviewerAccess: async (fileId, tx) => {
+      await revokeAllGrants(tx, fileId);
     },
 
     cityBelongsToState: async (stateId, cityId) => {

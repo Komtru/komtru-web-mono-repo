@@ -225,7 +225,7 @@ describe.runIf(infraEnabled)('the merchant routes (T-055)', () => {
   });
 
   describe('opening an application', () => {
-    it('serves the evidence, the advisory and signed documents, each logged for this reviewer', async () => {
+    it('serves the evidence and the advisory, lists the documents, and signs none of them', async () => {
       ports = stubPorts();
       const me = await applicant();
       const { id } = await submitAs(me);
@@ -239,14 +239,42 @@ describe.runIf(infraEnabled)('the merchant routes (T-055)', () => {
         advisory: { label: 'AI-suggested — not a decision' },
         form: { businessName: 'Techedge Nigeria Ltd' },
       });
-      expect((detail.documents as Body[]).map((d) => d.docType)).toEqual([
-        'CAC_CERTIFICATE',
-        'STATUS_REPORT',
-        'DIRECTOR_ID',
+      expect((detail.documents as Body[]).map((d) => [d.docType, d.viewable])).toEqual([
+        ['CAC_CERTIFICATE', true],
+        ['STATUS_REPORT', true],
+        ['DIRECTOR_ID', true],
       ]);
-      expect((detail.documents as Body[]).every((d) => typeof d.url === 'string')).toBe(true);
-      expect(ports.signed.map((s) => s.viewer.userId)).toEqual(Array(3).fill(viewer.userId));
-      expect(ports.signed.map((s) => s.viewer.roles)).toEqual(Array(3).fill(['KYC_ANALYST']));
+      expect(JSON.stringify(res.body)).not.toMatch(/files\.test|"url"|fileId/);
+      expect(ports.signed).toHaveLength(0);
+    });
+
+    it('signs one document on request, for this reviewer, and gates it on merchant.application.view', async () => {
+      ports = stubPorts();
+      const me = await applicant();
+      const { id } = await submitAs(me);
+      const viewer = await staff([VIEW], ['KYC_ANALYST']);
+      const none = await staff([]);
+      const path = `/v1/admin/merchant/applications/${id}/documents/CAC_CERTIFICATE`;
+      expect((await request(appFor(none.actor)).get(path)).status).toBe(403);
+      expect(ports.signed).toHaveLength(0);
+
+      const res = await request(appFor(viewer.actor)).get(path);
+      expect(res.status).toBe(200);
+      expect(json(res)).toMatchObject({ docType: 'CAC_CERTIFICATE', label: 'CAC certificate' });
+      expect(String(json(res).url)).toMatch(/^https:\/\/files\.test\//);
+      expect(ports.signed).toHaveLength(1);
+      expect(ports.signed[0]?.viewer).toEqual({ userId: viewer.userId, roles: ['KYC_ANALYST'] });
+      expect(
+        (await request(appFor(viewer.actor)).get(`/v1/admin/merchant/applications/${id}/documents/PASSPORT`))
+          .status,
+      ).toBe(422);
+      expect(
+        (
+          await request(appFor(viewer.actor)).get(
+            `/v1/admin/merchant/applications/${id}/documents/MEMORANDUM`,
+          )
+        ).status,
+      ).toBe(404);
     });
   });
 

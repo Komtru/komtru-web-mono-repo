@@ -18,12 +18,13 @@ import {
   decideApplication,
   getApplicationDetail,
   listApplications,
+  viewDocument,
   type StaffActor,
 } from '../../../src/modules/merchant/services/review.service.js';
 import { infraEnabled } from '../../support/db-urls.js';
 import { useTestDatabase } from '../../support/db.js';
 import { outboxEventTypes, seedUser } from '../identity/support.js';
-import { completeDraft, logger, matching, stubPorts, type StubPorts } from './support.js';
+import { addFile, completeDraft, logger, matching, stubPorts, type StubPorts } from './support.js';
 
 describe.runIf(infraEnabled)('the staff review service (T-055)', () => {
   const t = useTestDatabase();
@@ -52,15 +53,19 @@ describe.runIf(infraEnabled)('the staff review service (T-055)', () => {
     actor: StaffActor,
     applicationId: string,
     decision: Parameters<typeof decideApplication>[1]['decision'],
-    over: { reason?: string; policyCitation?: string } = {},
+    over: { reason?: string; policyCitation?: string; ports?: StubPorts } = {},
   ) =>
-    decideApplication(db(), {
-      actor,
-      applicationId,
-      decision,
-      reason: over.reason ?? 'Documents verified against the CAC record',
-      policyCitation: over.policyCitation ?? 'MER-POL-2.1',
-    });
+    decideApplication(
+      db(),
+      {
+        actor,
+        applicationId,
+        decision,
+        reason: over.reason ?? 'Documents verified against the CAC record',
+        policyCitation: over.policyCitation ?? 'MER-POL-2.1',
+      },
+      over.ports ?? stubPorts(),
+    );
 
   describe('the queue', () => {
     it('lists submitted applications by SLA risk, never drafts, with filters and pages', async () => {
@@ -128,15 +133,14 @@ describe.runIf(infraEnabled)('the staff review service (T-055)', () => {
   });
 
   describe('the detail', () => {
-    it('serves the form, signed documents for the viewer, the evidence matrix and the advisory', async () => {
+    it('serves the form, the evidence matrix and the advisory, and signs nothing', async () => {
       const p = ports();
       const { userId, applicationId, draft } = await submitted(p);
-      const viewer = await staffActor(['KYC_ANALYST']);
       await t
         .owner()
         .query(`UPDATE identity.users SET verification_level = 'IDENTITY_VERIFIED' WHERE id = $1`, [userId]);
 
-      const detail = await getApplicationDetail({ db: db(), ports: p, logger }, { applicationId, viewer });
+      const detail = await getApplicationDetail({ db: db(), ports: p, logger }, { applicationId });
 
       expect(detail).toMatchObject({
         applicationId,
@@ -154,17 +158,16 @@ describe.runIf(infraEnabled)('the staff review service (T-055)', () => {
           trades: { total: 0, completed: 0 },
         },
       });
-      // Every document is signed through M20 for THIS viewer, and the reviewer grant is re-asserted.
-      expect(detail.documents.map((d) => d.docType)).toEqual([
-        'CAC_CERTIFICATE',
-        'STATUS_REPORT',
-        'DIRECTOR_ID',
+      // Documents are listed and viewable, but opening the page signs none of them and writes no log:
+      // a document is signed when a person asks to see it.
+      expect(detail.documents.map((d) => [d.docType, d.viewable])).toEqual([
+        ['CAC_CERTIFICATE', true],
+        ['STATUS_REPORT', true],
+        ['DIRECTOR_ID', true],
       ]);
-      expect(detail.documents.every((d) => d.url?.startsWith('https://files.test/'))).toBe(true);
-      expect(p.signed.map((s) => s.viewer)).toEqual(
-        Array(3).fill({ userId: viewer.userId, roles: ['KYC_ANALYST'] }),
-      );
-      expect(p.granted.length).toBeGreaterThanOrEqual(draft.documents.length * 2);
+      expect(JSON.stringify(detail)).not.toMatch(/files\.test|url|fileId/);
+      expect(p.signed).toHaveLength(0);
+      void draft;
 
       expect(detail.evidence).toMatchObject({
         identityLevel: 2,
@@ -186,11 +189,8 @@ describe.runIf(infraEnabled)('the staff review service (T-055)', () => {
          VALUES ($1, $2, 'CAC', 'PROVIDER_PENDING', 3, now() + interval '1 day', 1)`,
         [requestId, userId],
       );
-      const viewer = await staffActor();
       const deps = { db: db(), ports: p, logger };
-      expect((await getApplicationDetail(deps, { applicationId, viewer })).evidence.cacLookup.state).toBe(
-        'PENDING',
-      );
+      expect((await getApplicationDetail(deps, { applicationId })).evidence.cacLookup.state).toBe('PENDING');
 
       // The lookup finishes: a verified business whose number matches the application's.
       await t
@@ -202,7 +202,7 @@ describe.runIf(infraEnabled)('the staff review service (T-055)', () => {
          VALUES ($1, $2, '123456', 'TECHEDGE NIGERIA LIMITED', 'LIMITED_LIABILITY', 'active', true, 'FAKE', 'ref', now())`,
         [requestId, userId],
       );
-      const detail = await getApplicationDetail(deps, { applicationId, viewer });
+      const detail = await getApplicationDetail(deps, { applicationId });
       expect(detail.evidence.cacLookup).toMatchObject({
         state: 'VERIFIED',
         registeredBusinessName: 'TECHEDGE NIGERIA LIMITED',
@@ -216,7 +216,7 @@ describe.runIf(infraEnabled)('the staff review service (T-055)', () => {
       expect(facts).toMatchObject({ cacLookup: 'VERIFIED' });
       // Viewing again with nothing changed writes nothing: the trail is not buried in identical syncs.
       const before = await count(`SELECT count(*) AS n FROM cases.case_trail WHERE type = 'FACTS_UPDATED'`);
-      await getApplicationDetail(deps, { applicationId, viewer });
+      await getApplicationDetail(deps, { applicationId });
       expect(await count(`SELECT count(*) AS n FROM cases.case_trail WHERE type = 'FACTS_UPDATED'`)).toBe(
         before,
       );
@@ -259,10 +259,7 @@ describe.runIf(infraEnabled)('the staff review service (T-055)', () => {
       await insertTrade('COMPLETED', 'BUYER', 1);
       await insertTrade('SETTLED', 'SELLER', 2);
       await insertTrade('DRAFT', 'SELLER', 3);
-      const detail = await getApplicationDetail(
-        { db: db(), ports: p, logger },
-        { applicationId, viewer: await staffActor() },
-      );
+      const detail = await getApplicationDetail({ db: db(), ports: p, logger }, { applicationId });
       expect(detail.applicant.trades).toEqual({ total: 3, completed: 2 });
     });
 
@@ -271,27 +268,138 @@ describe.runIf(infraEnabled)('the staff review service (T-055)', () => {
       const { userId } = await seedUser(t.app());
       const draft = await saveDraft({ db: db(), ports: p, logger }, userId, { businessName: 'A' });
       const deps = { db: db(), ports: p, logger };
-      const viewer = await staffActor();
-      await expect(getApplicationDetail(deps, { applicationId: draft.id, viewer })).rejects.toMatchObject({
+      await expect(getApplicationDetail(deps, { applicationId: draft.id })).rejects.toMatchObject({
         status: 404,
       });
-      await expect(getApplicationDetail(deps, { applicationId: randomUUID(), viewer })).rejects.toMatchObject(
-        { status: 404 },
-      );
+      await expect(getApplicationDetail(deps, { applicationId: randomUUID() })).rejects.toMatchObject({
+        status: 404,
+      });
     });
 
-    it('shows a document that cannot be served as unavailable rather than failing the page', async () => {
+    it('shows a document that cannot be served as not viewable, and refuses to open it', async () => {
       const p = ports();
       const { applicationId, draft } = await submitted(p);
       const first = draft.documents[0];
       const file = first ? p.files.get(first.fileId) : undefined;
       if (first && file) p.files.set(first.fileId, { ...file, status: 'TOMBSTONED' });
-      const detail = await getApplicationDetail(
+      const deps = { db: db(), ports: p, logger };
+      const detail = await getApplicationDetail(deps, { applicationId });
+      expect(detail.documents.map((d) => d.viewable)).toEqual([false, true, true]);
+      await expect(
+        viewDocument(deps, { applicationId, docType: 'CAC_CERTIFICATE', viewer: await staffActor() }),
+      ).rejects.toMatchObject({ status: 404 });
+    });
+  });
+
+  describe('opening a document', () => {
+    it('signs that one document for that viewer, on request, after re-asserting the grant', async () => {
+      const p = ports();
+      const { applicationId, draft } = await submitted(p);
+      const viewer = await staffActor(['KYC_ANALYST']);
+      const view = await viewDocument(
         { db: db(), ports: p, logger },
-        { applicationId, viewer: await staffActor() },
+        { applicationId, docType: 'DIRECTOR_ID', viewer },
       );
-      expect(detail.documents.find((d) => d.fileId === first?.fileId)?.url).toBeNull();
-      expect(detail.documents.filter((d) => d.url !== null)).toHaveLength(2);
+      expect(view).toMatchObject({ docType: 'DIRECTOR_ID', label: 'Proprietor or director ID' });
+      expect(view.url).toMatch(/^https:\/\/files\.test\//);
+      expect(p.signed).toEqual([
+        { fileId: draft.documents[2]?.fileId, viewer: { userId: viewer.userId, roles: ['KYC_ANALYST'] } },
+      ]);
+      expect(p.granted.at(-1)).toBe(draft.documents[2]?.fileId);
+    });
+
+    it('is refused once the application is decided, and for a document it does not have', async () => {
+      const p = ports();
+      const { applicationId } = await submitted(p);
+      const deps = { db: db(), ports: p, logger };
+      const staff = await staffActor();
+      await assignApplication(db(), { actor: staff, applicationId });
+      await expect(
+        viewDocument(deps, { applicationId, docType: 'MEMORANDUM', viewer: staff }),
+      ).rejects.toMatchObject({ status: 404 });
+      await decide(staff, applicationId, { outcome: 'REJECT' }, { ports: p });
+      p.signed.length = 0;
+      await expect(
+        viewDocument(deps, { applicationId, docType: 'CAC_CERTIFICATE', viewer: staff }),
+      ).rejects.toMatchObject({ status: 409, code: 'INVALID_TRANSITION' });
+      expect(p.signed).toHaveLength(0);
+      const detail = await getApplicationDetail(deps, { applicationId });
+      expect(detail.documents.every((d) => !d.viewable)).toBe(true);
+    });
+  });
+
+  describe('who may decide', () => {
+    it('refuses a reviewer their own application, to take or to decide', async () => {
+      const p = ports();
+      const { userId, applicationId } = await submitted(p);
+      const self: StaffActor = { userId, roles: ['KYC_ANALYST'] };
+      await expect(assignApplication(db(), { actor: self, applicationId })).rejects.toMatchObject({
+        status: 403,
+      });
+      // Even if the case were taken some other way (the generic cases route), the decision refuses.
+      await t.owner().query(`UPDATE cases.cases SET owner_user_id = $1, state = 'INVESTIGATING'`, [userId]);
+      await expect(decide(self, applicationId, { outcome: 'APPROVE' })).rejects.toMatchObject({
+        status: 403,
+      });
+      expect(await count(`SELECT count(*) AS n FROM identity.user_capabilities`)).toBe(0);
+      expect(await count(`SELECT count(*) AS n FROM cases.case_decisions`)).toBe(0);
+    });
+
+    it('re-checks the applicant’s account at approval: suspended since submitting is not certified', async () => {
+      const p = ports();
+      const { userId, applicationId } = await submitted(p);
+      const staff = await staffActor();
+      await assignApplication(db(), { actor: staff, applicationId });
+      await t.owner().query(`UPDATE identity.users SET status = 'SUSPENDED' WHERE id = $1`, [userId]);
+      await expect(decide(staff, applicationId, { outcome: 'APPROVE' })).rejects.toMatchObject({
+        status: 409,
+      });
+      expect(await count(`SELECT count(*) AS n FROM identity.user_capabilities`)).toBe(0);
+      expect(await count(`SELECT count(*) AS n FROM merchant.merchant_profiles`)).toBe(0);
+      expect(await count(`SELECT count(*) AS n FROM merchant.merchant_badges`)).toBe(0);
+      expect((await t.owner().query(`SELECT status FROM merchant.merchant_applications`)).rows).toEqual([
+        { status: 'IN_REVIEW' },
+      ]);
+      // A rejection of the same application is still possible.
+      await expect(decide(staff, applicationId, { outcome: 'REJECT' })).resolves.toMatchObject({
+        status: 'REJECTED',
+      });
+    });
+  });
+
+  describe('reviewer access ends with the decision', () => {
+    it.each<[string, Parameters<typeof decide>[2]]>([
+      ['approved', { outcome: 'APPROVE' }],
+      ['rejected', { outcome: 'REJECT' }],
+      ['sent back', { outcome: 'REQUEST_CHANGES', requested: [{ kind: 'FIELD', key: 'businessName' }] }],
+    ])('revokes the grants on every document when it is %s', async (_name, decision) => {
+      const p = ports();
+      const { applicationId, draft } = await submitted(p);
+      const staff = await staffActor();
+      await assignApplication(db(), { actor: staff, applicationId });
+      await decide(staff, applicationId, decision, { ports: p });
+      expect([...p.revoked].sort()).toEqual(draft.documents.map((d) => d.fileId).sort());
+    });
+
+    it('revokes nothing when the decision fails, so a refused decision leaves the review open', async () => {
+      const p = ports();
+      const { userId, applicationId } = await submitted(p);
+      const staff = await staffActor();
+      await assignApplication(db(), { actor: staff, applicationId });
+      await t.owner().query(`UPDATE identity.users SET status = 'SUSPENDED' WHERE id = $1`, [userId]);
+      await expect(decide(staff, applicationId, { outcome: 'APPROVE' }, { ports: p })).rejects.toBeDefined();
+      expect(p.revoked).toHaveLength(0);
+    });
+
+    it('revokes the grant on a document the applicant replaces', async () => {
+      const p = ports();
+      const { userId, deps, draft } = await submitted(p);
+      const old = draft.documents[0]?.fileId;
+      await t.owner().query(`UPDATE merchant.merchant_applications SET status = 'CHANGES_REQUESTED'`);
+      await saveDraft(deps, userId, {
+        documents: [{ docType: 'CAC_CERTIFICATE', fileId: addFile(p, userId) }],
+      });
+      expect(p.revoked).toEqual([old]);
     });
   });
 
@@ -722,31 +830,34 @@ describe.runIf(infraEnabled)('the staff review service (T-055)', () => {
       ).rejects.toMatchObject({ status: 409 });
     });
 
-    it('re-certifies after a suspension: the same slug, the badge back, the capability ACTIVE', async () => {
+    it('does not let an ended certification back through the ordinary queue', async () => {
       const p = ports();
       const userId = await certified(p);
       await endCertification(db(), { userId, kind: 'SUSPENDED', reason: 'Investigation' });
       const deps: ApplicationDeps = { db: db(), ports: p, logger };
-      const saved = await saveDraft(deps, userId, completeDraft(p, userId));
-      await submitApplication(deps, { userId, applicationId: saved.id, mode: 'SUBMIT' });
-      const staff = await staffActor();
-      await assignApplication(db(), { actor: staff, applicationId: saved.id });
-      expect(await decide(staff, saved.id, { outcome: 'APPROVE' })).toMatchObject({
-        storefrontSlug: 'techedge-nigeria-ltd',
+      await expect(saveDraft(deps, userId, completeDraft(p, userId))).rejects.toMatchObject({
+        status: 409,
+        title: 'Your merchant certification was ended',
       });
       expect((await t.owner().query(`SELECT status FROM identity.user_capabilities`)).rows).toEqual([
-        { status: 'ACTIVE' },
+        { status: 'SUSPENDED' },
       ]);
-      expect(
-        (await t.owner().query(`SELECT certification_status FROM merchant.merchant_profiles`)).rows,
-      ).toEqual([{ certification_status: 'CERTIFIED' }]);
-      expect(
-        (
-          await t
-            .owner()
-            .query(`SELECT count(*) FILTER (WHERE revoked_at IS NULL) AS live FROM merchant.merchant_badges`)
-        ).rows[0],
-      ).toEqual({ live: '1' });
+    });
+
+    it('refuses to certify an account that already has a profile, even if an application got through', async () => {
+      const p = ports();
+      const { userId, applicationId } = await submitted(p);
+      const staff = await staffActor();
+      await assignApplication(db(), { actor: staff, applicationId });
+      await t.owner().query(
+        `INSERT INTO merchant.merchant_profiles (user_id, application_id, business_name, business_type, storefront_slug, certification_status, certified_at, certification_ended_at)
+         VALUES ($1, $2, 'Old', 'REGISTERED_BUSINESS', 'old', 'SUSPENDED', now(), now())`,
+        [userId, applicationId],
+      );
+      await expect(decide(staff, applicationId, { outcome: 'APPROVE' })).rejects.toMatchObject({
+        status: 409,
+      });
+      expect(await count(`SELECT count(*) AS n FROM identity.user_capabilities`)).toBe(0);
     });
   });
 });

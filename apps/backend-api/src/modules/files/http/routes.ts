@@ -157,8 +157,12 @@ export function filesRoutes(deps: FilesHttpDeps): RouteDefinition[] {
      *
      * `audit.view` rather than a new permission: looking at a file as staff is a read of someone
      * else's data, and it writes an audit row exactly as the compliance reads beside it do. The
-     * access decision is unchanged — `decideAccess` still refuses a PRIVATE_OWNER file to staff,
-     * so this is not a back door around D2, only a door that exists.
+     * access decision is `decideAccess`'s: a PRIVATE_OWNER file is refused to staff unless it is a
+     * KYC document carrying a reviewer role grant (T-055). Only the merchant module can create one
+     * (`grantKycReviewerAccess`, which no route calls; `POST /admin/files/:id/grants` refuses
+     * anything but a PRIVATE_CASE file), for the roles holding `merchant.application.view` and for
+     * files attached to a merchant application, and it ends them when the case is decided. So this
+     * route reads a KYC document only while a review is open, and every read is in `file_access_log`.
      */
     defineRoute({
       method: 'get',

@@ -14,6 +14,7 @@ import { insertPayoutAccount } from '../../../src/modules/ledger/infrastructure/
 import { bindPorts, reviewerRoles } from '../../../src/modules/merchant/infrastructure/ports.js';
 import {
   getApplicationDetail,
+  viewDocument,
   assignApplication,
   decideApplication,
 } from '../../../src/modules/merchant/services/review.service.js';
@@ -113,6 +114,19 @@ describe.runIf(infraEnabled)('the merchant ports against the real modules (T-055
     });
     expect(await p.findFile(randomUUID())).toBeUndefined();
 
+    // Attached to the applicant's application, which is what makes it a document a reviewer may be given.
+    const application = await t
+      .owner()
+      .query<{ id: string }>(
+        `INSERT INTO merchant.merchant_applications (user_id) VALUES ($1) RETURNING id`,
+        [userId],
+      );
+    await t
+      .owner()
+      .query(
+        `INSERT INTO merchant.merchant_application_documents (application_id, doc_type, file_id) VALUES ($1, 'CAC_CERTIFICATE', $2)`,
+        [application.rows[0]?.id, fileId],
+      );
     await p.grantReviewerAccess(fileId);
     await p.grantReviewerAccess(fileId);
     const grants = await listGrants(db(), fileId);
@@ -237,38 +251,69 @@ describe.runIf(infraEnabled)('the merchant ports against the real modules (T-055
     ]);
 
     const reviewer = (await seedUser(t.app())).userId;
-    const detail = await getApplicationDetail(deps, {
+    // Opening the page signs nothing and logs nothing.
+    await getApplicationDetail(deps, { applicationId: saved.id });
+    expect(await listAccessLog(db(), cac, { limit: 10 })).toHaveLength(0);
+
+    // Asking to see one document signs that one, and logs the view against this reviewer.
+    const view = await viewDocument(deps, {
       applicationId: saved.id,
+      docType: 'CAC_CERTIFICATE',
       viewer: { userId: reviewer, roles: ['KYC_ANALYST'] },
     });
-    expect(detail.documents.map((d) => d.url !== null)).toEqual([true, true, true]);
-    expect(detail.documents[0]?.url).toContain('c-CLOUDINARY_TRADE');
+    expect(view.url).toContain('c-CLOUDINARY_TRADE');
     const log = await listAccessLog(db(), cac, { limit: 10 });
     expect(log.map((row) => [row.accessedByAdminId, row.accessGranted])).toEqual([[reviewer, true]]);
+    expect(await listAccessLog(db(), report, { limit: 10 })).toHaveLength(0);
 
     // A staff member without a granted role is refused, and the refusal is logged too.
     const outsider = (await seedUser(t.app())).userId;
-    const refused = await getApplicationDetail(deps, {
-      applicationId: saved.id,
-      viewer: { userId: outsider, roles: ['DISPUTE_REVIEWER'] },
-    });
-    expect(refused.documents.map((d) => d.url)).toEqual([null, null, null]);
+    await expect(
+      viewDocument(deps, {
+        applicationId: saved.id,
+        docType: 'CAC_CERTIFICATE',
+        viewer: { userId: outsider, roles: ['DISPUTE_REVIEWER'] },
+      }),
+    ).rejects.toMatchObject({ status: 404 });
     expect((await listAccessLog(db(), cac, { limit: 10 })).map((r) => r.accessGranted)).toEqual([
       false,
       true,
     ]);
 
-    // And the whole certification runs against the real bindings.
+    // The whole certification runs against the real bindings, and the reviewers' access ends with it.
     const actor = { userId: reviewer, roles: ['KYC_ANALYST'] };
     await assignApplication(db(), { actor, applicationId: saved.id });
     expect(
-      await decideApplication(db(), {
-        actor,
-        applicationId: saved.id,
-        decision: { outcome: 'APPROVE' },
-        reason: 'Verified',
-        policyCitation: 'MER-POL-2.1',
-      }),
+      await decideApplication(
+        db(),
+        {
+          actor,
+          applicationId: saved.id,
+          decision: { outcome: 'APPROVE' },
+          reason: 'Verified',
+          policyCitation: 'MER-POL-2.1',
+        },
+        real,
+      ),
     ).toMatchObject({ status: 'APPROVED', storefrontSlug: 'techedge-nigeria-ltd' });
+    for (const fileId of [cac, report, director]) expect(await listGrants(db(), fileId)).toHaveLength(0);
+    // A staff read of the applicant's identity document now returns nothing, through the real retrieval.
+    const afterwards = await real.signDocument(cac, { userId: reviewer, roles: ['KYC_ANALYST'] });
+    expect(afterwards).toBeUndefined();
+    expect((await listAccessLog(db(), cac, { limit: 10 })).map((r) => r.accessGranted)).toEqual([
+      false,
+      false,
+      true,
+    ]);
+  });
+
+  it('refuses a reviewer grant on a KYC file that is not attached to an application, for any role', async () => {
+    const real = ports();
+    const { userId } = await seedUser(t.app());
+    const identityDocument = await kycFile(userId);
+    await expect(real.grantReviewerAccess(identityDocument)).rejects.toThrow(
+      /not attached to an application/,
+    );
+    expect(await listGrants(db(), identityDocument)).toHaveLength(0);
   });
 });

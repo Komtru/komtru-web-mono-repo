@@ -21,8 +21,10 @@ import {
   decideApplication,
   getApplicationDetail,
   listApplications,
+  viewDocument,
   type StaffActor,
 } from '../services/review.service.js';
+import type { DocumentType } from '../domain/application.js';
 import type { MerchantPorts } from '../services/ports.js';
 import type { approveBody, draftBody, queueQuery, rejectBody, requestChangesBody } from './validations.js';
 
@@ -117,8 +119,15 @@ export const listHandler = (deps: MerchantHttpDeps, query: z.output<typeof queue
 
 export const countHandler = (deps: MerchantHttpDeps) => countAwaitingReview(deps.db());
 
-export const detailHandler = (deps: MerchantHttpDeps, ctx: Ctx, applicationId: string) =>
-  getApplicationDetail(applicationDeps(deps), { applicationId, viewer: staffActor(ctx) });
+export const detailHandler = (deps: MerchantHttpDeps, applicationId: string) =>
+  getApplicationDetail(applicationDeps(deps), { applicationId });
+
+export const documentHandler = (
+  deps: MerchantHttpDeps,
+  ctx: Ctx,
+  applicationId: string,
+  docType: DocumentType,
+) => viewDocument(applicationDeps(deps), { applicationId, docType, viewer: staffActor(ctx) });
 
 export const assignHandler = (deps: MerchantHttpDeps, ctx: Ctx, applicationId: string) =>
   assignApplication(deps.db(), { actor: staffActor(ctx), applicationId });
@@ -129,13 +138,17 @@ export const approveHandler = (
   applicationId: string,
   body: z.output<typeof approveBody>,
 ) =>
-  decideApplication(deps.db(), {
-    actor: staffActor(ctx),
-    applicationId,
-    decision: { outcome: 'APPROVE' },
-    reason: requireReason(ctx.req, body.reason),
-    policyCitation: body.policyCitation,
-  });
+  decideApplication(
+    deps.db(),
+    {
+      actor: staffActor(ctx),
+      applicationId,
+      decision: { outcome: 'APPROVE' },
+      reason: requireReason(ctx.req, body.reason),
+      policyCitation: body.policyCitation,
+    },
+    deps.ports(),
+  );
 
 export const rejectHandler = (
   deps: MerchantHttpDeps,
@@ -143,13 +156,17 @@ export const rejectHandler = (
   applicationId: string,
   body: z.output<typeof rejectBody>,
 ) =>
-  decideApplication(deps.db(), {
-    actor: staffActor(ctx),
-    applicationId,
-    decision: { outcome: 'REJECT' },
-    reason: requireReason(ctx.req, body.reason),
-    policyCitation: body.policyCitation,
-  });
+  decideApplication(
+    deps.db(),
+    {
+      actor: staffActor(ctx),
+      applicationId,
+      decision: { outcome: 'REJECT' },
+      reason: requireReason(ctx.req, body.reason),
+      policyCitation: body.policyCitation,
+    },
+    deps.ports(),
+  );
 
 export const requestChangesHandler = (
   deps: MerchantHttpDeps,
@@ -157,17 +174,21 @@ export const requestChangesHandler = (
   applicationId: string,
   body: z.output<typeof requestChangesBody>,
 ) =>
-  decideApplication(deps.db(), {
-    actor: staffActor(ctx),
-    applicationId,
-    decision: {
-      outcome: 'REQUEST_CHANGES',
-      requested: body.requested.map((item) => ({
-        kind: item.kind,
-        key: item.key,
-        ...(item.note === undefined ? {} : { note: item.note }),
-      })),
+  decideApplication(
+    deps.db(),
+    {
+      actor: staffActor(ctx),
+      applicationId,
+      decision: {
+        outcome: 'REQUEST_CHANGES',
+        requested: body.requested.map((item) => ({
+          kind: item.kind,
+          key: item.key,
+          ...(item.note === undefined ? {} : { note: item.note }),
+        })),
+      },
+      reason: requireReason(ctx.req, body.reason),
+      policyCitation: body.policyCitation,
     },
-    reason: requireReason(ctx.req, body.reason),
-    policyCitation: body.policyCitation,
-  });
+    deps.ports(),
+  );

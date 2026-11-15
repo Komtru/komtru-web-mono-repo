@@ -1,5 +1,6 @@
 import { sql } from 'drizzle-orm';
 import { check, text, timestamp, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
+import { merchantApplications } from './applications.js';
 import { merchant } from './columns.js';
 import { badgeType, businessType, certificationStatus } from './enums.js';
 
@@ -13,8 +14,10 @@ export const merchantProfiles = merchant.table(
   {
     /** Soft reference to identity.users(id). */
     userId: uuid('user_id').primaryKey(),
-    /** Soft reference to the application that earned it. */
-    applicationId: uuid('application_id').notNull(),
+    /** The application that earned it. */
+    applicationId: uuid('application_id')
+      .notNull()
+      .references(() => merchantApplications.id),
     businessName: text('business_name').notNull(),
     businessType: businessType('business_type').notNull(),
     storefrontSlug: text('storefront_slug').notNull(),
@@ -40,7 +43,9 @@ export const merchantBadges = merchant.table(
   'merchant_badges',
   {
     id: uuid('id').primaryKey().defaultRandom(),
-    userId: uuid('user_id').notNull(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => merchantProfiles.userId),
     badge: badgeType('badge').notNull(),
     awardedAt: timestamp('awarded_at', { withTimezone: true }).notNull().defaultNow(),
     revokedAt: timestamp('revoked_at', { withTimezone: true }),

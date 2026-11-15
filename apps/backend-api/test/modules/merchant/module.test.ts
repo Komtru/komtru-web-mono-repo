@@ -24,6 +24,7 @@ describe('the merchant module in the registry', () => {
     ).toEqual([
       'GET /admin/merchant/applications',
       'GET /admin/merchant/applications/:id',
+      'GET /admin/merchant/applications/:id/documents/:docType',
       'GET /admin/merchant/applications/count',
       'GET /merchant/applications/me',
       'POST /admin/merchant/applications/:id/approve',

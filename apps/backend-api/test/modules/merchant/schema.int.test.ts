@@ -126,13 +126,15 @@ describe.runIf(infraEnabled)('merchant schema (migration 0050)', () => {
   it('keeps storefront slugs unique and URL-shaped, and one live badge per user', async () => {
     const a = await seedUser(t.app());
     const b = await seedUser(t.app());
-    const profile = (userId: string, slug: string) =>
-      t.owner().query(
+    const profile = async (userId: string, slug: string) => {
+      const applicationId = (await insertApplication(userId, 'APPROVED')).rows[0]?.id;
+      return t.owner().query(
         `INSERT INTO merchant.merchant_profiles
            (user_id, application_id, business_name, business_type, storefront_slug, certified_at)
          VALUES ($1, $2, 'Shop', 'REGISTERED_BUSINESS', $3, now())`,
-        [userId, randomUUID(), slug],
+        [userId, applicationId, slug],
       );
+    };
     await profile(a.userId, 'techedge');
     await expect(profile(b.userId, 'techedge')).rejects.toMatchObject({
       constraint: 'merchant_profiles_slug_unique',
@@ -151,5 +153,24 @@ describe.runIf(infraEnabled)('merchant schema (migration 0050)', () => {
     await expect(badge(a.userId)).rejects.toMatchObject({ constraint: 'merchant_badges_one_live' });
     await t.owner().query(`UPDATE merchant.merchant_badges SET revoked_at = now()`);
     await expect(badge(a.userId)).resolves.toBeDefined();
+  });
+
+  it('ties a profile to the application that earned it, and a badge to a profile', async () => {
+    const { userId } = await seedUser(t.app());
+    await expect(
+      t.owner().query(
+        `INSERT INTO merchant.merchant_profiles
+           (user_id, application_id, business_name, business_type, storefront_slug, certified_at)
+         VALUES ($1, $2, 'Shop', 'REGISTERED_BUSINESS', 'orphan', now())`,
+        [userId, randomUUID()],
+      ),
+    ).rejects.toMatchObject({ code: '23503' });
+    await expect(
+      t
+        .owner()
+        .query(`INSERT INTO merchant.merchant_badges (user_id, badge) VALUES ($1, 'VERIFIED_MERCHANT')`, [
+          userId,
+        ]),
+    ).rejects.toMatchObject({ code: '23503' });
   });
 });

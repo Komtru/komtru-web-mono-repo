@@ -43,31 +43,23 @@ export async function certifyApplication(
     reason: input.reason,
   });
 
+  // A profile that already exists means certification was granted and then ended. Re-certifying is not
+  // something the application queue decides (see `assertCanApply`), so approval refuses it rather than
+  // quietly turning a suspension back off.
   const [existing] = await tx
-    .select({ storefrontSlug: merchantProfiles.storefrontSlug })
+    .select({ status: merchantProfiles.certificationStatus })
     .from(merchantProfiles)
     .where(eq(merchantProfiles.userId, application.userId))
     .for('update');
-
-  let storefrontSlug: string;
   if (existing) {
-    // Re-certification after a suspension or revocation: the shop keeps its address.
-    storefrontSlug = existing.storefrontSlug;
-    await tx
-      .update(merchantProfiles)
-      .set({
-        applicationId: application.id,
-        businessName: application.businessName,
-        businessType: application.businessType,
-        certificationStatus: 'CERTIFIED',
-        certifiedAt,
-        certificationEndedAt: null,
-        updatedAt: certifiedAt,
-      })
-      .where(eq(merchantProfiles.userId, application.userId));
-  } else {
-    storefrontSlug = await insertProfile(tx, application, certifiedAt);
+    throw new ApiError(
+      409,
+      'CONFLICT',
+      'This account already has a merchant profile',
+      'Re-certification is a separate decision.',
+    );
   }
+  const storefrontSlug = await insertProfile(tx, application, certifiedAt);
 
   await tx
     .insert(merchantBadges)

@@ -124,10 +124,15 @@ describe.runIf(infraEnabled)('the applicant service (T-055)', () => {
       });
 
       const { userId } = await seedUser(t.app());
+      const earned = await t.owner().query<{ id: string }>(
+        `INSERT INTO merchant.merchant_applications (user_id, status, case_id, submission_count)
+         VALUES ($1, 'APPROVED', $2, 1) RETURNING id`,
+        [userId, randomUUID()],
+      );
       await t.owner().query(
         `INSERT INTO merchant.merchant_profiles (user_id, application_id, business_name, business_type, storefront_slug, certified_at)
          VALUES ($1, $2, 'Shop', 'REGISTERED_BUSINESS', 'shop', now())`,
-        [userId, randomUUID()],
+        [userId, earned.rows[0]?.id],
       );
       await expect(saveDraft(deps, userId, { businessName: 'A' })).rejects.toMatchObject({ status: 409 });
     });

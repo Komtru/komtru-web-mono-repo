@@ -9,7 +9,8 @@
 //
 //   GET  /admin/merchant/applications                    the queue, sorted by SLA risk
 //   GET  /admin/merchant/applications/count              what awaits review (the sidebar's number)
-//   GET  /admin/merchant/applications/:id                one application, documents signed and logged
+//   GET  /admin/merchant/applications/:id                one application and its evidence (signs nothing)
+//   GET  /admin/merchant/applications/:id/documents/:docType   one document, signed on request and logged
 //   POST /admin/merchant/applications/:id/assign         take the case
 //   POST /admin/merchant/applications/:id/approve        one transaction
 //   POST /admin/merchant/applications/:id/request-changes
@@ -26,6 +27,8 @@ import {
   countResponse,
   decisionResponse,
   detailResponse,
+  documentParams,
+  documentViewResponse,
   draftBody,
   myApplicationResponse,
   queueQuery,
@@ -116,7 +119,20 @@ export function merchantRoutes(deps: MerchantHttpDeps): RouteDefinition[] {
       summary: 'One merchant application with its evidence and signed documents',
       rateLimit: READ_BUDGET,
       schema: { params: applicationIdParams, response: detailResponse },
-      handler: (ctx) => http.detailHandler(deps, ctx, ctx.params.id),
+      handler: (ctx) => http.detailHandler(deps, ctx.params.id),
+    }),
+
+    // The one place a KYC document is signed: on request, one at a time, and written to
+    // `file_access_log`. Opening the application above signs nothing.
+    defineRoute({
+      method: 'get',
+      path: '/admin/merchant/applications/:id/documents/:docType',
+      scope: 'STAFF',
+      permission: 'merchant.application.view',
+      summary: 'Open one document of an application under review: a short-lived signed link, logged',
+      rateLimit: READ_BUDGET,
+      schema: { params: documentParams, response: documentViewResponse },
+      handler: (ctx) => http.documentHandler(deps, ctx, ctx.params.id, ctx.params.docType),
     }),
 
     defineRoute({

@@ -1,3 +1,4 @@
+import type { Tx } from '../../../platform/events/publish.js';
 // What the merchant module needs from other modules, as narrow questions rather than imports: the
 // services below never name `files`, `geo`, `config`, `ledger` or the queue. `module.ts` is the only file
 // that binds these to the real barrels, so a service is testable with a stub and a module boundary is a
@@ -48,8 +49,13 @@ export interface EvidenceJob {
 
 export interface MerchantPorts {
   findFile(fileId: string): Promise<FileFacts | undefined>;
-  /** Idempotent. Grants the roles that may decide an application a read of one KYC document. */
+  /**
+   * Idempotent. Grants the roles that hold `merchant.application.view` a read of one KYC document, and
+   * refuses a file that is not attached to a merchant application.
+   */
   grantReviewerAccess(fileId: string): Promise<void>;
+  /** Ends every reviewer grant on the file. Takes the caller's transaction, so it commits with the decision. */
+  revokeReviewerAccess(fileId: string, tx: Tx): Promise<void>;
   /** True when the city exists, is active, and belongs to the state. */
   cityBelongsToState(stateId: string, cityId: string): Promise<boolean>;
   locationLabel(cityId: string): Promise<LocationLabel | undefined>;

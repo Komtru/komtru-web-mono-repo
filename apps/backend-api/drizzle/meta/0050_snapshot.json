@@ -1,5 +1,5 @@
 {
-  "id": "349c06a9-8326-44e4-bd34-f7bd2c903493",
+  "id": "b535cbb4-a252-4a74-859f-f9b5af142742",
   "prevId": "b5fb4469-8f86-4864-ade4-ddea6a141156",
   "version": "7",
   "dialect": "postgresql",
@@ -8214,7 +8214,18 @@
           "with": {}
         }
       },
-      "foreignKeys": {},
+      "foreignKeys": {
+        "merchant_badges_user_id_merchant_profiles_user_id_fk": {
+          "name": "merchant_badges_user_id_merchant_profiles_user_id_fk",
+          "tableFrom": "merchant_badges",
+          "tableTo": "merchant_profiles",
+          "schemaTo": "merchant",
+          "columnsFrom": ["user_id"],
+          "columnsTo": ["user_id"],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "policies": {},
@@ -8314,7 +8325,18 @@
           "with": {}
         }
       },
-      "foreignKeys": {},
+      "foreignKeys": {
+        "merchant_profiles_application_id_merchant_applications_id_fk": {
+          "name": "merchant_profiles_application_id_merchant_applications_id_fk",
+          "tableFrom": "merchant_profiles",
+          "tableTo": "merchant_applications",
+          "schemaTo": "merchant",
+          "columnsFrom": ["application_id"],
+          "columnsTo": ["id"],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "policies": {},

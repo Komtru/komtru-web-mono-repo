@@ -60,6 +60,8 @@ export { retrieveFile, subjectFrom, type RetrievalResult } from './services/acce
  */
 export {
   grantAccess,
+  grantKycReviewerAccess,
+  revokeAllGrants,
   revokeGrant,
   listGrants,
   listAccessLog,

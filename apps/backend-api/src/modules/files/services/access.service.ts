@@ -61,14 +61,10 @@ export interface GrantInput {
  * dispute half-wired.
  */
 /**
- * T-055: a KYC document is PRIVATE_OWNER, and a merchant application's reviewers reach it through a
- * role grant. That is the whole exception: one category, roles only, and `decideAccess` honours it for a
- * staff session only. Every other PRIVATE_OWNER file has no grants, and so no one but its owner.
+ * Grants access to a `PRIVATE_CASE` file. The one grant function the HTTP route reaches, and it grants
+ * on nothing else: a `KYC_DOCUMENT` is `PRIVATE_OWNER`, and its reviewer grant has its own function
+ * below that no route can call.
  */
-const isGrantable = (record: FileRecord, input: GrantInput): boolean =>
-  record.visibility === 'PRIVATE_CASE' ||
-  (record.visibility === 'PRIVATE_OWNER' && record.category === 'KYC_DOCUMENT' && Boolean(input.granteeRole));
-
 export const grantAccess = async (db: Db, input: GrantInput): Promise<FileAccessGrant> => {
   if (Boolean(input.granteeUserId) === Boolean(input.granteeRole)) {
     throw new ApiError(
@@ -82,18 +78,56 @@ export const grantAccess = async (db: Db, input: GrantInput): Promise<FileAccess
   const record = await findFile(db, input.fileId);
   if (!record) throw notFound();
 
-  // A grant on any other class would be inert — decideAccess consults grants only for PRIVATE_CASE and
-  // for a reviewer ROLE on a KYC document — so accepting one would let an operator believe they had
-  // shared a file when they had not.
-  if (!isGrantable(record, input)) {
+  // A grant on any other class would be inert — decideAccess consults grants only for PRIVATE_CASE (and,
+  // through `grantKycReviewerAccess`, for a reviewer role on a KYC document) — so accepting one would let
+  // an operator believe they had shared a file when they had not. A KYC document in particular is
+  // refused HERE: anyone holding `user.update` reaches this function, and minting a read of somebody's
+  // identity document is not something that permission is for.
+  if (record.visibility !== 'PRIVATE_CASE') {
     throw new ApiError(
       409,
       'CONFLICT',
       'Access grants only apply to case files',
-      `Grants are consulted only for PRIVATE_CASE files, and for a reviewer role on a KYC document; this one is ${record.visibility}.`,
+      `Grants are consulted only for PRIVATE_CASE files; this one is ${record.visibility}.`,
     );
   }
 
+  return insertGrant(db, input);
+};
+
+/**
+ * T-055: the reviewer's grant on a KYC document, for the merchant module and nobody else.
+ *
+ * Exported from the barrel but not from any route: the HTTP grant endpoint calls `grantAccess`, which
+ * refuses this class. A role only, never a user id, and only on a `KYC_DOCUMENT`. WHICH roles, and
+ * which files, is the caller's to prove: files cannot see merchant applications or the role catalogue,
+ * so the merchant module checks that the file is attached to an application and that the role holds
+ * `merchant.application.view` before it calls this. `decideAccess` honours the grant for a staff
+ * session only.
+ */
+export const grantKycReviewerAccess = async (
+  db: Db,
+  input: { fileId: string; granteeRole: string; reason: string },
+): Promise<FileAccessGrant> => {
+  const record = await findFile(db, input.fileId);
+  if (!record) throw notFound();
+  if (record.visibility !== 'PRIVATE_OWNER' || record.category !== 'KYC_DOCUMENT') {
+    throw new ApiError(409, 'CONFLICT', 'Only a KYC document takes a reviewer grant');
+  }
+  return insertGrant(db, { fileId: input.fileId, granteeRole: input.granteeRole, reason: input.reason });
+};
+
+/** Revokes every live grant on a file, returning how many. For a reviewer's access ending with their case. */
+export const revokeAllGrants = async (db: Db, fileId: string): Promise<number> => {
+  const revoked = await db
+    .update(fileAccessGrants)
+    .set({ revokedAt: new Date() })
+    .where(and(eq(fileAccessGrants.fileId, fileId), isNull(fileAccessGrants.revokedAt)))
+    .returning({ id: fileAccessGrants.id });
+  return revoked.length;
+};
+
+const insertGrant = async (db: Db, input: GrantInput): Promise<FileAccessGrant> => {
   const existing = await findActiveGrant(db, input);
   if (existing) return existing;
 

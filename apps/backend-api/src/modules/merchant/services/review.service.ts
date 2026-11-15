@@ -165,11 +165,21 @@ export async function countAwaitingReview(db: Db): Promise<{ awaitingReview: num
 export interface DetailDocument {
   docType: DocumentType;
   label: string;
-  fileId: string;
   contentType: string | null;
-  /** Null when the file cannot be served (removed, or refused). The reviewer sees that, not a broken link. */
-  url: string | null;
+  /**
+   * Whether the reviewer may open it now: only while the application is open for review. The detail
+   * carries no URL and no file id. A document is signed, and the view logged, when a person asks to see
+   * it (`viewDocument`), so opening a page, or leaving one open, writes nothing to `file_access_log`.
+   */
+  viewable: boolean;
+}
+
+export interface SignedView {
+  docType: DocumentType;
+  label: string;
+  url: string;
   expiresAt: Date | null;
+  contentType: string;
 }
 
 export interface HistoryEntry {
@@ -224,14 +234,17 @@ const COMPLETED_TRADE_STATUSES = TRADE_STATUSES.filter(
   (status) => status === 'COMPLETED' || status === 'SETTLED',
 );
 
+/** The statuses in which a reviewer holds a read of the applicant's documents. */
+const isOpenForReview = (status: MerchantApplicationStatus): boolean => AWAITING_REVIEW.includes(status);
+
 /**
- * Opening an application is an act on someone's KYC documents, so it goes through M20 for every one of
- * them: the access decision, the signed URL, and a `file_access_log` row per view. The reviewer grant is
- * re-asserted first (idempotent), because the one made at submit is best-effort.
+ * Opening an application shows the form, the evidence and which documents exist. It does NOT sign any
+ * of them: a document is an act on someone's identity records, so M20 signs it, and logs it in
+ * `file_access_log`, when a reviewer asks to view that one (`viewDocument`).
  */
 export async function getApplicationDetail(
   deps: ReviewDeps,
-  input: { applicationId: string; viewer: StaffActor },
+  input: { applicationId: string },
 ): Promise<ApplicationDetail> {
   const { db, ports } = deps;
   const app = await findApplication(db, input.applicationId);
@@ -246,22 +259,15 @@ export async function getApplicationDetail(
     .select()
     .from(merchantApplicationDocuments)
     .where(eq(merchantApplicationDocuments.applicationId, app.id));
+  const open = isOpenForReview(app.status);
   const documents: DetailDocument[] = [];
   for (const row of docRows) {
-    await ports.grantReviewerAccess(row.fileId).catch((error: unknown) => {
-      deps.logger.error({ err: error, fileId: row.fileId }, 'merchant: a reviewer grant could not be made');
-    });
     const file = await ports.findFile(row.fileId);
-    const signed = await ports
-      .signDocument(row.fileId, { userId: input.viewer.userId, roles: input.viewer.roles })
-      .catch(() => undefined);
     documents.push({
       docType: row.docType,
       label: DOCUMENT_LABELS[row.docType],
-      fileId: row.fileId,
-      contentType: signed?.contentType ?? file?.contentType ?? null,
-      url: signed?.url ?? null,
-      expiresAt: signed?.expiresAt ?? null,
+      contentType: file?.contentType ?? null,
+      viewable: open && file?.status === 'ACTIVE',
     });
   }
 
@@ -322,7 +328,66 @@ export async function getApplicationDetail(
   };
 }
 
+/**
+ * One document, signed for one reviewer, at their request. Refused once the application is decided or is
+ * with the applicant: the reviewer grants end with the decision, and this does not make them again. The
+ * grant is re-asserted first (idempotent) because the one made at submit is best-effort.
+ */
+export async function viewDocument(
+  deps: ReviewDeps,
+  input: { applicationId: string; docType: DocumentType; viewer: StaffActor },
+): Promise<SignedView> {
+  const { db, ports } = deps;
+  const app = await findApplication(db, input.applicationId);
+  if (!app.caseId) throw notFound();
+  if (!isOpenForReview(app.status)) {
+    throw new ApiError(
+      409,
+      'INVALID_TRANSITION',
+      'This application is no longer open for review',
+      'Reviewers can open its documents only while it awaits a decision.',
+      undefined,
+      { status: app.status },
+    );
+  }
+  const [row] = await db
+    .select()
+    .from(merchantApplicationDocuments)
+    .where(
+      and(
+        eq(merchantApplicationDocuments.applicationId, app.id),
+        eq(merchantApplicationDocuments.docType, input.docType),
+      ),
+    );
+  if (!row) throw new ApiError(404, 'NOT_FOUND', 'No such document on this application');
+  await ports.grantReviewerAccess(row.fileId);
+  const signed = await ports.signDocument(row.fileId, {
+    userId: input.viewer.userId,
+    roles: input.viewer.roles,
+  });
+  if (!signed) throw new ApiError(404, 'NOT_FOUND', 'This file is not available');
+  return {
+    docType: row.docType,
+    label: DOCUMENT_LABELS[row.docType],
+    url: signed.url,
+    expiresAt: signed.expiresAt,
+    contentType: signed.contentType,
+  };
+}
+
 // --- taking it --------------------------------------------------------------------------------------
+
+/** Nobody reviews their own application: a staff member with a consumer account is still the applicant. */
+const assertNotOwnApplication = (app: Pick<MerchantApplication, 'userId'>, actor: CaseActor): void => {
+  if (app.userId === actor.userId) {
+    throw new ApiError(
+      403,
+      'FORBIDDEN',
+      'You cannot review your own application',
+      'Another reviewer has to take and decide it.',
+    );
+  }
+};
 
 /** Takes the case; the application moves to IN_REVIEW. Whoever takes it is the only one who can decide it. */
 export async function assignApplication(
@@ -330,6 +395,7 @@ export async function assignApplication(
   input: { actor: CaseActor; applicationId: string },
 ): Promise<{ applicationId: string; status: MerchantApplicationStatus; ownerUserId: string | null }> {
   const app = await findApplication(db, input.applicationId);
+  assertNotOwnApplication(app, input.actor);
   if (!app.caseId || !AWAITING_REVIEW.includes(app.status)) {
     throw new ApiError(
       409,
@@ -391,7 +457,11 @@ const STATUS_OF = {
   REJECT: 'REJECTED',
 } as const satisfies Record<Decision['outcome'], MerchantApplicationStatus>;
 
-export async function decideApplication(db: Db, input: DecideInput): Promise<DecideResult> {
+export async function decideApplication(
+  db: Db,
+  input: DecideInput,
+  ports: Pick<MerchantPorts, 'revokeReviewerAccess'>,
+): Promise<DecideResult> {
   const reason = input.reason.trim();
   const policyCitation = input.policyCitation.trim();
   if (reason.length === 0 || policyCitation.length === 0) {
@@ -425,6 +495,7 @@ export async function decideApplication(db: Db, input: DecideInput): Promise<Dec
       .where(eq(merchantApplications.id, input.applicationId))
       .for('update');
     if (!app) throw notFound();
+    assertNotOwnApplication(app, input.actor);
     if (!app.caseId || !canTransition(app.status, to)) {
       throw new ApiError(
         409,
@@ -448,6 +519,20 @@ export async function decideApplication(db: Db, input: DecideInput): Promise<Dec
 
     let certified: Certified | undefined;
     if (input.decision.outcome === 'APPROVE') {
+      // Re-read inside the transaction: an applicant suspended or closed since they submitted must not
+      // be certified on the strength of a status that has since changed.
+      const [applicant] = await tx
+        .select({ status: users.status })
+        .from(users)
+        .where(eq(users.id, app.userId));
+      if (applicant?.status !== 'ACTIVE') {
+        throw new ApiError(
+          409,
+          'CONFLICT',
+          'The applicant’s account is not active',
+          'It cannot be certified. Reject the application, or ask for the account to be reinstated first.',
+        );
+      }
       certified = await certifyApplication(tx, {
         application: app,
         actorUserId: input.actor.userId,
@@ -477,6 +562,13 @@ export async function decideApplication(db: Db, input: DecideInput): Promise<Dec
       ...(certified ? { detail: { storefrontSlug: certified.storefrontSlug } } : {}),
     });
     await closeCaseForSubject(tx, caseSubjectFor(app), to);
+    // The reviewers' read of the applicant's documents ends with the decision, in the same transaction:
+    // a decided application leaves no standing access behind. A resubmission grants again.
+    const attached = await tx
+      .select({ fileId: merchantApplicationDocuments.fileId })
+      .from(merchantApplicationDocuments)
+      .where(eq(merchantApplicationDocuments.applicationId, app.id));
+    for (const { fileId } of attached) await ports.revokeReviewerAccess(fileId, tx);
     await publish(tx, merchantApplicationDecided, {
       payload: {
         applicationId: app.id,

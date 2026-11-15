@@ -10,6 +10,7 @@ import { MERCHANT_APPLICATION_STATUSES } from '../domain/status.js';
 // --- applicant ---------------------------------------------------------------------------------
 
 export const applicationIdParams = z.object({ id: z.uuid() });
+export const documentParams = z.object({ id: z.uuid(), docType: z.enum(DOCUMENT_TYPES) });
 
 export const draftBody = z.strictObject({
   businessName: z.string().trim().min(1).max(200).optional(),
@@ -126,10 +127,8 @@ export const detailResponse = queueItem.extend({
     z.object({
       docType: z.enum(DOCUMENT_TYPES),
       label: z.string(),
-      fileId: z.uuid(),
       contentType: z.string().nullable(),
-      url: z.string().nullable(),
-      expiresAt: z.date().nullable(),
+      viewable: z.boolean(),
     }),
   ),
   evidence: evidenceSchema,
@@ -194,4 +193,13 @@ export const decisionResponse = z.object({
   applicationId: z.uuid(),
   status: z.enum(MERCHANT_APPLICATION_STATUSES),
   storefrontSlug: z.string().optional(),
+});
+
+export const documentViewResponse = z.object({
+  docType: z.enum(DOCUMENT_TYPES),
+  label: z.string(),
+  /** A short-lived signed link. Treat it as a secret: anyone holding it can fetch the bytes until it expires. */
+  url: z.string(),
+  expiresAt: z.date().nullable(),
+  contentType: z.string(),
 });

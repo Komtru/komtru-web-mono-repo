@@ -15,6 +15,7 @@ export interface StubPorts extends MerchantPorts {
   files: Map<string, FileFacts>;
   payouts: Map<string, PayoutAccountFacts & { userId: string }>;
   granted: string[];
+  revoked: string[];
   enqueued: { job: EvidenceJob; delayMs: number | undefined }[];
   cacRequests: { userId: string; rcNumber: string }[];
   signed: { fileId: string; viewer: StaffViewer }[];
@@ -32,6 +33,7 @@ export function stubPorts(): StubPorts {
     files: new Map(),
     payouts: new Map(),
     granted: [],
+    revoked: [],
     enqueued: [],
     cacRequests: [],
     signed: [],
@@ -43,6 +45,10 @@ export function stubPorts(): StubPorts {
     grantReviewerAccess: (fileId) => {
       if (ports.failGrant) return Promise.reject(new Error('grant failed'));
       ports.granted.push(fileId);
+      return Promise.resolve();
+    },
+    revokeReviewerAccess: (fileId) => {
+      ports.revoked.push(fileId);
       return Promise.resolve();
     },
     cityBelongsToState: (stateId, cityId) => Promise.resolve(ports.cityOf.get(cityId) === stateId),
