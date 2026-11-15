@@ -69,6 +69,16 @@ describe('matching a search against a trade', () => {
     expect(matchesTradeQuery(trade, 'KMT-9013801')).toBe(false);
   });
 
+  it('finds a run of digits that is part of an item name, not only a code', () => {
+    const order = row(3, {
+      tradeCode: 'KMT-9013900-NG',
+      item: { title: 'Order 20231', categoryCode: null, categoryName: null },
+      counterparty: null,
+    });
+    expect(matchesTradeQuery(order, '20231')).toBe(true);
+    expect(matchesTradeQuery(order, '9013801')).toBe(false);
+  });
+
   it('matches nothing for a blank query, and nothing it does not contain', () => {
     expect(matchesTradeQuery(trade, '   ')).toBe(false);
     expect(matchesTradeQuery(trade, 'drone')).toBe(false);

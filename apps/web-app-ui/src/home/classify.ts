@@ -36,16 +36,17 @@ const CODE_SHAPED = /^(kmt-)?\d{5,8}(-ng)?$/i;
 
 /**
  * Whether a typed query finds a trade. A query shaped like a Trade Code matches on its digits alone, so a
- * code typed without the prefix or the market suffix still finds the trade. Anything else is matched,
- * without regard to case, against the item, its category, and the other party's name or handle.
+ * code typed without the prefix or the market suffix still finds the trade. Otherwise, and whenever the code
+ * match does not hold, the query is matched, without regard to case, against the item, its category, and the
+ * other party's name or handle.
  */
 export function matchesTradeQuery(trade: TradeListItem, query: string): boolean {
   const text = query.trim().toLowerCase();
   if (text === '') return false;
 
-  if (CODE_SHAPED.test(text)) {
-    return trade.tradeCode.replace(/\D/g, '') === text.replace(/\D/g, '');
-  }
+  // A code-shaped query that names this trade's code matches. One that does not still falls through to the words,
+  // because a run of digits is often part of an item name ("Order 20231"), not a code.
+  if (CODE_SHAPED.test(text) && trade.tradeCode.replace(/\D/g, '') === text.replace(/\D/g, '')) return true;
 
   const handle = text.startsWith('@') ? text.slice(1) : text;
   if (handle === '') return false;
