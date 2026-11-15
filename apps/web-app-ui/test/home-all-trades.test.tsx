@@ -3,12 +3,26 @@ import { cleanup, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useAllTrades } from '../src/home/useAllTrades';
 import { ProblemError } from '@komtru/api-client';
-import { answerWith, callsTo, listItem, renderWithApi, type CallFn } from './support/trade';
+import { answerWith, callsTo, id, listItem, renderWithApi, type CallFn } from './support/trade';
 
 const api = vi.hoisted(() => ({ call: vi.fn<CallFn>() }));
+const live = vi.hoisted(() => ({ subscribe: vi.fn() }));
+
+// The real subscription still runs; the spy records which rooms it was asked to join.
+vi.mock('@komtru/api-client/react', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@komtru/api-client/react')>();
+  return {
+    ...actual,
+    useTradeLive: (trades: readonly { id: string; code: string }[]) => {
+      live.subscribe(trades);
+      return actual.useTradeLive(trades);
+    },
+  };
+});
 
 beforeEach(() => {
   api.call.mockReset();
+  live.subscribe.mockClear();
 });
 afterEach(cleanup);
 
@@ -60,7 +74,25 @@ describe('every trade the person is party to, for home and search', () => {
     renderWithApi(api.call, <Probe />);
 
     expect(await screen.findByText('next failed')).toBeTruthy();
-    await new Promise((resolve) => setTimeout(resolve, 20));
+    // Let anything scheduled run, then check nothing re-asked: the count stays at the two that were made.
+    await new Promise((resolve) => setTimeout(resolve, 150));
     expect(callsTo(api.call, 'GET', '/trades')).toHaveLength(2);
+  });
+
+  it('subscribes only to the trades that are still open, not to finished ones', async () => {
+    answerWith(api.call, {
+      'GET /trades': {
+        items: [
+          listItem(1, { attention: 'PAY', status: 'PENDING_PAYMENT' }),
+          listItem(2, { attention: null, status: 'CANCELLED' }),
+          listItem(3, { attention: null, status: 'PENDING_PAYMENT' }),
+        ],
+        nextCursor: null,
+      },
+    });
+    renderWithApi(api.call, <Probe />);
+    expect(await screen.findByText('count 3')).toBeTruthy();
+    const latest = live.subscribe.mock.calls.at(-1)?.[0] as { id: string }[];
+    expect(latest.map((trade) => trade.id)).toEqual([id(1), id(3)]);
   });
 });

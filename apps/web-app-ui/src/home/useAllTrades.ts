@@ -3,6 +3,7 @@
 import { useTradeList, useTradeLive } from '@komtru/api-client/react';
 import type { TradeListItem } from '@komtru/shared-types';
 import { useEffect, useMemo } from 'react';
+import { describeTrade } from '../trade/format';
 
 /**
  * Every trade the person is party to, read to the end of the list.
@@ -12,7 +13,8 @@ import { useEffect, useMemo } from 'react';
  * matching happens here over what is loaded. Pages are read one after another with the cursor exactly as it came.
  *
  * A later page that fails is not retried in a loop: the hook says so (`nextPageFailed`) and the screen offers a
- * retry. The trades on screen are subscribed to live updates by id and code, as the Trades tab does.
+ * retry. The trades still open are subscribed to live updates by id and code; finished ones are not, since they
+ * cannot change.
  */
 export function useAllTrades(): {
   trades: TradeListItem[];
@@ -27,7 +29,15 @@ export function useAllTrades(): {
   const { hasNextPage, isFetchingNextPage, isFetchNextPageError, fetchNextPage } = list;
 
   const trades = useMemo(() => (list.data?.pages ?? []).flatMap((page) => page.items), [list.data]);
-  useTradeLive(trades.map((trade) => ({ id: trade.id, code: trade.tradeCode })));
+  // A finished trade cannot move, so it does not need a room: only the trades still open are subscribed.
+  const live = useMemo(
+    () =>
+      trades
+        .filter((trade) => !describeTrade(trade).closed)
+        .map((trade) => ({ id: trade.id, code: trade.tradeCode })),
+    [trades],
+  );
+  useTradeLive(live);
 
   useEffect(() => {
     if (hasNextPage && !isFetchingNextPage && !isFetchNextPageError) void fetchNextPage();
