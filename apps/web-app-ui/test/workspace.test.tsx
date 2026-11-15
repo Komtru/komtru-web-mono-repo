@@ -10,10 +10,14 @@ import {
   activityRow,
   answerWith,
   callsTo,
+  cancellationRead,
+  cancellationRequest,
   deliveryDeadline,
   id,
   inspectionRead,
   page,
+  refundRow,
+  refundsRead,
   renderWithApi,
   tradeView,
   workspaceTrade,
@@ -423,6 +427,42 @@ describe('disputed, settlement and completion (CWT-05, CWT-06, Customer-5)', () 
       expect(screen.getByText(/not a confirmation that the money has arrived/)).toBeTruthy();
     },
   );
+});
+
+describe('F-030 on the overview', () => {
+  it('says a refund has been requested on a funded trade, instead of showing the funds as untouched', async () => {
+    serve(workspaceTrade('FUNDED', 'BUYER'), {
+      'GET /trades/:id/cancellation': cancellationRead('FUNDED', 'BUYER', {
+        refundRequested: true,
+        request: cancellationRequest({ status: 'APPROVED' }),
+      }),
+    });
+    show();
+    expect(await screen.findByText(/A refund has been requested for this trade/)).toBeTruthy();
+  });
+
+  it('draws a cancelled-and-refunded trade from its refund row, not from the status alone', async () => {
+    serve(workspaceTrade('CANCELLED_REFUNDED', 'BUYER'), {
+      'GET /trades/:id/refunds': refundsRead(refundRow('PROCESSING')),
+      'GET /trades/:id/cancellation': cancellationRead('CANCELLED_REFUNDED', 'BUYER', {
+        refundRequested: true,
+        request: cancellationRequest({ status: 'APPROVED' }),
+      }),
+    });
+    show();
+    expect(await screen.findByRole('heading', { name: 'Refund on its way' })).toBeTruthy();
+    expect(screen.queryByText(/You are refunded|Refund issued/)).toBeNull();
+  });
+
+  it('shows AR1 on a trade the inspection window released by itself', async () => {
+    serve(workspaceTrade('COMPLETED', 'BUYER'), {
+      'GET /trades/:id/activity': page([
+        activityRow(2, { kind: 'INSPECTION_ELAPSED', toStatus: 'COMPLETED', actor: 'KOMTRU' }),
+      ]),
+    });
+    show();
+    expect(await screen.findByText('Payment released automatically')).toBeTruthy();
+  });
 });
 
 describe('the terms tab (CWT-07)', () => {
