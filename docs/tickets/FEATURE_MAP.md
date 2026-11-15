@@ -416,9 +416,10 @@ list a trade.
 - **Absorbs:** T-195 (todo)
 - **Backend scope:** Served by F-026 and F-027.
 - **Frontend scope:** Trade Workspace supporting sheets for delivery and evidence, CWT-S08–CWT-S13. _6 v2 screens._
-- **Status:** UI merged except CWT-S13 (2026-11-13) — T-195 merged; five of six screens built. S13 evidence submit is a seam: no party-facing call attaches a file to a trade or case, and S12's Delivery and Inspection groups await a media-list read. Blocked on an owner decision for that backend ticket, so not Done.
+- **Status:** Backend done, UI outstanding
 - **Depends on:** F-022
 - **MVP:** yes
+- **Note:** UI merged except CWT-S13 (2026-11-13) — T-195 merged, five of six screens built. S13 evidence submit is a seam: no party-facing call attaches a file to a trade or case, and S12's Delivery and Inspection groups await a media-list read. Blocked on an owner decision for that backend ticket, so not Done. **The status line carried this prose until 2026-11-15**, which is not one of the three legal values and so broke `scripts/test/progress-tickets.test.ts`; the detail belongs here.
 
 #### F-029 — Capture and compare proof media
 
