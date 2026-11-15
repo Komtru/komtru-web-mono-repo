@@ -85,9 +85,9 @@ describe('AppShell', () => {
     expect(screen.queryByRole('link', { name: 'Home' })).toBeNull();
   });
 
-  it('points Discover at /browse', () => {
+  it('points Discover at search', () => {
     shell();
-    expect(screen.getAllByRole('link', { name: 'Discover' })[0]?.getAttribute('href')).toBe('/browse');
+    expect(screen.getAllByRole('link', { name: 'Discover' })[0]?.getAttribute('href')).toBe('/search');
   });
 
   it('collapses the desktop sidebar to icons and expands it again', () => {
@@ -168,14 +168,14 @@ describe('the top bar tools (v2: DX-03, TX-02)', () => {
   it('searches by Trade Code and by words from the one bar', () => {
     shell();
     const search = screen.getByRole('searchbox', { name: 'Search' });
-    expect(search.getAttribute('placeholder')).toBe('Search trades or sellers — or enter a Trade Code');
+    expect(search.getAttribute('placeholder')).toBe('Search your trades — or enter a Trade Code');
     fireEvent.change(search, { target: { value: 'KMT-88213' } });
     fireEvent.submit(screen.getByRole('search'));
     expect(router.push).toHaveBeenCalledWith('/trades/KMT-88213-NG');
 
     fireEvent.change(search, { target: { value: 'iphone' } });
     fireEvent.submit(screen.getByRole('search'));
-    expect(router.push).toHaveBeenLastCalledWith('/browse?q=iphone');
+    expect(router.push).toHaveBeenLastCalledWith('/search?q=iphone');
   });
 
   it('links the bell to Alerts and the profile to Account', () => {
