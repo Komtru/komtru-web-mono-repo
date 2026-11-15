@@ -438,10 +438,10 @@ list a trade.
 
 - **Journey:** Issues & resolution
 - **Actor:** buyer, seller
-- **Absorbs:** T-066 (done), T-075 (done), T-119 (todo)
+- **Absorbs:** T-066 (done), T-075 (done), T-119 (done)
 - **Backend scope:** Post-funding cancellation and can't-fulfil refunds; refunds against the ledger with the Q4 fee rule (T-066, T-075).
 - **Frontend scope:** Cancel a Trade (CT1, CT2, AR1) and Cancel After Funding (CR1–CR3, SC1, SC2). _8 v2 screens._
-- **Status:** Backend done, UI outstanding
+- **Status:** Done
 - **Note (2026-11-12):** backend layer (T-066, T-075, migration 0049) merged; next: the T-119 UI layer (CT1, CT2, AR1, CR1–CR3, SC1, SC2).
 - **Depends on:** none
 - **MVP:** yes
