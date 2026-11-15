@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { Frame, Refusal, TradeGate } from '../delivery/parts';
 import { BeforeFunding } from './BeforeFunding';
+import { FundedCancel } from './FundedCancel';
 import { TradeCancelled } from './TradeCancelled';
 
 /**
@@ -36,10 +37,23 @@ export function CancelTrade({ id }: { id: string }): React.JSX.Element {
             </Frame>
           );
         }
-        return (
-          <Refusal id={trade.id} title="Cancel this trade" why="This trade can’t be cancelled from here." />
-        );
+        if (trade.status === 'FUNDED') return <FundedCancel trade={trade} />;
+        return <Refusal id={trade.id} title="Cancel this trade" why={whyNot(trade.status)} />;
       }}
     </TradeGate>
   );
+}
+
+/** Why there is nothing to cancel, from the trade's own status and nothing else. */
+function whyNot(status: string): string {
+  switch (status) {
+    case 'CANCELLED_REFUNDED':
+      return 'This trade was cancelled after payment. The refund is shown on the trade.';
+    case 'SHIPPED':
+    case 'UNCONFIRMED_DELIVERY':
+    case 'INSPECTION':
+      return 'Cancelling is only possible before the item ships.';
+    default:
+      return 'This trade can’t be cancelled from here.';
+  }
 }
