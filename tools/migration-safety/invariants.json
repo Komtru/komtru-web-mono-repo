@@ -122,6 +122,21 @@
       "definition": "CREATE UNIQUE INDEX refunds_provider_refund ON ledger.refunds USING btree (provider, provider_refund_id) WHERE (provider_refund_id IS NOT NULL)"
     },
     {
+      "table": "merchant.merchant_applications",
+      "name": "merchant_applications_case_unique",
+      "definition": "CREATE UNIQUE INDEX merchant_applications_case_unique ON merchant.merchant_applications USING btree (case_id) WHERE (case_id IS NOT NULL)"
+    },
+    {
+      "table": "merchant.merchant_applications",
+      "name": "merchant_applications_one_live",
+      "definition": "CREATE UNIQUE INDEX merchant_applications_one_live ON merchant.merchant_applications USING btree (user_id) WHERE (status = ANY (ARRAY['DRAFT'::merchant.application_status, 'SUBMITTED'::merchant.application_status, 'IN_REVIEW'::merchant.application_status, 'CHANGES_REQUESTED'::merchant.application_status]))"
+    },
+    {
+      "table": "merchant.merchant_badges",
+      "name": "merchant_badges_one_live",
+      "definition": "CREATE UNIQUE INDEX merchant_badges_one_live ON merchant.merchant_badges USING btree (user_id, badge) WHERE (revoked_at IS NULL)"
+    },
+    {
       "table": "trade.cancellation_requests",
       "name": "cancellation_request_one_approved",
       "definition": "CREATE UNIQUE INDEX cancellation_request_one_approved ON trade.cancellation_requests USING btree (trade_id) WHERE (status = 'APPROVED'::trade.cancellation_request_status)"
@@ -509,6 +524,36 @@
       "definition": "CHECK ((reference = ('refund-'::text || (id)::text)))"
     },
     {
+      "table": "merchant.merchant_application_events",
+      "name": "merchant_application_events_staff_actor",
+      "definition": "CHECK ((((actor_type = 'STAFF'::merchant.event_actor_type) = (actor_user_id IS NOT NULL)) OR (actor_type = 'APPLICANT'::merchant.event_actor_type)))"
+    },
+    {
+      "table": "merchant.merchant_application_events",
+      "name": "merchant_application_events_staff_decision",
+      "definition": "CHECK (((actor_type <> 'STAFF'::merchant.event_actor_type) OR (to_status <> ALL (ARRAY['APPROVED'::merchant.application_status, 'REJECTED'::merchant.application_status, 'CHANGES_REQUESTED'::merchant.application_status])) OR ((length(btrim(COALESCE(reason, ''::text))) > 0) AND (length(btrim(COALESCE(policy_citation, ''::text))) > 0))))"
+    },
+    {
+      "table": "merchant.merchant_applications",
+      "name": "merchant_applications_case_after_draft",
+      "definition": "CHECK (((status = 'DRAFT'::merchant.application_status) OR (case_id IS NOT NULL)))"
+    },
+    {
+      "table": "merchant.merchant_applications",
+      "name": "merchant_applications_submitted_count",
+      "definition": "CHECK (((status = 'DRAFT'::merchant.application_status) = (submission_count = 0)))"
+    },
+    {
+      "table": "merchant.merchant_profiles",
+      "name": "merchant_profiles_ended_together",
+      "definition": "CHECK (((certification_status = 'CERTIFIED'::merchant.certification_status) = (certification_ended_at IS NULL)))"
+    },
+    {
+      "table": "merchant.merchant_profiles",
+      "name": "merchant_profiles_slug_shape",
+      "definition": "CHECK ((storefront_slug ~ '^[a-z0-9]+(-[a-z0-9]+)*$'::text))"
+    },
+    {
       "table": "notify.notifications",
       "name": "notifications_suppressed_has_reason",
       "definition": "CHECK (((status <> 'SUPPRESSED'::notify.notification_status) OR (failed_reason IS NOT NULL)))"
@@ -829,6 +874,11 @@
       "table": "ledger.refunds",
       "name": "komtru_refund_total",
       "definition": "[O] CREATE TRIGGER komtru_refund_total BEFORE INSERT OR UPDATE OF amount_minor, status, payment_attempt_id ON ledger.refunds FOR EACH ROW EXECUTE FUNCTION ledger.guard_refund_total()"
+    },
+    {
+      "table": "merchant.merchant_application_events",
+      "name": "komtru_append_only",
+      "definition": "[O] CREATE TRIGGER komtru_append_only BEFORE DELETE OR UPDATE ON merchant.merchant_application_events FOR EACH ROW EXECUTE FUNCTION platform.reject_mutation()"
     },
     {
       "table": "notify.notification_delivery_attempts",
