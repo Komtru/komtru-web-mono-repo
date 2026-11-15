@@ -94,7 +94,7 @@ describe('Search your trades (SE1)', () => {
   it('takes its first query from the address, as the shell search bar sends it', async () => {
     search('speaker');
     expect(await screen.findByRole('region', { name: 'Results — "speaker"' })).toBeTruthy();
-    expect((screen.getByRole('searchbox', { name: 'Search your trades' }) as HTMLInputElement).value).toBe(
+    expect(screen.getByRole<HTMLInputElement>('searchbox', { name: 'Search your trades' }).value).toBe(
       'speaker',
     );
   });
@@ -122,7 +122,7 @@ describe('Search your trades (SE1)', () => {
 
   it('does not say there are no results while the rest of the trades are still being read', async () => {
     api.call.mockImplementation((_endpoint, input) => {
-      const cursor = (input as { query?: { cursor?: string } } | undefined)?.query?.cursor;
+      const cursor = input?.query?.cursor;
       return cursor === undefined ? Promise.resolve(page([speaker], 'more')) : new Promise(() => undefined);
     });
     search();

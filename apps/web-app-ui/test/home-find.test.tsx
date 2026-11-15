@@ -81,7 +81,7 @@ describe('Find a Trade by code (F1)', () => {
     renderWithApi(api.call, <FindTrade initialCode="KMT-9042800" />);
     expect(await screen.findByRole('link', { name: 'Open trade' })).toBeTruthy();
     expect(
-      (screen.getByRole('textbox', { name: "Enter the seller's Trade Code" }) as HTMLInputElement).value,
+      screen.getByRole<HTMLInputElement>('textbox', { name: "Enter the seller's Trade Code" }).value,
     ).toBe('KMT-9042800');
   });
 });
