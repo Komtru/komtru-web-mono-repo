@@ -68,7 +68,7 @@ describe('CR3 refund (buyer, cancellation approved)', () => {
   );
 
   it.each(['FAILED', 'NEEDS_REVIEW'] as const)(
-    'says the money is held, not lost, when the refund is %s, with the reference and the platform’s reason',
+    'says only what the refund row says when it is %s: the platform’s reason and the reference, with no claim about where the money is',
     async (status) => {
       show(
         'BUYER',
@@ -76,7 +76,7 @@ describe('CR3 refund (buyer, cancellation approved)', () => {
         buyerApproved,
       );
       expect(await screen.findByRole('heading', { name: 'Your refund hasn’t completed' })).toBeTruthy();
-      expect(screen.getByText(/Your money is held by Komtru, not lost/)).toBeTruthy();
+      expect(screen.queryByText(/not lost|held by Komtru/)).toBeNull();
       expect(screen.getByText(/Your bank returned the payment\./)).toBeTruthy();
       expect(screen.getAllByText(/refund-501/).length).toBeGreaterThan(0);
       expect(screen.queryByText(/Refund issued/)).toBeNull();
@@ -84,25 +84,27 @@ describe('CR3 refund (buyer, cancellation approved)', () => {
     },
   );
 
-  it('renders the fee exactly as the platform treated it when it kept the fee', async () => {
+  it('says the fee was kept, with no amount, when the platform returns a zero fee because it kept it', async () => {
     show(
       'BUYER',
       refundsRead(
         refundRow('PROCESSED', {
           amountMinor: '45200000',
+          feeAmountMinor: '0',
           buyerProtectionFeeTreatment: 'RECOGNISE',
         }),
       ),
       buyerApproved,
     );
     const rows = within(await screen.findByLabelText('The refund'));
-    expect(rows.getAllByText('₦452,000.00')).toHaveLength(2);
-    expect(rows.getByText(/₦6,780\.00 · Kept by Komtru/)).toBeTruthy();
+    expect(rows.getByText('Buyer protection fee')).toBeTruthy();
+    expect(rows.getByText('Kept by Komtru')).toBeTruthy();
   });
 
   it('hides the fee row when the fee amount is zero', async () => {
     show('BUYER', refundsRead(refundRow('PROCESSED', { feeAmountMinor: '0' })), buyerApproved);
     const rows = within(await screen.findByLabelText('The refund'));
+    // A zero fee that was returned has nothing to explain.
     expect(rows.queryByText('Buyer protection fee')).toBeNull();
   });
 });
@@ -125,6 +127,19 @@ describe('SC2 seller couldn’t fulfil', () => {
     expect(await screen.findByRole('heading', { name: 'Amaka B. couldn’t fulfil this' })).toBeTruthy();
     expect(screen.getByText(/is being sent back to your original payment method/)).toBeTruthy();
     expect(screen.queryByText(/was sent back/)).toBeNull();
+  });
+
+  it('does not tell the seller the trade is "refunded" while the refund is still moving', async () => {
+    show(
+      'SELLER',
+      refundsRead(refundRow('PROCESSING')),
+      cancellationRead('CANCELLED_REFUNDED', 'SELLER', {
+        refundRequested: true,
+        request: cancellationRequest({ status: 'APPROVED' }),
+      }),
+    );
+    expect(await screen.findByRole('heading', { name: 'Cancelled after payment' })).toBeTruthy();
+    expect(screen.queryByRole('heading', { name: 'Cancelled and refunded' })).toBeNull();
   });
 
   it('shows the seller their own cancellation and the refund’s state, with no amounts or fees', async () => {

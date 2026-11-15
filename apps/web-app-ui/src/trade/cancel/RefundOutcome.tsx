@@ -84,10 +84,17 @@ function RefundLines({ refund, stage }: { refund: Refund; stage: RefundStage }):
           {naira(refund.amountMinor)}
         </TermRow>
         <TermRow label="Item">{naira(refund.itemAmountMinor)}</TermRow>
-        {refund.feeAmountMinor !== '0' && (
+        {refund.feeAmountMinor !== '0' ? (
           <TermRow label="Buyer protection fee">
             {`${naira(refund.feeAmountMinor)} · ${feeTreatmentWords(refund.buyerProtectionFeeTreatment)}`}
           </TermRow>
+        ) : (
+          // The platform returns a zero fee when it kept the fee, so the amount is not there to show: say so.
+          refund.buyerProtectionFeeTreatment !== 'REFUND' && (
+            <TermRow label="Buyer protection fee">
+              {feeTreatmentWords(refund.buyerProtectionFeeTreatment)}
+            </TermRow>
+          )
         )}
         <TermRow label="Reference">{refund.reference}</TermRow>
       </TermList>
@@ -162,7 +169,11 @@ function heroFor(input: {
     };
     return {
       tone: stage === 'issued' ? 'success' : 'warning',
-      title: sellerCancelled ? 'You cancelled this trade' : 'Cancelled and refunded',
+      title: sellerCancelled
+        ? 'You cancelled this trade'
+        : stage === 'issued'
+          ? 'Cancelled and refunded'
+          : 'Cancelled after payment',
       body: join(cause, words[stage]),
     };
   }
@@ -181,7 +192,6 @@ function heroFor(input: {
         title: title('Your refund hasn’t completed'),
         body: join(
           cause,
-          'Your money is held by Komtru, not lost.',
           refund.failureReason ?? '',
           `Contact support with the reference ${refund.reference}.`,
         ),
