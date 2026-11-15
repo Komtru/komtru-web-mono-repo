@@ -58,8 +58,11 @@ export function workspaceStanding(status: WorkspaceStatus): WorkspaceStanding {
     case 'RESOLVED_RELEASED':
       return { chip: { tone: 'resolved', label: 'Released to seller' }, stage: 5, closed: true };
     case 'RESOLVED_REFUNDED':
-    case 'CANCELLED_REFUNDED':
       return { chip: { tone: 'resolved', label: 'Refunded' }, stage: undefined, closed: true };
+    case 'CANCELLED_REFUNDED':
+      // The status means the ledger decided a refund, not that the money has gone back: a refund can still be on its
+      // way, or held after the provider failed it. The overview says which, from the trade's own refund row.
+      return { chip: { tone: 'resolved', label: 'Cancelled' }, stage: undefined, closed: true };
   }
 }
 

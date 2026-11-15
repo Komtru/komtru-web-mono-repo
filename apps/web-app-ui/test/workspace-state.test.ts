@@ -86,6 +86,10 @@ describe('where a trade stands', () => {
     }
   });
 
+  it('does not call a cancelled-after-payment trade "Refunded": the refund row says where the money is', () => {
+    expect(workspaceStanding('CANCELLED_REFUNDED').chip.label).toBe('Cancelled');
+  });
+
   it('is what the trades list calls the same trade, so the two never disagree', () => {
     for (const status of WORKSPACE_STATUSES) {
       if (status === 'PENDING_PAYMENT') continue; // the list says "Terms agreed" until it is paid for
