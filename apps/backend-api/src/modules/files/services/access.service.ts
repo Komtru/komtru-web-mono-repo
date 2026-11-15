@@ -60,6 +60,15 @@ export interface GrantInput {
  * (M20 §8), so it WILL run twice, and a duplicate-key 500 on the second delivery would leave a
  * dispute half-wired.
  */
+/**
+ * T-055: a KYC document is PRIVATE_OWNER, and a merchant application's reviewers reach it through a
+ * role grant. That is the whole exception: one category, roles only, and `decideAccess` honours it for a
+ * staff session only. Every other PRIVATE_OWNER file has no grants, and so no one but its owner.
+ */
+const isGrantable = (record: FileRecord, input: GrantInput): boolean =>
+  record.visibility === 'PRIVATE_CASE' ||
+  (record.visibility === 'PRIVATE_OWNER' && record.category === 'KYC_DOCUMENT' && Boolean(input.granteeRole));
+
 export const grantAccess = async (db: Db, input: GrantInput): Promise<FileAccessGrant> => {
   if (Boolean(input.granteeUserId) === Boolean(input.granteeRole)) {
     throw new ApiError(
@@ -73,14 +82,15 @@ export const grantAccess = async (db: Db, input: GrantInput): Promise<FileAccess
   const record = await findFile(db, input.fileId);
   if (!record) throw notFound();
 
-  // A grant on any other class would be inert — decideAccess only consults grants for PRIVATE_CASE —
-  // so accepting one would let an operator believe they had shared a file when they had not.
-  if (record.visibility !== 'PRIVATE_CASE') {
+  // A grant on any other class would be inert — decideAccess consults grants only for PRIVATE_CASE and
+  // for a reviewer ROLE on a KYC document — so accepting one would let an operator believe they had
+  // shared a file when they had not.
+  if (!isGrantable(record, input)) {
     throw new ApiError(
       409,
       'CONFLICT',
       'Access grants only apply to case files',
-      `Grants are consulted only for PRIVATE_CASE files; this one is ${record.visibility}.`,
+      `Grants are consulted only for PRIVATE_CASE files, and for a reviewer role on a KYC document; this one is ${record.visibility}.`,
     );
   }
 
@@ -236,9 +246,12 @@ export const retrieveFile = async (
 };
 
 const decide = async (db: Reader, record: FileRecord, subject: AccessSubject): Promise<AccessDecision> => {
-  // Grants are only loaded for the one class that consults them — a PUBLIC listing image should not
-  // pay for a grants query on every view.
-  const grants = record.visibility === 'PRIVATE_CASE' ? await listGrants(db, record.id) : [];
+  // Grants are only loaded for the classes that consult them — a PUBLIC listing image should not pay
+  // for a grants query on every view. A PRIVATE_OWNER file consults them only when it is a KYC document.
+  const consultsGrants =
+    record.visibility === 'PRIVATE_CASE' ||
+    (record.visibility === 'PRIVATE_OWNER' && record.category === 'KYC_DOCUMENT');
+  const grants = consultsGrants ? await listGrants(db, record.id) : [];
 
   return decideAccess(subject, {
     visibility: record.visibility,

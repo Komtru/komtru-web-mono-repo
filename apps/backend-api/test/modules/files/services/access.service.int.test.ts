@@ -165,6 +165,65 @@ describe.runIf(infraEnabled)('access.service', () => {
       });
     });
 
+    describe('a reviewer role grant on a KYC document (T-055)', () => {
+      it('is accepted for a role, and then admits a staff session holding it, writing the access log', async () => {
+        const { fileId, uploaderUserId } = await readyFile({
+          category: 'KYC_DOCUMENT',
+          visibility: 'PRIVATE_OWNER',
+          contentType: 'application/pdf',
+        });
+        const reviewerId = randomUUID();
+        await expect(retrieve(fileId, staff(reviewerId, ['KYC_ANALYST']))).rejects.toMatchObject({
+          status: 404,
+        });
+
+        const grant = await grantAccess(db(), {
+          fileId,
+          granteeRole: 'KYC_ANALYST',
+          reason: 'merchant review',
+        });
+        expect(grant.granteeRole).toBe('KYC_ANALYST');
+        await expect(retrieve(fileId, staff(reviewerId, ['KYC_ANALYST']))).resolves.toMatchObject({ fileId });
+
+        const rows = await logRows(fileId);
+        expect(rows.map((row) => [row.accessedByAdminId, row.accessGranted])).toEqual([
+          [reviewerId, true],
+          [reviewerId, false],
+        ]);
+        // The owner is unaffected, and so is a staff member without the granted role.
+        await expect(retrieve(fileId, consumer(uploaderUserId))).resolves.toBeTruthy();
+        await expect(retrieve(fileId, staff(randomUUID(), ['DISPUTE_REVIEWER']))).rejects.toMatchObject({
+          status: 404,
+        });
+      });
+
+      it('stops admitting the reviewer once the grant is revoked', async () => {
+        const { fileId } = await readyFile({
+          category: 'KYC_DOCUMENT',
+          visibility: 'PRIVATE_OWNER',
+          contentType: 'application/pdf',
+        });
+        const grant = await grantAccess(db(), {
+          fileId,
+          granteeRole: 'KYC_ANALYST',
+          reason: 'merchant review',
+        });
+        await revokeGrant(db(), fileId, grant.id);
+        await expect(retrieve(fileId, staff(randomUUID(), ['KYC_ANALYST']))).rejects.toMatchObject({
+          status: 404,
+        });
+      });
+
+      it('is refused for any other PRIVATE_OWNER category, and for a user-id grantee', async () => {
+        const { fileId } = await readyFile({ category: 'OTHER', visibility: 'PRIVATE_OWNER' });
+        await expect(
+          grantAccess(db(), { fileId, granteeRole: 'KYC_ANALYST', reason: 'x' }),
+        ).rejects.toMatchObject({
+          status: 409,
+        });
+      });
+    });
+
     it('stops admitting a revoked grantee', async () => {
       const { fileId } = await readyFile({ category: 'DISPUTE_EVIDENCE', visibility: 'PRIVATE_CASE' });
       const granteeUserId = randomUUID();

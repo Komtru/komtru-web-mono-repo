@@ -62,6 +62,42 @@ describe('decideAccess', () => {
     ).toEqual({ allowed: false, reason: 'NOT_OWNER' });
   });
 
+  describe('a KYC reviewer grant on a PRIVATE_OWNER file (T-055)', () => {
+    it('admits a staff session holding a granted role', () => {
+      expect(
+        decideAccess(
+          subject({ scope: 'STAFF', roles: ['KYC_ANALYST'] }),
+          target({ grantedRoles: ['KYC_ANALYST', 'OPERATIONS_ADMIN'] }),
+        ),
+      ).toEqual({ allowed: true });
+    });
+
+    it('still refuses staff whose roles are not the granted ones', () => {
+      expect(
+        decideAccess(
+          subject({ scope: 'STAFF', roles: ['DISPUTE_REVIEWER'] }),
+          target({ grantedRoles: ['KYC_ANALYST'] }),
+        ),
+      ).toEqual({ allowed: false, reason: 'NOT_OWNER' });
+    });
+
+    it('never admits a consumer session, even one that somehow carries the role', () => {
+      expect(
+        decideAccess(
+          subject({ scope: 'CONSUMER', roles: ['KYC_ANALYST'] }),
+          target({ grantedRoles: ['KYC_ANALYST'] }),
+        ),
+      ).toEqual({ allowed: false, reason: 'NOT_OWNER' });
+    });
+
+    it('does not read a user-id grant as a way in: the owner is the only person', () => {
+      expect(decideAccess(subject(), target({ grantedUserIds: [STRANGER] }))).toEqual({
+        allowed: false,
+        reason: 'NOT_OWNER',
+      });
+    });
+  });
+
   it('admits a PRIVATE_CASE grantee named by user id', () => {
     expect(
       decideAccess(subject(), target({ visibility: 'PRIVATE_CASE', grantedUserIds: [STRANGER] })),
