@@ -62,7 +62,10 @@ export function FindTrade({ initialCode }: { initialCode?: string }): React.JSX.
           event.preventDefault();
           const code = tradeCodeOf(typed);
           setInvalid(code === undefined);
-          setSubmitted(code);
+          // The same code again is the same query key, which React Query will not refetch on its own after a
+          // failure (a 429 never clears). Pressing Find asks the platform again.
+          if (code !== undefined && code === submitted) void lookup.refetch();
+          else setSubmitted(code);
         }}
         noValidate
       >
@@ -162,7 +165,12 @@ function Result({
     );
   }
 
-  const state = describeTrade({ status: trade.status, attention: null, tradeCode: trade.tradeCode });
+  // The by-code answer does not say whose turn it is, so an unanswered proposal is not called "Sent": that word is
+  // the sender's, and this person may be the one being asked.
+  const state =
+    trade.status === 'AWAITING_ACCEPTANCE'
+      ? { tone: 'awaiting' as const, label: 'Awaiting a response' }
+      : describeTrade({ status: trade.status, attention: null, tradeCode: trade.tradeCode });
   return (
     <section aria-label="Trade found">
       <div className="mb-[12px]">

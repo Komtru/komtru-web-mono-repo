@@ -100,7 +100,8 @@ describe('a code the person is a party to (F2)', () => {
     expect(within(found).getByText('Verified Trade — found on Komtru')).toBeTruthy();
     expect(within(found).getByText('KMT-9042800-NG')).toBeTruthy();
     expect(within(found).getByText('TechEdge NG')).toBeTruthy();
-    expect(within(found).getByText('Sent')).toBeTruthy();
+    expect(within(found).getByText('Awaiting a response')).toBeTruthy();
+    expect(within(found).queryByText('Sent')).toBeNull();
     expect(within(found).getByText('Category: Electronics')).toBeTruthy();
     expect(within(found).getByRole('link', { name: 'Open trade' }).getAttribute('href')).toBe(
       `/trade/${id(1)}`,
@@ -163,6 +164,71 @@ describe('a code that does not lead to a trade for this person', () => {
 
     fireEvent.click(await screen.findByRole('button', { name: 'Try again' }));
     expect(await screen.findByRole('link', { name: 'Open trade' })).toBeTruthy();
-    await waitFor(() => expect(calls).toBe(2));
+    // Settled: nothing re-asks the platform on its own, so the count stays where the person left it.
+    await new Promise((resolve) => setTimeout(resolve, 150));
+    expect(calls).toBe(2);
+  });
+
+  it('asks the platform again when the same code is submitted after a rate limit, and shows the answer', async () => {
+    let calls = 0;
+    answerWith(api.call, {
+      'GET /trades/by-code/:code': () => {
+        calls += 1;
+        return calls === 1 ? problem(429, 'RATE_LIMITED') : lookup('PARTY');
+      },
+    });
+    renderWithApi(api.call, <FindTrade />);
+    fill('KMT-9042800');
+    submit();
+    expect(await screen.findByRole('heading', { name: 'Too many tries' })).toBeTruthy();
+
+    submit();
+    expect(await screen.findByRole('link', { name: 'Open trade' })).toBeTruthy();
+    expect(calls).toBe(2);
+  });
+
+  it('asks again after a not-found answer when the same code is submitted', async () => {
+    let calls = 0;
+    answerWith(api.call, {
+      'GET /trades/by-code/:code': () => {
+        calls += 1;
+        return calls === 1 ? problem(404, 'NOT_FOUND') : lookup('PARTY');
+      },
+    });
+    renderWithApi(api.call, <FindTrade />);
+    fill('KMT-9042800');
+    submit();
+    expect(await screen.findByRole('heading', { name: 'No trade found for you' })).toBeTruthy();
+    submit();
+    expect(await screen.findByRole('link', { name: 'Open trade' })).toBeTruthy();
+    expect(calls).toBe(2);
+  });
+});
+
+describe('the answer decides the view, not the trade status', () => {
+  it('shows an invitation for an INVITEE answer even when the status reads as a party one', async () => {
+    answerWith(api.call, {
+      'GET /trades/by-code/:code': lookup('INVITEE', {
+        trade: { ...lookup('INVITEE').trade, status: 'AWAITING_ACCEPTANCE' },
+      }),
+    });
+    renderWithApi(api.call, <FindTrade />);
+    fill('KMT-9042800');
+    submit();
+    expect(await screen.findByRole('region', { name: 'Trade invitation' })).toBeTruthy();
+    expect(screen.queryByRole('link', { name: 'Open trade' })).toBeNull();
+  });
+
+  it('shows the party view for a PARTY answer even when the status reads as an invitation', async () => {
+    answerWith(api.call, {
+      'GET /trades/by-code/:code': lookup('PARTY', {
+        trade: { ...lookup('PARTY').trade, status: 'PENDING_COUNTERPARTY' },
+      }),
+    });
+    renderWithApi(api.call, <FindTrade />);
+    fill('KMT-9042800');
+    submit();
+    expect(await screen.findByRole('link', { name: 'Open trade' })).toBeTruthy();
+    expect(screen.queryByRole('region', { name: 'Trade invitation' })).toBeNull();
   });
 });
