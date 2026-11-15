@@ -37,7 +37,7 @@ import {
 } from '@komtru/ui-kit';
 import Link from 'next/link';
 import { useState } from 'react';
-import { failureMessage, humanise, ownerLabel, priorityLabel, trailLabel, whenLabel } from '../cases/format';
+import { humanise, ownerLabel, priorityLabel, trailLabel, whenLabel } from '../cases/format';
 import { useCaseAction, useCaseTrail } from '../cases/hooks';
 import { dueLabel } from '../identity/format';
 import { ErrorLine, Panel, SMALL, TextArea, present } from '../identity/VerificationCase';
