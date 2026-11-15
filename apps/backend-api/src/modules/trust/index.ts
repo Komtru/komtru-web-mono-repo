@@ -77,3 +77,5 @@ export const requestBusinessEvidence = (
     },
     input,
   );
+/** The one normal form of an RC number (T-051): a second copy would drift, and a mismatch would hide a duplicate. */
+export { isValidRcNumber, normaliseRcNumber } from './domain/identifiers.js';

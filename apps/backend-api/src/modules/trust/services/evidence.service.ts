@@ -111,7 +111,10 @@ const NOT_RUN: BusinessEvidence = {
  * What the applicant's CAC lookup found: their verified business if they have one, else the outcome of
  * their latest CAC request. A read over T-051's tables; it triggers nothing and writes nothing.
  */
-export async function readBusinessEvidence(db: Db, userId: string): Promise<BusinessEvidence> {
+export async function readBusinessEvidence(
+  db: Pick<Db, 'select'>,
+  userId: string,
+): Promise<BusinessEvidence> {
   const [verified] = await db
     .select()
     .from(businessVerifications)
