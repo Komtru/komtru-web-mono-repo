@@ -351,6 +351,13 @@
       "when": 1794431326630,
       "tag": "0049_refunds_cancellations",
       "breakpoints": true
+    },
+    {
+      "idx": 50,
+      "version": "7",
+      "when": 1794737471314,
+      "tag": "0050_merchant_applications",
+      "breakpoints": true
     }
   ]
 }

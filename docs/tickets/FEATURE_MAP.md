@@ -565,7 +565,8 @@ list a trade.
 - **Absorbs:** T-055 (todo), T-051 (done), T-121 (todo), T-154 (todo)
 - **Backend scope:** Merchant applications and certification; business verification with bank name-match, address and social proof. Business verification already built (T-051); certification outstanding (T-055).
 - **Frontend scope:** Become a Seller (SO1–SO5), business verification result (BVR1), the seller's verification tab (M2), and the TrustOps review screen OP-61. _8 v2 screens._
-- **Status:** Not started
+- **Status:** Backend done, UI outstanding
+- **Progress note (2026-11-15):** T-055 (backend, migration `0050_merchant_applications`) and T-154 (OP-61 review queue and case in operations-app) are built on branch `f-040-merchant-cert`, not yet merged. T-121 (SO1-SO5, BVR1, M2 in `apps/web-app-ui`) was deliberately not built in this run because another agent held that app. Owner questions: OP-61 in the v2 master is Seller 360, not an application review, so T-154 followed its acceptance criteria (Seller 360 wants its own post-certification ticket); **T-055's bank name-match criterion is unmet** (blocking reason in `docs/tickets/06-merchant-search.md`, T-055 status note) and needs the owner's sign-off; `endCertification` has no production caller (a seam for risk or trust). Resume with T-121, then mark Done.
 - **Depends on:** F-037
 - **MVP:** yes
 - **Note:** Applicant and reviewer in one feature on purpose: a certification no one can approve is not a feature.

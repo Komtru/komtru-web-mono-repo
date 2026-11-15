@@ -160,6 +160,33 @@ const GEO_MAPPINGS: unknown[] = [
 ];
 
 /**
+ * T-055: the outcome of a merchant application. One template for the three outcomes (approved, changes
+ * requested, rejected): they differ only in the sentence the binding renders into `outcomeLine`, because
+ * a template has no conditionals (M11 D5). An ACCOUNT notification, so a user can opt out of it.
+ */
+const MERCHANT_TEMPLATES: unknown[] = [
+  {
+    templateKey: 'merchant.application.decided',
+    channel: 'IN_APP',
+    category: 'ACCOUNT',
+    body: 'Your merchant application: {{outcomeLine}}',
+    variables: ['outcomeLine'],
+  },
+  {
+    templateKey: 'merchant.application.decided',
+    channel: 'EMAIL',
+    category: 'ACCOUNT',
+    subject: 'An update on your Komtru merchant application',
+    body: 'We have reviewed your merchant application.\n\n{{outcomeLine}}',
+    variables: ['outcomeLine'],
+  },
+];
+
+const MERCHANT_MAPPINGS: unknown[] = [
+  { eventName: 'merchant.application.decided', templateKey: 'merchant.application.decided' },
+];
+
+/**
  * T-068: every trade notification. The copy is in `tradeCatalogue.ts`; the mappings come from the
  * trades module's plans, which are what say which event sends which key.
  */
@@ -169,10 +196,12 @@ const TRADE_MAPPINGS: unknown[] = TRADE_NOTIFICATION_PLANS.map((plan) => ({
 }));
 
 export const CATALOGUE: NotificationCatalogue = {
-  templates: [...IDENTITY_TEMPLATES, ...GEO_TEMPLATES, ...tradeTemplates()].map((t) =>
+  templates: [...IDENTITY_TEMPLATES, ...GEO_TEMPLATES, ...MERCHANT_TEMPLATES, ...tradeTemplates()].map((t) =>
     templateSchema.parse(t),
   ),
-  mappings: [...IDENTITY_MAPPINGS, ...GEO_MAPPINGS, ...TRADE_MAPPINGS].map((m) => mappingSchema.parse(m)),
+  mappings: [...IDENTITY_MAPPINGS, ...GEO_MAPPINGS, ...MERCHANT_MAPPINGS, ...TRADE_MAPPINGS].map((m) =>
+    mappingSchema.parse(m),
+  ),
 };
 
 const sameSet = (a: string[], b: string[]): boolean =>

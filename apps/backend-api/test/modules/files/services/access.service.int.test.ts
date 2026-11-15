@@ -12,6 +12,8 @@ import { createLogger } from '../../../../src/platform/logger.js';
 import type { AccessSubject } from '../../../../src/modules/files/domain/access.js';
 import {
   grantAccess,
+  grantKycReviewerAccess,
+  revokeAllGrants,
   listAccessLog,
   listGrants,
   retrieveFile,
@@ -162,6 +164,73 @@ describe.runIf(infraEnabled)('access.service', () => {
         grantAccess(db(), { fileId, granteeUserId: randomUUID(), reason: 'x' }),
       ).rejects.toMatchObject({
         status: 409,
+      });
+    });
+
+    describe('a reviewer role grant on a KYC document (T-055)', () => {
+      const kyc = () =>
+        readyFile({ category: 'KYC_DOCUMENT', visibility: 'PRIVATE_OWNER', contentType: 'application/pdf' });
+
+      it('is made by the internal function, then admits a staff session holding the role, writing the access log', async () => {
+        const { fileId, uploaderUserId } = await kyc();
+        const reviewerId = randomUUID();
+        await expect(retrieve(fileId, staff(reviewerId, ['KYC_ANALYST']))).rejects.toMatchObject({
+          status: 404,
+        });
+
+        const grant = await grantKycReviewerAccess(db(), {
+          fileId,
+          granteeRole: 'KYC_ANALYST',
+          reason: 'merchant review',
+        });
+        expect(grant.granteeRole).toBe('KYC_ANALYST');
+        await expect(retrieve(fileId, staff(reviewerId, ['KYC_ANALYST']))).resolves.toMatchObject({ fileId });
+
+        const rows = await logRows(fileId);
+        expect(rows.map((row) => [row.accessedByAdminId, row.accessGranted])).toEqual([
+          [reviewerId, true],
+          [reviewerId, false],
+        ]);
+        await expect(retrieve(fileId, consumer(uploaderUserId))).resolves.toBeTruthy();
+        await expect(retrieve(fileId, staff(randomUUID(), ['DISPUTE_REVIEWER']))).rejects.toMatchObject({
+          status: 404,
+        });
+      });
+
+      it('is NOT something the public grant function (and so the HTTP route) will do, for a role or a user id', async () => {
+        const { fileId } = await kyc();
+        await expect(
+          grantAccess(db(), { fileId, granteeRole: 'READ_ONLY', reason: 'x' }),
+        ).rejects.toMatchObject({
+          status: 409,
+        });
+        await expect(
+          grantAccess(db(), { fileId, granteeUserId: randomUUID(), reason: 'x' }),
+        ).rejects.toMatchObject({
+          status: 409,
+        });
+        expect(await listGrants(db(), fileId)).toHaveLength(0);
+        await expect(retrieve(fileId, staff(randomUUID(), ['READ_ONLY']))).rejects.toMatchObject({
+          status: 404,
+        });
+      });
+
+      it('is refused for any other category', async () => {
+        const { fileId } = await readyFile({ category: 'OTHER', visibility: 'PRIVATE_OWNER' });
+        await expect(
+          grantKycReviewerAccess(db(), { fileId, granteeRole: 'KYC_ANALYST', reason: 'x' }),
+        ).rejects.toMatchObject({ status: 409 });
+      });
+
+      it('stops admitting the reviewer once the grants are revoked', async () => {
+        const { fileId } = await kyc();
+        await grantKycReviewerAccess(db(), { fileId, granteeRole: 'KYC_ANALYST', reason: 'merchant review' });
+        await grantKycReviewerAccess(db(), { fileId, granteeRole: 'SUPER_ADMIN', reason: 'merchant review' });
+        expect(await revokeAllGrants(db(), fileId)).toBe(2);
+        expect(await revokeAllGrants(db(), fileId)).toBe(0);
+        await expect(retrieve(fileId, staff(randomUUID(), ['KYC_ANALYST']))).rejects.toMatchObject({
+          status: 404,
+        });
       });
     });
 

@@ -51,17 +51,24 @@ import { dueLabel, evidenceLabel, isBusiness, shortUser, verificationLabel } fro
 import { kycCalls, useClearances, useKycAction, useKycItem } from './hooks';
 import { IdentityFrame } from './shared';
 
-const PANEL = 'mb-[16px] rounded-lg border border-solid border-border-hairline bg-surface-elevated p-[20px]';
-const SMALL = 'w-auto!';
+export const PANEL =
+  'mb-[16px] rounded-lg border border-solid border-border-hairline bg-surface-elevated p-[20px]';
+export const SMALL = 'w-auto!';
 const DEFAULT_REJECTION: RejectionCode = 'REVIEW_DECLINED';
 /** A duplicate is settled through its flag, and "needs a person" is not a rejection. */
 const OFFERED_REJECTIONS = REJECTION_CODES.filter(
   (code) => code !== 'DUPLICATE_IDENTITY' && code !== 'NEEDS_HUMAN_REVIEW',
 );
 
-const present = (value: string): boolean => value.trim() !== '';
+export const present = (value: string): boolean => value.trim() !== '';
 
-function Panel({ heading, children }: { heading: string; children: React.ReactNode }): React.JSX.Element {
+export function Panel({
+  heading,
+  children,
+}: {
+  heading: string;
+  children: React.ReactNode;
+}): React.JSX.Element {
   return (
     <section aria-label={heading} className={PANEL}>
       <h2 className="mb-[12px] text-[14px] font-semibold">{heading}</h2>
@@ -70,7 +77,7 @@ function Panel({ heading, children }: { heading: string; children: React.ReactNo
   );
 }
 
-function TextArea({
+export function TextArea({
   label,
   value,
   onChange,
@@ -95,7 +102,7 @@ function TextArea({
   );
 }
 
-function ErrorLine({ error, what }: { error: unknown; what: string }): React.JSX.Element | null {
+export function ErrorLine({ error, what }: { error: unknown; what: string }): React.JSX.Element | null {
   return error === null || error === undefined ? null : (
     <Banner tone="risk" className="mt-[10px]">
       {failureMessage(error, what)}

@@ -30,12 +30,13 @@ describe('the permission list', () => {
 });
 
 describe('the sidebar table', () => {
-  it('has the twelve sections of the ticket, in its order', () => {
+  it('has the twelve sections of T-140 and T-154’s Merchant Applications, in its order', () => {
     expect(SECTIONS.map((section) => section.label)).toEqual([
       'Work Queue',
       'Trades',
       'Disputes',
       'Identity / KYB',
+      'Merchant Applications',
       'Fraud & Risk',
       'Park Hubs',
       'Parcels / Custody',
@@ -66,7 +67,8 @@ describe('permission filtering', () => {
   it('shows a section for any one of its permissions', () => {
     expect(labels(held('trade.view'))).toEqual(['Trades']);
     expect(labels(held('trade.view_all'))).toEqual(['Trades']);
-    expect(labels(held('merchant.application.view'))).toEqual(['Identity / KYB']);
+    // T-154: merchant applications are a sidebar item of their own, and no longer open Identity / KYB.
+    expect(labels(held('merchant.application.view'))).toEqual(['Merchant Applications']);
   });
 
   it('does not open a section for a permission that merely sounds related', () => {

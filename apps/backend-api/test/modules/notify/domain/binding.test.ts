@@ -67,6 +67,15 @@ describe("notify's identity bindings", () => {
         changedAt: new Date().toISOString(),
         revokedSessions: 2,
       },
+      'merchant.application.decided': {
+        applicationId: randomUUID(),
+        userId: randomUUID(),
+        outcome: 'CHANGES_REQUESTED',
+        status: 'CHANGES_REQUESTED',
+        reason: 'The scan is cut off.',
+        requested: [{ kind: 'DOCUMENT', key: 'CAC_CERTIFICATE' }],
+        decidedByUserId: randomUUID(),
+      },
       'geo.city_request.decided': {
         requestId: randomUUID(),
         requesterUserId: randomUUID(),

@@ -3,6 +3,7 @@
 import { Button, ConsoleShell, EmptyState, type NavItem } from '@komtru/ui-kit';
 import { useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'next/navigation';
+import { useMerchantAwaiting } from '../merchant/hooks';
 import { ACCOUNT_ICON, SECTION_ICONS, SIGN_OUT_ICON } from './icons';
 import { ACCOUNT_HREF, canOpen, sectionsFor, type SectionId } from './nav';
 import { signOut } from './sign-out';
@@ -43,8 +44,15 @@ export function ConsoleFrame({
   const router = useRouter();
   const queries = useQueryClient();
 
+  // The one number the rail carries: merchant applications awaiting a person. Asked only of someone
+  // who may see the section, and a missing answer draws the item without one.
+  const awaiting = useMerchantAwaiting(viewer.permissions.has('merchant.application.view'));
+
   const nav = sectionsFor(viewer.permissions).map<NavItem>((section) => ({
-    label: section.label,
+    label:
+      section.id === 'merchant-applications' && awaiting !== undefined && awaiting > 0
+        ? `${section.label} (${String(awaiting)})`
+        : section.label,
     href: section.href,
     icon: SECTION_ICONS[section.id],
     ...(section.id === current ? { current: true } : {}),

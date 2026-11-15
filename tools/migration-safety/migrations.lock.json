@@ -249,6 +249,11 @@
       "tag": "0049_refunds_cancellations",
       "when": 1794431326630,
       "sha256": "b948077bb5a9cc5499b37d3ad750cc39e0426ccd0c32fe70777a5b41ea812f77"
+    },
+    {
+      "tag": "0050_merchant_applications",
+      "when": 1794737471314,
+      "sha256": "c6843e3fb438d61031eb62c107eaeeb6be400483104347438be24a5e3c7f8789"
     }
   ]
 }

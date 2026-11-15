@@ -64,9 +64,16 @@ export const decideAccess = (subject: AccessSubject, target: AccessTarget): Acce
       return ALLOW;
 
     case 'PRIVATE_OWNER':
-      // The uploader case above is the only way in. Staff do NOT get an implicit override here:
+      // The uploader case above is the usual way in. Staff do NOT get an implicit override here:
       // reading a user's own KYC document is what an explicit grant and an audit row are for, not a
       // role check buried in a switch statement.
+      //
+      // The explicit grant (T-055) is a reviewer ROLE on a KYC_DOCUMENT, honoured for a staff session
+      // only. `grantAccess` refuses a grant on any other PRIVATE_OWNER file and any user-id grantee, so
+      // `grantedRoles` is empty everywhere else and the owner stays the only person.
+      if (subject.scope === 'STAFF' && target.grantedRoles.some((role) => subject.roles.includes(role))) {
+        return ALLOW;
+      }
       return deny('NOT_OWNER');
 
     case 'PRIVATE_CASE': {
