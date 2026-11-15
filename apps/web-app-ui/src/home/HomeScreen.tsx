@@ -142,6 +142,23 @@ function Group({
   );
 }
 
+/** The wallet the AC1 panel draws above its title (`.state-panel .icon-wrap`). */
+const EMPTY_ICON = (
+  <svg
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="1.8"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    className="h-[24px] w-[24px]"
+    aria-hidden
+  >
+    <rect x="4" y="7" width="16" height="12" rx="2.5" />
+    <path d="M8 7V5.5A2.5 2.5 0 0 1 10.5 3h3A2.5 2.5 0 0 1 16 5.5V7" />
+  </svg>
+);
+
 /**
  * AC1 and H-03: a person with no trades yet. The reference puts its two actions beneath the panel, not inside
  * it, so they are siblings here.
@@ -149,8 +166,10 @@ function Group({
 function HomeEmpty(): React.JSX.Element {
   return (
     <ScreenColumn>
-      <h1 className="mb-[10px] text-[19px] font-semibold">Your trades, at a glance</h1>
+      {/* The reference draws no heading over this panel; the page still needs its one `h1`, so it is read, not seen. */}
+      <h1 className="sr-only">Your trades, at a glance</h1>
       <EmptyState
+        icon={EMPTY_ICON}
         title="No protected Trades yet"
         body="Start one, or enter a Trade Code from a seller — every completed Trade adds to your Trust Profile."
       />
