@@ -546,14 +546,21 @@ function NotConfirmed({
   );
 }
 
-/** What happened to the money, from the trade's own status: held, paid out to the seller, or returned. */
-type Outcome = 'held' | 'released' | 'refunded';
+/**
+ * What happened to the money, from the trade's own status: held, paid out to the seller, returned, or cancelled.
+ * `CANCELLED_REFUNDED` only means the ledger decided a refund; the refund itself can still be on its way or held, and
+ * the trade overview reads its row to say which. So this screen says the trade was cancelled and does not say the money
+ * was returned.
+ */
+type Outcome = 'held' | 'released' | 'refunded' | 'cancelled';
 const outcomeOf = (status: string): Outcome =>
   status === 'SETTLED' || status === 'RESOLVED_RELEASED'
     ? 'released'
-    : status === 'RESOLVED_REFUNDED' || status === 'CANCELLED_REFUNDED'
-      ? 'refunded'
-      : 'held';
+    : status === 'CANCELLED_REFUNDED'
+      ? 'cancelled'
+      : status === 'RESOLVED_REFUNDED'
+        ? 'refunded'
+        : 'held';
 
 /**
  * CWT-S06 (and V3): the money is held, paid out or returned, and the screen says which, because this address stays
@@ -594,13 +601,25 @@ function Protected({
           {paid} was held in escrow and has been returned to you. Nothing was paid to {seller}.
         </StatusHero>
       )}
+      {outcome === 'cancelled' && (
+        <StatusHero tone="info" as="h2" title="Cancelled after payment" className="pt-[32px]">
+          {paid} was held in escrow and nothing was paid to {seller}. The refund shows on the trade, with
+          where it stands.
+        </StatusHero>
+      )}
       <TermList aria-label="Protected payment">
         {amount !== undefined && (
           <TermRow label={outcome === 'held' ? 'Protected amount' : 'Amount paid'}>{naira(amount)}</TermRow>
         )}
         {attempt !== null && <TermRow label="Payment reference">{attempt.reference}</TermRow>}
         <TermRow label="Payment state">
-          {outcome === 'held' ? 'Protected' : outcome === 'released' ? 'Released to the seller' : 'Refunded'}
+          {outcome === 'held'
+            ? 'Protected'
+            : outcome === 'released'
+              ? 'Released to the seller'
+              : outcome === 'cancelled'
+                ? 'Cancelled after payment'
+                : 'Refunded'}
         </TermRow>
         <TermRow label="Seller payout">
           {outcome === 'held' ? 'Held until settlement' : outcome === 'released' ? 'Paid' : 'Not paid'}
