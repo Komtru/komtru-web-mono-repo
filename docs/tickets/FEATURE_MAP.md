@@ -247,10 +247,10 @@ list a trade.
 
 - **Journey:** Home & discover
 - **Actor:** buyer
-- **Absorbs:** T-113 (todo)
+- **Absorbs:** T-113 (done)
 - **Backend scope:** None new. `GET /trades` and `GET /trades/by-code/:code` already ship in the trades module. The M19 listing index (T-057) is deferred with the catalogue.
 - **Frontend scope:** Home — Mobile Web and its additional states (Z1, H-01–H-03, Customer-1, AC1 empty state), trade search (SE1, SE2) and Find a Trade by code (F1, F2). Browse Categories (K1, K2) is deferred with the catalogue. _10 v2 screens._
-- **Status:** Not started
+- **Status:** Done
 - **Depends on:** none
 - **MVP:** yes
 - **Note:** The screen the owner's complaint is about: AC1 is the 'Your trades will appear here' placeholder.

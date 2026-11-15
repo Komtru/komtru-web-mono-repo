@@ -7,11 +7,11 @@ behind it is [`BUILD_PLAN.md`](BUILD_PLAN.md). The unit of work is the feature, 
 thing in an app.
 
 ```
-MVP   ██████████████████················  26/49   (53%)
-Total ███████████·······················  26/80   (32%)
+MVP   ███████████████████···············  27/49   (55%)
+Total ███████████·······················  27/80   (34%)
 ```
 
-23 MVP features left, 31 deferred past it.
+22 MVP features left, 31 deferred past it.
 
 ## Backend done, UI outstanding
 
@@ -28,7 +28,7 @@ The engine exists and only the UI is missing, so these are the highest-value wor
 | --------------------------------------- | ---- | ----- | -------- | --------- |
 | Platform (not a user journey)           | 9    | 10    | 9        | 10        |
 | Arrive & verify                         | 3    | 4     | 3        | 3         |
-| Home & discover                         | 0    | 2     | 0        | 2         |
+| Home & discover                         | 1    | 2     | 1        | 2         |
 | Propose & agree                         | 3    | 5     | 3        | 3         |
 | The trade workspace                     | 2    | 2     | 2        | 2         |
 | Fund & protect                          | 1    | 2     | 1        | 1         |
@@ -49,12 +49,12 @@ The engine exists and only the UI is missing, so these are the highest-value wor
 | Feature | Title                                                           | Journey                                 | MVP |
 | ------- | --------------------------------------------------------------- | --------------------------------------- | --- |
 | F-005   | Deterministic integration test suite                            | Platform (not a user journey)           | yes |
-| F-015   | Home, trade search and find-a-trade-by-code                     | Home & discover                         | yes |
 | F-028   | Delivery and evidence in the workspace                          | Deliver & inspect                       | yes |
 | F-031   | Lifecycle exceptions: expiry, withdrawal and inspection updates | Issues & resolution                     | yes |
 | F-032   | Report an issue and open a dispute                              | Issues & resolution                     | yes |
 | F-040   | Apply for merchant certification and have it reviewed           | Sell on Komtru                          | yes |
 | F-068   | Desktop: propose, agree and fund                                | Desktop & tablet journeys               | yes |
+| F-072   | Tablet: arrive, home, discover, propose and fund                | Desktop & tablet journeys               | yes |
 | F-075   | Hosting and real deploy jobs                                    | Launch & assurance (not a user journey) | yes |
 | F-078   | Definition-of-done audit and first push                         | Launch & assurance (not a user journey) | yes |
 | F-014   | Sign in with Google, Apple or Facebook                          | Arrive & verify                         |     |
@@ -72,7 +72,6 @@ The engine exists and only the UI is missing, so these are the highest-value wor
 | Feature | Title                                                           | Journey                                 | MVP |
 | ------- | --------------------------------------------------------------- | --------------------------------------- | --- |
 | F-005   | Deterministic integration test suite                            | Platform (not a user journey)           | yes |
-| F-015   | Home, trade search and find-a-trade-by-code                     | Home & discover                         | yes |
 | F-016   | View a seller's profile and Trust Passport                      | Home & discover                         | yes |
 | F-028   | Delivery and evidence in the workspace                          | Deliver & inspect                       | yes |
 | F-031   | Lifecycle exceptions: expiry, withdrawal and inspection updates | Issues & resolution                     | yes |
@@ -99,11 +98,11 @@ The same work counted per ticket. Useful for the detail in `docs/tickets/`, not 
 it counts backend and frontend layers separately, which is how the build drifted.
 
 ```
-MVP   █████████████████████████·········  76/104  (73%)
-Total ███████████████···················  76/168  (45%)
+MVP   █████████████████████████·········  77/104  (74%)
+Total ████████████████··················  77/168  (46%)
 ```
 
-28 MVP tickets left, 64 deferred past it.
+27 MVP tickets left, 64 deferred past it.
 
 ### Tickets in progress
 
@@ -120,6 +119,7 @@ Total ███████████████··············�
 | T-080  | Disputes core                                                     | yes |
 | T-198  | Lifecycle exceptions and trade extras                             | yes |
 | T-208  | Desktop: propose, agree and fund                                  | yes |
+| T-212  | Tablet: arrive, home, discover, propose and fund                  | yes |
 | T-213  | Tablet: fulfil, deliver, inspect and payouts                      | yes |
 | T-034  | Social login                                                      |     |
 | T-067  | IMEI verification                                                 |     |
@@ -150,7 +150,6 @@ Total ███████████████··············�
 | T-080  | Disputes core                                                      | yes |
 | T-081  | Evidence comparison and dispute read models                        | yes |
 | T-102  | Reputation and ratings (M12)                                       | yes |
-| T-113  | Home and discovery                                                 | yes |
 | T-114  | Seller profile and Trust Passport                                  | yes |
 | T-120  | Disputes (buyer and seller)                                        | yes |
 | T-121  | Apply for merchant certification                                   | yes |
