@@ -105,6 +105,22 @@ const RULES: Record<CaseType, Rule[]> = {
       suggestion: 'Request the missing items on the certification checklist',
       because: () => 'The checklist is incomplete',
     },
+    // T-055's evidence matrix. Each is evidence for a person to weigh: none of them approves or rejects.
+    {
+      when: (i) => isFalse(i, 'identityVerified'),
+      suggestion: 'Wait for the applicant to finish their own identity verification',
+      because: () => 'The applicant has not completed identity verification',
+    },
+    {
+      when: (i) => fact(i, 'cacLookup') === 'FAILED',
+      suggestion: 'Ask the applicant to confirm their CAC registration details',
+      because: () => 'The automated CAC lookup did not verify the business',
+    },
+    {
+      when: (i) => fact(i, 'bankNameMatch') === 'MISMATCH',
+      suggestion: 'Ask for a payout account in the registered business name',
+      because: () => 'The payout account name does not match the registered business name',
+    },
     {
       when: (i) => isTrue(i, 'checklistComplete'),
       suggestion: 'Review the checklist and decide',
