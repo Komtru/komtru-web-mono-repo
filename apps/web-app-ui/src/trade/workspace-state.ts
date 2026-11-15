@@ -58,8 +58,11 @@ export function workspaceStanding(status: WorkspaceStatus): WorkspaceStanding {
     case 'RESOLVED_RELEASED':
       return { chip: { tone: 'resolved', label: 'Released to seller' }, stage: 5, closed: true };
     case 'RESOLVED_REFUNDED':
-    case 'CANCELLED_REFUNDED':
       return { chip: { tone: 'resolved', label: 'Refunded' }, stage: undefined, closed: true };
+    case 'CANCELLED_REFUNDED':
+      // The status means the ledger decided a refund, not that the money has gone back: a refund can still be on its
+      // way, or held after the provider failed it. The overview says which, from the trade's own refund row.
+      return { chip: { tone: 'resolved', label: 'Cancelled · refund' }, stage: undefined, closed: true };
   }
 }
 
@@ -124,6 +127,11 @@ export const inspectHref = (tradeId: string): string => `/trade/${tradeId}/inspe
 /** DE1: the seller asks the buyer for more time to deliver. */
 export const extendHref = (tradeId: string): string => `/trade/${tradeId}/extend`;
 
+/** F-030: CT1 before payment, CR1 (the buyer) or SC1 (the seller) after it: the trade decides which the page is. */
+export const cancelHref = (tradeId: string): string => `/trade/${tradeId}/cancel`;
+/** F-030 (CR2): the seller answers the buyer's cancellation request. */
+export const cancelRequestHref = (tradeId: string): string => `/trade/${tradeId}/cancel-request`;
+
 export const tabItems = (tradeId: string) =>
   WORKSPACE_TAB_DEFS.map((tab) => ({ id: tab.id, label: tab.label, href: tabHref(tradeId, tab.id) }));
 
@@ -178,12 +186,22 @@ const confirmDeliveryRow = (tradeId: string, title: string): TradeActionRow => (
  * list is the reference's CWT-09 ("actions derive from state, role and policy"): the same rows for the same
  * facts, whichever of the two people is reading, in their own words.
  *
- * Only what is real is `live`: reading the agreed terms and activity, and withdrawing before payment (the
- * platform lets either party cancel an agreed trade nobody has paid for), and the buyer's funding (F-024). Everything else names the feature
- * that will own it. SEAM(F-030 cancellation after payment,
- * F-032 disputes, reporting an issue): turn a `later` row into a `live` one when the flow exists, and nothing else here changes.
+ * Only what is real is `live`: reading the agreed terms and activity, withdrawing before payment (the
+ * platform lets either party cancel an agreed trade nobody has paid for), the buyer's funding (F-024) and
+ * cancelling after payment (F-030). Everything else names the feature that will own it. SEAM(F-032 disputes,
+ * reporting an issue): turn a `later` row into a `live` one when the flow exists, and nothing else here changes.
  */
-export function tradeActions(status: WorkspaceStatus, role: TradeRole, tradeId: string): TradeActionRow[] {
+export function tradeActions(
+  status: WorkspaceStatus,
+  role: TradeRole,
+  tradeId: string,
+  /**
+   * What the platform's cancellation read allows this reader (F-030). The row for cancelling a funded trade is offered
+   * only when it says so: a trade with a request already waiting, a hold or a refund on its way offers none, and one
+   * whose read has not come back offers none either.
+   */
+  cancellation?: { canRequest: boolean; canCancelAsSeller: boolean },
+): TradeActionRow[] {
   const rows: TradeActionRow[] = [
     {
       id: 'view-terms',
@@ -220,11 +238,25 @@ export function tradeActions(status: WorkspaceStatus, role: TradeRole, tradeId: 
         });
         rows.push(moreTimeRow(tradeId));
       }
-      later(
-        'cancel-after-payment',
-        'Ask to cancel · Either party',
-        "Cancelling a trade that is already paid for isn't in the app yet.",
-      );
+      if (buyer && cancellation?.canRequest === true) {
+        rows.push({
+          id: 'ask-cancel',
+          title: 'Ask to cancel · Buyer',
+          description:
+            'Ask the seller to cancel before the item ships. If they agree, a refund is requested for you.',
+          availability: 'live',
+          href: cancelHref(tradeId),
+        });
+      }
+      if (!buyer && cancellation?.canCancelAsSeller === true) {
+        rows.push({
+          id: 'cannot-fulfil',
+          title: 'Can’t fulfil · Seller',
+          description: 'Cancel the trade because you can’t deliver. A refund is requested for the buyer.',
+          availability: 'live',
+          href: cancelHref(tradeId),
+        });
+      }
       break;
     case 'SHIPPED':
       if (!buyer) {
@@ -298,8 +330,9 @@ export function tradeActions(status: WorkspaceStatus, role: TradeRole, tradeId: 
     rows.push({
       id: 'cancel',
       title: 'Withdraw · Either party',
-      description: 'Available until the trade is paid for. Nothing is charged when you do.',
+      description: 'Available until the trade is paid for. Komtru checks for a payment on its way first.',
       availability: 'live',
+      href: cancelHref(tradeId),
     });
   }
   if (FUNDS_HELD.includes(status)) {

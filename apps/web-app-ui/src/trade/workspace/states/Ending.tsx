@@ -1,6 +1,7 @@
 'use client';
 
 import { SectionLabel, StatusHero, TermList, TermRow } from '@komtru/ui-kit';
+import { AutoReleaseNotice } from '../../cancel/AutoReleaseNotice';
 import { nairaShort, partyName } from '../../format';
 import { ItemSummary } from '../../parts';
 import { stateCopy } from '../../workspace-copy';
@@ -31,6 +32,7 @@ export function Settlement({ trade, role }: BodyProps): React.JSX.Element {
       : ` · ${nairaShort(role === 'BUYER' ? fees.itemAmountMinor : fees.sellerProceedsMinor)}`;
   return (
     <>
+      <AutoReleaseNotice trade={trade} />
       {copy.banner && <BannerView banner={copy.banner} />}
       <SectionLabel>Financial outcome</SectionLabel>
       <TermList aria-label="Financial outcome">
@@ -61,6 +63,7 @@ export function TradeComplete({ trade, role }: BodyProps): React.JSX.Element {
           {copy.hero.body}
         </StatusHero>
       )}
+      <AutoReleaseNotice trade={trade} />
       <ItemSummary trade={trade} />
       {/* SEAM(F-038): "Leave a review", and the count of trades on the Trust Profile (F-016). */}
       <FurtherViews trade={trade} />
@@ -74,7 +77,7 @@ export function Outcome({
   role,
   status,
 }: BodyProps & {
-  status: 'RESOLVED_RELEASED' | 'RESOLVED_REFUNDED' | 'CANCELLED_REFUNDED';
+  status: 'RESOLVED_RELEASED' | 'RESOLVED_REFUNDED';
 }): React.JSX.Element {
   const copy = stateCopy(status satisfies WorkspaceStatus, role);
   return (

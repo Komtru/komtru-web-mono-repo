@@ -178,12 +178,14 @@ export function stateCopy(status: WorkspaceStatus, role: TradeRole, ctx: CopyCon
           : 'The case was decided in the buyer’s favour. They are refunded.',
       );
     case 'CANCELLED_REFUNDED':
-      return outcome(
-        'Cancelled and refunded',
-        buyer
-          ? 'The trade was cancelled after payment. You are refunded.'
-          : 'The trade was cancelled after payment. The buyer is refunded.',
-      );
+      // The refund itself (its amount and whether it has been sent) is drawn from the trade's own refund row by
+      // `cancel/RefundOutcome`. This copy says only what the status proves, so it can never promise a refund.
+      return {
+        hero: {
+          title: 'Cancelled after payment',
+          body: 'The trade was cancelled after payment.',
+        },
+      };
     default:
       return NONE;
   }
