@@ -179,8 +179,13 @@ export {
 } from './services/avatar.service.js';
 import { avatarEnrichment, type AvatarPorts } from './services/avatar.service.js';
 export {
+  activateCapability,
   createCapabilityService,
   postgresBuyerFacts,
+  revokeCapability,
+  suspendCapability,
+  type CapabilityChange,
+  type CapabilityName,
   type BuyerFacts,
   type BuyerFactsLookup,
   type CapabilityService,
