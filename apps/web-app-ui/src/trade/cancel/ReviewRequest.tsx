@@ -49,7 +49,7 @@ function Answer({ trade, read }: { trade: TradeView; read: Cancellation }): Reac
   const approve = useApproveCancellation();
   const decline = useDeclineCancellation();
   const [note, setNote] = useState('');
-  const [confirming, setConfirming] = useState(false);
+  const [confirming, setConfirming] = useState<'approve' | 'decline' | undefined>(undefined);
   const [problem, setProblem] = useState<string | undefined>(undefined);
   // One decision, one key: asked again after a lost answer it is the same answer, not a second one.
   const attempt = useRef<{ key: string; kind: 'approve' | 'decline' } | undefined>(undefined);
@@ -87,13 +87,17 @@ function Answer({ trade, read }: { trade: TradeView; read: Cancellation }): Reac
     );
   }
   if (!read.actions.canRespond) {
+    const words =
+      request.status !== 'PENDING'
+        ? 'This request is no longer waiting for an answer.'
+        : read.refundRequested
+          ? 'A refund is already on its way for this trade, so the request can’t be answered.'
+          : read.tradeStatus === 'FUNDED'
+            ? 'This trade is on hold, so the request can’t be answered right now.'
+            : 'This request is no longer waiting for an answer: the trade moved on without one.';
     return (
       <Frame title="Cancellation request" id={trade.id}>
-        <Notice id={trade.id}>
-          {request.status === 'LAPSED'
-            ? 'This request is no longer waiting for an answer: the trade moved on without one.'
-            : 'This request is no longer waiting for an answer.'}
-        </Notice>
+        <Notice id={trade.id}>{words}</Notice>
       </Frame>
     );
   }
@@ -109,10 +113,10 @@ function Answer({ trade, read }: { trade: TradeView; read: Cancellation }): Reac
     };
     const handlers = {
       onSuccess: () => {
-        setConfirming(false);
+        setConfirming(undefined);
       },
       onError: (error: unknown) => {
-        setConfirming(false);
+        setConfirming(undefined);
         if (isDecidedRefusal(error)) attempt.current = undefined;
         setProblem(platformWords(error, 'We couldn’t send your answer. Try again.'));
       },
@@ -147,7 +151,7 @@ function Answer({ trade, read }: { trade: TradeView; read: Cancellation }): Reac
           type="button"
           disabled={busy}
           onClick={() => {
-            setConfirming(true);
+            setConfirming('approve');
           }}
         >
           Approve — refund buyer
@@ -157,17 +161,17 @@ function Answer({ trade, read }: { trade: TradeView; read: Cancellation }): Reac
           variant="secondary"
           disabled={busy}
           onClick={() => {
-            answer('decline');
+            setConfirming('decline');
           }}
         >
-          Decline — I’ve already shipped
+          Decline the request
         </Button>
         <Button asChild variant="ghost">
           <a href={tradeHref(trade.id)}>Back to the trade</a>
         </Button>
       </ActionStack>
       <ConfirmSheet
-        open={confirming}
+        open={confirming === 'approve'}
         title="Approve and refund the buyer?"
         confirm="Approve and refund"
         pending={approve.isPending}
@@ -175,11 +179,27 @@ function Answer({ trade, read }: { trade: TradeView; read: Cancellation }): Reac
           answer('approve');
         }}
         onClose={() => {
-          setConfirming(false);
+          setConfirming(undefined);
         }}
       >
         <p className="text-[12.5px] leading-[1.5] text-slate">
-          This ends the trade and refunds {buyer}. It can’t be undone.
+          This ends the trade and requests {buyer}’s refund. It can’t be undone.
+        </p>
+      </ConfirmSheet>
+      <ConfirmSheet
+        open={confirming === 'decline'}
+        title="Decline the cancellation request?"
+        confirm="Decline request"
+        pending={decline.isPending}
+        onConfirm={() => {
+          answer('decline');
+        }}
+        onClose={() => {
+          setConfirming(undefined);
+        }}
+      >
+        <p className="text-[12.5px] leading-[1.5] text-slate">
+          The trade carries on, and {buyer} can’t ask again. It can’t be undone.
         </p>
       </ConfirmSheet>
     </Frame>

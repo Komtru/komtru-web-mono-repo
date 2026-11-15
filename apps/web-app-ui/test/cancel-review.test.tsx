@@ -91,7 +91,12 @@ describe('CR2 buyer wants to cancel (seller)', () => {
     fireEvent.change(await screen.findByLabelText('Note to the buyer (optional)'), {
       target: { value: ' Already shipped ' },
     });
-    fireEvent.click(screen.getByRole('button', { name: 'Decline — I’ve already shipped' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Decline the request' }));
+    const sheet = await screen.findByRole('dialog');
+    // Declining ends the request for good (the buyer cannot ask again), so it asks once.
+    expect(within(sheet).getByText(/can’t ask again/)).toBeTruthy();
+    expect(callsTo(api.call, 'POST', '/trades/:id/cancellation-request/:requestId/decline')).toHaveLength(0);
+    fireEvent.click(within(sheet).getByRole('button', { name: 'Decline request' }));
     expect(await screen.findByRole('heading', { name: 'You declined the request' })).toBeTruthy();
     expect(callsTo(api.call, 'POST', '/trades/:id/cancellation-request/:requestId/decline')[0]).toMatchObject(
       {
@@ -109,7 +114,10 @@ describe('CR2 buyer wants to cancel (seller)', () => {
         'This request was already answered.',
       ),
     });
-    fireEvent.click(await screen.findByRole('button', { name: 'Decline — I’ve already shipped' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Decline the request' }));
+    fireEvent.click(
+      within(await screen.findByRole('dialog')).getByRole('button', { name: 'Decline request' }),
+    );
     expect(await screen.findByText('This request was already answered.')).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Approve — refund buyer' })).toBeTruthy();
   });
@@ -120,6 +128,25 @@ describe('CR2 buyer wants to cancel (seller)', () => {
       cancellationRead('SHIPPED', 'SELLER', { request: cancellationRequest({ status: 'LAPSED' }) }),
     );
     expect(await screen.findByText(/no longer waiting for an answer/)).toBeTruthy();
+    expect(screen.queryByRole('button')).toBeNull();
+  });
+
+  it('says a pending request is on hold, not "no longer waiting", when the platform has not opened the answer', async () => {
+    serve(
+      workspaceTrade('FUNDED', 'SELLER'),
+      cancellationRead('FUNDED', 'SELLER', { request: cancellationRequest() }),
+    );
+    expect(await screen.findByText(/on hold/)).toBeTruthy();
+    expect(screen.queryByText(/no longer waiting/)).toBeNull();
+    expect(screen.queryByRole('button')).toBeNull();
+  });
+
+  it('says a refund is already on its way when one was requested over a pending request', async () => {
+    serve(
+      workspaceTrade('FUNDED', 'SELLER'),
+      cancellationRead('FUNDED', 'SELLER', { refundRequested: true, request: cancellationRequest() }),
+    );
+    expect(await screen.findByText(/refund is already on its way/)).toBeTruthy();
     expect(screen.queryByRole('button')).toBeNull();
   });
 
