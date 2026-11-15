@@ -414,7 +414,6 @@ describe('disputed, settlement and completion (CWT-05, CWT-06, Customer-5)', () 
   it.each([
     ['RESOLVED_RELEASED', 'BUYER', 'Decided: released to the seller'],
     ['RESOLVED_REFUNDED', 'SELLER', 'Decided: refunded to the buyer'],
-    ['CANCELLED_REFUNDED', 'BUYER', 'Cancelled and refunded'],
   ] as const)(
     'records the outcome %s without claiming the money has arrived',
     async (status, role, title) => {
@@ -574,38 +573,24 @@ describe('the actions tab (CWT-09)', () => {
     expect(titles).not.toContain('Fund trade · Buyer');
   });
 
-  describe('withdrawing before payment', () => {
-    it('asks once, cancels the trade, and then shows it as ended', async () => {
-      serve(workspaceTrade('PENDING_PAYMENT', 'BUYER'), {
-        'POST /trades/:id/cancel': workspaceTrade('CANCELLED', 'BUYER'),
-      });
-      show('actions');
-      fireEvent.click(await screen.findByRole('button', { name: 'Withdraw from this trade' }));
-      const sheet = await screen.findByRole('dialog');
-      expect(callsTo(api.call, 'POST', '/trades/:id/cancel')).toHaveLength(0);
-      fireEvent.click(within(sheet).getByRole('button', { name: 'Withdraw' }));
-      expect(await screen.findByRole('heading', { name: 'Request cancelled' })).toBeTruthy();
-      expect(callsTo(api.call, 'POST', '/trades/:id/cancel')[0]).toMatchObject({
-        params: { id: id(1) },
-        body: {},
-      });
-    });
+  describe('withdrawing before payment (CT1)', () => {
+    it.each(['BUYER', 'SELLER'] as const)(
+      'leads the %s to the cancel screen, which checks for a payment before it offers anything',
+      async (role) => {
+        serve(workspaceTrade('PENDING_PAYMENT', role));
+        show('actions');
+        const link = await screen.findByRole('link', { name: 'Withdraw from this trade' });
+        expect(link.getAttribute('href')).toBe(`/trade/${id(1)}/cancel`);
+        expect(callsTo(api.call, 'POST', '/trades/:id/cancel')).toHaveLength(0);
+      },
+    );
 
-    it('lets either party do it', async () => {
-      serve(workspaceTrade('PENDING_PAYMENT', 'SELLER'));
-      show('actions');
-      expect(await screen.findByRole('button', { name: 'Withdraw from this trade' })).toBeTruthy();
-    });
-
-    it('says why when the platform refuses, and keeps the trade as it was', async () => {
-      serve(workspaceTrade('PENDING_PAYMENT', 'BUYER'), {
-        'POST /trades/:id/cancel': problem('INVALID_TRANSITION', 409),
-      });
-      show('actions');
-      fireEvent.click(await screen.findByRole('button', { name: 'Withdraw from this trade' }));
-      fireEvent.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Withdraw' }));
-      expect(await screen.findByText(/This trade has moved on since you opened it/)).toBeTruthy();
-      expect(screen.getByRole('button', { name: 'Withdraw from this trade' })).toBeTruthy();
+    it('shows an agreed trade that was cancelled as CT2, saying only that no payment was confirmed', async () => {
+      serve(workspaceTrade('CANCELLED', 'BUYER', { acceptedAt: '2026-09-30T08:41:00.000Z' }));
+      show();
+      expect(await screen.findByRole('heading', { name: 'Trade cancelled' })).toBeTruthy();
+      expect(screen.getByText(/never confirmed a payment on this trade/)).toBeTruthy();
+      expect(screen.queryByText(/ended without any payment/)).toBeNull();
     });
 
     it.each(['FUNDED', 'SHIPPED', 'INSPECTION', 'DISPUTED', 'COMPLETED'])(
@@ -614,7 +599,7 @@ describe('the actions tab (CWT-09)', () => {
         serve(workspaceTrade(status, 'BUYER'));
         show('actions');
         await screen.findByRole('list', { name: 'Actions on this trade' });
-        expect(screen.queryByRole('button', { name: /withdraw/i })).toBeNull();
+        expect(screen.queryByRole('link', { name: /withdraw/i })).toBeNull();
       },
     );
   });

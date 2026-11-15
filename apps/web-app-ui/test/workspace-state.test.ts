@@ -134,7 +134,8 @@ describe('what can be done', () => {
     (status, role) => {
       const key = `${status} ${role}`;
       const expected: Record<string, string[]> = {
-        'FUNDED SELLER': ['view-terms', 'ship', 'ask-more-time'],
+        'FUNDED SELLER': ['view-terms', 'ship', 'ask-more-time', 'cannot-fulfil'],
+        'FUNDED BUYER': ['view-terms', 'ask-cancel'],
         'SHIPPED SELLER': ['view-terms', 'ask-more-time', 'report-delivered'],
         'SHIPPED BUYER': ['view-terms', 'confirm-delivery'],
         'UNCONFIRMED_DELIVERY BUYER': ['view-terms', 'confirm-delivery'],
@@ -205,7 +206,7 @@ describe('what can be done', () => {
   });
 
   it('says plainly that a step is not in the app yet, instead of offering a control that does nothing', () => {
-    const later = tradeActions('FUNDED', 'SELLER', ID).filter((row) => row.availability === 'later');
+    const later = tradeActions('INSPECTION', 'BUYER', ID).filter((row) => row.availability === 'later');
     expect(later.length).toBeGreaterThan(0);
     for (const row of later) expect(row.href).toBeUndefined();
   });

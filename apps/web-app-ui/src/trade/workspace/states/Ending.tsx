@@ -74,7 +74,7 @@ export function Outcome({
   role,
   status,
 }: BodyProps & {
-  status: 'RESOLVED_RELEASED' | 'RESOLVED_REFUNDED' | 'CANCELLED_REFUNDED';
+  status: 'RESOLVED_RELEASED' | 'RESOLVED_REFUNDED';
 }): React.JSX.Element {
   const copy = stateCopy(status satisfies WorkspaceStatus, role);
   return (

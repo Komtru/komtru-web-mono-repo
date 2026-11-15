@@ -124,6 +124,11 @@ export const inspectHref = (tradeId: string): string => `/trade/${tradeId}/inspe
 /** DE1: the seller asks the buyer for more time to deliver. */
 export const extendHref = (tradeId: string): string => `/trade/${tradeId}/extend`;
 
+/** F-030: CT1 before payment, CR1 (the buyer) or SC1 (the seller) after it: the trade decides which the page is. */
+export const cancelHref = (tradeId: string): string => `/trade/${tradeId}/cancel`;
+/** F-030 (CR2): the seller answers the buyer's cancellation request. */
+export const cancelRequestHref = (tradeId: string): string => `/trade/${tradeId}/cancel-request`;
+
 export const tabItems = (tradeId: string) =>
   WORKSPACE_TAB_DEFS.map((tab) => ({ id: tab.id, label: tab.label, href: tabHref(tradeId, tab.id) }));
 
@@ -178,10 +183,10 @@ const confirmDeliveryRow = (tradeId: string, title: string): TradeActionRow => (
  * list is the reference's CWT-09 ("actions derive from state, role and policy"): the same rows for the same
  * facts, whichever of the two people is reading, in their own words.
  *
- * Only what is real is `live`: reading the agreed terms and activity, and withdrawing before payment (the
- * platform lets either party cancel an agreed trade nobody has paid for), and the buyer's funding (F-024). Everything else names the feature
- * that will own it. SEAM(F-030 cancellation after payment,
- * F-032 disputes, reporting an issue): turn a `later` row into a `live` one when the flow exists, and nothing else here changes.
+ * Only what is real is `live`: reading the agreed terms and activity, withdrawing before payment (the
+ * platform lets either party cancel an agreed trade nobody has paid for), the buyer's funding (F-024) and
+ * cancelling after payment (F-030). Everything else names the feature that will own it. SEAM(F-032 disputes,
+ * reporting an issue): turn a `later` row into a `live` one when the flow exists, and nothing else here changes.
  */
 export function tradeActions(status: WorkspaceStatus, role: TradeRole, tradeId: string): TradeActionRow[] {
   const rows: TradeActionRow[] = [
@@ -220,10 +225,22 @@ export function tradeActions(status: WorkspaceStatus, role: TradeRole, tradeId: 
         });
         rows.push(moreTimeRow(tradeId));
       }
-      later(
-        'cancel-after-payment',
-        'Ask to cancel · Either party',
-        "Cancelling a trade that is already paid for isn't in the app yet.",
+      rows.push(
+        buyer
+          ? {
+              id: 'ask-cancel',
+              title: 'Ask to cancel · Buyer',
+              description: 'Ask the seller to cancel before the item ships. If they agree you are refunded.',
+              availability: 'live',
+              href: cancelHref(tradeId),
+            }
+          : {
+              id: 'cannot-fulfil',
+              title: 'Can’t fulfil · Seller',
+              description: 'Cancel the trade because you can’t deliver. The buyer is refunded.',
+              availability: 'live',
+              href: cancelHref(tradeId),
+            },
       );
       break;
     case 'SHIPPED':
@@ -298,8 +315,9 @@ export function tradeActions(status: WorkspaceStatus, role: TradeRole, tradeId: 
     rows.push({
       id: 'cancel',
       title: 'Withdraw · Either party',
-      description: 'Available until the trade is paid for. Nothing is charged when you do.',
+      description: 'Available until the trade is paid for. Komtru checks for a payment on its way first.',
       availability: 'live',
+      href: cancelHref(tradeId),
     });
   }
   if (FUNDS_HELD.includes(status)) {
