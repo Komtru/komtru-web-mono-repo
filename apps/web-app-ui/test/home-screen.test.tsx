@@ -67,6 +67,36 @@ describe('Home with no trades yet (AC1, H-03)', () => {
   });
 });
 
+describe('Home when the first page is empty but more is unread', () => {
+  it('does not claim there are no trades when the next page fails, and offers a retry', async () => {
+    let later = 0;
+    answerWith(api.call, {
+      'GET /trades': ({ query }: { query?: Record<string, unknown> }) => {
+        if (query?.cursor === undefined) return page([], 'c2');
+        later += 1;
+        return later === 1 ? new Error('offline') : page([], null);
+      },
+    });
+    renderWithApi(api.call, <HomeScreen />);
+    expect(await screen.findByRole('heading', { name: "Couldn't load your trades" })).toBeTruthy();
+    expect(screen.queryByRole('heading', { name: 'No protected Trades yet' })).toBeNull();
+    expect(screen.queryByText('1 needs your attention · 0 active')).toBeNull();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
+    expect(await screen.findByRole('heading', { name: 'No protected Trades yet' })).toBeTruthy();
+  });
+
+  it('keeps reading, and does not call it empty, while the next page is still on its way', async () => {
+    api.call.mockImplementation((_endpoint, input) => {
+      const cursor = input?.query?.cursor;
+      return cursor === undefined ? Promise.resolve(page([], 'c2')) : new Promise(() => undefined);
+    });
+    renderWithApi(api.call, <HomeScreen />);
+    expect(await screen.findByRole('status', { name: 'Loading your trades' })).toBeTruthy();
+    expect(screen.queryByRole('heading', { name: 'No protected Trades yet' })).toBeNull();
+  });
+});
+
 describe('Home with trades (Z1, H-01, Customer-1)', () => {
   beforeEach(() => {
     answerWith(api.call, { 'GET /trades': page([needsAnswer, paying, cancelled]) });

@@ -47,7 +47,26 @@ export function HomeScreen(): React.JSX.Element {
     );
   }
 
-  if (all.trades.length === 0 && all.complete) return <HomeEmpty />;
+  // Nothing read yet, and the rest could not be read: "no protected Trades yet" would be a claim nobody has checked.
+  if (all.trades.length === 0 && !all.complete) {
+    if (all.nextPageFailed) {
+      return (
+        <LoadFailed
+          title="Couldn't load your trades"
+          body="Check your connection and try again."
+          onRetry={all.retry}
+        />
+      );
+    }
+    return (
+      <ScreenColumn>
+        <div role="status" aria-label="Loading your trades" aria-busy="true">
+          <Skeleton width="full" lines={3} />
+        </div>
+      </ScreenColumn>
+    );
+  }
+  if (all.trades.length === 0) return <HomeEmpty />;
 
   const groups = splitTrades(all.trades);
   const past = groups.past.slice(0, PAST_SHOWN);
