@@ -243,17 +243,20 @@ list a trade.
 
 ### Journey: Home & discover
 
-#### F-015 — Home, search, categories and find-a-trade-by-code
+#### F-015 — Home, trade search and find-a-trade-by-code
 
 - **Journey:** Home & discover
 - **Actor:** buyer
-- **Absorbs:** T-113 (todo), T-057 (todo)
-- **Backend scope:** Search and discovery (M19): `search_documents`, tsvector/GIN ranking, event-driven upserts, endpoints for SE1/SE2, K1/K2, I1/I2 and find-by-code (T-057).
-- **Frontend scope:** Home — Mobile Web and its additional states (Z1, H-01–H-03, Customer-1, AC1 empty state), Discovery (SE1, SE2), Browse Categories (K1, K2) and Find a Trade by code (F1, F2). _12 v2 screens._
+- **Absorbs:** T-113 (todo)
+- **Backend scope:** None new. `GET /trades` and `GET /trades/by-code/:code` already ship in the trades module. The M19 listing index (T-057) is deferred with the catalogue.
+- **Frontend scope:** Home — Mobile Web and its additional states (Z1, H-01–H-03, Customer-1, AC1 empty state), trade search (SE1, SE2) and Find a Trade by code (F1, F2). Browse Categories (K1, K2) is deferred with the catalogue. _10 v2 screens._
 - **Status:** Not started
-- **Depends on:** F-041
+- **Depends on:** none
 - **MVP:** yes
 - **Note:** The screen the owner's complaint is about: AC1 is the 'Your trades will appear here' placeholder.
+  **Rescoped 2026-11-15 by the owner:** home lists the user's own trades — past, and pending their
+  acceptance — and search covers trades only. That drops T-057 and the F-041 dependency, so this
+  feature is Ready now and needs no new backend.
 
 #### F-016 — View a seller's profile and Trust Passport
 
@@ -575,7 +578,10 @@ list a trade.
 - **Frontend scope:** Shop and listings (Seller-1, Seller-4, Seller-5) and Edit Listing & Manage Stock (EL1, EL2). _5 v2 screens._
 - **Status:** Not started
 - **Depends on:** F-040
-- **MVP:** yes
+- **MVP:** no
+- **Note:** **Deferred 2026-11-15 by the owner.** Listings and stock are out of the MVP: a trade is
+  proposed party to party and never needs a catalogue. F-017 already proved this when multi-item
+  ordering was split out of it on 2026-11-09.
 
 #### F-042 — Shop settings and catalogue import
 
@@ -586,7 +592,9 @@ list a trade.
 - **Frontend scope:** Supporting · Shop settings (SP-M25–SP-M29) and Catalogue import (SP-M34–SP-M36). _8 v2 screens._
 - **Status:** Not started
 - **Depends on:** F-041
-- **MVP:** yes
+- **MVP:** no
+- **Note:** **Deferred 2026-11-15 by the owner**, with F-041. Catalogue import is bulk listing
+  creation, and a shop with no listings is the seller profile F-016 already draws.
 
 #### F-043 — Customers, tax documents and badges
 
@@ -908,10 +916,10 @@ list a trade.
 - **Journey:** Desktop & tablet journeys
 - **Actor:** buyer, seller
 - **Absorbs:** T-209 (todo)
-- **Backend scope:** Served by F-026, F-027, F-037 and F-041.
+- **Backend scope:** Served by F-026, F-027 and F-037. The F-041 dependency went with the 2026-11-15 catalogue cut; DX-31 and DX-32 lose their shop panel.
 - **Frontend scope:** Desktop · 06 · Fulfil & dispatch (DX-18–DX-20), · 07 · Deliver & inspect (DX-21–DX-23, DX-38) and · 09 · Complete & grow (DX-31, DX-32). _9 v2 screens._
 - **Status:** Not started
-- **Depends on:** F-022, F-026, F-027, F-028, F-037, F-041
+- **Depends on:** F-022, F-026, F-027, F-028, F-037
 - **MVP:** yes
 
 #### F-070 — Desktop and tablet: issues and resolution
@@ -1042,8 +1050,9 @@ list a trade.
 - **Frontend scope:** The item steps inside the Create a Trade flow. v2 draws no screen of its own for this (gap 6), so it extends F-018's and F-019's stages rather than adding a surface.
 - **Status:** Not started
 - **Depends on:** F-017, F-041
-- **MVP:** yes
-- **Note:** Split out of F-017 on 2026-11-09. It genuinely needs listings (T-056 via F-041); the rest of proposing a trade does not, and keeping them together put the entire trade journey behind the storefront.
+- **MVP:** no
+- **Note:** **Deferred 2026-11-15 by the owner**, with F-041, for the reason this note already gave.
+  Split out of F-017 on 2026-11-09. It genuinely needs listings (T-056 via F-041); the rest of proposing a trade does not, and keeping them together put the entire trade journey behind the storefront.
 
 ## 3. Coverage table
 

@@ -7,11 +7,11 @@ behind it is [`BUILD_PLAN.md`](BUILD_PLAN.md). The unit of work is the feature, 
 thing in an app.
 
 ```
-MVP   ████████████████··················  25/52   (48%)
+MVP   █████████████████·················  25/49   (51%)
 Total ███████████·······················  25/80   (31%)
 ```
 
-27 MVP features left, 28 deferred past it.
+24 MVP features left, 31 deferred past it.
 
 ## Backend done, UI outstanding
 
@@ -37,19 +37,20 @@ The engine exists and only the UI is missing, so these are the highest-value wor
 | Deliver & inspect                       | 2    | 3     | 2        | 3         |
 | Issues & resolution                     | 0    | 7     | 0        | 6         |
 | Complete & grow                         | 1    | 3     | 1        | 1         |
-| Sell on Komtru                          | 0    | 4     | 0        | 3         |
+| Sell on Komtru                          | 0    | 4     | 0        | 1         |
 | Account, trust & support                | 0    | 5     | 0        | 3         |
 | TrustOps console                        | 3    | 11    | 3        | 3         |
 | Park network                            | 0    | 5     | 0        | 0         |
 | Logistics partner                       | 0    | 2     | 0        | 0         |
 | Desktop & tablet journeys               | 0    | 8     | 0        | 6         |
-| Launch & assurance (not a user journey) | 0    | 6     | 0        | 5         |
+| Launch & assurance (not a user journey) | 0    | 6     | 0        | 4         |
 
 ## Ready features (every dependency done), MVP first
 
 | Feature | Title                                                 | Journey                                 | MVP |
 | ------- | ----------------------------------------------------- | --------------------------------------- | --- |
 | F-005   | Deterministic integration test suite                  | Platform (not a user journey)           | yes |
+| F-015   | Home, trade search and find-a-trade-by-code           | Home & discover                         | yes |
 | F-028   | Delivery and evidence in the workspace                | Deliver & inspect                       | yes |
 | F-040   | Apply for merchant certification and have it reviewed | Sell on Komtru                          | yes |
 | F-068   | Desktop: propose, agree and fund                      | Desktop & tablet journeys               | yes |
@@ -69,7 +70,7 @@ The engine exists and only the UI is missing, so these are the highest-value wor
 | Feature | Title                                                           | Journey                                 | MVP |
 | ------- | --------------------------------------------------------------- | --------------------------------------- | --- |
 | F-005   | Deterministic integration test suite                            | Platform (not a user journey)           | yes |
-| F-015   | Home, search, categories and find-a-trade-by-code               | Home & discover                         | yes |
+| F-015   | Home, trade search and find-a-trade-by-code                     | Home & discover                         | yes |
 | F-016   | View a seller's profile and Trust Passport                      | Home & discover                         | yes |
 | F-028   | Delivery and evidence in the workspace                          | Deliver & inspect                       | yes |
 | F-031   | Lifecycle exceptions: expiry, withdrawal and inspection updates | Issues & resolution                     | yes |
@@ -78,8 +79,6 @@ The engine exists and only the UI is missing, so these are the highest-value wor
 | F-034   | Resolution execution: replacement and mutual settlement         | Issues & resolution                     | yes |
 | F-035   | Decide a dispute in TrustOps                                    | Issues & resolution                     | yes |
 | F-040   | Apply for merchant certification and have it reviewed           | Sell on Komtru                          | yes |
-| F-041   | List items and manage stock                                     | Sell on Komtru                          | yes |
-| F-042   | Shop settings and catalogue import                              | Sell on Komtru                          | yes |
 | F-046   | Trust history, account and notification settings                | Account, trust & support                | yes |
 | F-067   | Desktop: arrive, home and discover                              | Desktop & tablet journeys               | yes |
 | F-068   | Desktop: propose, agree and fund                                | Desktop & tablet journeys               | yes |
@@ -91,7 +90,6 @@ The engine exists and only the UI is missing, so these are the highest-value wor
 | F-076   | End-to-end critical paths                                       | Launch & assurance (not a user journey) | yes |
 | F-077   | Security review                                                 | Launch & assurance (not a user journey) | yes |
 | F-078   | Definition-of-done audit and first push                         | Launch & assurance (not a user journey) | yes |
-| F-080   | Order multiple items in one trade                               | Launch & assurance (not a user journey) | yes |
 
 ## Ticket layer (detail view)
 
@@ -99,11 +97,11 @@ The same work counted per ticket. Useful for the detail in `docs/tickets/`, not 
 it counts backend and frontend layers separately, which is how the build drifted.
 
 ```
-MVP   ███████████████████████···········  75/109  (69%)
+MVP   █████████████████████████·········  75/104  (72%)
 Total ███████████████···················  75/168  (45%)
 ```
 
-34 MVP tickets left, 59 deferred past it.
+29 MVP tickets left, 64 deferred past it.
 
 ### Tickets in progress
 
@@ -148,9 +146,6 @@ Total ███████████████··············�
 | T-005  | Hosting confirmation and real deploy jobs                          | yes |
 | T-029  | Isolate the integration suite's shared Redis and queues            | yes |
 | T-055  | Merchant applications and certification                            | yes |
-| T-056  | Listings lifecycle, images and stock                               | yes |
-| T-057  | Search and discovery (M19)                                         | yes |
-| T-063  | Orders and multi-item trades (M9)                                  | yes |
 | T-080  | Disputes core                                                      | yes |
 | T-081  | Evidence comparison and dispute read models                        | yes |
 | T-102  | Reputation and ratings (M12)                                       | yes |
@@ -159,7 +154,6 @@ Total ███████████████··············�
 | T-119  | Cancellation and refunds                                           | yes |
 | T-120  | Disputes (buyer and seller)                                        | yes |
 | T-121  | Apply for merchant certification                                   | yes |
-| T-122  | Shop and listings                                                  | yes |
 | T-126  | Trust, account and settings                                        | yes |
 | T-143  | Disputes                                                           | yes |
 | T-154  | Merchant certification review                                      | yes |
@@ -170,7 +164,6 @@ Total ███████████████··············�
 | T-198  | Lifecycle exceptions and trade extras                              | yes |
 | T-199  | Resolution execution: return track                                 | yes |
 | T-200  | Resolution execution: replacement and mutual settlement            | yes |
-| T-202  | Seller shop settings and catalogue import                          | yes |
 | T-204  | Account basics, money documents and system states                  | yes |
 | T-205  | Account security and lifecycle                                     | yes |
 | T-207  | Desktop: arrive, home and discover                                 | yes |

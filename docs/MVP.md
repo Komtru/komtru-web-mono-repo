@@ -25,7 +25,7 @@ things in particular have to be changed deliberately rather than waited out:
   logistics packages and the Park network console. Its definition of "end to end" spans two
   apps the MVP does not build.
 
-## The MVP cut in features — 51 features
+## The MVP cut in features — 48 features
 
 This is the cut as the project now measures it. Each feature carries its backend and its frontend, and is done only when a user can do the thing in an app. The definitions live in [`tickets/FEATURE_MAP.md`](tickets/FEATURE_MAP.md); the tickets each one absorbs are listed alongside, and the ticket listing further down is the same cut as tickets, kept so the history stays traceable.
 
@@ -60,22 +60,27 @@ Getting in. Social sign-in (F-014) stays out: email, phone and handle login only
 
 ### Home & discover (2)
 
-Search and the seller's Trust Passport. The Trust Passport pulls in reputation (T-102), which is why that ticket is in: both it and account settings depend on it.
+Home, trade search and the seller's Trust Passport. **Rescoped 2026-11-15 by the owner:** with listings
+out of the MVP, home lists the user's own trades (past, and pending their acceptance) and search covers
+trades only. Browse Categories (K1, K2) and the M19 listing index (T-057) go with the catalogue; the
+`GET /trades` and `GET /trades/by-code/:code` endpoints already exist, so F-015 needs no new backend.
+The Trust Passport pulls in reputation (T-102), which is why that ticket is in: both it and account
+settings depend on it.
 
-| Feature | Title                                             | Status      | Absorbs      |
-| ------- | ------------------------------------------------- | ----------- | ------------ |
-| F-015   | Home, search, categories and find-a-trade-by-code | Not started | T-113, T-057 |
-| F-016   | View a seller's profile and Trust Passport        | Not started | T-114, T-102 |
+| Feature | Title                                       | Status      | Absorbs      |
+| ------- | ------------------------------------------- | ----------- | ------------ |
+| F-015   | Home, trade search and find-a-trade-by-code | Not started | T-113        |
+| F-016   | View a seller's profile and Trust Passport  | Not started | T-114, T-102 |
 
 ### Propose & agree (3)
 
 The core buyer and seller journey. IMEI check (F-020) and the automated risk hold (F-021) are deferred; phones are a large share of this market, so F-020 is the first thing to add back.
 
-| Feature | Title                                                            | Status      | Absorbs                                  |
-| ------- | ---------------------------------------------------------------- | ----------- | ---------------------------------------- |
-| F-017   | Propose a trade, invite the other party and order multiple items | Not started | T-060, T-061, T-035, T-049, T-063, T-115 |
-| F-018   | Create a trade: buyer starts, seller completes                   | Not started | T-192                                    |
-| F-019   | Create a trade: seller starts, buyer completes                   | Not started | T-193                                    |
+| Feature | Title                                          | Status      | Absorbs                           |
+| ------- | ---------------------------------------------- | ----------- | --------------------------------- |
+| F-017   | Propose a trade and invite the other party     | Done        | T-060, T-061, T-035, T-049, T-115 |
+| F-018   | Create a trade: buyer starts, seller completes | Not started | T-192                             |
+| F-019   | Create a trade: seller starts, buyer completes | Not started | T-193                             |
 
 ### The trade workspace (2)
 
@@ -133,15 +138,17 @@ Payouts only. Reviews and seller insights are after the first merchants are live
 | ------- | ------------ | ----------- | ------------ |
 | F-037   | Get paid out | Not started | T-073, T-124 |
 
-### Sell on Komtru (3)
+### Sell on Komtru (1)
 
-The merchant storefront. Business verification and certification are in because a merchant cannot be certified without them. Customers, tax and badges (F-043) are storefront polish.
+Merchant certification only. **Cut 2026-11-15 by the owner:** listings and stock (F-041), shop settings
+and catalogue import (F-042) and multi-item orders (F-080) are deferred — a trade is proposed party to
+party and never needs a catalogue, which F-017 already proved when multi-item ordering was split out of
+it on 2026-11-09. Certification stays: it is the vendor trust story, and it now blocks nothing, so it
+runs in the operations-app lane off the critical path. Customers, tax and badges (F-043) remain polish.
 
 | Feature | Title                                                 | Status      | Absorbs                    |
 | ------- | ----------------------------------------------------- | ----------- | -------------------------- |
 | F-040   | Apply for merchant certification and have it reviewed | Not started | T-055, T-051, T-121, T-154 |
-| F-041   | List items and manage stock                           | Not started | T-056, T-122               |
-| F-042   | Shop settings and catalogue import                    | Not started | T-202                      |
 
 ### Account, trust & support (3)
 
@@ -187,7 +194,7 @@ Hosting, end-to-end paths, security review and the first push. F-079 (load and r
 | F-077   | Security review                         | Not started | T-182   |
 | F-078   | Definition-of-done audit and first push | Not started | T-183   |
 
-## Included — 77 tickets
+## Included — 72 tickets
 
 The same cut as tickets, the secondary mapping. `tools/tickets/progress.py` reads this listing for the ticket-layer view (`pnpm progress --tickets`) and fails if it disagrees with the counts stated here.
 
@@ -207,14 +214,13 @@ without business verification, and the console's identity review queue is T-052'
 T-102 reputation and ratings — in because both T-114 (Trust Passport) and T-126 (account and
 settings) depend on it. Deferring it would gut two screens the MVP needs.
 
-### Merchant and storefront (3)
+### Merchant and storefront (1)
 
-T-055 merchant applications and certification · T-056 listings lifecycle, images and stock ·
-T-057 search and discovery
+T-055 merchant applications and certification
 
-### Trades (6)
+### Trades (5)
 
-T-061 proposal flow · T-063 orders and multi-item trades · T-064 fulfilment, ship step and
+T-061 proposal flow · T-064 fulfilment, ship step and
 deadlines · T-065 inspection and completion · T-066 post-funding cancellation and can't-fulfil
 refunds · T-068 trade realtime, notifications and deep links
 
@@ -228,13 +234,13 @@ T-075 refunds
 T-080 disputes core · T-081 evidence comparison and read models · T-107 universal case model,
 work queue and advisory
 
-### Web app (16)
+### Web app (15)
 
 T-017 Next.js foundation · T-110 scaffold and shells · T-111 entry and authentication · T-112
 first-time onboarding · T-113 home and discovery · T-114 seller profile and Trust Passport ·
 T-115 create and propose a trade · T-116 buyer trade core and trade detail · T-117 escrow
 funding · T-118 delivery and inspection · T-119 cancellation and refunds · T-121 apply for
-merchant certification · T-122 shop and listings · T-123 seller trade handling and shipping ·
+merchant certification · T-123 seller trade handling and shipping ·
 T-124 seller payouts · T-126 trust, account and settings
 
 ### Operations console (5)
@@ -242,7 +248,7 @@ T-124 seller payouts · T-126 trust, account and settings
 T-140 scaffold, shell and staff auth · T-141 work queue and universal case · T-143 disputes ·
 T-144 identity review · T-154 merchant certification review
 
-### UI master v2 (17, added 2026-11-06)
+### UI master v2 (16, added 2026-11-06)
 
 T-190 remaps the screen index to Living Master v2 and re-scopes the UI tickets; every MVP UI
 ticket depends on it. It adds 30 tickets, 15 of them MVP, listed here:
@@ -254,7 +260,6 @@ ticket depends on it. It adds 30 tickets, 15 of them MVP, listed here:
 - **T-195** workspace supporting screens, delivery and evidence: self-arranged delivery.
 - **T-197** proof media: mandatory seller proof and buyer comparison, the heart of inspection.
 - **T-198** lifecycle exceptions and trade extras: expiry, withdrawal and inspection updates.
-- **T-202** seller shop settings and catalogue import: the merchant storefront.
 - **T-204** account basics, money documents and system states: addresses, refunds, session errors.
 - **T-205** account security and lifecycle: MFA, suspension and closure, which T-036 and T-039 serve.
 - **T-207, T-208, T-209** desktop journeys, arrive to complete: the desktop layouts of MVP journeys.
@@ -293,7 +298,12 @@ depending ticket does for a user; each narrows what it covers.
 | T-180 end-to-end critical paths    | T-173, T-162, T-148                  | "End to end" means propose → fund → deliver → inspect → release, plus the dispute path. Park and logistics journeys are added with those waves. |
 | T-183 first push                   | everything outside this list         | Gates the push on the MVP set rather than on all 166.                                                                                           |
 
-## Deferred — 60 tickets
+## Deferred — 65 tickets
+
+- **Catalogue and storefront, 5 (deferred 2026-11-15 by the owner):** T-056 listings lifecycle,
+  images and stock · T-057 search and discovery (the M19 listing index) · T-063 orders and
+  multi-item trades · T-122 shop and listings · T-202 shop settings and catalogue import.
+  Trades are proposed party to party, so none of the MVP journeys needs a catalogue.
 
 - **Park, 16:** T-090–T-095, T-130, T-147, T-148, T-170–T-174. The signature feature, and the
   largest single block. It is the first wave after MVP.
