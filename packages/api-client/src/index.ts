@@ -18,6 +18,7 @@ export * from './fulfilment.js';
 export * from './geo.js';
 export * from './idempotency.js';
 export * from './kyc.js';
+export * from './merchant.js';
 export * from './pagination.js';
 export * from './parties.js';
 export * from './payments.js';
