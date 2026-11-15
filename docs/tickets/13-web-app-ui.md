@@ -59,6 +59,7 @@ One app for every consumer with no buyer or seller views (design C22, §6.3), pl
 
 - **Screens (v2):** AC1, Z1, SE1, SE2, F1, F2, K1, K2, Customer-1, H-01, H-02, H-03
 - **Depends on:** T-110, T-057, T-060, T-190
+- **Status note (F-015, rescoped 2026-11-15):** built for the trades-only scope: Home, trade search and find-by-code. K1, K2 and H-02 are not built (catalogue and merchant Sell mode are deferred). **Backend gap, not worked around here:** `GET /trades` has no text query, so search matches over the full trade list on the client, and says "still reading" or "can't tell yet" until every page is read. A server-side text filter belongs to a later ticket. The Trades tab's empty state (`/trades`, trade module) still lacks the "Enter a Trade Code" action that AC1 draws; it is not changed here.
 
 ### T-114 — Seller profile and Trust Passport
 
