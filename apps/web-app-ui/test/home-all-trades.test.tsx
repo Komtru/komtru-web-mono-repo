@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { cleanup, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type * as ApiReact from '@komtru/api-client/react';
 import { useAllTrades } from '../src/home/useAllTrades';
 import { ProblemError } from '@komtru/api-client';
 import { answerWith, callsTo, id, listItem, renderWithApi, type CallFn } from './support/trade';
@@ -10,7 +11,7 @@ const live = vi.hoisted(() => ({ subscribe: vi.fn() }));
 
 // The real subscription still runs; the spy records which rooms it was asked to join.
 vi.mock('@komtru/api-client/react', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@komtru/api-client/react')>();
+  const actual = await importOriginal<typeof ApiReact>();
   return {
     ...actual,
     useTradeLive: (trades: readonly { id: string; code: string }[]) => {

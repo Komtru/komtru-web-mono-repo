@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { ProblemError } from '@komtru/api-client';
-import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
+import { cleanup, fireEvent, screen, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { FindTrade } from '../src/home/FindTrade';
 import { expectNoAxeViolations } from './axe';
