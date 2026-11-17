@@ -358,6 +358,13 @@
       "when": 1794737471314,
       "tag": "0050_merchant_applications",
       "breakpoints": true
+    },
+    {
+      "idx": 51,
+      "version": "7",
+      "when": 1794922711319,
+      "tag": "0051_trade_evidence_media",
+      "breakpoints": true
     }
   ]
 }

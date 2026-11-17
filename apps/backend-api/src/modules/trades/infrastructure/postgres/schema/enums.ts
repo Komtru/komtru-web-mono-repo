@@ -129,6 +129,10 @@ export const cancellationReason = trade.enum('cancellation_reason', [
 ]);
 
 /** Holds are not states (design §6.2): they freeze auto-transitions without hiding where a trade is. */
+/** F-028 CWT-S13: what a piece of evidence shows. Listing is the seller's proof (trade_proof_media), not here. */
+export const TRADE_EVIDENCE_EVENTS = ['DISPATCH', 'DELIVERY', 'INSPECTION', 'ISSUE'] as const;
+export const tradeEvidenceEvent = trade.enum('trade_evidence_event', TRADE_EVIDENCE_EVENTS);
+
 export const tradeHoldSource = trade.enum('trade_hold_source', ['PARK_EXCEPTION', 'RISK', 'ADMIN']);
 
 /** The six scheduled deadlines design §6.2 names. */
