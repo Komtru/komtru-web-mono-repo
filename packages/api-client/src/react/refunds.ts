@@ -14,6 +14,7 @@ import {
   declineCancellation,
   getCancellation,
   isRefundInFlight,
+  type Refund,
   listMyRefunds,
   listTradeRefunds,
   requestCancellation,
@@ -77,6 +78,11 @@ export function useMyRefunds() {
         throw error;
       }
     },
+    // Asked about again only while a refund is on its way back, as for a single trade: once settled it stops changing.
+    refetchInterval: (query: { state: { data?: { pages: { items: Refund[] }[] } } }) =>
+      query.state.data?.pages.some((page) => page.items.some(isRefundInFlight)) === true
+        ? REFUND_POLL_MS
+        : false,
   });
 }
 

@@ -4,7 +4,13 @@ import { cleanup, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createApiClient } from '../../src/client.js';
 import { ApiClientProvider } from '../../src/react/client-context.js';
-import { REFUND_POLL_MS, refundKeys, useCancelAsSeller, useTradeRefunds } from '../../src/react/refunds.js';
+import {
+  REFUND_POLL_MS,
+  refundKeys,
+  useCancelAsSeller,
+  useMyRefunds,
+  useTradeRefunds,
+} from '../../src/react/refunds.js';
 import { tradeKeys } from '../../src/react/trades.js';
 
 const TRADE = '0190b0a0-0000-7000-8000-000000000001';
@@ -61,6 +67,24 @@ describe('the refund hooks', () => {
     for (const key of [refundKeys.cancellation(TRADE), refundKeys.forTrade(TRADE)]) {
       expect(key.slice(0, 2)).toEqual(tradeKeys.one(TRADE));
     }
+  });
+
+  it('poll the buyer’s own refund list while one is on its way back, and stop once it is settled', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    let status = 'PROCESSING';
+    const { requests, wrapper: Wrapper } = setup(() => ({ items: [refund(status)], nextCursor: null }));
+    function Probe() {
+      const list = useMyRefunds();
+      return <p>{list.data?.pages[0]?.items[0]?.status ?? 'loading'}</p>;
+    }
+    render(<Probe />, { wrapper: Wrapper });
+    expect(await screen.findByText('PROCESSING')).toBeTruthy();
+    status = 'PROCESSED';
+    await vi.advanceTimersByTimeAsync(REFUND_POLL_MS + 10);
+    expect(await screen.findByText('PROCESSED')).toBeTruthy();
+    const seen = requests.length;
+    await vi.advanceTimersByTimeAsync(REFUND_POLL_MS * 3);
+    expect(requests).toHaveLength(seen);
   });
 
   it('poll a refund on its way back and stop once the platform has settled it', async () => {
