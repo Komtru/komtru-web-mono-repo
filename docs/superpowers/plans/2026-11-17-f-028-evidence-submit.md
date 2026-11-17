@@ -45,9 +45,9 @@ Client: `POST /files/upload-url` -> Cloudinary -> `POST /files/:id/finalize` -> 
 
 ## Tasks
 
-- [ ] schema + migration 0051 + schema test
-- [ ] evidence service tests (int) then service, ports, routes, module wiring, route test
-- [ ] shared contract: api-client endpoints + hooks (+ contract test)
-- [ ] S12 groups, S13 form (jsdom + axe tests first)
-- [ ] ui-review CWT-S12 / S13 notes, FEATURE_MAP / ticket notes
-- [ ] full verification, `git merge-tree` against `main`
+- [x] schema + migration 0051 + schema test
+- [x] evidence service tests (int) then service, ports, routes, module wiring, route test
+- [x] shared contract: api-client endpoints + hooks (+ contract test)
+- [x] S12 groups, S13 form (jsdom + axe tests first)
+- [x] ui-review CWT-S12 / S13 notes, FEATURE_MAP / ticket notes
+- [x] full verification, `git merge-tree` against `main`
