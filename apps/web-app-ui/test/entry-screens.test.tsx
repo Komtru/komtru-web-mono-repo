@@ -33,11 +33,11 @@ interface Sent {
 /** Answers by `METHOD path`, in order per route, and records every request. */
 class Network {
   sent: Sent[] = [];
-  private routes = new Map<string, { status: number; body: unknown }[]>();
+  private routes = new Map<string, { status: number; body: unknown; headers: Record<string, string> }[]>();
 
-  on(route: string, status: number, body: unknown): this {
+  on(route: string, status: number, body: unknown, headers: Record<string, string> = {}): this {
     const queue = this.routes.get(route) ?? [];
-    queue.push({ status, body });
+    queue.push({ status, body, headers });
     this.routes.set(route, queue);
     return this;
   }
@@ -59,7 +59,10 @@ class Network {
     return Promise.resolve(
       new Response(JSON.stringify(next.body), {
         status: next.status,
-        headers: { 'content-type': next.status >= 400 ? 'application/problem+json' : 'application/json' },
+        headers: {
+          'content-type': next.status >= 400 ? 'application/problem+json' : 'application/json',
+          ...next.headers,
+        },
       }),
     );
   });
@@ -352,6 +355,52 @@ describe('E4 Log in', () => {
       password: 'a long passphrase',
     });
     expect(tokenNow()).toBe('at-1');
+  });
+
+  it('says sign-in is paused for as long as the platform says, and offers recovery instead (SP-M17)', async () => {
+    network.on('POST /api/auth/login', 429, problem(429, 'RATE_LIMITED', 'Slow down'), {
+      'retry-after': '90',
+    });
+    const { container } = show(<LoginForm next={undefined} notice={undefined} />);
+    logIn();
+    expect(await screen.findByRole('heading', { name: 'Too many tries' })).toBeDefined();
+    expect(screen.getByText('1:30')).toBeDefined();
+    expect(screen.getByRole('link', { name: 'Recover my account' }).getAttribute('href')).toBe(
+      '/reset-password',
+    );
+    expect(screen.queryByLabelText('Password')).toBeNull();
+    expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Back to log in' }).disabled).toBe(true);
+    await expectNoAxeViolations(container);
+    // Only the one attempt went out: the screen does not hand the person a form to hammer.
+    expect(network.to('/api/auth/login')).toHaveLength(1);
+  });
+
+  it('shows no clock when the 429 carries no Retry-After, and lets the person go back', async () => {
+    network.on('POST /api/auth/login', 429, problem(429, 'RATE_LIMITED', 'Slow down'));
+    show(<LoginForm next={undefined} notice={undefined} />);
+    logIn();
+    await screen.findByRole('heading', { name: 'Too many tries' });
+    expect(screen.queryByRole('timer')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Back to log in' }));
+    expect(await screen.findByLabelText('Password')).toBeDefined();
+  });
+
+  it('is the same screen when the second step is the one that is paused (SP-M17)', async () => {
+    network
+      .on('POST /api/auth/login', 200, {
+        mfaRequired: true,
+        mfaToken: 'cid.secret',
+        expiresAt: 4_000_000_000_000,
+        factors: [{ id: 'f1', type: 'TOTP', hint: null, isDefault: true }],
+      })
+      .on('POST /api/auth/mfa', 429, problem(429, 'RATE_LIMITED', 'Slow down'), { 'retry-after': '60' });
+    show(<LoginForm next={undefined} notice={undefined} />);
+    logIn();
+    await screen.findByText(/authenticator app/);
+    typeCode('123456');
+    fireEvent.click(screen.getByRole('button', { name: 'Verify & log in' }));
+    expect(await screen.findByRole('heading', { name: 'Too many tries' })).toBeDefined();
+    expect(screen.getByText('1:00')).toBeDefined();
   });
 
   it('interrupts with the updated Terms when the platform says they are owed', async () => {

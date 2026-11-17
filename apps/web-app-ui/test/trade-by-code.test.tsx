@@ -78,10 +78,10 @@ describe('opening a trade from its code', () => {
     expect(api.call).not.toHaveBeenCalled();
   });
 
-  it('says exactly "No trade found for you" for a 404, with no retry, and implies nothing about whether it exists', async () => {
-    answerWith(api.call, { 'GET /trades/by-code/:code': problem(404, 'NOT_FOUND') });
+  it('says "We can’t find that Trade" (SP-M19) for a 404, with no retry, and implies nothing about whether it exists', async () => {
+    answerWith(api.call, { 'GET /trades/by-code/:code': problem(404, 'NOT_FOUND'), 'GET /me': { id: 'x' } });
     const { container } = renderWithApi(api.call, <TradeByCode typed="KMT-9042800-NG" />);
-    expect(await screen.findByText('No trade found for you')).toBeTruthy();
+    expect(await screen.findByText('We can’t find that Trade')).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'Try again' })).toBeNull();
     expect(container.textContent).not.toMatch(/forbidden|not yours|exists|permission/i);
     expect(callsTo(api.call, 'GET', '/trades/by-code/:code')).toHaveLength(1);

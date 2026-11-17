@@ -13,6 +13,7 @@ import {
   type SendOutcome,
   type SignInOutcome,
 } from '../session-calls';
+import { TooManyAttempts } from '../../system/TooManyAttempts';
 import { EntryFrame, EntryHeading, ErrorText, InlineLink, Lede } from './EntryFrame';
 import { useOpenSession } from './useOpenSession';
 
@@ -28,7 +29,9 @@ const NOTICE_COPY: Record<NonNullable<AccountNotice['noticeKey']>, string> = {
   ACCOUNT_CLOSED: 'This account is closed.',
 };
 
-function messageFor(outcome: Exclude<SignInOutcome, { kind: 'session' } | { kind: 'mfa' }>): React.ReactNode {
+function messageFor(
+  outcome: Exclude<SignInOutcome, { kind: 'session' } | { kind: 'mfa' } | { kind: 'limited' }>,
+): React.ReactNode {
   switch (outcome.kind) {
     case 'rejected':
       return (
@@ -48,7 +51,6 @@ function messageFor(outcome: Exclude<SignInOutcome, { kind: 'session' } | { kind
       );
     case 'wrong-scope':
       return "This account can't sign in here. Komtru staff use the operations console.";
-    case 'limited':
     case 'unavailable':
       return failureMessage(outcome);
   }
@@ -71,6 +73,8 @@ export function LoginForm({
     challenge: MfaChallenge;
     firstSend: SendOutcome | undefined;
   } | null>(null);
+  // SP-M17: the platform has paused sign-in (a 429), here or at the second step. `wait` is its `Retry-After`, if it sent one.
+  const [paused, setPaused] = useState<{ wait: number | undefined } | null>(null);
 
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -98,8 +102,24 @@ export function LoginForm({
       return;
     }
     setBusy(false);
+    if (outcome.kind === 'limited') {
+      setPaused({ wait: outcome.wait });
+      return;
+    }
     setProblem(messageFor(outcome));
   };
+
+  if (paused !== null) {
+    return (
+      <TooManyAttempts
+        waitSeconds={paused.wait}
+        onRetry={() => {
+          setPaused(null);
+          setChallenge(null);
+        }}
+      />
+    );
+  }
 
   if (challenge !== null) {
     return (
@@ -110,6 +130,7 @@ export function LoginForm({
           setChallenge(null);
         }}
         onOpened={openSession}
+        onPaused={(wait) => setPaused({ wait })}
       />
     );
   }
@@ -200,11 +221,14 @@ function SecondFactor({
   firstSend,
   onBack,
   onOpened,
+  onPaused,
 }: {
   challenge: MfaChallenge;
   firstSend: SendOutcome | undefined;
   onBack: () => void;
   onOpened: (opened: Extract<SignInOutcome, { kind: 'session' }>) => Promise<void>;
+  /** The platform has paused sign-in after too many wrong codes (SP-M17). */
+  onPaused: (wait: number | undefined) => void;
 }): React.JSX.Element {
   const factors = usableFactors(challenge.factors);
   const [factor, setFactor] = useState<Factor | undefined>(() => defaultFactor(challenge.factors));
@@ -250,7 +274,11 @@ function SecondFactor({
       setProblem('This sign-in has expired. Go back and log in again.');
       return;
     }
-    if (outcome.kind === 'limited' || outcome.kind === 'unavailable') {
+    if (outcome.kind === 'limited') {
+      onPaused(outcome.wait);
+      return;
+    }
+    if (outcome.kind === 'unavailable') {
       setProblem(failureMessage(outcome));
       return;
     }

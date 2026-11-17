@@ -27,6 +27,7 @@ import {
 } from '@komtru/ui-kit';
 import { useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
+import { LinkNotFound } from '../system/LinkNotFound';
 import { AddressPicker } from './AddressPicker';
 import { ClaimPanel } from './ClaimPanel';
 import { ShareTrade } from './ShareTrade';
@@ -65,6 +66,8 @@ export function TradeScreen({ id, tab = 'overview' }: { id: string; tab?: Worksp
       </ScreenColumn>
     );
   }
+  // SP-M19: a trade that is not there (or not this person's) is a dead link, and said so as one.
+  if (trade.isError && isProblem(trade.error, 'NOT_FOUND')) return <LinkNotFound />;
   if (trade.isError) {
     return (
       <LoadFailed
