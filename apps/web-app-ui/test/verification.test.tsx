@@ -157,6 +157,23 @@ describe('Verification failed (VF1)', () => {
     expect(screen.queryByText('Try again')).toBeNull();
   });
 
+  it('offers no NIN form for a check that is not an ID check, even when the platform says to resubmit', async () => {
+    answerWith(api.call, {
+      ...base,
+      'GET /verification/status': status({
+        rejections: [
+          rejection('DOCUMENT', { remedy: 'RESUBMIT' }),
+          rejection('ADDRESS', { remedy: 'RESUBMIT' }),
+        ],
+      }),
+    });
+    renderWithApi(api.call, <Verification />);
+    expect(await screen.findByRole('region', { name: 'Document' })).toBeDefined();
+    expect(screen.queryByLabelText('NIN')).toBeNull();
+    expect(screen.queryByText('Try again')).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Resubmit' })).toBeNull();
+  });
+
   it('shows a newer attempt as being checked and drops the failure it replaces', () => {
     const current = status({
       rejections: [rejection('LIVENESS')],

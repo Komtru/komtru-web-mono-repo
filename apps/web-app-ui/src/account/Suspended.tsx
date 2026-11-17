@@ -110,11 +110,11 @@ export function Suspended({ seller = false }: { seller?: boolean }): React.JSX.E
       <StatusHero tone="risk" title={words.title}>
         {words.lead}
       </StatusHero>
-      <Banner tone="warning" icon={ALERT_MARK} title="What’s still protected">
-        {seller
-          ? 'Existing Trades continue normally — you can still ship what’s already funded and withdraw funds already released to your balance.'
-          : 'Any Trade already in progress stays exactly as it was — funds in escrow remain protected, and you can still confirm delivery or respond to a dispute.'}
-      </Banner>
+      {stillWorks(account.abilities, seller) !== undefined && (
+        <Banner tone="warning" icon={ALERT_MARK} title="What still works">
+          {stillWorks(account.abilities, seller)}
+        </Banner>
+      )}
       {seller ? <SellerPaused abilities={account.abilities} /> : <BuyerNext />}
       <div className="mt-[16px]">
         <ContactSupport label="Contact TrustOps about this" reference={account.supportReference} />
@@ -123,14 +123,27 @@ export function Suspended({ seller = false }: { seller?: boolean }): React.JSX.E
   );
 }
 
+/**
+ * What the platform says this person can still do, in their own terms, and nothing it does not say. The reference promises
+ * more (escrow stays protected, a dispute can still be answered, "Existing Trades continue normally"); `abilities` carries
+ * none of that, so it is not stated here: a banner that promised "ship or withdraw" above a table reading "Paused" was
+ * the failure this replaces. Returns `undefined` when nothing is left to say (a locked account cannot sign in).
+ */
+export function stillWorks(abilities: Me['account']['abilities'], seller: boolean): string | undefined {
+  const can: string[] = [];
+  if (abilities.login) can.push(seller ? 'sign in and see your orders' : 'sign in and look around');
+  if (abilities.withdraw) can.push('withdraw money already released to your balance');
+  if (can.length === 0) return undefined;
+  return `You can still ${can.join(' and ')}.`;
+}
+
 function BuyerNext(): React.JSX.Element {
   return (
     <section aria-label="What happens next">
       <SectionLabel>What happens next</SectionLabel>
       <TermList>
-        <TermRow label="Review">A TrustOps specialist is looking into this</TermRow>
-        <TermRow label="Typical timeline">Within 48 hours</TermRow>
-        <TermRow label="You’ll be notified">The moment a decision is made, with the reason</TermRow>
+        <TermRow label="Review">Our TrustOps team is looking into this</TermRow>
+        <TermRow label="Where it stands">This page always shows your account’s current state</TermRow>
       </TermList>
     </section>
   );
@@ -140,12 +153,12 @@ function BuyerNext(): React.JSX.Element {
 function SellerPaused({ abilities }: { abilities: Me['account']['abilities'] }): React.JSX.Element {
   const selling = abilities.sell ? 'Available' : 'Paused';
   return (
-    <section aria-label="While this is under review">
-      <SectionLabel>While this is under review, you can’t</SectionLabel>
+    <section aria-label="What’s paused and what isn’t">
+      <SectionLabel>What’s paused and what isn’t</SectionLabel>
       <TermList>
         <TermRow label="Create listings">{selling}</TermRow>
         <TermRow label="Accept new Trade requests">{selling}</TermRow>
-        <TermRow label="Ship or withdraw">{abilities.withdraw ? 'Unaffected' : 'Paused'}</TermRow>
+        <TermRow label="Withdraw funds">{abilities.withdraw ? 'Available' : 'Paused'}</TermRow>
       </TermList>
     </section>
   );

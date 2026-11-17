@@ -41,6 +41,9 @@ const ALERT_MARK = (
   </svg>
 );
 
+/** The three checks this screen can send again. Any other type would be sent as the wrong check, so it gets no form. */
+const RESUBMITTABLE: ReadonlySet<string> = new Set(['NIN', 'BVN', 'LIVENESS']);
+
 const KYC_FILE = { category: 'KYC_DOCUMENT', visibility: 'PRIVATE_OWNER' } as const;
 
 /** What each check is called to the person. NIN and BVN are two ways to say the one thing VF1 is about: an ID. */
@@ -180,6 +183,7 @@ function Failure({
   const { reason } = rejection;
   const outcome = OUTCOME[reason.outcome];
   const canResubmit =
+    RESUBMITTABLE.has(rejection.type) &&
     reason.surface === 'VF1' &&
     reason.outcome !== 'UNDER_REVIEW' &&
     (reason.remedy === 'RESUBMIT' || reason.remedy === 'RESUBMIT_WITH_CLEARER_PHOTO');

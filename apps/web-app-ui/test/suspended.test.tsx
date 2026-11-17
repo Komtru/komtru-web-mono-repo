@@ -27,11 +27,17 @@ describe('Account suspended (AS1)', () => {
     const { container } = renderWithApi(api.call, <Suspended />);
     expect(await screen.findByRole('heading', { name: 'Your account is suspended' })).toBeDefined();
     expect(screen.getByText(/You can’t start new Trades right now/)).toBeDefined();
-    expect(screen.getByText('What’s still protected')).toBeDefined();
-    expect(screen.getByText(/funds in escrow remain protected/)).toBeDefined();
-    expect(screen.getByText('A TrustOps specialist is looking into this')).toBeDefined();
-    expect(screen.getByText('Within 48 hours')).toBeDefined();
-    expect(screen.getByText('The moment a decision is made, with the reason')).toBeDefined();
+    expect(screen.getByText('What still works')).toBeDefined();
+    expect(
+      screen.getByText(
+        'You can still sign in and look around and withdraw money already released to your balance.',
+      ),
+    ).toBeDefined();
+    expect(screen.getByText('Our TrustOps team is looking into this')).toBeDefined();
+    // Nothing the platform does not back: no deadline, and no promise of a reason (it never sends one).
+    expect(screen.queryByText(/48 hours/)).toBeNull();
+    expect(screen.queryByText(/with the reason/)).toBeNull();
+    expect(screen.queryByText(/escrow/)).toBeNull();
     await expectNoAxeViolations(container, SHELL_RULES);
   });
 
@@ -45,10 +51,16 @@ describe('Account suspended (AS1)', () => {
     expect(button.getAttribute('aria-expanded')).toBe('true');
   });
 
-  it('words a restricted or locked account as what it is', async () => {
-    answerWith(api.call, { 'GET /me': me({ status: 'LOCKED' }) });
+  it('words a restricted or locked account as what it is, and promises nothing a locked account cannot do', async () => {
+    answerWith(api.call, {
+      'GET /me': me({
+        status: 'LOCKED',
+        abilities: { login: false, browse: false, buy: false, sell: false, withdraw: false },
+      }),
+    });
     renderWithApi(api.call, <Suspended />);
     expect(await screen.findByRole('heading', { name: 'Your account is locked' })).toBeDefined();
+    expect(screen.queryByText('What still works')).toBeNull();
   });
 
   it('has nothing to say to an account in good standing, and points home', async () => {
@@ -76,10 +88,15 @@ describe('Shop suspended (AS2)', () => {
     answerWith(api.call, { 'GET /me': suspended() });
     const { container } = renderWithApi(api.call, <Suspended seller />);
     expect(await screen.findByRole('heading', { name: 'Your shop is suspended' })).toBeDefined();
-    expect(screen.getByText(/Existing Trades continue normally/)).toBeDefined();
-    expect(screen.getByText('While this is under review, you can’t')).toBeDefined();
+    expect(
+      screen.getByText(
+        'You can still sign in and see your orders and withdraw money already released to your balance.',
+      ),
+    ).toBeDefined();
+    expect(screen.getByText('What’s paused and what isn’t')).toBeDefined();
     expect(screen.getAllByText('Paused')).toHaveLength(2);
-    expect(screen.getByText('Unaffected')).toBeDefined();
+    expect(screen.queryByText(/ship/i)).toBeNull();
+    expect(screen.getByText('Available')).toBeDefined();
     await expectNoAxeViolations(container, SHELL_RULES);
   });
 
@@ -87,7 +104,7 @@ describe('Shop suspended (AS2)', () => {
     answerWith(api.call, { 'GET /me': suspended({ withdraw: false }) });
     renderWithApi(api.call, <Suspended seller />);
     expect(await screen.findAllByText('Paused')).toHaveLength(3);
-    expect(screen.queryByText('Unaffected')).toBeNull();
+    expect(screen.queryByText('Available')).toBeNull();
   });
 
   it('points an account in good standing back to the shop', async () => {
