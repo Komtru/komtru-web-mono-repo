@@ -63,6 +63,9 @@ export function accountProblem(error: unknown, action: AccountAction): string {
         if (isActiveTradesRefusal(error)) {
           return 'You still have a Trade in progress. Finish or cancel it first.';
         }
+        // Naming a number "already in use" is the enumeration trade-off registration accepts too (it says the same of an email
+        // or phone), and it is only reachable here after the person has received a code at that very number, so it is not a
+        // probe of numbers they do not hold.
         // The trade screens' CONFLICT wording ("the terms changed") is about trades; here the platform's own sentence is
         // the answer (a number already in use, a factor already set up).
         return error.problem.detail ?? FALLBACK[action];

@@ -68,8 +68,18 @@
     },
     {
       "table": "identity.user_phones",
+      "name": "user_phones_one_pending",
+      "definition": "CREATE UNIQUE INDEX user_phones_one_pending ON identity.user_phones USING btree (user_id) WHERE (change_state = 'PENDING'::text)"
+    },
+    {
+      "table": "identity.user_phones",
       "name": "user_phones_one_primary",
       "definition": "CREATE UNIQUE INDEX user_phones_one_primary ON identity.user_phones USING btree (user_id) WHERE is_primary"
+    },
+    {
+      "table": "identity.user_phones",
+      "name": "user_phones_one_retired",
+      "definition": "CREATE UNIQUE INDEX user_phones_one_retired ON identity.user_phones USING btree (user_id) WHERE (change_state = 'RETIRED'::text)"
     },
     {
       "table": "identity.user_phones",
@@ -352,6 +362,16 @@
       "table": "identity.user_phones",
       "name": "phone_e164_format",
       "definition": "CHECK ((phone_e164 ~ '^\\+[1-9][0-9]{7,14}$'::text))"
+    },
+    {
+      "table": "identity.user_phones",
+      "name": "user_phones_change_state",
+      "definition": "CHECK ((change_state = ANY (ARRAY['NONE'::text, 'PENDING'::text, 'RETIRED'::text])))"
+    },
+    {
+      "table": "identity.user_phones",
+      "name": "user_phones_change_state_unproven",
+      "definition": "CHECK (((change_state = 'NONE'::text) OR ((NOT is_primary) AND (verified_at IS NULL))))"
     },
     {
       "table": "identity.user_profiles",

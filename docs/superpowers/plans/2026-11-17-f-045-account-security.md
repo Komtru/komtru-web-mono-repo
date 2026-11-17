@@ -44,3 +44,9 @@ owner pulled these forward, so they extend the existing `/account` area and add 
 - "Contact TrustOps": there is no support screen in the app; the button shows the account's support reference.
 - Accepted scope cuts: no text-message second-method setup UI; sequential session revoke.
 - Not built: an automatic redirect of a suspended account to AS1/AS2 (middleware that knows account state).
+- Phone change hardening (security review): migration 0052 adds `user_phones.change_state` (`NONE`, `PENDING`, `RETIRED`) with a
+  partial unique index each, so one pending and one retired number per user holds under concurrency. The start is behind a
+  step-up (any factor), the OTP send budget is keyed on the number, confirm failures are audited, and an SMS second factor is
+  revoked on a change and not moved.
+- Declined, on purpose: revoking every other session when the number changes. The owner considered it and chose not to; it is a
+  logged follow-up, not an oversight.
