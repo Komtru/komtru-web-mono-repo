@@ -3,7 +3,10 @@
 // PM-2: the camera, guided. Taking a shot inside Komtru names the file as taken on this device, and the guide says what
 // each shot is for. The camera can be refused or missing; both leave the same way out, a plain file picker.
 import { Button, Chip, Sheet } from '@komtru/ui-kit';
+import { useState } from 'react';
 import { createPortal } from 'react-dom';
+import { usePermission } from '../../account/permissions';
+import { CameraPermission } from '../../system/CameraPermission';
 import { useCamera } from './camera';
 import { captureName, nextShot, shotChips, SHOTS } from './rules';
 
@@ -27,7 +30,33 @@ const PILL =
 const PICK =
   'inline-flex cursor-pointer items-center justify-center rounded-md border-[1.5px] border-solid border-border-hairline bg-surface-primary px-[16px] py-[12px] text-[13px] font-semibold focus-within:outline-[2.5px] focus-within:outline-trust-indigo focus-within:outline-offset-[2px]';
 
-export function CameraSheet({
+/** Set once this device has been asked, so the explanation is said once and not before every photo. */
+const EXPLAINED_KEY = 'komtru.camera.explained';
+
+const wasExplained = (): boolean => {
+  try {
+    return window.localStorage.getItem(EXPLAINED_KEY) === '1';
+  } catch {
+    return false;
+  }
+};
+const rememberExplained = (): void => {
+  try {
+    window.localStorage.setItem(EXPLAINED_KEY, '1');
+  } catch {
+    // Private mode: the person is asked again next time, which is the safe way to be wrong.
+  }
+};
+
+/**
+ * Mounted only while the sheet is open, so its state (asked, declined) starts afresh every time and the camera is
+ * always let go of when it closes.
+ */
+export function CameraSheet(props: CameraSheetProps): React.JSX.Element | null {
+  return props.open ? createPortal(<OpenSheet {...props} />, document.body) : null;
+}
+
+function OpenSheet({
   open,
   onClose,
   photosTaken,
@@ -35,10 +64,17 @@ export function CameraSheet({
   onPick,
   videoNeeded,
   onVideo,
-}: CameraSheetProps): React.JSX.Element | null {
-  const { state, attach, capture } = useCamera(open);
+}: CameraSheetProps): React.JSX.Element {
+  // SP-M18: the camera is explained just before it is first needed. A browser that already says it is allowed or
+  // blocked needs no explaining; one that cannot say (`unknown`) or has not been asked (`prompt`) gets it, once.
+  const permission = usePermission('camera');
+  const [asked] = useState(wasExplained);
+  const [choice, setChoice] = useState<'asking' | 'allowed' | 'declined'>('asking');
+  const explaining = choice === 'asking' && !asked && permission !== 'granted' && permission !== 'denied';
+  const declined = choice === 'declined';
+  const { state, attach, capture } = useCamera(!explaining && !declined);
   const shot = nextShot(photosTaken);
-  const trouble = state === 'denied' || state === 'unavailable';
+  const trouble = state === 'denied' || state === 'unavailable' || declined;
 
   const take = () => {
     void capture().then((blob) => {
@@ -49,8 +85,22 @@ export function CameraSheet({
     });
   };
 
+  if (explaining) {
+    return (
+      <Sheet open={open} onClose={onClose} title="Take photos">
+        <CameraPermission
+          onAllow={() => {
+            rememberExplained();
+            setChoice('allowed');
+          }}
+          onNotNow={() => setChoice('declined')}
+        />
+      </Sheet>
+    );
+  }
+
   // Drawn on the page's body, after the tab bar: the sheet and the bar share a stacking level, and the later one wins.
-  const sheet = (
+  return (
     <Sheet open={open} onClose={onClose} title="Take photos">
       <p className="mb-[10px] text-center text-[11px] text-slate">
         {String(Math.min(photosTaken + 1, SHOTS.length))} of {String(SHOTS.length)}
@@ -78,7 +128,7 @@ export function CameraSheet({
             </span>
           </>
         )}
-        {state === 'starting' && (
+        {state === 'starting' && !declined && (
           <p role="status" className="px-[24px] text-center text-[12.5px] text-pure-white">
             Opening the camera… If your browser asks, allow it.
           </p>
@@ -86,12 +136,18 @@ export function CameraSheet({
         {trouble && (
           <div role="alert" className="px-[24px] text-center text-pure-white">
             <b className="mb-[4px] block text-[14px]">
-              {state === 'denied' ? 'The camera is off for Komtru' : 'We couldn’t open a camera'}
+              {declined
+                ? 'No problem'
+                : state === 'denied'
+                  ? 'The camera is off for Komtru'
+                  : 'We couldn’t open a camera'}
             </b>
             <span className="text-[12px] leading-[1.5]">
-              {state === 'denied'
-                ? 'Allow the camera in your browser’s settings to take photos here, or choose photos from your gallery.'
-                : 'Another app may be using it. Close it and try again, or choose photos from your gallery.'}
+              {declined
+                ? 'Choose photos you took earlier from your gallery instead.'
+                : state === 'denied'
+                  ? 'Allow the camera in your browser’s settings to take photos here, or choose photos from your gallery.'
+                  : 'Another app may be using it. Close it and try again, or choose photos from your gallery.'}
             </span>
           </div>
         )}
@@ -162,5 +218,4 @@ export function CameraSheet({
       </div>
     </Sheet>
   );
-  return open ? createPortal(sheet, document.body) : null;
 }
