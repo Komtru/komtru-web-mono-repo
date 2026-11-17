@@ -67,8 +67,8 @@ describe('SP-M19 link expired or Trade not found: reached by a 404 on a trade', 
 });
 
 const meta = { requestId: undefined, retryAfterMs: undefined, rateLimit: undefined, replayed: false };
-const failure = (status: number) =>
-  new ProblemError({ type: 'about:blank', title: 'x', status, code: 'X' }, { status, ...meta }, false);
+const failure = (status: number, code = 'X') =>
+  new ProblemError({ type: 'about:blank', title: 'x', status, code }, { status, ...meta }, false);
 
 function watcher() {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
