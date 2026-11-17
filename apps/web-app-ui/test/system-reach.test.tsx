@@ -124,14 +124,24 @@ describe('SP-M14 service notice: reached by a 503 from any read or change', () =
   });
 });
 
-describe('SP-M15 update required: reached by a 426', () => {
+describe('SP-M15 update required: reached by a 426 the platform says is about the version', () => {
   it('sends the person to the update screen', async () => {
     const queries = watcher();
     await act(async () => {
       await queries
-        .fetchQuery({ queryKey: ['v'], queryFn: () => Promise.reject(failure(426)) })
+        .fetchQuery({ queryKey: ['v'], queryFn: () => Promise.reject(failure(426, 'UPGRADE_REQUIRED')) })
         .catch(() => undefined);
     });
     expect(router.replace).toHaveBeenCalledWith('/update-required');
+  });
+
+  it('ignores a bare 426, which a gateway or proxy may send for its own reasons', async () => {
+    const queries = watcher();
+    await act(async () => {
+      await queries
+        .fetchQuery({ queryKey: ['p'], queryFn: () => Promise.reject(failure(426)) })
+        .catch(() => undefined);
+    });
+    expect(router.replace).not.toHaveBeenCalled();
   });
 });
