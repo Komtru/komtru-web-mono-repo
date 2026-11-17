@@ -4,6 +4,7 @@ import {
   DEFAULT_PREFS,
   DISPLAY_STORAGE_KEY,
   applyPrefs,
+  bootDisplayPrefs,
   onMobileData,
   parsePrefs,
   readPrefs,
@@ -88,5 +89,73 @@ describe('onMobileData', () => {
     expect(onMobileData({})).toBe(false);
     expect(onMobileData({ type: 'wifi' })).toBe(false);
     expect(onMobileData({ type: 'cellular' })).toBe(true);
+  });
+});
+
+/** The page runs it as source text in a <script>, so it is run that way here: it must stand alone. */
+const runAsSource = (): void => {
+  // eslint-disable-next-line @typescript-eslint/no-implied-eval -- this is the point of the test
+  (new Function(`(${bootDisplayPrefs.toString()})()`) as () => void)();
+};
+
+describe('bootDisplayPrefs (the inline script that runs before first paint)', () => {
+  const attrs = () =>
+    Object.fromEntries(
+      document.documentElement
+        .getAttributeNames()
+        .filter((n) => n.startsWith('data-'))
+        .map((n) => [n, document.documentElement.getAttribute(n)]),
+    );
+  const clear = () => {
+    for (const name of [...document.documentElement.getAttributeNames()]) {
+      if (name.startsWith('data-')) document.documentElement.removeAttribute(name);
+    }
+  };
+
+  it.each([
+    ['nothing saved', null],
+    [
+      'everything on',
+      JSON.stringify({
+        textSize: 'large',
+        boldText: true,
+        highContrast: true,
+        reduceMotion: true,
+        lowData: true,
+        wifiPhotosOnly: true,
+      }),
+    ],
+    ['low-data off, small text', JSON.stringify({ textSize: 'small', lowData: false })],
+    [
+      'hostile values',
+      JSON.stringify({
+        textSize: '<script>',
+        boldText: 'yes',
+        highContrast: 1,
+        reduceMotion: null,
+        lowData: 'no',
+      }),
+    ],
+    ['not json', 'not json'],
+    ['an array', '[1,2]'],
+  ])('puts exactly what applyPrefs would on <html>: %s', (_name, stored) => {
+    if (stored !== null) window.localStorage.setItem(DISPLAY_STORAGE_KEY, stored);
+    // Run it the way the page does: as source text, so it must stand alone.
+    runAsSource();
+    const booted = attrs();
+    clear();
+    applyPrefs(document.documentElement, readPrefs());
+    expect(booted).toEqual(attrs());
+  });
+
+  it('survives storage that throws', () => {
+    const refuse = vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => {
+      throw new DOMException('blocked', 'SecurityError');
+    });
+    try {
+      expect(runAsSource).not.toThrow();
+    } finally {
+      refuse.mockRestore();
+    }
   });
 });

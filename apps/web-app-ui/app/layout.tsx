@@ -2,6 +2,7 @@ import { fontVariables } from '@komtru/ui-kit/fonts';
 import { KOMTRU_TOKENS } from '@komtru/ui-kit';
 import type { Metadata, Viewport } from 'next';
 import { DisplayPrefsApplier } from '../src/account/display/DisplayPrefsApplier';
+import { bootDisplayPrefs } from '../src/account/display/prefs';
 import { Providers } from '../src/shell/Providers';
 import './globals.css';
 
@@ -32,7 +33,13 @@ export const viewport: Viewport = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }): React.JSX.Element {
   return (
-    <html lang="en" className={fontVariables}>
+    // The inline script sets display attributes on <html> before React has hydrated it, so the server's markup and the
+    // browser's differ by design.
+    <html lang="en" className={fontVariables} suppressHydrationWarning>
+      <head>
+        {/* SP-M33: this device's display preferences, applied before first paint rather than after hydration. */}
+        <script dangerouslySetInnerHTML={{ __html: `(${bootDisplayPrefs.toString()})()` }} />
+      </head>
       <body>
         <DisplayPrefsApplier />
         <Providers>{children}</Providers>

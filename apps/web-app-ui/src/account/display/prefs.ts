@@ -95,3 +95,37 @@ export interface NetworkInformationLike {
 /** True only when the browser says the connection is cellular. A browser that cannot say is never guessed at. */
 export const onMobileData = (connection: NetworkInformationLike | undefined): boolean =>
   connection?.type === 'cellular';
+
+/**
+ * Applies the saved preferences to `<html>` before the first paint. It is stringified into an inline script in the
+ * root layout, so it must be self-contained (no imports, no names from this module) and must never throw. It carries the
+ * same hostile-value rules as `parsePrefs` and the same attributes as `applyPrefs`, and `display-prefs.test.ts` runs it
+ * against `applyPrefs` on good and bad stored values so the two cannot drift.
+ *
+ * Without it the attributes arrive after hydration, and someone who needs large text, high contrast or no motion sees
+ * the defaults first on every page.
+ */
+export function bootDisplayPrefs(): void {
+  try {
+    const root = document.documentElement;
+    let saved: Record<string, unknown> = {};
+    try {
+      const parsed: unknown = JSON.parse(window.localStorage.getItem('komtru.display') ?? 'null');
+      if (typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed)) {
+        saved = parsed as Record<string, unknown>;
+      }
+    } catch {
+      // Storage blocked or garbage in it: every field below is then its default.
+    }
+    if (saved.textSize === 'small' || saved.textSize === 'large') {
+      root.setAttribute('data-text-size', saved.textSize);
+    }
+    if (saved.boldText === true) root.setAttribute('data-bold-text', 'on');
+    if (saved.highContrast === true) root.setAttribute('data-contrast', 'high');
+    if (saved.reduceMotion === true) root.setAttribute('data-motion', 'reduced');
+    // Low-data is on unless the person turned it off, as `DEFAULT_PREFS` has it.
+    if (saved.lowData !== false) root.setAttribute('data-low-data', 'on');
+  } catch {
+    // No document to put it on: nothing to do.
+  }
+}
