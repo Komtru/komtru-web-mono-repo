@@ -25,7 +25,7 @@ describe('CATALOGUE', () => {
     expect(() => assertCatalogueIntegrity(CATALOGUE, 'en-NG')).not.toThrow();
   });
 
-  it('seeds the four identity templates T-045 owes', () => {
+  it('seeds the identity templates', () => {
     const identity = CATALOGUE.templates.filter((t) => t.templateKey.startsWith('identity.'));
     expect(new Set(identity.map((t) => t.templateKey))).toEqual(
       new Set([
@@ -33,6 +33,8 @@ describe('CATALOGUE', () => {
         'identity.device.new_sign_in',
         'identity.password.changed',
         'identity.session.reuse_detected',
+        'identity.phone_change.code',
+        'identity.phone.changed',
       ]),
     );
   });

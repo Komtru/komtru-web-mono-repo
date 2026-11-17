@@ -19,5 +19,9 @@
     "not-null-no-default": "account_key is a GENERATED ALWAYS ... STORED column, so Postgres computes a value for every existing row as part of the same ADD COLUMN and NOT NULL can never fail on it — a DEFAULT is not merely unnecessary, it is rejected on a generated column. The rule's failure mode does not apply.",
     "rename": "The enum type is renamed only so a new one can take its name in the same transaction, and is dropped before that transaction commits; no release ever observes the old name. The rebuild is forced: ALTER TYPE ... ADD VALUE cannot be used in the transaction that adds it, and the drizzle migrator runs every pending migration in one transaction, so extending ledger_account_type in place does not run at all.",
     "type-change": "ledger_accounts.account_type is retyped from the old ledger_account_type to the rebuilt one, which has the same labels plus BUYER_PROTECTION_FEE_LIABILITY: nothing narrows and no existing value can fail to fit. The rewrite is over zero rows — ledger.ledger_accounts is empty in every environment and the platform is pre-launch."
+  },
+  "0052_phone_change_state": {
+    "index-lock": "identity.user_phones holds no production rows: the platform is pre-launch, so each of these two partial unique indexes is built over zero rows. Built on a populated table they would block writes to phone numbers for the length of the build; at that point they belong in an operations step.",
+    "constraint-scan": "identity.user_phones holds no production rows: the platform is pre-launch, so validating these two CHECKs scans nothing and blocks nobody. Both are total over a column added in this same migration with a default that satisfies them, so they could not fail on existing rows in any case."
   }
 }

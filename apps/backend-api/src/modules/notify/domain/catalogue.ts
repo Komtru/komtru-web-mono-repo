@@ -122,6 +122,41 @@ const IDENTITY_TEMPLATES: unknown[] = [
     variables: ['detectedAt'],
     isSecurityCritical: true,
   },
+  // F-045 (SP-M05): moving to a new phone number. The code goes to the NEW number; the notice to the OLD one, the email
+  // and the app, once it has changed. Both are security critical: a cap must never swallow either.
+  {
+    templateKey: 'identity.phone_change.code',
+    channel: 'SMS',
+    category: 'SECURITY',
+    body: 'Komtru: {{code}} confirms this number for your account. It expires in {{expiresInMinutes}} minutes. Never share it.',
+    variables: ['code', 'expiresInMinutes'],
+    isSecurityCritical: true,
+  },
+  {
+    templateKey: 'identity.phone.changed',
+    channel: 'SMS',
+    category: 'SECURITY',
+    body: 'Komtru: the phone number on your account was changed to {{newNumber}} at {{changedAt}}. Not you? Contact support now.',
+    variables: ['newNumber', 'changedAt'],
+    isSecurityCritical: true,
+  },
+  {
+    templateKey: 'identity.phone.changed',
+    channel: 'EMAIL',
+    category: 'SECURITY',
+    subject: 'The phone number on your Komtru account was changed',
+    body: 'The phone number on your Komtru account was changed to {{newNumber}} at {{changedAt}}.\n\nIf this was not you, contact support immediately: whoever changed it can now receive your codes.\n\nIf you signed in with text-message codes, that method was switched off and needs setting up again on the new number, in Security. If that left you with no second factor, your printed backup codes were switched off too.',
+    variables: ['newNumber', 'changedAt'],
+    isSecurityCritical: true,
+  },
+  {
+    templateKey: 'identity.phone.changed',
+    channel: 'IN_APP',
+    category: 'SECURITY',
+    body: 'Your phone number was changed to {{newNumber}} at {{changedAt}}. Text-message codes and, if they were your only second factor, backup codes need setting up again.',
+    variables: ['newNumber', 'changedAt'],
+    isSecurityCritical: true,
+  },
 ];
 
 const IDENTITY_MAPPINGS: unknown[] = [
@@ -129,6 +164,8 @@ const IDENTITY_MAPPINGS: unknown[] = [
   { eventName: 'identity.device.signed_in', templateKey: 'identity.device.new_sign_in' },
   { eventName: 'identity.password.changed', templateKey: 'identity.password.changed' },
   { eventName: 'identity.session.reuse_detected', templateKey: 'identity.session.reuse_detected' },
+  { eventName: 'identity.phone_change.code_requested', templateKey: 'identity.phone_change.code' },
+  { eventName: 'identity.phone.changed', templateKey: 'identity.phone.changed' },
 ];
 
 /**

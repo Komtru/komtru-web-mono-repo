@@ -103,6 +103,37 @@ export const identityEmailVerifiedEvent = defineEvent(
   z.object({ userId: z.uuid(), emailId: z.uuid() }),
 );
 
+/**
+ * The code for the NEW number in a phone change (SP-M05). Its own event, not `identity.otp.requested`, because that
+ * one is delivered to the account's proven number and this one must reach the number being proven: the binding for it
+ * names the pending contact (`phoneTargetFor` in the notify module). The code travels in the payload exactly as an OTP's
+ * does, and for the same reason: the outbox row is the only place it exists in the clear.
+ */
+export const identityPhoneChangeCodeRequestedEvent = defineEvent(
+  'identity.phone_change.code_requested',
+  1,
+  z.object({
+    userId: z.uuid(),
+    challengeId: z.uuid(),
+    code: z.string().min(1),
+    expiresInMinutes: z.number().int().positive(),
+  }),
+);
+
+/**
+ * The phone number on an account was changed. Notify tells the OLD number (and the email, and the app) once it has
+ * changed, in case it was not the owner. No number is in the payload, only the masked new one, for §S12's reason.
+ */
+export const identityPhoneChangedEvent = defineEvent(
+  'identity.phone.changed',
+  1,
+  z.object({
+    userId: z.uuid(),
+    newPhoneMasked: z.string().min(1),
+    changedAt: z.iso.datetime(),
+  }),
+);
+
 export const identityPhoneVerifiedEvent = defineEvent(
   'identity.phone.verified',
   1,

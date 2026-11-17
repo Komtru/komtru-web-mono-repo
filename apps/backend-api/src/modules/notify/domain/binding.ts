@@ -15,6 +15,8 @@ import {
   identityDeviceSignedInEvent,
   identityOtpRequestedEvent,
   identityPasswordChangedEvent,
+  identityPhoneChangeCodeRequestedEvent,
+  identityPhoneChangedEvent,
   otpPurposeLabel,
 } from '../../identity/index.js';
 import { identitySessionReuseDetectedEvent } from '@komtru/shared-types';
@@ -88,6 +90,21 @@ export const defineAudienceBinding = <S extends z.ZodType>(
  */
 export const UNVERIFIED_DESTINATION_TEMPLATES: ReadonlySet<string> = new Set(['identity.otp.requested']);
 
+/**
+ * Which of a user's phone numbers a template's phone channel goes to. `PRIMARY` (everything else) is the proven number.
+ * The two phone-change templates are the exception, and they find their number by its stated state (see `identity/services/phone-change.service.ts`):
+ *   - `PENDING` is the number being proven (`user_phones.change_state`). The code for the NEW number goes there.
+ *   - `RETIRED` is the number that was just replaced (`change_state`). The notice goes there.
+ * Decided in code and never from a column an operator can edit, for `allowsUnverifiedDestination`'s reason.
+ */
+export type PhoneTarget = 'PRIMARY' | 'PENDING' | 'RETIRED';
+
+export const phoneTargetFor = (templateKey: string): PhoneTarget => {
+  if (templateKey === 'identity.phone_change.code') return 'PENDING';
+  if (templateKey === 'identity.phone.changed') return 'RETIRED';
+  return 'PRIMARY';
+};
+
 export const allowsUnverifiedDestination = (templateKey: string): boolean =>
   UNVERIFIED_DESTINATION_TEMPLATES.has(templateKey);
 
@@ -142,6 +159,32 @@ export const BINDINGS: NotificationBinding[] = [
               },
             },
           ],
+  }),
+
+  defineBinding({
+    subscriber: 'notify.on-phone-change-code-requested',
+    event: identityPhoneChangeCodeRequestedEvent,
+    templateKey: 'identity.phone_change.code',
+    recipients: (payload) => [
+      {
+        userId: payload.userId,
+        // The code is for a phone: it is never emailed to the address on the account.
+        channels: ['SMS'],
+        variables: { code: payload.code, expiresInMinutes: String(payload.expiresInMinutes) },
+      },
+    ],
+  }),
+
+  defineBinding({
+    subscriber: 'notify.on-phone-changed',
+    event: identityPhoneChangedEvent,
+    templateKey: 'identity.phone.changed',
+    recipients: (payload) => [
+      {
+        userId: payload.userId,
+        variables: { newNumber: payload.newPhoneMasked, changedAt: whenFor(payload.changedAt) },
+      },
+    ],
   }),
 
   defineBinding({

@@ -23,7 +23,7 @@ import {
   notificationExists,
   type ClaimedNotification,
 } from '../services/delivery.service.js';
-import { allowsUnverifiedDestination } from '../domain/binding.js';
+import { allowsUnverifiedDestination, phoneTargetFor } from '../domain/binding.js';
 import { resolveDestination } from '../services/recipients.service.js';
 import { sendEmail } from '../infrastructure/providers/mailjet.client.js';
 import { sendPush } from '../infrastructure/providers/fcm.client.js';
@@ -89,6 +89,7 @@ export async function runSendJob(deps: SendJobDeps, data: SendJobData): Promise<
   // dispatch and dead-letter here for a reason that never changed.
   const destination = await resolveDestination(db, claimed.userId, claimed.channel, {
     allowUnverified: allowsUnverifiedDestination(claimed.templateKey),
+    phoneTarget: phoneTargetFor(claimed.templateKey),
   });
   if (!destination) {
     // The address went away between dispatch and send. Deterministic, so retrying is pointless.

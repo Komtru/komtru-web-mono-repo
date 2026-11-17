@@ -7,6 +7,7 @@ import {
   allowsUnverifiedDestination,
   defineAudienceBinding,
   defineBinding,
+  phoneTargetFor,
 } from '../../../../src/modules/notify/domain/binding.js';
 
 const bindingFor = (eventType: string) => {
@@ -28,12 +29,14 @@ const otpPayload = (overrides: Record<string, unknown> = {}) => ({
 });
 
 describe("notify's identity bindings", () => {
-  it('binds the four identity events the catalogue already has templates for', () => {
+  it('binds the identity events the catalogue has templates for', () => {
     const identity = BINDINGS.filter((b) => b.event.eventType.startsWith('identity.'));
     expect(identity.map((b) => b.event.eventType).sort()).toEqual([
       'identity.device.signed_in',
       'identity.otp.requested',
       'identity.password.changed',
+      'identity.phone.changed',
+      'identity.phone_change.code_requested',
       'identity.session.reuse_detected',
     ]);
   });
@@ -86,6 +89,17 @@ describe("notify's identity bindings", () => {
         cityId: randomUUID(),
         cityName: 'Jos East',
         reason: null,
+      },
+      'identity.phone_change.code_requested': {
+        userId: randomUUID(),
+        challengeId: randomUUID(),
+        code: '482913',
+        expiresInMinutes: 5,
+      },
+      'identity.phone.changed': {
+        userId: randomUUID(),
+        newPhoneMasked: '+23490•••2290',
+        changedAt: new Date().toISOString(),
       },
       'identity.session.reuse_detected': {
         userId: randomUUID(),
@@ -214,5 +228,29 @@ describe("notify's city-request binding (T-046)", () => {
     const templates = CATALOGUE.templates.filter((t) => t.templateKey === 'geo.city_request.decided');
     expect(templates.map((t) => t.channel).sort()).toEqual(['EMAIL', 'IN_APP']);
     expect(templates.every((t) => t.category === 'ACCOUNT' && !t.isSecurityCritical)).toBe(true);
+  });
+});
+
+describe('which phone a template goes to (F-045, SP-M05)', () => {
+  it('sends the new number its code to the number being proven, and the notice to the one just replaced', () => {
+    expect(phoneTargetFor('identity.phone_change.code')).toBe('PENDING');
+    expect(phoneTargetFor('identity.phone.changed')).toBe('RETIRED');
+  });
+
+  it('leaves every other template on the proven number', () => {
+    for (const binding of BINDINGS) {
+      if (binding.templateKey.startsWith('identity.phone')) continue;
+      expect(phoneTargetFor(binding.templateKey), binding.templateKey).toBe('PRIMARY');
+    }
+  });
+
+  it('never emails the code for the new number, and never sends it anywhere but SMS', () => {
+    const [recipient] = bindingFor('identity.phone_change.code_requested').recipients({
+      userId: randomUUID(),
+      challengeId: randomUUID(),
+      code: '482913',
+      expiresInMinutes: 5,
+    });
+    expect(recipient?.channels).toEqual(['SMS']);
   });
 });

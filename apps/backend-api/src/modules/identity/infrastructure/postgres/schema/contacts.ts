@@ -57,10 +57,30 @@ export const userPhones = identity.table(
     /** Forces re-verification of a stale number: SIM recycling in Nigeria is real (M1 D4). */
     reverifyAfter: timestamp('reverify_after', { withTimezone: true }),
     carrier: text('carrier'),
+    /**
+     * Where a number stands in a phone change (F-045, SP-M05): `NONE` for every number outside one, `PENDING` for the new
+     * number being proven, `RETIRED` for the number just replaced. Stated, not inferred from the shape of the row, because
+     * Notify addresses the code for the new number and the "your number was changed" notice by it, and an inferred shape could
+     * be forged by a session alone. At most one of each per user, which is what the two unique indexes below hold under
+     * concurrency; the service's row lock is only a second belt.
+     */
+    changeState: text('change_state').notNull().default('NONE'),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [
     check('phone_e164_format', sql`${table.phoneE164} ~ '^\\+[1-9][0-9]{7,14}$'`),
+    check('user_phones_change_state', sql`${table.changeState} IN ('NONE', 'PENDING', 'RETIRED')`),
+    // A number in a change is never primary and never verified: it claims nothing until it is proven.
+    check(
+      'user_phones_change_state_unproven',
+      sql`${table.changeState} = 'NONE' OR (NOT ${table.isPrimary} AND ${table.verifiedAt} IS NULL)`,
+    ),
+    uniqueIndex('user_phones_one_pending')
+      .on(table.userId)
+      .where(sql`${table.changeState} = 'PENDING'`),
+    uniqueIndex('user_phones_one_retired')
+      .on(table.userId)
+      .where(sql`${table.changeState} = 'RETIRED'`),
     uniqueIndex('user_phones_verified_unique')
       .on(table.phoneE164)
       .where(sql`${table.verifiedAt} IS NOT NULL`),

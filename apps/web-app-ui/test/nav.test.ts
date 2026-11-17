@@ -172,6 +172,12 @@ describe('Account', () => {
     ]);
   });
 
+  it('holds Privacy & data after the five, for everyone, and Security still opens the security screen (F-045)', () => {
+    const items = accountItemsFor(viewer(), links);
+    expect(items[5]).toMatchObject({ id: 'privacy', label: 'Privacy & data', href: '/account/privacy' });
+    expect(items.find((item) => item.id === 'security')?.href).toBe('/account/security');
+  });
+
   it('holds Payouts for anyone who has sold, merchant or not', () => {
     expect(labels(accountItemsFor(viewer(), links))).not.toContain('Payouts');
     expect(labels(accountItemsFor(viewer({ hasSold: true }), links))).toContain('Payouts');

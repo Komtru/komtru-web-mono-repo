@@ -129,6 +129,7 @@ export type AccountItemId =
   | 'trust-history'
   | 'notifications'
   | 'security'
+  | 'privacy'
   | 'payouts'
   | 'park-agent';
 
@@ -169,6 +170,7 @@ export function accountItemsFor(viewer: Viewer, links: AccountLinks): readonly A
     { id: 'trust-history', label: 'Trust history', href: '/account/trust-history' },
     { id: 'notifications', label: 'Notifications', href: '/account/notifications' },
     { id: 'security', label: 'Security', href: '/account/security' },
+    { id: 'privacy', label: 'Privacy & data', href: '/account/privacy' },
   ];
 
   if (viewer.hasSold) items.push({ id: 'payouts', label: 'Payouts', href: '/account/payouts' });

@@ -40,6 +40,11 @@ export interface DestinationOptions {
    * answer taken consistently.
    */
   allowUnverified?: boolean;
+  /**
+   * Which phone a phone channel goes to: the proven one (default), the one being proven, or the one just replaced. Only the
+   * phone-change templates set it, and only through `phoneTargetFor` (domain/binding.ts).
+   */
+  phoneTarget?: 'PRIMARY' | 'PENDING' | 'RETIRED';
 }
 
 export async function resolveDestination(
@@ -75,6 +80,27 @@ export async function resolveDestination(
     // address verified — demanding verification before sending it is a cycle no user can break.
     if (!row) return undefined;
     return { address: [row.email], masked: maskEmail(row.email) };
+  }
+
+  if (
+    PHONE_CHANNELS.includes(channel) &&
+    options.phoneTarget !== undefined &&
+    options.phoneTarget !== 'PRIMARY'
+  ) {
+    // Addressed by the number's STATED place in a phone change (`user_phones.change_state`), never by what its row looks like:
+    // the identity module writes `PENDING` and `RETIRED` only through a change that needs a step-up and both codes, and a
+    // partial unique index keeps one of each per user. This branch deliberately does not go through the verified-first rule
+    // below, because the number it wants is by definition not the proven one; what stands in for that rule is that
+    // `phoneTarget` comes only from `phoneTargetFor`, a code-side map of two template keys, and that the state is not
+    // something a session can forge. Anything else that wants an unproven number goes through `allowUnverified`.
+    const state = options.phoneTarget === 'PENDING' ? 'PENDING' : 'RETIRED';
+    const rows = await reader
+      .select({ phone: userPhones.phoneE164 })
+      .from(userPhones)
+      .where(and(eq(userPhones.userId, userId), eq(userPhones.changeState, state)))
+      .limit(1);
+    const row = rows[0];
+    return row ? { address: [row.phone], masked: maskPhone(row.phone) } : undefined;
   }
 
   if (PHONE_CHANNELS.includes(channel)) {

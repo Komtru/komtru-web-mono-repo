@@ -40,6 +40,7 @@ import { createTokenSigner, type TokenSigner } from './infrastructure/jwt/access
 import { createEpochCache, type EpochCache } from './infrastructure/redis/epoch-cache.js';
 import { seedIdentityCatalogue } from './infrastructure/postgres/seed.js';
 import { lifecycleRoutes } from './http/routes/lifecycle.routes.js';
+import { phoneChangeRoutes } from './http/routes/phone-change.routes.js';
 import type { LifecycleControllerDeps } from './http/controllers/lifecycle.controller.js';
 import { requireStepUp as requireStepUpToken } from './services/step-up.service.js';
 import { activeFactors } from './services/mfa.service.js';
@@ -458,6 +459,7 @@ export function createIdentityAuth(options: IdentityAuthOptions): IdentityAuth {
       ...meRoutes({ db, logger, ports: options.avatar ?? missingAvatarPorts }),
       ...mfaRoutes(account),
       ...lifecycleRoutes(lifecycle),
+      ...phoneChangeRoutes(account),
     ],
     schedules: [
       {

@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import type { NavItem } from '@komtru/ui-kit';
 import { readParkUrl, webAppEnv } from '../../../src/app-config';
+import { StatusNotice } from '../../../src/account/StatusNotice';
 import { AccountSections } from '../../../src/shell/AccountSections';
 import { AppShell } from '../../../src/shell/AppShell';
 import { ACCOUNT_ICONS } from '../../../src/shell/icons';
@@ -47,6 +48,9 @@ export default async function AccountPage(): Promise<React.JSX.Element> {
       <p className="mb-[16px] text-[12px] leading-[1.6] text-slate">
         Your details, what Komtru has verified, and how you get paid.
       </p>
+      <div className="max-w-[480px]">
+        <StatusNotice seller={mode === 'sell'} />
+      </div>
       <AccountSections viewer={viewer} links={links} />
     </AppShell>
   );
