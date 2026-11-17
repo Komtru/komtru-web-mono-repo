@@ -20,3 +20,5 @@
 - **Two-step sign-in** is a locked switch when on (aria-readonly) and the methods below carry their own Remove, each with its own step-up proof: a switch that removed them all at once would be a way round the proof. Added rows: the methods, Backup codes (left, and Get new codes), and a Phone number row to SP-M05.
 - Devices come from `GET /me/devices`; the reference's "Lagos" place is not sent by the platform, so the line reads "Last used 3 days ago". The reference marks a chevron on the other device; here it is a **Remove** button (`DELETE /me/devices/:id`).
 - "Sign out of other devices" revokes every other session one by one and says how many are left.
+- **Accepted scope cut:** there is no way here to add a text-message second method; only an authenticator app can be added (the platform's SMS enrolment is built and not surfaced). Tracked as a follow-up.
+- Added: a **Phone number** row that opens SP-M05.

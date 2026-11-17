@@ -7,11 +7,11 @@ routes (one proxy adds the sealed session cookie).
 | ------ | ------------------------------ | -------------------------------------- | ---------------- |
 | SP-M03 | `/account/privacy`             | camera unknown, as the harness browser | 4.83%            |
 | SP-M04 | `/account/security`            | two-step off, two devices              | 3.81%            |
-| SP-M05 | `/account/phone`               | empty form                             | 10.70%           |
-| TF1    | `/account/security/two-factor` | key issued, no code typed              | 13.31%           |
+| SP-M05 | `/account/phone`               | empty form                             | 15.88%           |
+| TF1    | `/account/security/two-factor` | key issued, no code typed              | 14.21%           |
 | CA1    | `/account/close`               | a trade in progress                    | 3.77%            |
-| AS1    | `/account/suspended`           | suspended                              | 5.91%            |
-| AS2    | `/shop/suspended`              | suspended, selling paused              | 5.53%            |
+| AS1    | `/account/suspended`           | suspended                              | 5.59%            |
+| AS2    | `/shop/suspended`              | suspended, selling paused              | 5.25%            |
 | VF1    | `/account/verification`        | selfie check failed                    | 12.56%           |
 
 TF2 and CA2 are in-flow states (codes shown once; a sheet over CA1) the harness cannot set; their `.md` says which tests hold them.

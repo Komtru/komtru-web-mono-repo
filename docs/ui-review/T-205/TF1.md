@@ -3,7 +3,7 @@
 - **Reference:** `docs/design-reference/Komtru — UI Living Master v2.html` line 7402 — Trust History · Account · Notifications — Mobile Web
 - **Built:** http://localhost:3146/account/security/two-factor
 - **Frame:** mobile, 340px reference frame; compared at 340 × 660
-- **Differing pixels:** 29,876 of 224,400 (13.31%)
+- **Differing pixels:** 31,888 of 224,400 (14.21%)
 - **Side by side:** `TF1.png` (reference · built · heat map) — **heat map:** `TF1.diff.png`
 
 ## Deviations
@@ -15,6 +15,5 @@
 
 **Real differences (intended, and why)**
 
-- **No QR code.** The reference draws one. This app has no QR encoder and adding a dependency is the owner's decision (a `qrcode` install was declined in this run). The key is shown typed, grouped as the reference groups it, with an **Open in your authenticator app** link (the `otpauth` URI), which a phone's authenticator opens directly. Open question for the owner.
-- The six code boxes are empty at first (the reference is mid-entry), and **Verify & enable** is disabled until six digits are in. The key is the platform's, returned once when the screen opens; it is not in the cache or the URL.
-- The intro reads "Add this to…" rather than "Scan this with…", because there is nothing to scan.
+- The QR code is real: drawn in the browser from the `otpauth` URI (the `qrcode-generator` dependency, approved by the owner). The key typed, grouped as the reference groups it, and an **Open in your authenticator app** link stay beside it as the fallback. The QR is 140px in the reference's 160px box.
+- The six code boxes are empty at first (the reference is mid-entry), and **Verify & enable** is disabled until six digits are in. The key is the platform's, returned once when the screen opens; it is not in the cache or the URL, and the mutation's result is dropped when the screen unmounts (`gcTime: 0`).

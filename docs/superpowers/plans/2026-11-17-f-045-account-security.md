@@ -33,9 +33,14 @@ owner pulled these forward, so they extend the existing `/account` area and add 
 10. e2e (route-level render with axe) and visual check against the v2 reference; deviations recorded under
     `docs/ui-review/T-205/`.
 
-## Gaps and decisions
+## Gaps and decisions (updated after the review pass)
 
-- SP-M05: no backend route. The screen is built to the reference, validates both numbers, and states plainly that
-  changing a number is not available yet, with the recovery path for a lost SIM. Raised with the owner.
+- SP-M05 is real: the identity module gained `POST /me/phone/change`, `/me/phone/change/confirm-current` and
+  `/me/phone/change/confirm-new` (no migration; see `identity/services/phone-change.service.ts` for how the pending and retired
+  numbers are held). Codes to both numbers, a notice to the old one.
+- QR code: `qrcode-generator`, approved by the owner.
 - AS1/AS2/CA1: "1 Trade in progress" and a trade row are not available (boolean only); the copy says "a Trade".
+- AS1/AS2 say only what `abilities` backs; the reference's escrow, 48-hour and "with the reason" promises are dropped.
 - "Contact TrustOps": there is no support screen in the app; the button shows the account's support reference.
+- Accepted scope cuts: no text-message second-method setup UI; sequential session revoke.
+- Not built: an automatic redirect of a suspended account to AS1/AS2 (middleware that knows account state).

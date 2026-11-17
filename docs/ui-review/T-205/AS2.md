@@ -3,7 +3,7 @@
 - **Reference:** `docs/design-reference/Komtru — UI Living Master v2.html` line 7258 — Trust History · Account · Notifications — Mobile Web
 - **Built:** http://localhost:3146/shop/suspended
 - **Frame:** mobile, 340px reference frame; compared at 340 × 660
-- **Differing pixels:** 12,401 of 224,400 (5.53%)
+- **Differing pixels:** 11,773 of 224,400 (5.25%)
 - **Side by side:** `AS2.png` (reference · built · heat map) — **heat map:** `AS2.diff.png`
 
 ## Deviations
@@ -15,6 +15,6 @@
 
 **Real differences (intended, and why)**
 
-- The reference's lead names "an unusual pattern of new-account proposal activity". The platform does not say why, and no seller is told a cause that may not be theirs, so the lead reads "an unusual pattern of activity". Intended; raised in the report.
-- The paused rows come from the platform's own `abilities` (selling, withdrawing), not from the state's name: "Create listings" and "Accept new Trade requests" read Paused when `sell` is false; "Ship or withdraw" reads Unaffected unless `withdraw` is false.
-- Shown in the Account frame, because the reference marks Account as the current tab.
+- The reference's lead names "an unusual pattern of new-account proposal activity". The platform does not say why, so the lead reads "an unusual pattern of activity". Same reasons and same banner rule as AS1: "What still works" comes from `abilities`, and the reference's "Existing Trades continue normally — you can still ship what's already funded" is not stated, because nothing the platform sends says shipping is unaffected.
+- The table is headed **What's paused and what isn't** (the reference's "While this is under review, you can't" sat over rows that could read Available). Rows: Create listings and Accept new Trade requests follow `sell`; **Withdraw funds** (the reference's "Ship or withdraw") follows `withdraw`; shipping is not claimed.
+- Shown in the Account frame, because the reference marks Account as the current tab. Reached from Account for a seller (Sell mode).

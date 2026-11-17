@@ -3,7 +3,7 @@
 - **Reference:** `docs/design-reference/Komtru — UI Living Master v2.html` line 7232 — Trust History · Account · Notifications — Mobile Web
 - **Built:** http://localhost:3146/account/suspended
 - **Frame:** mobile, 340px reference frame; compared at 340 × 660
-- **Differing pixels:** 13,269 of 224,400 (5.91%)
+- **Differing pixels:** 12,542 of 224,400 (5.59%)
 - **Side by side:** `AS1.png` (reference · built · heat map) — **heat map:** `AS1.diff.png`
 
 ## Deviations
@@ -15,6 +15,10 @@
 
 **Real differences (intended, and why)**
 
-- Words, banner and the three "What happens next" rows are the reference's. The icon is `StatusHero`'s ring with the risk mark rather than the reference's bare circle.
-- The reference has no secondary state. Here a **restricted** or **locked** account gets its own title and lead (the reference only draws suspended), and an account in good standing sees "Nothing is holding your account" with a way home.
-- **Contact TrustOps about this** has no inbox to open yet: it shows the account's support reference to quote. The staff-written reason is never sent by the platform, so none is shown.
+- Heading, lead and icon are the reference's. **Deviations, each because the platform does not back the reference's sentence:**
+  - "What's still protected" (escrow stays protected, you can still confirm delivery or respond to a dispute) becomes **What still works**, built from the platform's own `abilities` ("You can still sign in and look around and withdraw money already released to your balance."). A locked account, which cannot sign in, gets no such banner. The escrow and dispute promises are not in anything the platform sends.
+  - "Typical timeline: Within 48 hours" is dropped: no SLA backs it.
+  - "You'll be notified the moment a decision is made, with the reason" becomes **Where it stands: This page always shows your account's current state**: the platform deliberately never sends the staff reason.
+- A **restricted** or **locked** account gets its own title and lead; an account in good standing sees "Nothing is holding your account" with a way home.
+- **Contact TrustOps about this** has no inbox to open yet: it shows the account's support reference to quote.
+- Reachable from Account: a restricted, suspended or locked account sees a banner there linking to this screen. No automatic redirect: that needs middleware that knows the account's state, which this ticket does not add.

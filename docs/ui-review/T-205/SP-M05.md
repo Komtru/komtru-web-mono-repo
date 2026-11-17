@@ -3,7 +3,7 @@
 - **Reference:** `docs/design-reference/Komtru — UI Living Master v2.html` line 7907 — Supporting · Account & settings
 - **Built:** http://localhost:3146/account/phone
 - **Frame:** mobile, 340px reference frame; compared at 340 × 660
-- **Differing pixels:** 24,012 of 224,400 (10.70%)
+- **Differing pixels:** 35,628 of 224,400 (15.88%)
 - **Side by side:** `SP-M05.png` (reference · built · heat map) — **heat map:** `SP-M05.diff.png`
 
 ## Deviations
@@ -15,7 +15,7 @@
 
 **Real differences (intended, and why)**
 
-- **Send a code is disabled, with a warning that says why.** The platform has no change-number route (no code to the old number, none to the new, no notice to the old). Building the button live would be a lie. Raised as an owner decision and a backend gap.
-- **I can't get the code is real**: it opens the platform's lost-phone recovery request (`POST /auth/recovery-requests`, `LOST_PHONE`) with the current number typed, and says a person will check the ID within 24 hours.
-- The reference prefills **Current number**; the platform has no read that returns the number, so it is typed. Both numbers are validated as Nigerian mobiles as typed, and the new one must differ.
-- The three-step timeline is the ui-kit's `VersionTimeline`, drawn without the reference's card around it.
+- **The flow is real.** The reference's fields and three steps are the platform's now: **Send a code** names the new number and a code goes to the current one; the current number's code sends a second to the new one; the new number's code makes the change, and the old number is told (SMS to it, plus email and in-app). The screen walks the three steps with the timeline marking where the person is.
+- The reference prefills **Current number**. The platform holds it and sends the first code there, so the person is never asked to type it; the code step says where it went (`+23480•••4471`).
+- **I've lost access to my number** replaces the reference's "I can't get the code". It opens the platform's lost-phone **recovery request** (the number typed), says plainly that it does not change the number and that a person checks the ID within 24 hours. It is not offered as a way to make this change: that flow carries no new number.
+- Shot at the first step (new number empty), so the heat map is the first step only; the code steps are held by `test/change-phone.test.tsx`.
