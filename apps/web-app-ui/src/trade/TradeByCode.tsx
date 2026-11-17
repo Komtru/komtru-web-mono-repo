@@ -19,6 +19,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useRouter } from 'next/navigation';
 import { useEffect } from 'react';
 import { ClaimPanel } from './ClaimPanel';
+import { LinkNotFound } from '../system/LinkNotFound';
 import { initialsOf, partyName, problemMessage } from './format';
 
 const BACK = (
@@ -75,18 +76,9 @@ export function TradeByCode({ typed }: { typed: string }): React.JSX.Element {
 
   if (lookup.isError) {
     const missing = lookup.error instanceof ProblemError && lookup.error.status === 404;
-    if (missing) {
-      return (
-        <ScreenColumn>
-          <ScreenHeader title="Trade Code" backHref="/trades" />
-          <EmptyState
-            title="No trade found for you"
-            body="Check the code. If someone invited you, sign in with the phone number or email they used."
-            action={BACK}
-          />
-        </ScreenColumn>
-      );
-    }
+    // SP-M19. The platform answers a code that does not exist and a trade that is not this person's the same way, and so
+    // does this: the screen never says which.
+    if (missing) return <LinkNotFound />;
     return (
       <LoadFailed
         title="Couldn't open that trade"

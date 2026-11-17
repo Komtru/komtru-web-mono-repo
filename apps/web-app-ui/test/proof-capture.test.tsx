@@ -32,11 +32,15 @@ const serve = () =>
 beforeEach(() => {
   api.call.mockReset();
   uploads = 0;
+  // These suites are about the camera itself. SP-M18's explanation, said once per device, has its own suite
+  // (`camera-permission-flow.test.tsx`), so here the device has already been through it.
+  window.localStorage.setItem('komtru.camera.explained', '1');
   vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true }));
   serve();
 });
 afterEach(() => {
   cleanup();
+  window.localStorage.clear();
   vi.unstubAllGlobals();
 });
 

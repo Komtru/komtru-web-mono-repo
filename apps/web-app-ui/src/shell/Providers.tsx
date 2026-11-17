@@ -7,6 +7,8 @@ import { readAppConfig } from '@komtru/app-kit';
 import { useRouter } from 'next/navigation';
 import { useCallback, useState } from 'react';
 import { appSpec, webAppEnv } from '../app-config';
+import { wasDeliberateSignOut } from '../entry/deliberate-sign-out';
+import { sessionExpiredHref } from '../entry/flow';
 import { clearOfflineCache } from './ServiceWorker';
 import { clearWelcomeTransient } from '../welcome/state';
 
@@ -41,8 +43,12 @@ export function Providers({ children }: { children: React.ReactNode }): React.JS
         captureException(error);
       })
       .finally(() => {
-        // `replace`, not `push`: a dead session is not somewhere to go back to.
-        router.replace(appSpec.signInPath);
+        // Someone who just closed their account is signed out on purpose, and told so by their own screen: not "please
+        // sign in again".
+        if (wasDeliberateSignOut()) return;
+        // `replace`, not `push`: a dead session is not somewhere to go back to. SP-M16 says why, and carries the screen the
+        // person was on so one step brings them back.
+        router.replace(sessionExpiredHref(`${window.location.pathname}${window.location.search}`));
       });
   }, [router, queries]);
 

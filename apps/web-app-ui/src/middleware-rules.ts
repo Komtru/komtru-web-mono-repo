@@ -25,4 +25,15 @@ export const PUBLIC_PATHS = [
  *
  * The sign-in screen itself is `appSpec.signInPath`, which the gate always leaves open.
  */
-export const ENTRY_PATHS = ['/signup', '/verify', '/reset-password', '/terms'] as const;
+export const ENTRY_PATHS = [
+  '/signup',
+  '/verify',
+  '/reset-password',
+  '/terms',
+  // F-044's system states, which are for people who cannot (or can no longer) hold a session: SP-M16 explains a session
+  // that ended, SP-M14 says whether Komtru is working, SP-M15 asks for an update. A gate on any of them would send the
+  // person to the sign-in screen to be told they cannot sign in.
+  '/session-expired',
+  '/status',
+  '/update-required',
+] as const;

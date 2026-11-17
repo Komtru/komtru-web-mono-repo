@@ -16,6 +16,8 @@ export const ENTRY = {
   setPassword: '/set-password',
   termsUpdated: '/terms-updated',
   fullTerms: '/terms',
+  /** SP-M16: where a session that ended on its own is explained. */
+  sessionExpired: '/session-expired',
 } as const;
 
 /** An origin no real request has, to resolve `next` against and see whether it stays there. */
@@ -43,11 +45,23 @@ export function safeNext(value: string | null | undefined): string | undefined {
     return undefined;
   }
   if (url.origin !== PROBE || url.pathname.startsWith('//')) return undefined;
-  const entry = [ENTRY.login, ENTRY.signUp, ENTRY.verify, ENTRY.forgot, ENTRY.terms];
+  const entry = [ENTRY.login, ENTRY.signUp, ENTRY.verify, ENTRY.forgot, ENTRY.terms, ENTRY.sessionExpired];
   if (entry.some((prefix) => url.pathname === prefix || url.pathname.startsWith(`${prefix}/`))) {
     return undefined;
   }
   return `${url.pathname}${url.search}${url.hash}`;
+}
+
+/**
+ * Where a session that ended on its own sends the person (SP-M16): the explanation, with the screen they were on carried
+ * as `next` so one step brings them back. A place that cannot be returned to (an entry screen, or anything `safeNext`
+ * refuses) is dropped, and the explanation stands alone.
+ */
+export function sessionExpiredHref(current: string): string {
+  const next = safeNext(current);
+  return next === undefined
+    ? ENTRY.sessionExpired
+    : `${ENTRY.sessionExpired}?next=${encodeURIComponent(next)}`;
 }
 
 const withNext = (path: string, next: string | undefined): string =>

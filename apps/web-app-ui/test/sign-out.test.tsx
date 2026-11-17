@@ -43,7 +43,7 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe('when a session ends', () => {
-  it("empties the in-memory query cache, so the next person is not handed the last one's trades, then goes to sign-in", async () => {
+  it("empties the in-memory query cache, so the next person is not handed the last one's trades, then explains the sign-out (SP-M16)", async () => {
     render(
       <Providers>
         <p>app</p>
@@ -57,7 +57,7 @@ describe('when a session ends', () => {
     provided.props?.onSessionEnded?.();
 
     await waitFor(() => {
-      expect(router.replace).toHaveBeenCalledWith('/login');
+      expect(router.replace).toHaveBeenCalledWith('/session-expired?next=%2F');
     });
     expect(client?.getQueryData(['trades', 'trade-a'])).toBeUndefined();
   });

@@ -3,6 +3,10 @@
 // `useAddresses()` and the four address mutations (T-042). Every mutation refreshes the list, because
 // one change can touch several rows: making a default clears another, archiving the default promotes
 // the next one.
+//
+// An address is personal data: a name, a phone number and where someone lives. TanStack keeps a mutation's
+// `variables` as well as its `data`, for five minutes by default, so every mutation here sets `gcTime: 0` and
+// the cache drops it the moment the screen that made it is gone.
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { Address, CreateAddressBody, UpdateAddressBody } from '@komtru/shared-types';
 import {
@@ -37,6 +41,7 @@ function useAddressMutation<TVariables>(
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (variables: TVariables) => call(client, variables),
+    gcTime: 0,
     onSettled: () => queryClient.invalidateQueries({ queryKey: addressKeys.all }),
   });
 }

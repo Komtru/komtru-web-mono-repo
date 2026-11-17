@@ -118,6 +118,34 @@ export const ACCOUNT_ICONS: Record<AccountItemId, React.ReactNode> = {
       <path d="M8 11V8a4 4 0 0 1 8 0v3" />
     </svg>
   ),
+  /** SP-M01: the pin the reference draws on a saved address. */
+  addresses: (
+    <svg {...RAIL} strokeLinejoin="round">
+      <path d="M12 21s6.5-5.6 6.5-11A6.5 6.5 0 1 0 5.5 10c0 5.4 6.5 11 6.5 11z" />
+      <circle cx="12" cy="10" r="2.2" />
+    </svg>
+  ),
+  /** SP-M33: a sun, for how bright and how big. */
+  display: (
+    <svg {...RAIL}>
+      <circle cx="12" cy="12" r="3.5" />
+      <path d="M12 4v2M12 18v2M4 12h2M18 12h2M6.3 6.3l1.4 1.4M16.3 16.3l1.4 1.4M6.3 17.7l1.4-1.4M16.3 7.7l1.4-1.4" />
+    </svg>
+  ),
+  /** SP-M12: money coming back round. */
+  refunds: (
+    <svg {...RAIL} strokeLinejoin="round">
+      <path d="M4 12a8 8 0 1 0 2.4-5.7" />
+      <path d="M4 4v4h4" />
+    </svg>
+  ),
+  /** SP-M13: a page of lines. */
+  statements: (
+    <svg {...RAIL} strokeLinejoin="round">
+      <path d="M7 3.5h7l4 4V20.5H7z" />
+      <path d="M10 12h5M10 15.5h5" />
+    </svg>
+  ),
   /** S6's `.tab` — the card. Payouts, for anyone who has sold. */
   payouts: (
     <svg {...RAIL}>

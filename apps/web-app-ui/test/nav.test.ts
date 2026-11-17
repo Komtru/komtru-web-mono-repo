@@ -178,6 +178,16 @@ describe('Account', () => {
     expect(items.find((item) => item.id === 'security')?.href).toBe('/account/security');
   });
 
+  it('holds the F-044 sections after Privacy & data, for everyone', () => {
+    const items = accountItemsFor(viewer(), links);
+    expect(items.slice(6, 10).map((item) => [item.id, item.label, item.href])).toEqual([
+      ['addresses', 'Saved addresses', '/account/addresses'],
+      ['display', 'Display & accessibility', '/account/display'],
+      ['refunds', 'Where’s my refund?', '/account/refunds'],
+      ['statements', 'Statements', '/account/statements'],
+    ]);
+  });
+
   it('holds Payouts for anyone who has sold, merchant or not', () => {
     expect(labels(accountItemsFor(viewer(), links))).not.toContain('Payouts');
     expect(labels(accountItemsFor(viewer({ hasSold: true }), links))).toContain('Payouts');

@@ -7,6 +7,7 @@ import type { TradeView } from '@komtru/api-client';
 import { useTrade } from '@komtru/api-client/react';
 import { ActionStack, Button, LoadFailed, LoadingScreen, ScreenColumn, ScreenHeader } from '@komtru/ui-kit';
 import { useOnline } from '../../shell/OfflineStatus';
+import { LinkNotFound } from '../../system/LinkNotFound';
 import { isProblem, problemMessage } from '../format';
 import type { TradeRole } from '../workspace-state';
 
@@ -112,6 +113,8 @@ export function TradeGate({
       </Frame>
     );
   }
+  // SP-M19: a trade that is not there (or not this person's) is a dead link, and said so as one.
+  if (trade.isError && isProblem(trade.error, 'NOT_FOUND')) return <LinkNotFound backHref="/trades" />;
   if (trade.isError) {
     return <ReadFailed error={trade.error} noun="this trade" onRetry={() => void trade.refetch()} />;
   }

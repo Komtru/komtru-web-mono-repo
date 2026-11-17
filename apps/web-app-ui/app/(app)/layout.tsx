@@ -1,4 +1,5 @@
 import { ServiceWorker } from '../../src/shell/ServiceWorker';
+import { SystemWatcher } from '../../src/system/SystemWatcher';
 
 /**
  * Everything behind a session, and the offline support that goes with it.
@@ -12,6 +13,7 @@ import { ServiceWorker } from '../../src/shell/ServiceWorker';
 export default function AppLayout({ children }: { children: React.ReactNode }): React.JSX.Element {
   return (
     <>
+      <SystemWatcher />
       {children}
       <ServiceWorker />
     </>

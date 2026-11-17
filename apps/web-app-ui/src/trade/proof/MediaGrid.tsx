@@ -7,6 +7,9 @@
 import { ProblemError } from '@komtru/api-client';
 import { useFileUrl } from '@komtru/api-client/react';
 import { Skeleton } from '@komtru/ui-kit';
+import { useState } from 'react';
+import { onMobileData, type NetworkInformationLike } from '../../account/display/prefs';
+import { useDisplayPrefs } from '../../account/display/useDisplayPrefs';
 
 export interface GridItem {
   id: string;
@@ -38,6 +41,8 @@ const PlayCentre = (): React.JSX.Element => (
 /** A file the platform holds, signed when it is shown. Says so when it cannot be loaded, and offers another try. */
 export function FileTile({ fileId, label }: { fileId: string; label: string }): React.JSX.Element {
   const file = useFileUrl(fileId);
+  const [prefs] = useDisplayPrefs();
+  const [tapped, setTapped] = useState(false);
   const frame = `${TILE} border border-solid border-border-hairline bg-surface-secondary object-cover`;
   if (file.isPending) return <Skeleton width="full" lines={3} />;
   if (file.isError && file.error instanceof ProblemError && file.error.status === 410) {
@@ -66,14 +71,40 @@ export function FileTile({ fileId, label }: { fileId: string; label: string }): 
       </p>
     );
   }
-  return file.data.contentType.startsWith('video/') ? (
-    <video src={file.data.url} controls className={frame} aria-label={label}>
+  const isVideo = file.data.contentType.startsWith('video/');
+  // SP-M33: "Download photos on Wi-Fi only". Only where the browser can say it is on mobile data; one that cannot is
+  // never guessed at. A video is never fetched before it is played in Low-data mode, so it needs no second gate.
+  const connection = (navigator as Navigator & { connection?: NetworkInformationLike }).connection;
+  if (!isVideo && prefs.wifiPhotosOnly && onMobileData(connection) && !tapped) {
+    return (
+      <button
+        type="button"
+        onClick={() => setTapped(true)}
+        className="flex aspect-square w-full items-center justify-center rounded-md border border-solid border-border-hairline bg-surface-secondary p-[8px] text-center text-[11px] font-semibold text-midnight-text"
+      >
+        Load {label}
+      </button>
+    );
+  }
+  return isVideo ? (
+    <video
+      src={file.data.url}
+      controls
+      preload={prefs.lowData ? 'none' : 'metadata'}
+      className={frame}
+      aria-label={label}
+    >
       {/* Proof video is camera footage with nothing said in it: there is no caption file to point at. */}
       <track kind="captions" label="No captions" />
     </video>
   ) : (
     // eslint-disable-next-line @next/next/no-img-element -- a short-lived signed URL, not an optimisable asset
-    <img src={file.data.url} alt={label} className={frame} />
+    <img
+      src={file.data.url}
+      alt={label}
+      {...(prefs.lowData ? { loading: 'lazy' as const, decoding: 'async' as const } : {})}
+      className={frame}
+    />
   );
 }
 

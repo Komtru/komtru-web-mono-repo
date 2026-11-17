@@ -57,10 +57,10 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe('opening a trade', () => {
-  it('says a trade cannot be found, with no retry, when the platform says 404', async () => {
+  it('says a trade cannot be found (SP-M19), with no retry, when the platform says 404', async () => {
     withTrade(problem('NOT_FOUND', 404));
     renderWithApi(api.call, <TradeScreen id={id(1)} />);
-    expect(await screen.findByText("We can't find that trade. It may have been withdrawn.")).toBeTruthy();
+    expect(await screen.findByRole('heading', { name: 'We can’t find that Trade' })).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'Try again' })).toBeNull();
   });
 

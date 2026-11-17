@@ -1,11 +1,11 @@
 // @vitest-environment jsdom
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { cleanup, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, render, renderHook, screen, waitFor } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createApiClient } from '../../src/client.js';
 import { ApiClientProvider, useApiClient } from '../../src/react/client-context.js';
-import { geoKeys, useCities, useStates } from '../../src/react/geo.js';
+import { geoKeys, useCities, useStates, useSubmitCityRequest } from '../../src/react/geo.js';
 
 const id = (n: number) => `0190b0a0-0000-7000-8000-${String(n).padStart(12, '0')}`;
 
@@ -111,5 +111,35 @@ describe('useApiClient', () => {
     const spy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
     expect(() => render(<Bare />)).toThrow('<ApiClientProvider>');
     spy.mockRestore();
+  });
+});
+
+describe('useSubmitCityRequest', () => {
+  it('posts the state and the city name', async () => {
+    const calls: { url: string; body: string }[] = [];
+    const fetch = vi.fn((input: URL | RequestInfo, init?: RequestInit) => {
+      const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
+      calls.push({ url, body: typeof init?.body === 'string' ? init.body : '' });
+      return Promise.resolve(
+        json({
+          id: id(5),
+          stateId: id(1),
+          cityName: 'Epe',
+          status: 'PENDING',
+          resolvedCityId: null,
+          decisionReason: null,
+          createdAt: '2026-11-17T10:00:00.000Z',
+          decidedAt: null,
+        }),
+      );
+    });
+    const client = createApiClient({ baseUrl: 'https://api.test/v1', fetch });
+    const { Wrapper } = wrap(client);
+    const { result } = renderHook(() => useSubmitCityRequest(), { wrapper: Wrapper });
+    await act(async () => {
+      await result.current.mutateAsync({ stateId: id(1), cityName: 'Epe' });
+    });
+    expect(calls[0]?.url).toBe('https://api.test/v1/geo/city-requests');
+    expect(JSON.parse(calls[0]?.body ?? '{}')).toEqual({ stateId: id(1), cityName: 'Epe' });
   });
 });
