@@ -20,6 +20,7 @@ import { ItemSummary } from '../parts';
 import { ReadFailed, Frame, Refusal, TradeGate } from '../delivery/parts';
 import { whenLabel } from '../format';
 import { EVIDENCE_STATUSES, evidenceHref } from '../workspace-state';
+import { EvidenceGroup } from '../delivery/EvidenceGroup';
 import { type GridItem, MediaGrid } from './MediaGrid';
 
 type Read = NonNullable<ReturnType<typeof useInspection>['data']>;
@@ -70,29 +71,40 @@ export function Trail({ trade, read }: { trade: TradeView; read: Read }): React.
         )}
       </section>
 
-      {shipment !== null && (
-        <section aria-label="Dispatch">
-          <SectionLabel>Added by the seller · dispatch</SectionLabel>
-          {receipt !== undefined && (
-            <MediaGrid
-              aria-label="Dispatch files"
-              items={[{ id: receipt, fileId: receipt, label: 'Waybill receipt' }]}
-            />
-          )}
-          <p className={CAPTION}>
-            Waybill {shipment.waybillNumber} · {whenLabel(shipment.shippedAt)}
-            {receipt !== undefined
-              ? ' · waybill photo included'
-              : seller
-                ? ''
-                : ' · the waybill photo is kept private'}
-          </p>
-        </section>
-      )}
+      <EvidenceGroup
+        trade={trade}
+        event="DISPATCH"
+        heading="Added by the seller · dispatch"
+        always={shipment !== null}
+      >
+        {shipment !== null && (
+          <>
+            {receipt !== undefined && (
+              <MediaGrid
+                aria-label="Dispatch files"
+                items={[{ id: receipt, fileId: receipt, label: 'Waybill receipt' }]}
+              />
+            )}
+            <p className={CAPTION}>
+              Waybill {shipment.waybillNumber} · {whenLabel(shipment.shippedAt)}
+              {receipt !== undefined
+                ? ' · waybill photo included'
+                : seller
+                  ? ''
+                  : ' · the waybill photo is kept private'}
+            </p>
+          </>
+        )}
+      </EvidenceGroup>
 
-      {signals.length > 0 && (
-        <section aria-label="Delivery">
-          <SectionLabel>Added at delivery</SectionLabel>
+      <EvidenceGroup
+        trade={trade}
+        event="DELIVERY"
+        heading="Added at delivery"
+        empty={signals.length > 0 ? undefined : 'Nothing has been added at delivery yet.'}
+        always
+      >
+        {signals.length > 0 && (
           <TermList aria-label="Delivery record">
             {signals.map((signal) => (
               <TermRow key={`${signal.source}-${signal.reportedAt ?? ''}`} label="Delivery">
@@ -101,18 +113,22 @@ export function Trail({ trade, read }: { trade: TradeView; read: Read }): React.
               </TermRow>
             ))}
           </TermList>
-        </section>
-      )}
+        )}
+      </EvidenceGroup>
 
-      {!seller && (
-        <section aria-label="Your inspection photos">
-          <SectionLabel>Your inspection photos</SectionLabel>
-          <p className={CAPTION}>
-            Photos you take at inspection aren’t kept with the Trade yet. Use them to compare, from the
-            inspection screen.
-          </p>
-        </section>
-      )}
+      <EvidenceGroup
+        trade={trade}
+        event="INSPECTION"
+        heading="Added at inspection"
+        empty={
+          seller
+            ? 'Nothing has been added at inspection yet.'
+            : 'Photos you add at inspection are kept here, with the trade.'
+        }
+        always
+      />
+
+      <EvidenceGroup trade={trade} event="ISSUE" heading="Added for an issue" />
       <NoteBanner>
         Chat attachments can be linked to the trade, but case evidence should be submitted through the
         evidence flow.

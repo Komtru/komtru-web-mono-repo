@@ -13,6 +13,7 @@ export * from './client.js';
 export * from './contracts.js';
 export * from './devices.js';
 export * from './entry.js';
+export * from './evidence.js';
 export * from './files.js';
 export * from './fulfilment.js';
 export * from './geo.js';

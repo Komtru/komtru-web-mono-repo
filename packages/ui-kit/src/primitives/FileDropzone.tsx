@@ -129,7 +129,16 @@ export function FileDropzone({
                         FOCUS_RING,
                       )}
                     >
-                      &times;
+                      <svg
+                        aria-hidden
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        strokeWidth={2.4}
+                        strokeLinecap="round"
+                        className="h-[9px] w-[9px] stroke-pure-white"
+                      >
+                        <path d="M6 6l12 12M18 6L6 18" />
+                      </svg>
                     </button>
                   )}
                 </>

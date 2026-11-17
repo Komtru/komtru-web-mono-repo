@@ -20,6 +20,7 @@ import type { SocketGateway } from '../socket/index.js';
 import { tradeStateChangedEvent } from './domain/events.js';
 import { cancellationRoutes } from './http/cancellation.routes.js';
 import { fulfilmentRoutes } from './http/fulfilment.routes.js';
+import { evidenceRoutes } from './http/evidence.routes.js';
 import { inspectionRoutes } from './http/inspection.routes.js';
 import { tradeRoutes } from './http/trade.routes.js';
 import { viewerRoutes } from './http/viewer.routes.js';
@@ -36,6 +37,11 @@ import { lapsePendingCancellation, refundTrade } from './services/cancellation.s
 import { openDeliveryDeadline } from './services/deadline.service.js';
 import { fundTrade } from './services/funding.service.js';
 import { settleTrade } from './services/inspectionDeadline.service.js';
+import {
+  postgresFileProgress,
+  postgresGrantEvidenceAccess,
+  type EvidenceDeps,
+} from './services/evidencePorts.js';
 import { noDisputes, type InspectionDeps } from './services/inspectionPorts.js';
 import { noLogisticsCompanies, noParkCoverage, type FulfilmentDeps } from './services/fulfilmentPorts.js';
 import {
@@ -126,10 +132,21 @@ export function buildInspectionDeps(deps: TradeDeps): InspectionDeps {
   return { db: deps.db, disputes: noDisputes, now: () => new Date() };
 }
 
+/** Evidence's ports: the files module's upload progress and its case-grant. */
+export function buildEvidenceDeps(deps: TradeDeps): EvidenceDeps {
+  return {
+    db: deps.db,
+    proofFiles: (tx, ids) => deps.proofFiles(tx, ids),
+    fileProgress: postgresFileProgress,
+    grantEvidenceAccess: postgresGrantEvidenceAccess,
+  };
+}
+
 export function createTradesModule(options: TradesModuleOptions): KomtruModule {
   const deps = buildTradeDeps(options);
   const fulfilment = buildFulfilmentDeps(deps);
   const inspection = buildInspectionDeps(deps);
+  const evidence = buildEvidenceDeps(deps);
 
   return defineModule({
     name: 'trades',
@@ -138,6 +155,7 @@ export function createTradesModule(options: TradesModuleOptions): KomtruModule {
       ...fulfilmentRoutes(() => fulfilment),
       ...cancellationRoutes(() => fulfilment),
       ...inspectionRoutes(() => inspection),
+      ...evidenceRoutes(() => evidence),
       ...viewerRoutes(() => deps),
     ],
     schedules: [

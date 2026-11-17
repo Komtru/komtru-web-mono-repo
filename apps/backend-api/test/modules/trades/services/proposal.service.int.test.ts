@@ -403,6 +403,18 @@ describe.runIf(infraEnabled)('proposal flow (T-061)', () => {
       const granted = await failure(createProposal(deps(), { ...base, proofFileIds: [inUse] }));
       expect(granted.status).toBe(422);
 
+      // A file added as evidence on a trade is shared with that trade's other party: never the seller's proof.
+      const asEvidence = upload(seller.id);
+      await insertRow(t.owner(), 'trade.trade_evidence_media', {
+        trade_id: first.id,
+        file_id: asEvidence,
+        event: 'DELIVERY',
+        attached_by_user_id: seller.id,
+        attached_by_role: 'SELLER',
+      });
+      const evidenceFile = await failure(createProposal(deps(), { ...base, proofFileIds: [asEvidence] }));
+      expect(evidenceFile.status).toBe(422);
+
       // The same files on the same trade are not "elsewhere": re-attaching is a no-op.
       const again = await sendProposal(deps(), {
         userId: seller.id,

@@ -14,7 +14,7 @@ import {
   type ShipOption,
 } from '../domain/fulfilment.js';
 import { selfArrangedShipments, tradeDeadlines } from '../infrastructure/postgres/schema/fulfilment.js';
-import { tradeProofMedia } from '../infrastructure/postgres/schema/proof.js';
+import { tradeEvidenceMedia, tradeProofMedia } from '../infrastructure/postgres/schema/proof.js';
 import { applyTransition } from '../infrastructure/postgres/transitions.js';
 import { hasApprovedCancellation } from './cancellation.service.js';
 import type { FulfilmentDeps } from './fulfilmentPorts.js';
@@ -196,12 +196,18 @@ async function checkReceipt(
     .from(tradeProofMedia)
     .where(eq(tradeProofMedia.fileId, fileId))
     .limit(1);
+  // Evidence on any trade is shared with that trade's other party; as a receipt it would be shown to a stranger.
+  const [asEvidence] = await tx
+    .select({ id: tradeEvidenceMedia.id })
+    .from(tradeEvidenceMedia)
+    .where(eq(tradeEvidenceMedia.fileId, fileId))
+    .limit(1);
   const [asReceipt] = await tx
     .select({ id: selfArrangedShipments.id })
     .from(selfArrangedShipments)
     .where(and(eq(selfArrangedShipments.receiptFileId, fileId), ne(selfArrangedShipments.tradeId, trade.id)))
     .limit(1);
-  if (asProof || asReceipt) throw receiptRejected();
+  if (asProof || asEvidence || asReceipt) throw receiptRejected();
 }
 
 /**

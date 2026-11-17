@@ -11,16 +11,16 @@ MVP and is not built.
 
 ## How it sits on the platform (what is reused, nothing reinvented)
 
-| Need                                   | Reused                                                                                          | New                                                           |
-| -------------------------------------- | ----------------------------------------------------------------------------------------------- | ------------------------------------------------------------- |
-| Case, queue, SLA, decision record      | `cases` barrel: `registerCase`, `syncCaseFacts`, `takeCase`, `decideCase`, `closeCaseForSubject`, `adviseOnCase` | MERCHANT_APPLICATION advisory rules for the evidence facts    |
-| Admin action log                       | `decideCase` already writes identity's audit log with reason and citation                         | merchant-specific audit rows for certify/revoke               |
-| MERCHANT capability                    | identity `capability.service.ts` (owns `canActAsBuyer`)                                          | `activateCapability` / `suspendCapability` / `revokeCapability` |
-| CAC lookup                             | trust T-051 job and `submitBusinessCheck`                                                       | one barrel function in trust: `requestBusinessEvidence` + `readBusinessEvidence` |
-| Bank name-match                        | trust verdict, already attached to the applicant's `payout_accounts` row by T-073                | read-only attach; see "Seams"                                 |
-| KYC documents                          | files `KYC_DOCUMENT`, `PRIVATE_OWNER`, `retrieveFile`, `file_access_log`                          | reviewer role grant is honoured on a `KYC_DOCUMENT` (files)   |
-| Address, categories                    | geo `getCitiesByIds`, config `listCurrentStandards`                                              | -                                                             |
-| Applicant notified                     | notify bindings and catalogue                                                                   | one binding + template for `merchant.application.decided`     |
+| Need                              | Reused                                                                                                           | New                                                                              |
+| --------------------------------- | ---------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
+| Case, queue, SLA, decision record | `cases` barrel: `registerCase`, `syncCaseFacts`, `takeCase`, `decideCase`, `closeCaseForSubject`, `adviseOnCase` | MERCHANT_APPLICATION advisory rules for the evidence facts                       |
+| Admin action log                  | `decideCase` already writes identity's audit log with reason and citation                                        | merchant-specific audit rows for certify/revoke                                  |
+| MERCHANT capability               | identity `capability.service.ts` (owns `canActAsBuyer`)                                                          | `activateCapability` / `suspendCapability` / `revokeCapability`                  |
+| CAC lookup                        | trust T-051 job and `submitBusinessCheck`                                                                        | one barrel function in trust: `requestBusinessEvidence` + `readBusinessEvidence` |
+| Bank name-match                   | trust verdict, already attached to the applicant's `payout_accounts` row by T-073                                | read-only attach; see "Seams"                                                    |
+| KYC documents                     | files `KYC_DOCUMENT`, `PRIVATE_OWNER`, `retrieveFile`, `file_access_log`                                         | reviewer role grant is honoured on a `KYC_DOCUMENT` (files)                      |
+| Address, categories               | geo `getCitiesByIds`, config `listCurrentStandards`                                                              | -                                                                                |
+| Applicant notified                | notify bindings and catalogue                                                                                    | one binding + template for `merchant.application.decided`                        |
 
 ## Backend design (`src/modules/merchant/`)
 
@@ -55,7 +55,7 @@ Approval is one transaction: decision (reason, citation, audit), status to `APPR
    a role grant is accepted and honoured for a STAFF session only. Every other `PRIVATE_OWNER` file is unchanged.
 2. **Bank name-match is attached, not triggered.** Triggering it needs the plaintext account number, which M8 owns, and
    T-051 refuses it until the CAC check has passed. The applicant's own verification flow runs it (T-121/BVR1); the
-   evidence job reads the verdict on the applicant's payout account. The CAC lookup *is* triggered at submit.
+   evidence job reads the verdict on the applicant's payout account. The CAC lookup _is_ triggered at submit.
 3. **Event names.** The platform needs three segments, so the AC's `merchant.certified` is `merchant.profile.certified`
    and `merchant.certification_revoked` is `merchant.profile.certification_revoked` (the trust precedent).
 4. **Resubmission** registers a new case under subject `<applicationId>:<n>` because a decided case is never reopened.
