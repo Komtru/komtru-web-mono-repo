@@ -104,7 +104,7 @@ export function CloseAccount({ erase = false }: { erase?: boolean }): React.JSX.
 
   const hasOpenTrade = account.openTrades === true || blocked;
 
-  const send = (proof: { password: string } | { stepUpToken: string }) => {
+  const send = (proof: { password?: string; stepUpToken?: string }) => {
     setProblem(undefined);
     const body = { reason, ...proof };
     const options = {
@@ -117,6 +117,7 @@ export function CloseAccount({ erase = false }: { erase?: boolean }): React.JSX.
         setDone(erase ? { scheduledFor: (answer as { scheduledFor?: string }).scheduledFor } : {});
       },
       onError: (error: unknown) => {
+        const typed = password;
         setPassword('');
         if (isActiveTradesRefusal(error)) {
           setConfirming(false);
@@ -124,9 +125,14 @@ export function CloseAccount({ erase = false }: { erase?: boolean }): React.JSX.
           return;
         }
         if (isProblem(error, 'STEP_UP_REQUIRED')) {
-          // An account with no password proves itself another way.
+          // An account with no password (it signs in by phone code) proves itself another way.
           setConfirming(false);
           setProving(true);
+          return;
+        }
+        if (isProblem(error, 'VALIDATION_FAILED') && typed.trim() === '') {
+          // The platform wants a password this account has: the field is not optional for it.
+          setProblem('Enter your password to close your account.');
           return;
         }
         setProblem(accountProblem(error, erase ? 'erase' : 'close'));
@@ -198,8 +204,8 @@ export function CloseAccount({ erase = false }: { erase?: boolean }): React.JSX.
               <Button
                 type="button"
                 variant="danger"
-                disabled={!sure || password === '' || pending}
-                onClick={() => send({ password })}
+                disabled={!sure || pending}
+                onClick={() => send(password.trim() === '' ? {} : { password })}
               >
                 {pending ? 'Closing…' : erase ? 'Close and delete my data' : 'Close my account'}
               </Button>
@@ -217,6 +223,7 @@ export function CloseAccount({ erase = false }: { erase?: boolean }): React.JSX.
             label="Your password"
             type="password"
             autoComplete="current-password"
+            helper="If you sign in with a code and have no password, leave this empty and we’ll ask for a code."
             value={password}
             onChange={(event) => setPassword(event.target.value)}
           />
@@ -235,6 +242,8 @@ export function CloseAccount({ erase = false }: { erase?: boolean }): React.JSX.
       <StepUpSheet
         open={proving}
         factors={factors.data ?? []}
+        // This path is reached because the account has no password to give.
+        allowPassword={false}
         onClose={() => setProving(false)}
         onProved={(stepUpToken) => send({ stepUpToken })}
       />

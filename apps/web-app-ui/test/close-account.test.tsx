@@ -88,6 +88,7 @@ describe('Confirm closure (CA2)', () => {
     const confirm = within(sheet).getByRole<HTMLButtonElement>('button', { name: 'Close my account' });
     expect(confirm.disabled).toBe(true);
     fireEvent.change(within(sheet).getByLabelText('Your password'), { target: { value: 'hunter2hunter2' } });
+    // The tick is what holds it, and only the tick: a password is the platform's to demand, not this button's.
     expect(confirm.disabled).toBe(true);
     fireEvent.click(
       within(sheet).getByRole('checkbox', { name: 'I understand this permanently closes my account.' }),
@@ -147,7 +148,7 @@ describe('Confirm closure (CA2)', () => {
     });
     renderWithApi(api.call, <CloseAccount />);
     const sheet = await open();
-    fireEvent.change(within(sheet).getByLabelText('Your password'), { target: { value: 'x' } });
+    // No password typed: this account has none. Ticking the box is all it takes to ask.
     fireEvent.click(within(sheet).getByRole('checkbox'));
     fireEvent.click(within(sheet).getByRole('button', { name: 'Close my account' }));
     const proof = await screen.findByRole('dialog', { name: 'Confirm it’s you' });
@@ -155,10 +156,39 @@ describe('Confirm closure (CA2)', () => {
     '123456'.split('').forEach((d, i) => fireEvent.change(cells[i] as HTMLElement, { target: { value: d } }));
     fireEvent.click(within(proof).getByRole('button', { name: 'Confirm' }));
     expect(await screen.findByText('Your account is closed')).toBeDefined();
+    expect(callsTo(api.call, 'POST', '/me/close')[0]?.body).toEqual({ reason: 'OTHER' });
     expect(callsTo(api.call, 'POST', '/me/close')[1]?.body).toEqual({
       reason: 'OTHER',
       stepUpToken: 'chal.secret',
     });
+  });
+
+  it('asks for the password when the platform says this account has one and none was typed', async () => {
+    answerWith(api.call, {
+      'GET /me': me(),
+      'GET /me/mfa/factors': paged([]),
+      'POST /me/close': problem('VALIDATION_FAILED', 422),
+    });
+    renderWithApi(api.call, <CloseAccount />);
+    const sheet = await open();
+    fireEvent.click(within(sheet).getByRole('checkbox'));
+    fireEvent.click(within(sheet).getByRole('button', { name: 'Close my account' }));
+    expect(await within(sheet).findByText('Enter your password to close your account.')).toBeDefined();
+  });
+
+  it('does not offer a password as the proof for an account that has none and no second method', async () => {
+    answerWith(api.call, {
+      'GET /me': me(),
+      'GET /me/mfa/factors': paged([]),
+      'POST /me/close': problem('STEP_UP_REQUIRED', 403),
+    });
+    renderWithApi(api.call, <CloseAccount />);
+    const sheet = await open();
+    fireEvent.click(within(sheet).getByRole('checkbox'));
+    fireEvent.click(within(sheet).getByRole('button', { name: 'Close my account' }));
+    const proof = await screen.findByRole('dialog', { name: 'Confirm it’s you' });
+    expect(within(proof).getByText('This needs a code')).toBeDefined();
+    expect(within(proof).queryByLabelText('Your password')).toBeNull();
   });
 });
 
@@ -180,5 +210,34 @@ describe('Delete my data (the erasure request, which closes the account)', () =>
     expect(screen.getByText(/erased by 17 Dec/)).toBeDefined();
     await waitFor(() => expect(callsTo(api.call, 'POST', '/me/erasure-request')).toHaveLength(1));
     expect(callsTo(api.call, 'POST', '/me/close')).toHaveLength(0);
+  });
+
+  it('works for an account with no password: asks for a code, then sends the erasure with the proof', async () => {
+    let attempt = 0;
+    answerWith(api.call, {
+      'GET /me': me(),
+      'GET /me/mfa/factors': paged([factor(1)]),
+      'POST /me/erasure-request': () => {
+        attempt += 1;
+        return attempt === 1
+          ? problem('STEP_UP_REQUIRED', 403)
+          : { status: 'CLOSED', scheduledFor: '2026-12-17T09:00:00.000Z' };
+      },
+      'POST /me/step-up': { stepUpToken: 'chal.secret', expiresAt: 1 },
+    });
+    renderWithApi(api.call, <CloseAccount erase />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Close and delete my data' }));
+    const sheet = await screen.findByRole('dialog', { name: 'This can’t be undone' });
+    fireEvent.click(within(sheet).getByRole('checkbox'));
+    fireEvent.click(within(sheet).getByRole('button', { name: 'Close and delete my data' }));
+    const proof = await screen.findByRole('dialog', { name: 'Confirm it’s you' });
+    const cells = within(proof).getAllByRole('textbox');
+    '123456'.split('').forEach((d, i) => fireEvent.change(cells[i] as HTMLElement, { target: { value: d } }));
+    fireEvent.click(within(proof).getByRole('button', { name: 'Confirm' }));
+    expect(await screen.findByText('Your request is in')).toBeDefined();
+    expect(callsTo(api.call, 'POST', '/me/erasure-request')[1]?.body).toEqual({
+      reason: 'OTHER',
+      stepUpToken: 'chal.secret',
+    });
   });
 });

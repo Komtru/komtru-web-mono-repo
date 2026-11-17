@@ -3,7 +3,6 @@
 // `@komtru/api-client/react`: everything that needs React, TanStack Query or socket.io-client.
 // Kept out of the package's main entry so a React Server Component can import the client itself.
 export * from './account.js';
-export * from './account.js';
 export * from './addresses.js';
 export * from './client-context.js';
 export * from './devices.js';

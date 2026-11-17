@@ -209,7 +209,7 @@ function Methods({
         )}
       </SettingsGroup>
       <ConfirmSheet
-        open={removing !== undefined && proving === undefined}
+        open={removing !== undefined && proving === undefined && !remove.isPending}
         title={`Remove ${removing === undefined ? 'this' : (FACTOR_NAME[removing.type] ?? removing.label)}?`}
         confirm="Continue"
         pending={remove.isPending}

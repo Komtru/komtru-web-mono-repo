@@ -18,14 +18,16 @@ export type StepUpProof =
   | { kind: 'password' }
   | { kind: 'unsupported' };
 
-export function proofFor(factors: readonly AccountFactor[]): StepUpProof {
+export function proofFor(factors: readonly AccountFactor[], allowPassword = true): StepUpProof {
   const usable = factors.filter((f) => f.type === 'TOTP' || f.type === 'SMS_OTP');
   const totp = usable.find((f) => f.type === 'TOTP');
   if (totp !== undefined) return { kind: 'totp', factor: totp };
   const sms = usable.find((f) => f.type === 'SMS_OTP');
   if (sms !== undefined) return { kind: 'sms', factor: sms };
-  // Only a recovery-code sheet or passkeys on the account: no password step-up is allowed once a factor exists.
-  return factors.some((f) => f.type === 'PASSKEY') ? { kind: 'unsupported' } : { kind: 'password' };
+  // The platform refuses a password as proof once the account holds any factor at all (a passkey, an email code, a
+  // recovery-code sheet), so such an account falls to `unsupported` here rather than to a password box that cannot
+  // work. An account with no factor proves itself with its password, unless the caller says it has none (`allowPassword`).
+  return factors.length > 0 || !allowPassword ? { kind: 'unsupported' } : { kind: 'password' };
 }
 
 /**
@@ -36,16 +38,19 @@ export function StepUpSheet({
   open,
   factors,
   title = 'Confirm it’s you',
+  allowPassword = true,
   onClose,
   onProved,
 }: {
   open: boolean;
   factors: readonly AccountFactor[];
   title?: string;
+  /** False when the account has no password to give (it signs in by phone code). */
+  allowPassword?: boolean;
   onClose: () => void;
   onProved: (stepUpToken: string) => void;
 }): React.JSX.Element {
-  const proof = proofFor(factors);
+  const proof = proofFor(factors, allowPassword);
   const stepUp = useStepUp();
   const challenge = useStepUpChallenge();
   const [code, setCode] = useState('');
@@ -163,7 +168,8 @@ export function StepUpSheet({
           )}
           {proof.kind === 'unsupported' && (
             <RiskBanner title="This needs a code">
-              Your account uses a passkey, which this screen can’t use yet. Contact support to carry on.
+              This screen can’t confirm it’s you with the way your account is set up yet. Contact support to
+              carry on.
             </RiskBanner>
           )}
           {problem !== undefined && <RiskBanner>{problem}</RiskBanner>}

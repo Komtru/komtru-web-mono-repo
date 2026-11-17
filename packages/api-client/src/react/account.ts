@@ -2,8 +2,10 @@
 
 // Account security and lifecycle (F-045, T-205), over `../account.ts`. Reads sit under `accountKeys.all`, so a change that
 // moves one (a factor added, a device retired) refreshes what it touches with one invalidation. The seed, the backup
-// codes and the step-up token pass through a mutation's result and are never put in a query cache a later screen could
-// read: a screen holds them in its own state and drops them when it is done.
+// codes and the step-up token come back as a mutation's result, and TanStack keeps a mutation's result in its
+// MutationCache until it is collected. The hooks that carry them set `gcTime: 0`, so the result is dropped the moment the
+// screen that made the call unmounts and nothing a later screen could read is left behind; a screen also holds what it
+// shows in its own state and clears it when the person is done.
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   activateSms,
@@ -95,23 +97,29 @@ export function useVerificationStatus() {
 }
 
 /** A mutation that refreshes everything account-shaped once it settles, success or not. */
-function useAccountMutation<TVariables, TData>(mutationFn: (variables: TVariables) => Promise<TData>) {
+function useAccountMutation<TVariables, TData>(
+  mutationFn: (variables: TVariables) => Promise<TData>,
+  options: { secret?: boolean } = {},
+) {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn,
+    // A secret result (the seed, backup codes) must not outlive the screen that showed it.
+    ...(options.secret === true ? { gcTime: 0 } : {}),
     onSettled: () => queryClient.invalidateQueries({ queryKey: accountKeys.all }),
   });
 }
 
 export function useEnrolTotp() {
   const client = useApiClient();
-  return useMutation({ mutationFn: () => client.call(enrolOwnTotp, {}) });
+  return useMutation({ mutationFn: () => client.call(enrolOwnTotp, {}), gcTime: 0 });
 }
 
 export function useActivateTotp() {
   const client = useApiClient();
-  return useAccountMutation((body: { factorId: string; code: string }) =>
-    client.call(activateOwnTotp, { body }),
+  return useAccountMutation(
+    (body: { factorId: string; code: string }) => client.call(activateOwnTotp, { body }),
+    { secret: true },
   );
 }
 
@@ -129,8 +137,9 @@ export function useActivateSms() {
 
 export function useRegenerateRecoveryCodes() {
   const client = useApiClient();
-  return useAccountMutation((stepUpToken: string) =>
-    client.call(regenerateRecoveryCodes, { body: { stepUpToken } }),
+  return useAccountMutation(
+    (stepUpToken: string) => client.call(regenerateRecoveryCodes, { body: { stepUpToken } }),
+    { secret: true },
   );
 }
 
@@ -151,7 +160,7 @@ export function useStepUpChallenge() {
 /** Proves it is you for a sensitive action. The token comes back to the caller only. */
 export function useStepUp() {
   const client = useApiClient();
-  return useMutation({ mutationFn: (body: StepUpBody) => client.call(stepUp, { body }) });
+  return useMutation({ mutationFn: (body: StepUpBody) => client.call(stepUp, { body }), gcTime: 0 });
 }
 
 export function useRetireDevice() {
