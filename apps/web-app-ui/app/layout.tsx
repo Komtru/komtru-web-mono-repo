@@ -1,6 +1,7 @@
 import { fontVariables } from '@komtru/ui-kit/fonts';
 import { KOMTRU_TOKENS } from '@komtru/ui-kit';
 import type { Metadata, Viewport } from 'next';
+import { DisplayPrefsApplier } from '../src/account/display/DisplayPrefsApplier';
 import { Providers } from '../src/shell/Providers';
 import './globals.css';
 
@@ -33,6 +34,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }):
   return (
     <html lang="en" className={fontVariables}>
       <body>
+        <DisplayPrefsApplier />
         <Providers>{children}</Providers>
       </body>
     </html>

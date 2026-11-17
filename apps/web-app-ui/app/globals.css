@@ -7,3 +7,37 @@
 
 @source './**/*.{ts,tsx}';
 @source '../src/**/*.{ts,tsx}';
+
+/*
+ * SP-M33: this device's display preferences. `DisplayPrefsApplier` puts each one on <html> as an attribute while it is off
+ * its default, so a rule here only ever fires for someone who chose it. They are the person's choice and so beat the
+ * component styles they sit over.
+ */
+html[data-text-size='small'] body {
+  zoom: 0.92;
+}
+
+html[data-text-size='large'] body {
+  zoom: 1.15;
+}
+
+/* Everything that states no weight of its own is drawn heavier; headings and labels already are. */
+html[data-bold-text='on'] body {
+  font-weight: 600;
+}
+
+/* Stronger colours and borders: the secondary text and the hairlines, which are the two things that fade. */
+html[data-contrast='high'] {
+  --slate: #1f2635;
+  --trust-gray: #3b4557;
+  --border-hairline: #6b7488;
+}
+
+html[data-motion='reduced'] *,
+html[data-motion='reduced'] *::before,
+html[data-motion='reduced'] *::after {
+  animation-duration: 0.001ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.001ms !important;
+  scroll-behavior: auto !important;
+}
