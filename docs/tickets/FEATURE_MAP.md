@@ -413,13 +413,13 @@ list a trade.
 
 - **Journey:** Deliver & inspect
 - **Actor:** buyer, seller
-- **Absorbs:** T-195 (todo)
+- **Absorbs:** T-195 (done)
 - **Backend scope:** Served by F-026 and F-027.
 - **Frontend scope:** Trade Workspace supporting sheets for delivery and evidence, CWT-S08–CWT-S13. _6 v2 screens._
-- **Status:** Backend done, UI outstanding
+- **Status:** Done
 - **Depends on:** F-022
 - **MVP:** yes
-- **Note:** UI merged except CWT-S13 (2026-11-13) — T-195 merged, five of six screens built. S13 evidence submit is a seam: no party-facing call attaches a file to a trade or case, and S12's Delivery and Inspection groups await a media-list read. Blocked on an owner decision for that backend ticket, so not Done. **The status line carried this prose until 2026-11-15**, which is not one of the three legal values and so broke `scripts/test/progress-tickets.test.ts`; the detail belongs here.
+- **Note:** Closed 2026-11-17. Five screens merged 2026-11-13; CWT-S13 was held as a seam because no party-facing call attached a file to a trade or case. The owner answered on 2026-11-17: upload through the files endpoint, then attach the file to the evidence. `POST /trades/:id/evidence` and `GET /trades/:id/evidence` now do that, over the new append-only `trade_evidence_media` table (migration 0051), with the counterparty grant inside the attach transaction. Video is refused because `ALLOWED_CONTENT_TYPES` has no video type; the screen offers photos and PDFs. Dispatch is seller-only and inspection buyer-only, which deviates from the reference's "Both" label. Staff removal of evidence is `docs/runbooks/trade-evidence-removal.md`. **The status line carried explanatory prose until 2026-11-15**, which is not one of the three legal values and so broke `scripts/test/progress-tickets.test.ts`; the detail belongs here.
 
 #### F-029 — Capture and compare proof media
 
@@ -1202,7 +1202,7 @@ Every ticket in `docs/tickets/`, in id order, with the feature that absorbs it.
 | T-192 | Create a trade: buyer starts, seller completes                            | Not started   | F-018   | Not started                  |
 | T-193 | Create a trade: seller starts, buyer completes                            | Not started   | F-019   | Not started                  |
 | T-194 | Trade workspace supporting screens: funding, terms, agreement and payment | Done          | F-023   | Done                         |
-| T-195 | Trade workspace supporting screens: delivery and evidence                 | Done          | F-028   | UI merged except CWT-S13     |
+| T-195 | Trade workspace supporting screens: delivery and evidence                 | Done          | F-028   | Done                         |
 | T-196 | Trade workspace supporting screens: resolution and issue reporting        | Not started   | F-032   | Not started                  |
 | T-197 | Proof media: capture, check and compare                                   | Done          | F-029   | Done                         |
 | T-198 | Lifecycle exceptions and trade extras                                     | Not started   | F-031   | Not started                  |

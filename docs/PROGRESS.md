@@ -7,11 +7,11 @@ behind it is [`BUILD_PLAN.md`](BUILD_PLAN.md). The unit of work is the feature, 
 thing in an app.
 
 ```
-MVP   ███████████████████···············  27/49   (55%)
-Total ███████████·······················  27/80   (34%)
+MVP   ███████████████████···············  28/49   (57%)
+Total ████████████······················  28/80   (35%)
 ```
 
-22 MVP features left, 31 deferred past it.
+21 MVP features left, 31 deferred past it.
 
 ## Backend done, UI outstanding
 
@@ -19,7 +19,6 @@ The engine exists and only the UI is missing, so these are the highest-value wor
 
 | Feature | Title                                                  | Journey                  | MVP |
 | ------- | ------------------------------------------------------ | ------------------------ | --- |
-| F-028   | Delivery and evidence in the workspace                 | Deliver & inspect        | yes |
 | F-040   | Apply for merchant certification and have it reviewed  | Sell on Komtru           | yes |
 | F-044   | Account basics, addresses, documents and system states | Account, trust & support | yes |
 | F-045   | Verify yourself, and close or recover an account       | Account, trust & support | yes |
@@ -35,7 +34,7 @@ The engine exists and only the UI is missing, so these are the highest-value wor
 | The trade workspace                     | 2    | 2     | 2        | 2         |
 | Fund & protect                          | 1    | 2     | 1        | 1         |
 | Fulfil & dispatch                       | 1    | 1     | 1        | 1         |
-| Deliver & inspect                       | 2    | 3     | 2        | 3         |
+| Deliver & inspect                       | 3    | 3     | 3        | 3         |
 | Issues & resolution                     | 1    | 7     | 1        | 6         |
 | Complete & grow                         | 1    | 3     | 1        | 1         |
 | Sell on Komtru                          | 0    | 4     | 0        | 1         |
@@ -54,7 +53,9 @@ The engine exists and only the UI is missing, so these are the highest-value wor
 | F-031   | Lifecycle exceptions: expiry, withdrawal and inspection updates | Issues & resolution                     | yes |
 | F-032   | Report an issue and open a dispute                              | Issues & resolution                     | yes |
 | F-068   | Desktop: propose, agree and fund                                | Desktop & tablet journeys               | yes |
+| F-069   | Desktop: fulfil, deliver, inspect and complete                  | Desktop & tablet journeys               | yes |
 | F-072   | Tablet: arrive, home, discover, propose and fund                | Desktop & tablet journeys               | yes |
+| F-073   | Tablet: fulfil, deliver, inspect and payouts                    | Desktop & tablet journeys               | yes |
 | F-075   | Hosting and real deploy jobs                                    | Launch & assurance (not a user journey) | yes |
 | F-078   | Definition-of-done audit and first push                         | Launch & assurance (not a user journey) | yes |
 | F-014   | Sign in with Google, Apple or Facebook                          | Arrive & verify                         |     |
