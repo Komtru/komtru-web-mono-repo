@@ -46,7 +46,7 @@ describe('Change phone number (SP-M05)', () => {
   it('says plainly that the codes cannot be sent yet, and does not offer a live "Send a code"', () => {
     renderWithApi(api.call, <ChangePhone />);
     expect(screen.getByText('Changing your number here isn’t available yet')).toBeDefined();
-    const send = screen.getByRole('button', { name: 'Send a code' }) as HTMLButtonElement;
+    const send = screen.getByRole<HTMLButtonElement>('button', { name: 'Send a code' });
     expect(send.disabled).toBe(true);
     expect(callsTo(api.call, 'POST', '/auth/recovery-requests')).toHaveLength(0);
   });
@@ -63,7 +63,7 @@ describe('Change phone number (SP-M05)', () => {
   it('opens a lost-phone recovery request with the current number when the person cannot get the code', async () => {
     answerWith(api.call, { 'POST /auth/recovery-requests': { receiptId: id(950), status: 'RECEIVED' } });
     renderWithApi(api.call, <ChangePhone />);
-    const cant = screen.getByRole('button', { name: 'I can’t get the code' }) as HTMLButtonElement;
+    const cant = screen.getByRole<HTMLButtonElement>('button', { name: 'I can’t get the code' });
     expect(cant.disabled).toBe(true);
     type('Current number', '0803 221 4471');
     expect(cant.disabled).toBe(false);
@@ -74,9 +74,9 @@ describe('Change phone number (SP-M05)', () => {
       method: 'LOST_PHONE',
     });
     await waitFor(() =>
-      expect(
-        (screen.getByRole('button', { name: 'I can’t get the code' }) as HTMLButtonElement).disabled,
-      ).toBe(true),
+      expect(screen.getByRole<HTMLButtonElement>('button', { name: 'I can’t get the code' }).disabled).toBe(
+        true,
+      ),
     );
   });
 
@@ -86,7 +86,7 @@ describe('Change phone number (SP-M05)', () => {
     type('Current number', '0803 221 4471');
     fireEvent.click(screen.getByRole('button', { name: 'I can’t get the code' }));
     expect(await screen.findByText('Too many tries. Wait a minute and try again.')).toBeDefined();
-    expect((screen.getByRole('button', { name: 'I can’t get the code' }) as HTMLButtonElement).disabled).toBe(
+    expect(screen.getByRole<HTMLButtonElement>('button', { name: 'I can’t get the code' }).disabled).toBe(
       false,
     );
   });

@@ -41,9 +41,7 @@ describe('Two-factor setup (TF1, TF2)', () => {
       SEED.otpauthUri,
     );
     expect(callsTo(api.call, 'POST', '/me/mfa/totp/enroll')).toHaveLength(1);
-    expect((screen.getByRole('button', { name: 'Verify & enable' }) as HTMLButtonElement).disabled).toBe(
-      true,
-    );
+    expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Verify & enable' }).disabled).toBe(true);
     await expectNoAxeViolations(container, SHELL_RULES);
   });
 

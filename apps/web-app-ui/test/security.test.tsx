@@ -31,6 +31,7 @@ describe('Security (SP-M04)', () => {
     // This device cannot be removed from itself; the other one can.
     expect(screen.getAllByRole('button', { name: /^Remove/ })).toHaveLength(1);
     expect(screen.getByText(/Komtru will never ask for your PIN or a code/)).toBeDefined();
+    expect(screen.getByRole('link', { name: /Phone number/ }).getAttribute('href')).toBe('/account/phone');
     await expectNoAxeViolations(container, SHELL_RULES);
   });
 
@@ -150,7 +151,7 @@ describe('Security (SP-M04)', () => {
     expect(await screen.findByText('No devices yet')).toBeDefined();
     expect(screen.getByText('You’re only signed in here.')).toBeDefined();
     expect(
-      (screen.getByRole('button', { name: 'Sign out of other devices' }) as HTMLButtonElement).disabled,
+      screen.getByRole<HTMLButtonElement>('button', { name: 'Sign out of other devices' }).disabled,
     ).toBe(true);
   });
 

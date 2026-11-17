@@ -85,7 +85,7 @@ describe('Confirm closure (CA2)', () => {
         'You’ll lose access immediately — your Trust History stays on record but is no longer visible to you.',
       ),
     ).toBeDefined();
-    const confirm = within(sheet).getByRole('button', { name: 'Close my account' }) as HTMLButtonElement;
+    const confirm = within(sheet).getByRole<HTMLButtonElement>('button', { name: 'Close my account' });
     expect(confirm.disabled).toBe(true);
     fireEvent.change(within(sheet).getByLabelText('Your password'), { target: { value: 'hunter2hunter2' } });
     expect(confirm.disabled).toBe(true);

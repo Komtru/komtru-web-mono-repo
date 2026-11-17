@@ -35,7 +35,7 @@ export function usePermission(name: Name): PermissionState {
 
     if (typeof navigator !== 'undefined' && navigator.permissions !== undefined) {
       navigator.permissions
-        .query({ name: name as PermissionName })
+        .query({ name })
         .then((result) => {
           status = result;
           update();
@@ -45,7 +45,11 @@ export function usePermission(name: Name): PermissionState {
           // Not a permission this browser can be asked about.
         });
     } else if (name === 'notifications' && typeof Notification !== 'undefined') {
-      setState(Notification.permission === 'default' ? 'prompt' : Notification.permission);
+      // A browser with no Permissions API still says what Notification says. Read in a microtask so the answer
+      // arrives like the other one does, not as a synchronous write inside the effect.
+      void Promise.resolve().then(() => {
+        if (!cancelled) setState(Notification.permission === 'default' ? 'prompt' : Notification.permission);
+      });
     }
 
     return () => {

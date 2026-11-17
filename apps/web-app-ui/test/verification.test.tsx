@@ -38,7 +38,7 @@ describe('Verification failed (VF1)', () => {
     expect(screen.getByText(/A blurry photo or glare across the ID is the usual cause/)).toBeDefined();
     expect(screen.getByText('Upload a clearer photo')).toBeDefined();
     expect(screen.getByText('Flat surface, good light, all four corners visible')).toBeDefined();
-    expect((screen.getByRole('button', { name: 'Resubmit' }) as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Resubmit' }).disabled).toBe(true);
     await expectNoAxeViolations(container, SHELL_RULES);
   });
 
