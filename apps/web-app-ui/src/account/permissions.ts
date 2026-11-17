@@ -22,7 +22,20 @@ export const PERMISSION_WORDS: Record<PermissionState, string> = {
  * does not let any page do so.
  */
 export function usePermission(name: Name): PermissionState {
-  const [state, setState] = useState<PermissionState>('unknown');
+  return usePermissionStatus(name).state;
+}
+
+/**
+ * `usePermission` and whether the browser has answered yet. `unknown` before the answer and `unknown` as the answer
+ * look the same, and a screen that acts on `unknown` (the camera explainer) must not act on the first one: someone whose
+ * camera is already allowed would see it for a moment.
+ */
+export function usePermissionStatus(name: Name): { state: PermissionState; settled: boolean } {
+  const [answer, setAnswer] = useState<{ state: PermissionState; settled: boolean }>({
+    state: 'unknown',
+    settled: false,
+  });
+  const setState = (state: PermissionState) => setAnswer({ state, settled: true });
 
   useEffect(() => {
     let status: PermissionStatus | undefined;
@@ -42,13 +55,19 @@ export function usePermission(name: Name): PermissionState {
           result.addEventListener('change', update);
         })
         .catch(() => {
-          // Not a permission this browser can be asked about.
+          // Not a permission this browser can be asked about: that is an answer.
+          if (!cancelled) setState('unknown');
         });
     } else if (name === 'notifications' && typeof Notification !== 'undefined') {
       // A browser with no Permissions API still says what Notification says. Read in a microtask so the answer
       // arrives like the other one does, not as a synchronous write inside the effect.
       void Promise.resolve().then(() => {
         if (!cancelled) setState(Notification.permission === 'default' ? 'prompt' : Notification.permission);
+      });
+    } else {
+      // No Permissions API at all: nothing is coming, so the answer is "can't say". Said in a microtask, like the others.
+      void Promise.resolve().then(() => {
+        if (!cancelled) setState('unknown');
       });
     }
 
@@ -58,5 +77,5 @@ export function usePermission(name: Name): PermissionState {
     };
   }, [name]);
 
-  return state;
+  return answer;
 }

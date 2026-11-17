@@ -52,6 +52,31 @@ afterEach(() => {
 });
 
 describe('Camera permission (SP-M18) in the proof camera', () => {
+  it('shows neither the explainer nor the camera until the browser has answered, so an allowed camera never flashes it', async () => {
+    let answer: (value: unknown) => void = () => undefined;
+    const stop = vi.fn();
+    const getUserMedia = vi.fn(() => Promise.resolve({ getTracks: () => [{ stop }] }));
+    vi.stubGlobal('navigator', {
+      onLine: true,
+      mediaDevices: { getUserMedia },
+      permissions: {
+        query: () =>
+          new Promise((resolve) => {
+            answer = resolve;
+          }),
+      },
+    });
+    sheet();
+    const dialog = await screen.findByRole('dialog', { name: 'Take photos' });
+    expect(within(dialog).getByText('Getting the camera ready…')).toBeDefined();
+    expect(screen.queryByRole('heading', { name: 'Allow the camera' })).toBeNull();
+    expect(getUserMedia).not.toHaveBeenCalled();
+    answer({ state: 'granted', addEventListener: () => undefined, removeEventListener: () => undefined });
+    await waitFor(() => expect(getUserMedia).toHaveBeenCalledTimes(1));
+    // It went straight to the camera: the explainer was never drawn.
+    expect(screen.queryByRole('heading', { name: 'Allow the camera' })).toBeNull();
+  });
+
   it('explains first and does not touch the camera until the person says so', async () => {
     const { getUserMedia } = browser('prompt');
     sheet();

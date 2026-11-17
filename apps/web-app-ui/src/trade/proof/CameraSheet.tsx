@@ -5,7 +5,7 @@
 import { Button, Chip, Sheet } from '@komtru/ui-kit';
 import { useState } from 'react';
 import { createPortal } from 'react-dom';
-import { usePermission } from '../../account/permissions';
+import { usePermissionStatus } from '../../account/permissions';
 import { CameraPermission } from '../../system/CameraPermission';
 import { useCamera } from './camera';
 import { captureName, nextShot, shotChips, SHOTS } from './rules';
@@ -67,12 +67,15 @@ function OpenSheet({
 }: CameraSheetProps): React.JSX.Element {
   // SP-M18: the camera is explained just before it is first needed. A browser that already says it is allowed or
   // blocked needs no explaining; one that cannot say (`unknown`) or has not been asked (`prompt`) gets it, once.
-  const permission = usePermission('camera');
+  const { state: permission, settled } = usePermissionStatus('camera');
   const [asked] = useState(wasExplained);
   const [choice, setChoice] = useState<'asking' | 'allowed' | 'declined'>('asking');
   const explaining = choice === 'asking' && !asked && permission !== 'granted' && permission !== 'denied';
+  // Until the browser has said, neither the explainer nor the camera: the first would flash for someone already allowed,
+  // and the second would raise the browser's prompt before the person has read why.
+  const waiting = !settled && !asked && choice === 'asking';
   const declined = choice === 'declined';
-  const { state, attach, capture } = useCamera(!explaining && !declined);
+  const { state, attach, capture } = useCamera(!waiting && !explaining && !declined);
   const shot = nextShot(photosTaken);
   const trouble = state === 'denied' || state === 'unavailable' || declined;
 
@@ -85,6 +88,15 @@ function OpenSheet({
     });
   };
 
+  if (waiting) {
+    return (
+      <Sheet open={open} onClose={onClose} title="Take photos">
+        <p role="status" className="py-[24px] text-center text-[12.5px] text-slate">
+          Getting the camera ready…
+        </p>
+      </Sheet>
+    );
+  }
   if (explaining) {
     return (
       <Sheet open={open} onClose={onClose} title="Take photos">
