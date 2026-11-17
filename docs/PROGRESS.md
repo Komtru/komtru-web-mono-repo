@@ -7,20 +7,19 @@ behind it is [`BUILD_PLAN.md`](BUILD_PLAN.md). The unit of work is the feature, 
 thing in an app.
 
 ```
-MVP   ████████████████████··············  29/49   (59%)
-Total ████████████······················  29/80   (36%)
+MVP   █████████████████████·············  30/49   (61%)
+Total █████████████·····················  30/80   (38%)
 ```
 
-20 MVP features left, 31 deferred past it.
+19 MVP features left, 31 deferred past it.
 
 ## Backend done, UI outstanding
 
 The engine exists and only the UI is missing, so these are the highest-value work available.
 
-| Feature | Title                                                  | Journey                  | MVP |
-| ------- | ------------------------------------------------------ | ------------------------ | --- |
-| F-040   | Apply for merchant certification and have it reviewed  | Sell on Komtru           | yes |
-| F-044   | Account basics, addresses, documents and system states | Account, trust & support | yes |
+| Feature | Title                                                 | Journey        | MVP |
+| ------- | ----------------------------------------------------- | -------------- | --- |
+| F-040   | Apply for merchant certification and have it reviewed | Sell on Komtru | yes |
 
 ## By journey
 
@@ -37,7 +36,7 @@ The engine exists and only the UI is missing, so these are the highest-value wor
 | Issues & resolution                     | 1    | 7     | 1        | 6         |
 | Complete & grow                         | 1    | 3     | 1        | 1         |
 | Sell on Komtru                          | 0    | 4     | 0        | 1         |
-| Account, trust & support                | 1    | 5     | 1        | 3         |
+| Account, trust & support                | 2    | 5     | 2        | 3         |
 | TrustOps console                        | 3    | 11    | 3        | 3         |
 | Park network                            | 0    | 5     | 0        | 0         |
 | Logistics partner                       | 0    | 2     | 0        | 0         |
@@ -96,11 +95,11 @@ The same work counted per ticket. Useful for the detail in `docs/tickets/`, not 
 it counts backend and frontend layers separately, which is how the build drifted.
 
 ```
-MVP   ██████████████████████████········  79/104  (76%)
-Total ████████████████··················  79/168  (47%)
+MVP   ██████████████████████████········  80/104  (77%)
+Total ████████████████··················  80/168  (48%)
 ```
 
-25 MVP tickets left, 64 deferred past it.
+24 MVP tickets left, 64 deferred past it.
 
 ### Tickets in progress
 
@@ -160,7 +159,6 @@ Total ████████████████·············
 | T-198  | Lifecycle exceptions and trade extras                              | yes |
 | T-199  | Resolution execution: return track                                 | yes |
 | T-200  | Resolution execution: replacement and mutual settlement            | yes |
-| T-204  | Account basics, money documents and system states                  | yes |
 | T-207  | Desktop: arrive, home and discover                                 | yes |
 | T-208  | Desktop: propose, agree and fund                                   | yes |
 | T-209  | Desktop: fulfil, deliver, inspect and complete                     | yes |

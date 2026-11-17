@@ -162,6 +162,7 @@ What changed, from [`screens-v2.tsv`](../design-reference/screens-v2.tsv) (437 s
 - **Model:** sonnet
 - **Scope:** Saved addresses, add or edit an address, display and accessibility, receipt and documents, where's my refund, statements, and the six system states (service notice, update required, session expired, too many attempts, camera permission, link expired or trade not found). Definition of done as epic 13 (frontend-design per screen, ui-kit only, all states, e2e and axe).
 - **Acceptance criteria:** the 12 v2 screens SP-M14, SP-M15, SP-M16, SP-M17, SP-M18, SP-M19, SP-M01, SP-M02, SP-M33, SP-M11, SP-M12, SP-M13 are built to the reference rows in `SCREEN_INDEX.md`, with copy taken from the reference and every data-backed screen showing loading, empty, error and offline states.
+- **Status:** Done (2026-11-17). Plan: docs/superpowers/plans/2026-11-17-f-044-account-basics.md. Review: no must-fix items, 7 should-fix items fixed (closed-account redirect, 426 gating, pre-paint accessibility preferences, object-URL revoke, Lagos day, refund-poll backoff, camera-permission flicker). Visual check: `docs/ui-review/T-204/` (2.2%-31.7% differing pixels; SP-M18 is high because it is a sheet over a page, not a full screen). SP-M15 is wired but not live. E2E waived (no harness, as T-192).
 
 ### T-205 — Account security and lifecycle
 

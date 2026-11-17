@@ -6,6 +6,14 @@ cost and to find work to resume.
 
 ## Waiting on the owner
 
+- **F-044 account basics and system states** (merged 2026-11-17; plan `2026-11-17-f-044-account-basics.md`). Reviewed with no must-fix items. Four questions, none blocking; the reviewer's answer to each was "not yet, and that is fine", because each needs backend that does not exist:
+  - **new:** should the backend add a minimum client version and emit 426 with problem code `UPGRADE_REQUIRED`? **SP-M15 is built and wired but can never fire until it does**, and is labelled NOT LIVE in `docs/ui-review/T-204/SP-M15.md`.
+  - **new:** should there be a real incident feed behind SP-M14 (message, cause, affected trades)? Today it only reports whether the platform answered. Build one only when ops will publish incident text.
+  - **new:** SP-M17 and SP-M19 offer no "Contact support" to a signed-out person, which needs SP-M06 / T-129. Recovery and the account's support reference are offered where they can be.
+  - **new:** should Statements add "Trades and payments" or a PDF? Both need backend first — there is no route listing a buyer's payments, and no server-side statement service. CSV over payouts and refunds for now.
+  - **tracked follow-ups, not blocking:** the 503 strip flaps when unrelated queries succeed; SP-M16 misses a cold return with a lapsed cookie (middleware cannot tell expired from never-signed-in, though it could tell "cookie present but unreadable"); an inactive saved city blocks unrelated edits to that address; `/status` shows loading rather than the offline hero if the device drops after load; the trade action screens keep their own 404 panel instead of SP-M19.
+  - **note:** commit `f405a97` is titled `docs(ui-review)` but carries the `SystemHero` code change. Not rewritten, recorded here.
+
 - **F-045 phone-number change** (merged 2026-11-17; plan `2026-11-17-f-045-account-security.md`). SP-M05 had no backend, so the owner asked for one and F-045 grew a three-step change-number flow. Two opus security reviews reproduced three real defects against a live database; all are fixed and re-verified. Decisions taken and still open:
   - **answered:** starting a change requires step-up, satisfied by **any** active factor (the owner declined "strongest factor", so an account holding TOTP can still move its number with an SMS code).
   - **answered:** SMS second factors are **revoked, not moved**, on a change; if that leaves no second factor the backup-code sheet is revoked too.

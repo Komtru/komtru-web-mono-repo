@@ -616,12 +616,13 @@ list a trade.
 
 - **Journey:** Account, trust & support
 - **Actor:** buyer, seller
-- **Absorbs:** T-042 (done), T-046 (done), T-204 (todo)
+- **Absorbs:** T-042 (done), T-046 (done), T-204 (done)
 - **Backend scope:** Saved delivery addresses and the location catalog of states, cities and city requests. Already built (T-042, T-046).
 - **Frontend scope:** Supporting · Account & settings address screens (SP-M01, SP-M02, SP-M33), Money & documents (SP-M11–SP-M13) and System states (SP-M14–SP-M19). _12 v2 screens._
-- **Status:** Backend done, UI outstanding
+- **Status:** Done
 - **Depends on:** F-030, F-046
 - **MVP:** yes
+- **Note:** Closed 2026-11-17, built ahead of its F-030 and F-046 parents on the owner's call, extending the account shell from F-037 and F-045 rather than waiting. **SP-M15 (Update required) is wired but NOT LIVE** — it fires only on a 426 carrying problem code `UPGRADE_REQUIRED`, and the backend has no minimum-version concept, so nothing emits it; see `docs/ui-review/T-204/SP-M15.md`. Money and documents are bounded by what the ledger records: SP-M11 prints from the browser (no PDF service, no stated retention), SP-M13 is CSV over payouts and refunds only (no route lists a buyer's payments), and SP-M12 drops the reference's delivery promises. Display preferences (SP-M33) are device-only, in localStorage, applied before first paint by an inline script so accessibility settings do not flash their defaults. Three "ui-kit only" deviations are recorded in `docs/ui-review/T-204/README.md`. Tracked follow-ups: the 503 strip flaps when unrelated queries succeed, SP-M16 does not cover a cold return with a lapsed cookie, an inactive saved city blocks unrelated edits, `/status` has an offline-after-load gap, and the trade action screens keep their own 404 panel instead of SP-M19.
 
 #### F-045 — Verify yourself, and close or recover an account
 
