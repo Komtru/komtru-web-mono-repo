@@ -71,8 +71,8 @@ describe('refundPollDelay', () => {
 
   it('gives up after about half an hour, so a refund stuck for days is not asked about for days', () => {
     expect(refundPollDelay(1)).toBe(REFUND_POLL_MS);
-    expect(refundPollDelay(33)).toBe(REFUND_POLL_MAX_MS);
-    expect(refundPollDelay(34)).toBe(false);
+    expect(refundPollDelay(32)).toBe(REFUND_POLL_MAX_MS);
+    expect(refundPollDelay(33)).toBe(false);
     expect(refundPollDelay(60)).toBe(false);
   });
 });
