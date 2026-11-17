@@ -5,10 +5,10 @@
 //
 // The catalog changes only when staff change it, and the backend revalidates with an ETag, so a long
 // `staleTime` costs one 304 now and then; a fresh city reaches a mounted dropdown on its next refetch.
-import { useQuery } from '@tanstack/react-query';
-import type { City, State } from '@komtru/shared-types';
+import { useMutation, useQuery } from '@tanstack/react-query';
+import type { City, CityRequestBody, State } from '@komtru/shared-types';
 import type { ApiClient } from '../client.js';
-import { fetchAllCities, fetchAllStates } from '../geo.js';
+import { fetchAllCities, fetchAllStates, submitCityRequest } from '../geo.js';
 import { useApiClient } from './client-context.js';
 
 export const GEO_STALE_TIME_MS = 10 * 60 * 1000;
@@ -46,5 +46,14 @@ export function useCities(stateId: string | null | undefined) {
   return useQuery({
     ...citiesQueryOptions(client, stateId ?? ''),
     enabled: Boolean(stateId),
+  });
+}
+
+/** "My city isn't listed": asks the team to add one. Staff decide; the person is told when it is added. */
+export function useSubmitCityRequest() {
+  const client = useApiClient();
+  return useMutation({
+    mutationFn: (body: CityRequestBody) => client.call(submitCityRequest, { body }),
+    gcTime: 0,
   });
 }

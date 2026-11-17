@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { act, cleanup, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, render, renderHook, screen, waitFor } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createApiClient } from '../../src/client.js';
@@ -138,4 +138,40 @@ describe('the address mutations', () => {
     act(() => screen.getByText('default').click());
     await waitFor(() => expect(screen.getByTestId('list').textContent).toBe('Address 1,Address 2*'));
   });
+});
+
+describe('an address is PII', () => {
+  it.each([
+    [
+      'create',
+      () => useCreateAddress(),
+      {
+        label: 'Home',
+        recipientName: 'Ada Obi',
+        recipientPhone: '08012345678',
+        streetLine: '1 Road',
+        landmark: null,
+        stateId: id(1),
+        cityId: id(2),
+      },
+    ],
+    ['update', () => useUpdateAddress(), { id: id(2), recipientPhone: '08012345678' }],
+    ['archive', () => useArchiveAddress(), id(2)],
+    ['make default', () => useMakeDefaultAddress(), id(2)],
+  ] as const)(
+    '%s leaves nothing in the mutation cache once the screen is gone',
+    async (_name, hook, variables) => {
+      const { Wrapper, queryClient } = setup();
+      const rendered = renderHook(hook as () => { mutateAsync: (v: never) => Promise<unknown> }, {
+        wrapper: Wrapper,
+      });
+      await act(async () => {
+        await rendered.result.current.mutateAsync(variables as never);
+      });
+      rendered.unmount();
+      // TanStack keeps `variables` and `data` for gcTime (5 minutes by default); `gcTime: 0` collects on the next tick.
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      expect(queryClient.getMutationCache().getAll()).toEqual([]);
+    },
+  );
 });
