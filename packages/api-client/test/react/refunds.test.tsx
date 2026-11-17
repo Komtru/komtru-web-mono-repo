@@ -5,7 +5,9 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createApiClient } from '../../src/client.js';
 import { ApiClientProvider } from '../../src/react/client-context.js';
 import {
+  REFUND_POLL_MAX_MS,
   REFUND_POLL_MS,
+  refundPollDelay,
   refundKeys,
   useCancelAsSeller,
   useMyRefunds,
@@ -61,6 +63,19 @@ function setup(respond: (path: string, method: string) => unknown) {
   );
   return { requests, bodies, queryClient, wrapper };
 }
+
+describe('refundPollDelay', () => {
+  it('backs off from 5s to once a minute', () => {
+    expect([1, 2, 3, 4, 5, 6].map(refundPollDelay)).toEqual([5000, 10000, 20000, 40000, 60000, 60000]);
+  });
+
+  it('gives up after about half an hour, so a refund stuck for days is not asked about for days', () => {
+    expect(refundPollDelay(1)).toBe(REFUND_POLL_MS);
+    expect(refundPollDelay(33)).toBe(REFUND_POLL_MAX_MS);
+    expect(refundPollDelay(34)).toBe(false);
+    expect(refundPollDelay(60)).toBe(false);
+  });
+});
 
 describe('the refund hooks', () => {
   it('keep a trade’s cancellation and refunds under the trade, so one invalidation refreshes them', () => {

@@ -27,6 +27,25 @@ export const REFUND_POLL_MS = 5000;
 
 const REFUND_PAGE = 20;
 
+/** The slowest the buyer's refund list is asked about again, and how long it is asked at all. */
+export const REFUND_POLL_MAX_MS = 60_000;
+export const REFUND_POLL_GIVE_UP_MS = 30 * 60 * 1000;
+
+/**
+ * The wait before asking again, given how many answers there have been: 5s, 10s, 20s, 40s, then once a minute, and
+ * `false` (stop) after about half an hour. A refund can sit PROCESSING for days, and every ask re-reads every loaded page
+ * of the list, so polling it every 5s for as long as a tab stays open would be a request every 5s for days. Someone who
+ * comes back to the screen (a new mount, or "Try again") starts the count afresh.
+ */
+export function refundPollDelay(answers: number): number | false {
+  const delay = Math.min(REFUND_POLL_MS * 2 ** Math.max(0, answers - 1), REFUND_POLL_MAX_MS);
+  let spent = 0;
+  for (let n = 1; n <= answers; n += 1) {
+    spent += Math.min(REFUND_POLL_MS * 2 ** (n - 1), REFUND_POLL_MAX_MS);
+  }
+  return spent >= REFUND_POLL_GIVE_UP_MS ? false : delay;
+}
+
 export const refundKeys = {
   cancellation: (tradeId: string) => [...tradeKeys.one(tradeId), 'cancellation'] as const,
   forTrade: (tradeId: string) => [...tradeKeys.one(tradeId), 'refunds'] as const,
@@ -78,10 +97,12 @@ export function useMyRefunds() {
         throw error;
       }
     },
-    // Asked about again only while a refund is on its way back, as for a single trade: once settled it stops changing.
-    refetchInterval: (query: { state: { data?: { pages: { items: Refund[] }[] } } }) =>
+    // Asked about again only while a refund is on its way back, and less often the longer it takes (see `refundPollDelay`).
+    refetchInterval: (query: {
+      state: { data?: { pages: { items: Refund[] }[] }; dataUpdateCount: number };
+    }) =>
       query.state.data?.pages.some((page) => page.items.some(isRefundInFlight)) === true
-        ? REFUND_POLL_MS
+        ? refundPollDelay(query.state.dataUpdateCount)
         : false,
   });
 }
