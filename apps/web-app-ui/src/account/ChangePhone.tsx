@@ -1,10 +1,15 @@
 'use client';
 
-import { useRequestRecovery } from '@komtru/api-client/react';
 import {
-  Banner,
+  useConfirmCurrentPhone,
+  useConfirmNewPhone,
+  useRequestRecovery,
+  useStartPhoneChange,
+} from '@komtru/api-client/react';
+import {
   Button,
   NoteBanner,
+  OtpInput,
   ReadyBanner,
   RiskBanner,
   ScreenColumn,
@@ -16,12 +21,6 @@ import {
 import { useState } from 'react';
 import { accountProblem } from './words';
 
-const STEPS: VersionStep[] = [
-  { id: 'old', title: 'Code to your current number', detail: 'Confirms it’s you', state: 'active' },
-  { id: 'new', title: 'Code to your new number', detail: 'Confirms it’s yours', state: 'pending' },
-  { id: 'tell', title: 'We tell your old number', detail: 'In case it wasn’t you', state: 'pending' },
-];
-
 /**
  * A Nigerian mobile number as people write it: `0803 221 4471`, `+234 803 221 4471`, `234…`. Enough to catch a typo before
  * it is sent; the platform is the one that decides whether a number is real.
@@ -31,31 +30,101 @@ export function phoneDigits(value: string): string | undefined {
   return /^0\d{10}$/.test(digits) || /^234\d{10}$/.test(digits) ? digits : undefined;
 }
 
+type Phase =
+  | { at: 'enter' }
+  | { at: 'current'; changeId: string; challengeId: string; sentTo: string }
+  | { at: 'new'; changeId: string; challengeId: string; sentTo: string }
+  | { at: 'done'; maskedPhone: string };
+
+const stepsFor = (phase: Phase['at']): VersionStep[] => {
+  const state = (index: number) => {
+    const at = { enter: 0, current: 0, new: 1, done: 3 }[phase];
+    return index < at ? ('done' as const) : index === at ? ('active' as const) : ('pending' as const);
+  };
+  return [
+    { id: 'old', title: 'Code to your current number', detail: 'Confirms it’s you', state: state(0) },
+    { id: 'new', title: 'Code to your new number', detail: 'Confirms it’s yours', state: state(1) },
+    { id: 'tell', title: 'We tell your old number', detail: 'In case it wasn’t you', state: state(2) },
+  ];
+};
+
 /**
- * SP-M05. Your phone number is your Komtru ID, so a move is checked at both ends and the old number is told.
+ * SP-M05. Your phone number is your Komtru ID, so a move is checked at both ends and the old number is told: a code to the
+ * current number (it is you), a code to the new one (it is yours), and then the platform changes the number and sends the
+ * old one its notice. The platform holds the current number, so the person is never asked to type it.
  *
- * What the platform can do today is only the last resort: there is no change-number route yet (no code to the old number,
- * no code to the new one, no notice to the old one), so the screen cannot honestly offer "Send a code" and says so. "I can't
- * get the code" is real: it opens the platform's recovery request for a lost phone, which a person on the team reviews with an
- * ID check. It is sent with the current number the person typed, because that is what the platform looks the account up by,
- * and it answers the same whether or not a number matches.
+ * "I've lost access to my number" is a different thing and says so: it opens the platform's lost-phone recovery request,
+ * which a person on the team answers after an ID check. That flow does not carry a new number, so it is not offered as a way to
+ * make this change, only as the way back in when the old number is gone.
  */
 export function ChangePhone(): React.JSX.Element {
-  const recovery = useRequestRecovery();
-  const [current, setCurrent] = useState('');
-  const [next, setNext] = useState('');
+  const start = useStartPhoneChange();
+  const current = useConfirmCurrentPhone();
+  const next = useConfirmNewPhone();
+  const [phase, setPhase] = useState<Phase>({ at: 'enter' });
+  const [newNumber, setNewNumber] = useState('');
+  const [code, setCode] = useState('');
   const [problem, setProblem] = useState<string | undefined>(undefined);
 
-  const currentOk = phoneDigits(current) !== undefined;
-  const nextOk = phoneDigits(next) !== undefined;
-  const same = currentOk && nextOk && phoneDigits(current) === phoneDigits(next);
+  const numberOk = phoneDigits(newNumber) !== undefined;
+  const busy = start.isPending || current.isPending || next.isPending;
 
-  const cantGetCode = () => {
-    if (!currentOk) return;
+  const send = () => {
+    if (!numberOk) return;
     setProblem(undefined);
-    recovery.mutate(
-      { identifier: current.trim(), method: 'LOST_PHONE' },
-      { onError: (error) => setProblem(accountProblem(error, 'step-up')) },
+    start.mutate(newNumber.trim(), {
+      onSuccess: (answer) => {
+        if (!answer.delivered) {
+          setProblem('We’ve sent too many codes to that number recently. Try again later.');
+          return;
+        }
+        setCode('');
+        setPhase({
+          at: 'current',
+          changeId: answer.changeId,
+          challengeId: answer.challengeId,
+          sentTo: answer.maskedDestination,
+        });
+      },
+      onError: (error) => setProblem(accountProblem(error, 'phone')),
+    });
+  };
+
+  const confirmCurrent = () => {
+    if (phase.at !== 'current' || code.length !== 6) return;
+    setProblem(undefined);
+    current.mutate(
+      { changeId: phase.changeId, challengeId: phase.challengeId, code },
+      {
+        onSuccess: (answer) => {
+          setCode('');
+          setPhase({
+            at: 'new',
+            changeId: phase.changeId,
+            challengeId: answer.challengeId,
+            sentTo: answer.maskedDestination,
+          });
+        },
+        onError: (error) => {
+          setCode('');
+          setProblem(accountProblem(error, 'phone'));
+        },
+      },
+    );
+  };
+
+  const confirmNew = () => {
+    if (phase.at !== 'new' || code.length !== 6) return;
+    setProblem(undefined);
+    next.mutate(
+      { changeId: phase.changeId, challengeId: phase.challengeId, code },
+      {
+        onSuccess: (answer) => setPhase({ at: 'done', maskedPhone: answer.maskedPhone }),
+        onError: (error) => {
+          setCode('');
+          setProblem(accountProblem(error, 'phone'));
+        },
+      },
     );
   };
 
@@ -66,68 +135,146 @@ export function ChangePhone(): React.JSX.Element {
       <p className="mb-[16px] text-[12.5px] leading-[1.55] text-slate">
         Your phone number is how others find you on Komtru, so we check both numbers.
       </p>
-      <TextField
-        label="Current number"
-        type="tel"
-        inputMode="tel"
-        autoComplete="tel"
-        mono={false}
-        className="font-mono"
-        value={current}
-        invalid={current !== '' && !currentOk}
-        helper={current !== '' && !currentOk ? 'Enter it the way you use it, like 0803 221 4471.' : undefined}
-        onChange={(event) => setCurrent(event.target.value)}
-      />
-      <TextField
-        label="New number"
-        type="tel"
-        inputMode="tel"
-        autoComplete="off"
-        placeholder="080…"
-        className="font-mono"
-        value={next}
-        invalid={(next !== '' && !nextOk) || same}
-        helper={
-          same
-            ? 'That’s the number you already have.'
-            : next !== '' && !nextOk
-              ? 'Enter it the way you use it, like 0905 118 2290.'
-              : undefined
-        }
-        onChange={(event) => setNext(event.target.value)}
-      />
-      <VersionTimeline steps={STEPS} aria-label="How the move works" className="my-[16px]" />
-      <NoteBanner>
-        No longer have your old SIM? Choose “I can’t get the code”. It takes up to 24 hours, with an ID check.
-      </NoteBanner>
-      <Banner tone="warning" title="Changing your number here isn’t available yet">
-        We can’t send the two codes from this screen for now. If you can’t use your current number, ask for
-        help below and we’ll check your ID.
-      </Banner>
-      {recovery.data !== undefined && (
-        <ReadyBanner title="We’ve got your request">
-          A person on the team will check your ID and come back to you within 24 hours.
+
+      {phase.at === 'enter' && (
+        <form
+          onSubmit={(event) => {
+            event.preventDefault();
+            send();
+          }}
+          noValidate
+        >
+          <TextField
+            label="New number"
+            type="tel"
+            inputMode="tel"
+            autoComplete="off"
+            placeholder="080…"
+            className="font-mono"
+            value={newNumber}
+            invalid={newNumber !== '' && !numberOk}
+            helper={
+              newNumber !== '' && !numberOk ? 'Enter it the way you use it, like 0905 118 2290.' : undefined
+            }
+            onChange={(event) => setNewNumber(event.target.value)}
+          />
+        </form>
+      )}
+
+      {(phase.at === 'current' || phase.at === 'new') && (
+        <div>
+          <p className="mb-[12px] text-[12.5px] leading-[1.55] text-slate">
+            {phase.at === 'current'
+              ? `We sent a code to your current number, ${phase.sentTo}. Enter it to confirm it’s you.`
+              : `Now we sent a code to your new number, ${phase.sentTo}. Enter it to confirm it’s yours.`}
+          </p>
+          <OtpInput
+            label={phase.at === 'current' ? 'Code from your current number' : 'Code from your new number'}
+            value={code}
+            onChange={setCode}
+            invalid={problem !== undefined}
+          />
+        </div>
+      )}
+
+      {phase.at === 'done' && (
+        <ReadyBanner title="Your number is changed">
+          Your number is now {phase.maskedPhone}. We’ve told your old number.
         </ReadyBanner>
       )}
+
+      <VersionTimeline steps={stepsFor(phase.at)} aria-label="How the move works" className="my-[16px]" />
+      {phase.at !== 'done' && (
+        <NoteBanner>
+          No longer have your old SIM? Choose “I’ve lost access to my number” below. It takes up to 24 hours,
+          with an ID check.
+        </NoteBanner>
+      )}
       {problem !== undefined && <RiskBanner>{problem}</RiskBanner>}
+
       <div className="mt-[16px] flex flex-col gap-[8px]">
-        {/* Held back until the two codes can be sent: a button that looked live and did nothing would be a lie. */}
-        <Button type="button" disabled aria-describedby="phone-unavailable">
-          Send a code
-        </Button>
-        <span id="phone-unavailable" className="sr-only">
-          Not available yet.
-        </span>
-        <Button
-          type="button"
-          variant="ghost"
-          className="mx-auto mt-[4px] block text-center"
-          disabled={!currentOk || recovery.isPending || recovery.data !== undefined}
-          onClick={cantGetCode}
-        >
-          {recovery.isPending ? 'Sending…' : 'I can’t get the code'}
-        </Button>
+        {phase.at === 'enter' && (
+          <Button type="button" disabled={!numberOk || busy} onClick={send}>
+            {start.isPending ? 'Sending…' : 'Send a code'}
+          </Button>
+        )}
+        {phase.at === 'current' && (
+          <Button type="button" disabled={code.length !== 6 || busy} onClick={confirmCurrent}>
+            {current.isPending ? 'Checking…' : 'Continue'}
+          </Button>
+        )}
+        {phase.at === 'new' && (
+          <Button type="button" disabled={code.length !== 6 || busy} onClick={confirmNew}>
+            {next.isPending ? 'Changing…' : 'Change my number'}
+          </Button>
+        )}
+        {phase.at === 'done' && (
+          <Button type="button" onClick={() => window.location.assign('/account/security')}>
+            Done
+          </Button>
+        )}
+        {phase.at !== 'done' && <LostAccess />}
       </div>
     </ScreenColumn>
+  );
+}
+
+/** The way back in when the old number is gone: the platform's lost-phone recovery request, with the number typed. */
+function LostAccess(): React.JSX.Element {
+  const recovery = useRequestRecovery();
+  const [open, setOpen] = useState(false);
+  const [identifier, setIdentifier] = useState('');
+  const [problem, setProblem] = useState<string | undefined>(undefined);
+  const ok = phoneDigits(identifier) !== undefined;
+
+  if (recovery.data !== undefined) {
+    return (
+      <ReadyBanner title="We’ve got your request">
+        A person on the team will check your ID and come back to you within 24 hours.
+      </ReadyBanner>
+    );
+  }
+
+  return (
+    <div>
+      <Button
+        type="button"
+        variant="ghost"
+        className="mx-auto mt-[4px] block text-center"
+        aria-expanded={open}
+        onClick={() => setOpen((value) => !value)}
+      >
+        I’ve lost access to my number
+      </Button>
+      {open && (
+        <div className="mt-[10px]">
+          <TextField
+            label="The number you’ve lost"
+            type="tel"
+            inputMode="tel"
+            autoComplete="off"
+            className="font-mono"
+            value={identifier}
+            helper="We’ll open a recovery request for this number. It doesn’t change your number: a person checks your ID first."
+            onChange={(event) => setIdentifier(event.target.value)}
+          />
+          {problem !== undefined && <RiskBanner>{problem}</RiskBanner>}
+          <Button
+            type="button"
+            variant="secondary"
+            disabled={!ok || recovery.isPending}
+            onClick={() => {
+              setProblem(undefined);
+              recovery.mutate(
+                { identifier: identifier.trim(), method: 'LOST_PHONE' },
+                { onError: (error) => setProblem(accountProblem(error, 'recovery')) },
+              );
+            }}
+          >
+            {recovery.isPending ? 'Sending…' : 'Ask for help getting back in'}
+          </Button>
+        </div>
+      )}
+    </div>
   );
 }
