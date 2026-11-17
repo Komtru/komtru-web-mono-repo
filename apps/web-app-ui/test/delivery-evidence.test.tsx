@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 // F-028 / CWT-S12: Evidence - Trade Media, by event, from what the platform can list.
-import { cleanup, screen, waitFor, within } from '@testing-library/react';
+import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { Evidence } from '../src/trade/delivery/Evidence';
 import { expectNoAxeViolations } from './axe';
@@ -32,6 +32,7 @@ const serve = (trade: unknown, more: Record<string, unknown> = {}) => {
   answerWith(api.call, {
     'GET /trades/:id': trade,
     'GET /trades/:id/inspection': withReceipt,
+    'GET /trades/:id/evidence': { items: [], nextCursor: null },
     'GET /files/:id': (input: { params?: { id?: string } }) => ({
       ...fileRead(7),
       fileId: input.params?.id ?? id(7),
@@ -42,7 +43,7 @@ const serve = (trade: unknown, more: Record<string, unknown> = {}) => {
 };
 
 describe('CWT-S12 / PM-6 trade media', () => {
-  it('shows the proof as it was when agreed, then what was added beside it, and keeps the unlisted events honest', async () => {
+  it('shows the proof as it was when agreed, then what was added beside it, and says plainly where nothing was added', async () => {
     const { container } = serve(workspaceTrade('INSPECTION', 'BUYER'), {
       'GET /trades/:id/inspection': inspectionRead({
         deliveryEvidence: {
@@ -65,11 +66,13 @@ describe('CWT-S12 / PM-6 trade media', () => {
     expect(within(dispatch).queryByRole('img')).toBeNull();
     expect(screen.getByText('Added at delivery')).toBeTruthy();
     expect(screen.getByText(/Reported delivered by the seller/)).toBeTruthy();
-    expect(screen.getByText('Your inspection photos')).toBeTruthy();
-    expect(screen.getByText(/aren’t kept with the Trade yet/)).toBeTruthy();
+    expect(
+      await screen.findByText('Photos you add at inspection are kept here, with the trade.'),
+    ).toBeTruthy();
     expect(screen.getByText(/Chat attachments can be linked to the trade/)).toBeTruthy();
-    // No add-evidence control: the platform has nothing to attach it to yet.
-    expect(screen.queryByRole('link', { name: /Add evidence/ })).toBeNull();
+    expect(screen.getByRole('link', { name: 'Add evidence' }).getAttribute('href')).toBe(
+      `/trade/${id(1)}/evidence/new`,
+    );
     await expectNoAxeViolations(container, SHELL_RULES);
   });
 
@@ -77,7 +80,6 @@ describe('CWT-S12 / PM-6 trade media', () => {
     serve(workspaceTrade('SHIPPED', 'SELLER'));
     const dispatch = await screen.findByRole('region', { name: 'Dispatch' });
     expect(await within(dispatch).findByAltText('Waybill receipt')).toBeTruthy();
-    expect(screen.queryByText('Your inspection photos')).toBeNull();
   });
 
   it('says so when no proof was attached', async () => {
@@ -107,6 +109,89 @@ describe('CWT-S12 / PM-6 trade media', () => {
     const online = vi.spyOn(window.navigator, 'onLine', 'get').mockReturnValue(false);
     serve(workspaceTrade('INSPECTION', 'BUYER'), { 'GET /trades/:id/inspection': new Error('boom') });
     expect(await screen.findByText('You’re offline')).toBeTruthy();
+    online.mockRestore();
+  });
+});
+
+const file = (n: number, event: string, role: 'BUYER' | 'SELLER' = 'BUYER') => ({
+  id: id(800 + n),
+  fileId: id(700 + n),
+  event,
+  attachedByRole: role,
+  attachedAt: `2026-11-17T10:0${String(n)}:00.000Z`,
+});
+const byEvent = (rows: ReturnType<typeof file>[]) => (input: { query?: Record<string, unknown> }) => ({
+  items: rows.filter((row) => row.event === input.query?.event),
+  nextCursor: null,
+});
+
+describe('CWT-S12 media added by the parties (CWT-S13)', () => {
+  it('fills the delivery and inspection groups from the new read, each file saying who added it', async () => {
+    const { container } = serve(workspaceTrade('INSPECTION', 'BUYER'), {
+      'GET /trades/:id/evidence': byEvent([
+        file(1, 'DELIVERY', 'SELLER'),
+        file(2, 'DELIVERY'),
+        file(3, 'INSPECTION'),
+      ]),
+    });
+    const delivery = await screen.findByRole('region', { name: 'Delivery' });
+    await waitFor(() => {
+      expect(within(delivery).getAllByRole('img')).toHaveLength(2);
+    });
+    expect(within(delivery).getByAltText('Delivery file 1, added by the seller')).toBeTruthy();
+    expect(within(delivery).getByText(/2 files · shared with both sides of the trade/)).toBeTruthy();
+    const inspection = screen.getByRole('region', { name: 'Inspection' });
+    expect(await within(inspection).findByAltText('Inspection file 1, added by the buyer')).toBeTruthy();
+    expect(within(inspection).getByText(/1 file · shared/)).toBeTruthy();
+    // An event with no files and nothing else to say is not drawn.
+    expect(screen.queryByRole('region', { name: 'Issue' })).toBeNull();
+    await expectNoAxeViolations(container, SHELL_RULES);
+  });
+
+  it('draws the issue group and dispatch files only when there are some', async () => {
+    serve(workspaceTrade('DISPUTED', 'SELLER'), {
+      'GET /trades/:id/inspection': inspectionRead({ deliveryEvidence: { signals: [], selfArranged: null } }),
+      'GET /trades/:id/evidence': byEvent([file(1, 'ISSUE'), file(2, 'DISPATCH', 'SELLER')]),
+    });
+    const issue = await screen.findByRole('region', { name: 'Issue' });
+    expect(await within(issue).findByAltText('Issue file 1, added by the buyer')).toBeTruthy();
+    const dispatch = screen.getByRole('region', { name: 'Dispatch' });
+    expect(await within(dispatch).findByAltText('Dispatch file 1, added by the seller')).toBeTruthy();
+  });
+
+  it('says plainly when nothing was added, and offers Add evidence only while the trade can take it', async () => {
+    serve(workspaceTrade('INSPECTION', 'SELLER'));
+    expect(await screen.findByText('Nothing has been added at delivery yet.')).toBeTruthy();
+    expect(screen.getByText('Nothing has been added at inspection yet.')).toBeTruthy();
+    expect(screen.getByRole('link', { name: 'Add evidence' })).toBeTruthy();
+    cleanup();
+    serve(workspaceTrade('COMPLETED', 'SELLER'));
+    await screen.findByRole('region', { name: 'Seller’s proof' });
+    expect(screen.queryByRole('link', { name: 'Add evidence' })).toBeNull();
+  });
+
+  it('shows a failed read of one group as a failure with a retry, not as no files, and keeps the rest', async () => {
+    let fail = true;
+    serve(workspaceTrade('INSPECTION', 'BUYER'), {
+      'GET /trades/:id/evidence': (input: { query?: Record<string, unknown> }) => {
+        if (input.query?.event === 'DELIVERY' && fail) return new Error('boom');
+        return { items: [], nextCursor: null };
+      },
+    });
+    expect(await screen.findByText('We couldn’t load the delivery files.')).toBeTruthy();
+    expect(screen.queryByText('Nothing has been added at delivery yet.')).toBeNull();
+    expect(screen.getByRole('region', { name: 'Seller’s proof' })).toBeTruthy();
+    fail = false;
+    fireEvent.click(screen.getByRole('button', { name: /try again/i }));
+    expect(await screen.findByText('Nothing has been added at delivery yet.')).toBeTruthy();
+  });
+
+  it('says a failed read in the words of the connection when the device is offline', async () => {
+    const online = vi.spyOn(window.navigator, 'onLine', 'get').mockReturnValue(false);
+    serve(workspaceTrade('INSPECTION', 'BUYER'), { 'GET /trades/:id/evidence': new Error('boom') });
+    expect((await screen.findAllByText(/You’re offline, so we can’t load the delivery files/)).length).toBe(
+      1,
+    );
     online.mockRestore();
   });
 });

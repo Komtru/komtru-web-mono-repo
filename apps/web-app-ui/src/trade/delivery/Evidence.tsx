@@ -4,15 +4,15 @@ import type { TradeView } from '@komtru/api-client';
 import { useInspection } from '@komtru/api-client/react';
 import { ActionStack, Button, Skeleton } from '@komtru/ui-kit';
 import { Trail } from '../proof/EvidenceTrail';
-import { EVIDENCE_STATUSES } from '../workspace-state';
+import { EVIDENCE_OPEN_STATUSES } from '@komtru/api-client';
+import { EVIDENCE_STATUSES, addEvidenceHref } from '../workspace-state';
 import { ReadFailed, Frame, Refusal, TradeGate, tradeHref } from './parts';
 
 const TITLE = 'Trade Evidence';
 
 /**
  * CWT-S12 / PM-6 (Z4): the media kept with the trade, by event, drawn by F-029's `Trail`. Only what the platform can
- * list is shown: the seller's proof, the dispatch record (and, for the seller, the waybill photo) and the delivery
- * records. Media from delivery and inspection have no read yet, so nothing is drawn for them as fact.
+XX
  */
 export function Evidence({ id }: { id: string }): React.JSX.Element {
   return (
@@ -54,6 +54,11 @@ function Media({ trade }: { trade: TradeView }): React.JSX.Element {
       </p>
       <Trail trade={trade} read={inspection.data} />
       <ActionStack className="mt-[16px]">
+        {(EVIDENCE_OPEN_STATUSES as readonly string[]).includes(trade.status) && (
+          <Button asChild>
+            <a href={addEvidenceHref(trade.id)}>Add evidence</a>
+          </Button>
+        )}
         <Button asChild variant="secondary">
           <a href={tradeHref(trade.id)}>Back to trade</a>
         </Button>
