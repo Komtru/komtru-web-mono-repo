@@ -12,6 +12,7 @@ import {
 } from '@komtru/ui-kit';
 import { useEffect, useRef, useState } from 'react';
 import { BackupCodes } from './BackupCodes';
+import { QrCode } from './QrCode';
 import { Loading } from './states';
 import { SECURITY_HREF } from './SecurityScreen';
 import { accountProblem, groupedKey } from './words';
@@ -21,8 +22,8 @@ import { accountProblem, groupedKey } from './words';
  * cache, the URL or storage, and leaving the screen ends it (the platform leaves an unconfirmed factor inert). The
  * backup codes come back from the activation, once, and are the next view; there is no way back to them.
  *
- * The reference draws a QR code. This app has no QR encoder and adding one is a dependency decision that is the
- * owner's, so the key is shown typed, with the `otpauth` link a phone's authenticator app opens directly.
+ * The QR code is drawn in the browser from the `otpauth` URI. The typed key and the `otpauth` link stay beside it, for
+ * the phone that is also the screen and for a person who cannot scan.
  */
 export function TwoFactorSetup(): React.JSX.Element {
   const enrol = useEnrolTotp();
@@ -96,6 +97,9 @@ export function TwoFactorSetup(): React.JSX.Element {
             Add this to Google Authenticator or any TOTP app — it adds a second check on top of your password
             at login.
           </p>
+          <div className="mx-auto mb-[16px] flex h-[160px] w-[160px] items-center justify-center rounded-md border border-solid border-border-hairline bg-surface-primary">
+            <QrCode value={seed.otpauthUri} label="QR code for your authenticator app" />
+          </div>
           <SectionLabel>Can’t scan? Enter this code</SectionLabel>
           <p className="mb-[8px] rounded-sm border border-solid border-border-hairline bg-surface-primary p-[12px] text-center font-mono text-[13px] tracking-[.08em]">
             <span className="sr-only">Your setup key: </span>

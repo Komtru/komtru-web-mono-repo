@@ -40,6 +40,9 @@ describe('Two-factor setup (TF1, TF2)', () => {
     expect(screen.getByRole('link', { name: 'Open in your authenticator app' }).getAttribute('href')).toBe(
       SEED.otpauthUri,
     );
+    // The QR code is there, drawn from the URI, beside the typed key and the link.
+    const qr = screen.getByRole('img', { name: 'QR code for your authenticator app' });
+    expect(qr.querySelector('path')?.getAttribute('d')?.length).toBeGreaterThan(100);
     expect(callsTo(api.call, 'POST', '/me/mfa/totp/enroll')).toHaveLength(1);
     expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Verify & enable' }).disabled).toBe(true);
     await expectNoAxeViolations(container, SHELL_RULES);
