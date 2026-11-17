@@ -1,7 +1,7 @@
 // How the account screens word what the platform says. Pure functions, so the wording is tested without a DOM.
 // A screen branches on the problem's `code` and never on its title or detail, which the platform may reword.
 import { NetworkError, ProblemError } from '@komtru/api-client';
-import { problemMessage } from '../trade/format';
+import { problemMessage, whenLabel } from '../trade/format';
 
 export type AccountAction =
   | 'close'
@@ -29,6 +29,12 @@ const FALLBACK: Record<AccountAction, string> = {
   phone: 'We couldn’t change your number. Try again.',
   recovery: 'We couldn’t send your request. Try again in a moment.',
 };
+
+/** Whether this problem is the platform holding a phone change off because one has just completed (SP-M05). */
+export const isPhoneCooldown = (error: unknown): boolean =>
+  error instanceof ProblemError &&
+  error.code === 'CONFLICT' &&
+  (error.problem as { reason?: unknown }).reason === 'PHONE_RECENTLY_CHANGED';
 
 /** Whether this problem is the platform refusing to close an account that still has a trade in progress. */
 export const isActiveTradesRefusal = (error: unknown): boolean =>
@@ -60,6 +66,10 @@ export function accountProblem(error: unknown, action: AccountAction): string {
       case 'CONTACT_VERIFICATION_REQUIRED':
         return 'Confirm your email and phone number first, then send this again.';
       case 'CONFLICT':
+        if (isPhoneCooldown(error)) {
+          const at = whenLabel(String((error.problem as { retryAt?: unknown }).retryAt ?? ''));
+          return `Your number was changed a moment ago. To protect your account, you can change it again${at === '' ? ' in a little while' : ` after ${at}`}. If you didn’t change it, contact support now.`;
+        }
         if (isActiveTradesRefusal(error)) {
           return 'You still have a Trade in progress. Finish or cancel it first.';
         }

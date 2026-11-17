@@ -356,36 +356,103 @@ describe.runIf(infraEnabled)('changing the phone number (F-045, SP-M05)', () => 
     );
   });
 
-  it('keeps the notice for the old number pointed at the old number, whatever a session starts next', async () => {
-    const me = await signedIn();
-    const started = await start(me.token);
-    const sent = bodyOf<Sent>(await confirmCurrent(me.token, started));
-    await as(me.token).post('/me/phone/change/confirm-new', {
+  /** One whole change, start to swap, for a member; returns the number it moved to. */
+  const changeTo = async (token: string, number: string) => {
+    const started = await start(token, number);
+    const sent = bodyOf<Sent>(await confirmCurrent(token, started));
+    const done = await as(token).post('/me/phone/change/confirm-new', {
       changeId: started.changeId,
       challengeId: sent.challengeId,
       code: await codeFor('identity.phone_change.code_requested', sent.challengeId),
     });
-    // The moment after the swap commits, before Notify has read anything, the same session starts another change toward a
-    // number of its own. That used to re-address the "your number was changed" notice to it.
-    await start(me.token, '+2349051182291');
+    expect(done.status).toBe(200);
+  };
+
+  it('refuses a second change straight after one, so a chain cannot re-address the notice to the taker’s number', async () => {
+    const me = await signedIn();
+    await changeTo(me.token, NEW);
+    // The moment after the swap commits, before Notify has read anything, the same session tries another change toward a
+    // number of its own. Refused: the retired number, which is the notice's address, must outlive the queue.
+    const second = await startRaw(me.token, '+2349051182291');
+    expect(second.status).toBe(409);
+    expect(second.body.reason).toBe('PHONE_RECENTLY_CHANGED');
+    expect(new Date(second.body.retryAt as string).getTime()).toBeGreaterThan(Date.now() + 14 * 60 * 1000);
+    expect(bodyOf<Problem>(second).code).toBe('CONFLICT');
     const { rows } = await t
       .owner()
       .query<{ phone_e164: string; change_state: string }>(
-        `SELECT phone_e164, change_state FROM identity.user_phones WHERE user_id = $1 AND change_state <> 'NONE' ORDER BY change_state`,
+        `SELECT phone_e164, change_state FROM identity.user_phones WHERE user_id = $1 AND change_state <> 'NONE'`,
         [me.userId],
       );
-    expect(rows).toEqual([
-      { phone_e164: '+2349051182291', change_state: 'PENDING' },
-      { phone_e164: OLD, change_state: 'RETIRED' },
-    ]);
+    expect(rows).toEqual([{ phone_e164: OLD, change_state: 'RETIRED' }]);
     const { resolveDestination } =
       await import('../../../../src/modules/notify/services/recipients.service.js');
     expect((await resolveDestination(t.db(), me.userId, 'SMS', { phoneTarget: 'RETIRED' }))?.address).toEqual(
       [OLD],
     );
-    expect((await resolveDestination(t.db(), me.userId, 'SMS', { phoneTarget: 'PENDING' }))?.address).toEqual(
-      ['+2349051182291'],
-    );
+  });
+
+  it('allows a change again once the cooldown has passed', async () => {
+    const me = await signedIn();
+    await changeTo(me.token, NEW);
+    // The audit log is append-only, so the passage of time is the real row moved back sixteen minutes: with triggers off, on
+    // one connection, as a test-only stand-in for waiting.
+    const client = await t.owner().connect();
+    try {
+      await client.query(`SET session_replication_role = replica`);
+      await client.query(
+        `UPDATE identity.identity_audit_log SET occurred_at = now() - interval '16 minutes'
+          WHERE subject_user_id = $1 AND action = 'PHONE_CHANGED'`,
+        [me.userId],
+      );
+      await client.query(`SET session_replication_role = DEFAULT`);
+    } finally {
+      client.release();
+    }
+    expect((await startRaw(me.token, '+2349051182291')).status).toBe(200);
+  });
+
+  it('does not count an abandoned change against the person: start, walk away, start again', async () => {
+    const me = await signedIn();
+    await start(me.token);
+    await start(me.token, '+2349051182291');
+    await start(me.token);
+    expect(await phones(me.userId)).toEqual([
+      { phone_e164: OLD, is_primary: true, verified: true },
+      { phone_e164: NEW, is_primary: false, verified: false },
+    ]);
+    // And one that got as far as the first code and stopped is no different.
+    const started = await start(me.token, '+2349051182292');
+    expect((await confirmCurrent(me.token, started)).status).toBe(200);
+    expect((await startRaw(me.token, '+2349051182293')).status).toBe(200);
+  });
+
+  it('will not let a proof minted for one change complete another: a restart supersedes the new number’s code', async () => {
+    const me = await signedIn();
+    const first = await start(me.token);
+    const sent = bodyOf<Sent>(await confirmCurrent(me.token, first));
+    const stale = await codeFor('identity.phone_change.code_requested', sent.challengeId);
+    // Start AGAIN to the same number: a fresh change. Its step two has not been taken.
+    const second = await start(me.token);
+    const skipped = await as(me.token).post('/me/phone/change/confirm-new', {
+      changeId: second.changeId,
+      challengeId: sent.challengeId,
+      code: stale,
+    });
+    expect(skipped.status).toBe(422);
+    expect(bodyOf<Problem>(skipped).code).toBe('OTP_INVALID');
+    expect(await phones(me.userId)).toEqual([
+      { phone_e164: OLD, is_primary: true, verified: true },
+      { phone_e164: NEW, is_primary: false, verified: false },
+    ]);
+    // The honest route still works: this change's own step two, then step three.
+    const sent2 = bodyOf<Sent>(await confirmCurrent(me.token, second));
+    const done = await as(me.token).post('/me/phone/change/confirm-new', {
+      changeId: second.changeId,
+      challengeId: sent2.challengeId,
+      code: await codeFor('identity.phone_change.code_requested', sent2.challengeId),
+    });
+    expect(done.status).toBe(200);
   });
 
   it('caps the codes sent to one number: the third start inside ten minutes is the last that sends', async () => {

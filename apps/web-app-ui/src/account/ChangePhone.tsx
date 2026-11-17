@@ -203,7 +203,8 @@ export function ChangePhone(): React.JSX.Element {
       {phase.at === 'done' && (
         <ReadyBanner title="Your number is changed">
           Your number is now {phase.maskedPhone}. We’ve told your old number. If you signed in with
-          text-message codes, that method was switched off: set it up again on your new number in Security.
+          text-message codes, that method was switched off, and so were your printed backup codes if it was
+          your only second factor: set them up again in Security.
         </ReadyBanner>
       )}
 

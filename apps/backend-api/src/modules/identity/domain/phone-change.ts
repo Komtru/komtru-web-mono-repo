@@ -21,3 +21,11 @@ export const phoneChangeDestinationHash = (
   hasher: HmacHasher,
   input: { phoneE164: string; end: PhoneChangeEnd },
 ): Buffer => hasher.hmac(PHONE_CHANGE_OTP_DOMAIN, `${input.phoneE164}:${input.end}`);
+
+/**
+ * How long after a completed change a new one is refused. The notice to the old number is addressed by the retired row, and
+ * a second completed change replaces that row, so a chain of changes inside the window of the notices still waiting to be
+ * sent would aim the alarm for the first change at the second change's old number. In a takeover that number is the
+ * taker's own. The window outlasts the queue and its retries; it is also a pause in which the real owner can notice and act.
+ */
+export const PHONE_CHANGE_COOLDOWN_MS = 15 * 60 * 1000;

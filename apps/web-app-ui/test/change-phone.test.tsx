@@ -263,4 +263,22 @@ describe('Change phone number (SP-M05)', () => {
     );
     expect(screen.queryByText(/confirm it’s you/)).toBeNull();
   });
+
+  it('says when the next change may start, and why, when one has only just been made', async () => {
+    answerWith(api.call, {
+      ...FACTORS,
+      ...STEP_UP,
+      'POST /me/phone/change': problem('CONFLICT', 409, {
+        reason: 'PHONE_RECENTLY_CHANGED',
+        retryAt: '2026-11-17T10:15:00.000Z',
+      }),
+    });
+    renderWithApi(api.call, <ChangePhone />);
+    await sendFirst();
+    expect(
+      await screen.findByText(
+        /Your number was changed a moment ago\. To protect your account, you can change it again after 17 Nov · 11:15\. If you didn’t change it, contact support now\./,
+      ),
+    ).toBeDefined();
+  });
 });

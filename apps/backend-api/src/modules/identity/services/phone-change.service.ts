@@ -2,7 +2,8 @@
 //
 // Three steps, because "your phone number is your Komtru ID" means both ends are proven and the old one is told:
 //   1. `startPhoneChange`    behind a step-up, names the new number and sends a code to the CURRENT one (it is you).
-//   2. `confirmCurrentPhone` takes that code and sends a code to the NEW one (it is yours).
+//   2. `confirmCurrentPhone` takes that code and sends a code to the NEW one (it is yours). A start supersedes any
+//      earlier NEW-end code for the same number, so step 3 can only be reached through this change's step 2.
 //   3. `confirmNewPhone`     takes that code and swaps the numbers; Notify then tells the old number.
 //
 // How a change in flight is held. A number in a change carries `user_phones.change_state`: `PENDING` for the new number being
@@ -11,13 +12,19 @@
 // lock on the user's row as a second belt. That matters because Notify finds the number a code or a notice goes to by that
 // state, so a state a session alone could forge or duplicate would be a way to aim a security message at somebody else's
 // handset. Only a completed change writes `RETIRED`, and it needs both codes.
-import { and, eq, isNull } from 'drizzle-orm';
+import { and, desc, eq, gt, isNull } from 'drizzle-orm';
 import { isUniqueViolation } from '../../../db/errors.js';
 import type { Db } from '../../../db/index.js';
 import { publish, type Tx } from '../../../platform/events/publish.js';
 import { DEFAULT_COUNTRY, maskPhone, normalisePhone } from '../../../platform/identifiers.js';
 import { identityPhoneChangedEvent } from '../domain/events.js';
-import { phoneChangeDestinationHash, type PhoneChangeEnd } from '../domain/phone-change.js';
+import {
+  PHONE_CHANGE_COOLDOWN_MS,
+  phoneChangeDestinationHash,
+  type PhoneChangeEnd,
+} from '../domain/phone-change.js';
+import { identityAuditLog } from '../infrastructure/postgres/schema/audit.js';
+import { otpChallenges } from '../infrastructure/postgres/schema/sessions.js';
 import { mfaFactors } from '../infrastructure/postgres/schema/sessions.js';
 import { userPhones } from '../infrastructure/postgres/schema/contacts.js';
 import { users } from '../infrastructure/postgres/schema/users.js';
@@ -68,7 +75,9 @@ export type StartPhoneChangeResult =
   /** No verified number on the account to confirm with. */
   | { outcome: 'NO_CURRENT_PHONE' }
   | { outcome: 'INVALID_PHONE' }
-  | { outcome: 'SAME_PHONE' };
+  | { outcome: 'SAME_PHONE' }
+  /** A change was completed less than the cooldown ago. `retryAt` is when the next one may start. */
+  | { outcome: 'COOLDOWN'; retryAt: Date };
 
 export async function startPhoneChange(
   deps: PhoneChangeDeps,
@@ -94,12 +103,51 @@ export async function startPhoneChange(
     // what holds if this lock is ever lost; this is what makes the loser's start succeed instead of failing.
     await tx.select({ id: users.id }).from(users).where(eq(users.id, input.userId)).for('update');
 
+    // A change that just completed holds the next one off (see `PHONE_CHANGE_COOLDOWN_MS`). Read under the user lock, so two starts
+    // cannot both pass it, and from the audit row the swap wrote in its own transaction: an abandoned start writes only
+    // PHONE_CHANGE_STARTED and so never counts against the person.
+    const lastChange = (
+      await tx
+        .select({ at: identityAuditLog.occurredAt })
+        .from(identityAuditLog)
+        .where(
+          and(
+            eq(identityAuditLog.subjectUserId, input.userId),
+            eq(identityAuditLog.action, AUDIT_ACTIONS.PHONE_CHANGED),
+            gt(identityAuditLog.occurredAt, new Date(Date.now() - PHONE_CHANGE_COOLDOWN_MS)),
+          ),
+        )
+        .orderBy(desc(identityAuditLog.occurredAt))
+        .limit(1)
+    )[0];
+    if (lastChange) {
+      return { outcome: 'COOLDOWN', retryAt: new Date(lastChange.at.getTime() + PHONE_CHANGE_COOLDOWN_MS) };
+    }
+
     const current = (await primaryContacts(tx, input.userId)).phone;
     if (!current?.verified) return { outcome: 'NO_CURRENT_PHONE' };
 
     const normalised = normalisePhone(input.newPhone);
     if (!normalised) return { outcome: 'INVALID_PHONE' };
     if (normalised.phoneE164 === current.address) return { outcome: 'SAME_PHONE' };
+
+    // A proof for the new number belongs to the change that minted it. Starting again to the same number must not leave the
+    // earlier change's NEW-end code live, or it would complete this change without the current number's code ever being
+    // given (the hash is per number and end, so the database cannot tell the two changes apart; this does).
+    await tx
+      .update(otpChallenges)
+      .set({ consumedAt: new Date() })
+      .where(
+        and(
+          eq(otpChallenges.userId, input.userId),
+          eq(otpChallenges.purpose, 'SENSITIVE_ACTION'),
+          isNull(otpChallenges.consumedAt),
+          eq(
+            otpChallenges.destinationHash,
+            phoneChangeDestinationHash(deps.otpHasher, { phoneE164: normalised.phoneE164, end: 'NEW' }),
+          ),
+        ),
+      );
 
     // One pending number at a time. Only the pending one: a retired number is the notice's address and is not this
     // flow's to touch, and any other unverified number on the account belongs to another flow.

@@ -64,6 +64,15 @@ export async function postStartPhoneChange(
       throw new ApiError(422, 'VALIDATION_FAILED', 'That is already your number', undefined, [
         { path: 'newPhone', message: 'Enter a different number' },
       ]);
+    case 'COOLDOWN':
+      throw new ApiError(
+        409,
+        'CONFLICT',
+        'Your number was changed a moment ago',
+        'To protect your account, a second change has to wait. If you did not change your number, contact support now.',
+        undefined,
+        { reason: 'PHONE_RECENTLY_CHANGED', retryAt: result.retryAt.toISOString() },
+      );
     case 'NO_CURRENT_PHONE':
       throw new ApiError(
         409,
