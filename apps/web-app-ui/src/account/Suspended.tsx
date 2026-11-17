@@ -12,7 +12,7 @@ import {
   TermList,
   TermRow,
 } from '@komtru/ui-kit';
-import { useState } from 'react';
+import { ContactSupport } from './ContactSupport';
 import { Loading, LoadProblem } from './states';
 
 const ALERT_MARK = (
@@ -116,7 +116,9 @@ export function Suspended({ seller = false }: { seller?: boolean }): React.JSX.E
           : 'Any Trade already in progress stays exactly as it was — funds in escrow remain protected, and you can still confirm delivery or respond to a dispute.'}
       </Banner>
       {seller ? <SellerPaused abilities={account.abilities} /> : <BuyerNext />}
-      <Contact reference={account.supportReference} />
+      <div className="mt-[16px]">
+        <ContactSupport label="Contact TrustOps about this" reference={account.supportReference} />
+      </div>
     </ScreenColumn>
   );
 }
@@ -146,30 +148,5 @@ function SellerPaused({ abilities }: { abilities: Me['account']['abilities'] }):
         <TermRow label="Ship or withdraw">{abilities.withdraw ? 'Unaffected' : 'Paused'}</TermRow>
       </TermList>
     </section>
-  );
-}
-
-function Contact({ reference }: { reference: string }): React.JSX.Element {
-  const [shown, setShown] = useState(false);
-  return (
-    <div className="mt-[16px] flex flex-col gap-[8px]">
-      <Button
-        type="button"
-        variant="secondary"
-        aria-expanded={shown}
-        aria-controls="support-reference"
-        onClick={() => setShown((value) => !value)}
-      >
-        Contact TrustOps about this
-      </Button>
-      <div id="support-reference">
-        {shown && (
-          <Banner tone="info" title="Quote this reference">
-            <span className="font-mono">{reference}</span> — give it to support and they’ll find your case
-            straight away.
-          </Banner>
-        )}
-      </div>
-    </div>
   );
 }
