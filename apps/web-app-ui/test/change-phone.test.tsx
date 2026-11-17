@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 // F-045 (SP-M05): change phone number, end to end through the three steps the platform now has.
-import { cleanup, fireEvent, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ChangePhone, phoneDigits } from '../src/account/ChangePhone';
 import { expectNoAxeViolations } from './axe';
@@ -26,6 +26,20 @@ const STARTED = {
   delivered: true,
 };
 const SECOND = { challengeId: id(702), maskedDestination: '+23490•••2290', expiresAt: WHEN, delivered: true };
+
+const FACTORS = { 'GET /me/mfa/factors': { items: [], page: 1, limit: 50, total: 0 } };
+const STEP_UP = { 'POST /me/step-up': { stepUpToken: 'chal.secret', expiresAt: 1 } };
+
+/** Names the number, gives the password as the proof the sheet asks for, and sends the first code. */
+const sendFirst = async () => {
+  type('New number', '0905 118 2290');
+  const send = screen.getByRole<HTMLButtonElement>('button', { name: 'Send a code' });
+  await waitFor(() => expect(send.disabled).toBe(false));
+  fireEvent.click(send);
+  const sheet = await screen.findByRole('dialog', { name: 'Confirm it’s you' });
+  fireEvent.change(within(sheet).getByLabelText('Your password'), { target: { value: 'hunter2hunter2' } });
+  fireEvent.click(within(sheet).getByRole('button', { name: 'Confirm' }));
+};
 
 const type = (label: string, value: string) =>
   fireEvent.change(screen.getByLabelText(label), { target: { value } });
@@ -64,7 +78,8 @@ describe('Change phone number (SP-M05)', () => {
     await expectNoAxeViolations(container, SHELL_RULES);
   });
 
-  it('holds "Send a code" until the new number looks like one', () => {
+  it('holds "Send a code" until the new number looks like one', async () => {
+    answerWith(api.call, FACTORS);
     renderWithApi(api.call, <ChangePhone />);
     const send = screen.getByRole<HTMLButtonElement>('button', { name: 'Send a code' });
     expect(send.disabled).toBe(true);
@@ -72,20 +87,73 @@ describe('Change phone number (SP-M05)', () => {
     expect(screen.getByText('Enter it the way you use it, like 0905 118 2290.')).toBeDefined();
     expect(send.disabled).toBe(true);
     type('New number', '0905 118 2290');
-    expect(send.disabled).toBe(false);
+    await waitFor(() => expect(send.disabled).toBe(false));
+  });
+
+  it('asks for proof it is you before anything is sent, and sends the proof with the number', async () => {
+    answerWith(api.call, { ...FACTORS, ...STEP_UP, 'POST /me/phone/change': STARTED });
+    renderWithApi(api.call, <ChangePhone />);
+    type('New number', '0905 118 2290');
+    const send = screen.getByRole<HTMLButtonElement>('button', { name: 'Send a code' });
+    await waitFor(() => expect(send.disabled).toBe(false));
+    fireEvent.click(send);
+    await screen.findByRole('dialog', { name: 'Confirm it’s you' });
+    expect(callsTo(api.call, 'POST', '/me/phone/change')).toHaveLength(0);
+    const sheet = screen.getByRole('dialog', { name: 'Confirm it’s you' });
+    fireEvent.change(within(sheet).getByLabelText('Your password'), { target: { value: 'hunter2hunter2' } });
+    fireEvent.click(within(sheet).getByRole('button', { name: 'Confirm' }));
+    await screen.findByText(/We sent a code to your current number/);
+    expect(callsTo(api.call, 'POST', '/me/phone/change')[0]?.body).toEqual({
+      newPhone: '0905 118 2290',
+      stepUpToken: 'chal.secret',
+    });
+  });
+
+  it('uses the authenticator code as the proof when the account has one', async () => {
+    answerWith(api.call, {
+      'GET /me/mfa/factors': {
+        items: [
+          {
+            id: id(800),
+            type: 'TOTP',
+            label: 'Authenticator app',
+            isDefault: true,
+            createdAt: WHEN,
+            lastUsedAt: null,
+          },
+        ],
+        page: 1,
+        limit: 50,
+        total: 1,
+      },
+      ...STEP_UP,
+      'POST /me/phone/change': STARTED,
+    });
+    renderWithApi(api.call, <ChangePhone />);
+    type('New number', '0905 118 2290');
+    const send = screen.getByRole<HTMLButtonElement>('button', { name: 'Send a code' });
+    await waitFor(() => expect(send.disabled).toBe(false));
+    fireEvent.click(send);
+    const sheet = await screen.findByRole('dialog', { name: 'Confirm it’s you' });
+    expect(within(sheet).queryByLabelText('Your password')).toBeNull();
+    expect(within(sheet).getByText(/code from your authenticator app/)).toBeDefined();
   });
 
   it('goes through both codes and says the number is changed and the old one told', async () => {
     answerWith(api.call, {
+      ...FACTORS,
+      ...STEP_UP,
       'POST /me/phone/change': STARTED,
       'POST /me/phone/change/confirm-current': SECOND,
       'POST /me/phone/change/confirm-new': { status: 'CHANGED', maskedPhone: '+23490•••2290' },
     });
     const { container } = renderWithApi(api.call, <ChangePhone />);
-    type('New number', '0905 118 2290');
-    fireEvent.click(screen.getByRole('button', { name: 'Send a code' }));
+    await sendFirst();
     expect(await screen.findByText(/We sent a code to your current number, \+23480•••4471/)).toBeDefined();
-    expect(callsTo(api.call, 'POST', '/me/phone/change')[0]?.body).toEqual({ newPhone: '0905 118 2290' });
+    expect(callsTo(api.call, 'POST', '/me/phone/change')[0]?.body).toEqual({
+      newPhone: '0905 118 2290',
+      stepUpToken: 'chal.secret',
+    });
 
     typeCode('111111');
     fireEvent.click(screen.getByRole('button', { name: 'Continue' }));
@@ -115,12 +183,13 @@ describe('Change phone number (SP-M05)', () => {
 
   it('says a wrong code is wrong and lets the person try again', async () => {
     answerWith(api.call, {
+      ...FACTORS,
+      ...STEP_UP,
       'POST /me/phone/change': STARTED,
       'POST /me/phone/change/confirm-current': problem('OTP_INVALID', 422, { attemptsRemaining: 4 }),
     });
     renderWithApi(api.call, <ChangePhone />);
-    type('New number', '0905 118 2290');
-    fireEvent.click(screen.getByRole('button', { name: 'Send a code' }));
+    await sendFirst();
     await screen.findByText(/We sent a code to your current number/);
     typeCode('000000');
     fireEvent.click(screen.getByRole('button', { name: 'Continue' }));
@@ -130,6 +199,8 @@ describe('Change phone number (SP-M05)', () => {
 
   it('says so when the new number is already on another account', async () => {
     answerWith(api.call, {
+      ...FACTORS,
+      ...STEP_UP,
       'POST /me/phone/change': STARTED,
       'POST /me/phone/change/confirm-current': SECOND,
       'POST /me/phone/change/confirm-new': problem('CONFLICT', 409, {
@@ -137,8 +208,7 @@ describe('Change phone number (SP-M05)', () => {
       }),
     });
     renderWithApi(api.call, <ChangePhone />);
-    type('New number', '0905 118 2290');
-    fireEvent.click(screen.getByRole('button', { name: 'Send a code' }));
+    await sendFirst();
     await screen.findByText(/We sent a code to your current number/);
     typeCode('111111');
     fireEvent.click(screen.getByRole('button', { name: 'Continue' }));
@@ -149,15 +219,21 @@ describe('Change phone number (SP-M05)', () => {
   });
 
   it('says a number the platform refuses cannot be used, and an unreachable platform is not that', async () => {
-    answerWith(api.call, { 'POST /me/phone/change': problem('VALIDATION_FAILED', 422) });
+    answerWith(api.call, {
+      ...FACTORS,
+      ...STEP_UP,
+      'POST /me/phone/change': problem('VALIDATION_FAILED', 422),
+    });
     renderWithApi(api.call, <ChangePhone />);
-    type('New number', '0905 118 2290');
-    fireEvent.click(screen.getByRole('button', { name: 'Send a code' }));
+    await sendFirst();
     expect(await screen.findByText('That number can’t be used. Check it and try again.')).toBeDefined();
   });
 
   it('offers the lost-phone request as the way back in, labelled as that, and not as the change', async () => {
-    answerWith(api.call, { 'POST /auth/recovery-requests': { receiptId: id(950), status: 'RECEIVED' } });
+    answerWith(api.call, {
+      ...FACTORS,
+      'POST /auth/recovery-requests': { receiptId: id(950), status: 'RECEIVED' },
+    });
     renderWithApi(api.call, <ChangePhone />);
     expect(screen.queryByRole('button', { name: 'I can’t get the code' })).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: 'I’ve lost access to my number' }));
@@ -174,7 +250,7 @@ describe('Change phone number (SP-M05)', () => {
   });
 
   it('words a rate-limited recovery request as that, not as a failed confirmation', async () => {
-    answerWith(api.call, { 'POST /auth/recovery-requests': problem('RATE_LIMITED', 429) });
+    answerWith(api.call, { ...FACTORS, 'POST /auth/recovery-requests': problem('RATE_LIMITED', 429) });
     renderWithApi(api.call, <ChangePhone />);
     fireEvent.click(screen.getByRole('button', { name: 'I’ve lost access to my number' }));
     type('The number you’ve lost', '0803 221 4471');

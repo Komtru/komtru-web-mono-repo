@@ -2,6 +2,7 @@
 
 import {
   useConfirmCurrentPhone,
+  useFactors,
   useConfirmNewPhone,
   useRequestRecovery,
   useStartPhoneChange,
@@ -19,6 +20,7 @@ import {
   type VersionStep,
 } from '@komtru/ui-kit';
 import { useState } from 'react';
+import { StepUpSheet } from './StepUpSheet';
 import { accountProblem } from './words';
 
 /**
@@ -65,29 +67,36 @@ export function ChangePhone(): React.JSX.Element {
   const [newNumber, setNewNumber] = useState('');
   const [code, setCode] = useState('');
   const [problem, setProblem] = useState<string | undefined>(undefined);
+  const [proving, setProving] = useState(false);
+  const factors = useFactors();
 
   const numberOk = phoneDigits(newNumber) !== undefined;
   const busy = start.isPending || current.isPending || next.isPending;
 
-  const send = () => {
+  /** §S7: a change of number asks for proof it is you first, from any method the account has; then the code goes out. */
+  const send = (stepUpToken: string) => {
     if (!numberOk) return;
     setProblem(undefined);
-    start.mutate(newNumber.trim(), {
-      onSuccess: (answer) => {
-        if (!answer.delivered) {
-          setProblem('We’ve sent too many codes to that number recently. Try again later.');
-          return;
-        }
-        setCode('');
-        setPhase({
-          at: 'current',
-          changeId: answer.changeId,
-          challengeId: answer.challengeId,
-          sentTo: answer.maskedDestination,
-        });
+    setProving(false);
+    start.mutate(
+      { newPhone: newNumber.trim(), stepUpToken },
+      {
+        onSuccess: (answer) => {
+          if (!answer.delivered) {
+            setProblem('We’ve sent too many codes to your current number recently. Try again later.');
+            return;
+          }
+          setCode('');
+          setPhase({
+            at: 'current',
+            changeId: answer.changeId,
+            challengeId: answer.challengeId,
+            sentTo: answer.maskedDestination,
+          });
+        },
+        onError: (error) => setProblem(accountProblem(error, 'phone')),
       },
-      onError: (error) => setProblem(accountProblem(error, 'phone')),
-    });
+    );
   };
 
   const confirmCurrent = () => {
@@ -98,6 +107,12 @@ export function ChangePhone(): React.JSX.Element {
       {
         onSuccess: (answer) => {
           setCode('');
+          if (!answer.delivered) {
+            // The code for the current number is spent; the change has to be started again.
+            setPhase({ at: 'enter' });
+            setProblem('We’ve sent too many codes to that new number recently. Try again later.');
+            return;
+          }
           setPhase({
             at: 'new',
             changeId: phase.changeId,
@@ -140,7 +155,7 @@ export function ChangePhone(): React.JSX.Element {
         <form
           onSubmit={(event) => {
             event.preventDefault();
-            send();
+            if (numberOk && factors.data !== undefined) setProving(true);
           }}
           noValidate
         >
@@ -177,9 +192,18 @@ export function ChangePhone(): React.JSX.Element {
         </div>
       )}
 
+      <StepUpSheet
+        open={proving}
+        factors={factors.data ?? []}
+        title="Confirm it’s you"
+        onClose={() => setProving(false)}
+        onProved={send}
+      />
+
       {phase.at === 'done' && (
         <ReadyBanner title="Your number is changed">
-          Your number is now {phase.maskedPhone}. We’ve told your old number.
+          Your number is now {phase.maskedPhone}. We’ve told your old number. If you signed in with
+          text-message codes, that method was switched off: set it up again on your new number in Security.
         </ReadyBanner>
       )}
 
@@ -194,7 +218,11 @@ export function ChangePhone(): React.JSX.Element {
 
       <div className="mt-[16px] flex flex-col gap-[8px]">
         {phase.at === 'enter' && (
-          <Button type="button" disabled={!numberOk || busy} onClick={send}>
+          <Button
+            type="button"
+            disabled={!numberOk || busy || factors.data === undefined}
+            onClick={() => setProving(true)}
+          >
             {start.isPending ? 'Sending…' : 'Send a code'}
           </Button>
         )}
