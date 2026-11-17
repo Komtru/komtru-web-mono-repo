@@ -1,8 +1,9 @@
 'use client';
 
 import { useMe } from '@komtru/api-client/react';
-import { ActionStack, Button, NoteBanner, ScreenColumn, ScreenHeader, StatusHero } from '@komtru/ui-kit';
+import { ActionStack, Button, NoteBanner, ScreenColumn, ScreenHeader } from '@komtru/ui-kit';
 import { ContactSupport } from '../account/ContactSupport';
+import { SystemHero } from './SystemHero';
 
 /**
  * SP-M19: a dead link turned into a safety message, because a fake link is the real risk. It is what a Trade Code or
@@ -18,9 +19,9 @@ export function LinkNotFound({ backHref = '/trades' }: { backHref?: string }): R
   return (
     <ScreenColumn>
       <ScreenHeader title="Trade" as="p" backHref={backHref} backLabel="Back to your Trades" />
-      <StatusHero tone="warning" title="We can’t find that Trade">
+      <SystemHero mark="warning" title="We can’t find that Trade">
         The code may be mistyped, or the Trade may have been cancelled or have expired.
-      </StatusHero>
+      </SystemHero>
       <NoteBanner>
         Komtru never asks you to pay from a link. Search the Trade Code inside the app instead.
       </NoteBanner>

@@ -1,9 +1,10 @@
 'use client';
 
-import { Button, StatusHero } from '@komtru/ui-kit';
+import { Button } from '@komtru/ui-kit';
 import { useState } from 'react';
 import { EntryFrame } from '../entry/components/EntryFrame';
 import { clearOfflineCache } from '../shell/ServiceWorker';
+import { SystemHero } from './SystemHero';
 
 /**
  * SP-M15: when this version of the app is no longer supported. It says plainly that money and Trades are unaffected.
@@ -44,10 +45,10 @@ export function UpdateRequired(): React.JSX.Element {
       }
     >
       <div className="pt-[24px]">
-        <StatusHero tone="info" title="Please update Komtru">
+        <SystemHero mark="download" title="Please update Komtru">
           This version is no longer supported. Your Trades and money are safe, and nothing changes until you
           update.
-        </StatusHero>
+        </SystemHero>
         {why && (
           <p className="text-[12px] leading-[1.6] text-slate">
             Komtru has changed in a way this version can’t follow, so it stops here rather than risk showing

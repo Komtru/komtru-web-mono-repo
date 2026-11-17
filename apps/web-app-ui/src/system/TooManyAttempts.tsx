@@ -2,7 +2,8 @@
 
 import { Button } from '@komtru/ui-kit';
 import { countdown, ENTRY } from '../entry/flow';
-import { EntryFrame, EntryHeading, Lede, TrustNote } from '../entry/components/EntryFrame';
+import { EntryFrame, TrustNote } from '../entry/components/EntryFrame';
+import { SystemHero } from './SystemHero';
 import { useSecondsLeft } from './useSecondsLeft';
 
 /**
@@ -36,8 +37,9 @@ export function TooManyAttempts({
       }
     >
       <div className="pt-[24px] text-center">
-        <EntryHeading>Too many tries</EntryHeading>
-        <Lede>To keep your account safe, sign-in is paused for a little while.</Lede>
+        <SystemHero mark="alert" title="Too many tries">
+          To keep your account safe, sign-in is paused for a little while.
+        </SystemHero>
         {left !== undefined && (
           <p
             role="timer"

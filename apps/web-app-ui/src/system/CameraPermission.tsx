@@ -1,7 +1,8 @@
 'use client';
 
-import { Button, StatusHero } from '@komtru/ui-kit';
+import { Button } from '@komtru/ui-kit';
 import { TrustNote } from '../entry/components/EntryFrame';
+import { SystemHero } from './SystemHero';
 
 /**
  * SP-M18: the camera is asked for just before it is needed, with the reason in the person's terms. This is what
@@ -21,9 +22,9 @@ export function CameraPermission({
 }): React.JSX.Element {
   return (
     <div>
-      <StatusHero tone="info" as="h2" title="Allow the camera">
+      <SystemHero mark="camera" as="h2" title="Allow the camera">
         Photos you take in Komtru are marked as taken on your device, which buyers trust.
-      </StatusHero>
+      </SystemHero>
       <TrustNote>Used only to take photos for a Trade</TrustNote>
       <TrustNote>You can also pick photos you took earlier</TrustNote>
       <p className="mt-[6px] mb-[14px] text-[11.5px] leading-[1.6] text-trust-gray">
