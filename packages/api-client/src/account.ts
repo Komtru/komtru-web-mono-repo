@@ -423,3 +423,29 @@ export const submitLiveness = defineEndpoint({
   retryable: false,
   schema: { body: z.strictObject({ selfieFileId: z.uuid() }), response: submitted },
 });
+
+// --- recovery (SP-M05's "I can't get the code") -------------------------------------------------------------
+
+export const RECOVERY_METHODS = [
+  'LOST_PASSWORD',
+  'LOST_PHONE',
+  'LOST_DEVICE',
+  'LOST_ALL',
+  'MFA_LOCKOUT',
+] as const;
+export type RecoveryMethod = (typeof RECOVERY_METHODS)[number];
+
+/**
+ * Public: the person asking has no session, or cannot use the one they have. The answer is one shape whether or not an
+ * account matches the identifier (§S3), so a screen can never say "no such account". Three an hour per identifier.
+ */
+export const requestRecovery = defineEndpoint({
+  method: 'post',
+  path: '/auth/recovery-requests',
+  scope: 'PUBLIC',
+  retryable: false,
+  schema: {
+    body: z.strictObject({ identifier: z.string().trim().min(3).max(320), method: z.enum(RECOVERY_METHODS) }),
+    response: z.object({ receiptId: z.uuid(), status: z.literal('RECEIVED') }),
+  },
+});

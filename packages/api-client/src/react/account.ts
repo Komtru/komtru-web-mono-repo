@@ -20,6 +20,7 @@ import {
   removeFactor,
   requestDataExport,
   requestErasure,
+  requestRecovery,
   retireDevice,
   revokeSession,
   stepUp,
@@ -29,6 +30,7 @@ import {
   submitNin,
   trustDevice,
   type CloseAccountBody,
+  type RecoveryMethod,
   type StepUpBody,
   type SubmitBvnBody,
   type SubmitNinBody,
@@ -198,4 +200,13 @@ export function useSubmitLiveness() {
   return useAccountMutation((selfieFileId: string) =>
     client.call(submitLiveness, { body: { selfieFileId } }),
   );
+}
+
+/** "I can't get the code": opens a recovery request a person on the team reads, with an ID check. */
+export function useRequestRecovery() {
+  const client = useApiClient();
+  return useMutation({
+    mutationFn: (body: { identifier: string; method: RecoveryMethod }) =>
+      client.call(requestRecovery, { body }),
+  });
 }

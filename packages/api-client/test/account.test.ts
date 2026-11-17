@@ -13,6 +13,7 @@ import {
   removeFactor,
   requestDataExport,
   requestErasure,
+  requestRecovery,
   revokeSession,
   stepUp,
   stepUpBodySchema,
@@ -164,5 +165,22 @@ describe('account endpoints', () => {
   it('takes a selfie file id for liveness and nothing else', () => {
     expect(submitLiveness.schema.body?.safeParse({ selfieFileId: ID })?.success).toBe(true);
     expect(submitLiveness.schema.body?.safeParse({ selfieFileId: ID, extra: 1 })?.success).toBe(false);
+  });
+
+  it('asks for recovery without a session, and answers the same whether or not the account exists', () => {
+    expect(requestRecovery).toMatchObject({
+      method: 'post',
+      path: '/auth/recovery-requests',
+      scope: 'PUBLIC',
+    });
+    expect(
+      requestRecovery.schema.body?.safeParse({ identifier: '08032214471', method: 'LOST_PHONE' }).success,
+    ).toBe(true);
+    expect(
+      requestRecovery.schema.body?.safeParse({ identifier: '08032214471', method: 'SHRUG' }).success,
+    ).toBe(false);
+    expect(requestRecovery.schema.response.parse({ receiptId: ID, status: 'RECEIVED' }).status).toBe(
+      'RECEIVED',
+    );
   });
 });

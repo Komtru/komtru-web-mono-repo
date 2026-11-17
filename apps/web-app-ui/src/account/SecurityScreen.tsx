@@ -29,6 +29,7 @@ import { accountProblem, ago } from './words';
 
 export const SECURITY_HREF = '/account/security';
 export const TWO_FACTOR_HREF = '/account/security/two-factor';
+export const PHONE_HREF = '/account/phone';
 
 const SECOND_FACTORS = new Set(['TOTP', 'SMS_OTP', 'PASSKEY']);
 const FACTOR_NAME: Record<string, string> = {
@@ -108,6 +109,7 @@ function Loaded({
             />
           }
         />
+        <SettingsRow label="Phone number" sub="Move to a new number" href={PHONE_HREF} />
       </SettingsGroup>
       {on && <Methods methods={methods} sheet={sheet} factors={factors} />}
       <Devices devices={devices} sessions={sessions} />
