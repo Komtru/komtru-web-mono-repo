@@ -111,6 +111,13 @@ export const ACCOUNT_ICONS: Record<AccountItemId, React.ReactNode> = {
       <circle cx="17.5" cy="16.5" r="3.2" />
     </svg>
   ),
+  /** SP-M03: a padlock on a page, for what Komtru can use and what it keeps. */
+  privacy: (
+    <svg {...RAIL} strokeLinejoin="round">
+      <rect x="5" y="11" width="14" height="9" rx="1.5" />
+      <path d="M8 11V8a4 4 0 0 1 8 0v3" />
+    </svg>
+  ),
   /** S6's `.tab` — the card. Payouts, for anyone who has sold. */
   payouts: (
     <svg {...RAIL}>
