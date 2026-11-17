@@ -4,6 +4,7 @@
 //
 // Plain functions over `fetch` that answer with an outcome, not a Response: the screens branch on
 // what happened, and this is the part worth testing without rendering anything.
+import { markDeliberateSignOut } from './deliberate-sign-out';
 import { authRoutePaths, type AuthSession, type NextStep } from '@komtru/api-client';
 
 const PATHS = authRoutePaths();
@@ -265,5 +266,6 @@ export async function proveCode(
 
 /** Best effort: a sign-out that cannot reach the platform still clears this device's cookies. */
 export async function signOut(fetchImpl: typeof fetch = fetch): Promise<void> {
+  markDeliberateSignOut();
   await post(PATHS.logout, {}, fetchImpl);
 }

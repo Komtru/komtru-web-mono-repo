@@ -18,9 +18,16 @@ vi.mock('@komtru/app-kit/react', () => ({
   },
 }));
 
+import { signOut } from '../src/entry/session-calls';
+import {
+  markDeliberateSignOut,
+  resetDeliberateSignOut,
+  wasDeliberateSignOut,
+} from '../src/entry/deliberate-sign-out';
 import { Providers } from '../src/shell/Providers';
 
 afterEach(() => {
+  router.replace.mockReset();
   cleanup();
   captured.props = undefined;
   vi.unstubAllEnvs();
@@ -52,6 +59,29 @@ describe('the app providers', () => {
         '/session-expired?next=%2Ftrades%2FKMT-9042800-NG%3Ftab%3Dterms',
       );
     });
+  });
+
+  it('says nothing about an expired session after a deliberate sign-out (a closed account stays on its done screen)', async () => {
+    markDeliberateSignOut();
+    try {
+      mount();
+      (captured.props?.onSessionEnded as () => void)();
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      expect(router.replace).not.toHaveBeenCalled();
+    } finally {
+      resetDeliberateSignOut();
+    }
+  });
+
+  it('signing out through the app marks the sign-out as deliberate', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response('{}', { status: 200 })));
+    try {
+      expect(wasDeliberateSignOut()).toBe(false);
+      await signOut();
+      expect(wasDeliberateSignOut()).toBe(true);
+    } finally {
+      resetDeliberateSignOut();
+    }
   });
 
   it('does not hand the socket a token of its own to override the session', () => {
