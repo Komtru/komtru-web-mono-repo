@@ -115,6 +115,42 @@ describe('Statements (SP-M13)', () => {
     );
   });
 
+  it('names the file and limits the dates by the Lagos day, which has already turned at 23:30 UTC', async () => {
+    vi.setSystemTime(new Date('2026-11-17T23:30:00.000Z'));
+    answerWith(api.call, FEEDS);
+    renderWithApi(api.call, <Statements />);
+    fireEvent.click(screen.getByRole('radio', { name: /Custom/ }));
+    expect(screen.getByLabelText('From').getAttribute('max')).toBe('2026-11-18');
+    fireEvent.click(screen.getByRole('radio', { name: /^This month/ }));
+    fireEvent.click(screen.getByRole('button', { name: 'Export statement' }));
+    await screen.findByText(/Your statement is ready/);
+    expect(saved.names).toEqual(['komtru-statement-2026-11-18.csv']);
+  });
+
+  it('keeps the file’s address alive after the click, and lets go of it later', async () => {
+    const revoke = vi.fn();
+    URL.revokeObjectURL = revoke;
+    // Catch the deferred revoke instead of waiting a real second for it.
+    const later: { run: () => void; ms: number }[] = [];
+    const real = window.setTimeout.bind(window);
+    vi.spyOn(window, 'setTimeout').mockImplementation(((run: () => void, ms?: number) => {
+      if (ms === 1000) {
+        later.push({ run, ms });
+        return 0;
+      }
+      return real(run, ms);
+    }) as unknown as typeof window.setTimeout);
+    answerWith(api.call, FEEDS);
+    renderWithApi(api.call, <Statements />);
+    fireEvent.click(screen.getByRole('button', { name: 'Export statement' }));
+    await screen.findByText(/Your statement is ready/);
+    expect(revoke).not.toHaveBeenCalled();
+    // Not yet: nothing has revoked it. Then every one-second timer the page is waiting on fires.
+    expect(later.length).toBeGreaterThan(0);
+    for (const timer of later) timer.run();
+    expect(revoke).toHaveBeenCalledWith('blob:statement');
+  });
+
   it('leaves out what is switched off', async () => {
     answerWith(api.call, FEEDS);
     renderWithApi(api.call, <Statements />);

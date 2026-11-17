@@ -23,6 +23,13 @@ function lagosYearMonth(now: Date): { year: number; month: number } {
   return { year: shifted.getUTCFullYear(), month: shifted.getUTCMonth() + 1 };
 }
 
+/** The Lagos calendar day of an instant, as `2026-11-17`: the day a date input's `max` and a file's name should use. */
+export function lagosDate(at: Date): string {
+  const { year, month } = lagosYearMonth(at);
+  const day = new Date(at.getTime() + LAGOS_OFFSET_MS).getUTCDate();
+  return `${String(year)}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+}
+
 const DATE_INPUT = /^(\d{4})-(\d{2})-(\d{2})$/;
 
 function parseDay(text: string): { year: number; month: number; day: number } | undefined {

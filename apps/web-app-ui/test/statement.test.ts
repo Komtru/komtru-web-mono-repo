@@ -3,6 +3,7 @@ import {
   buildStatement,
   csvCell,
   koboDecimal,
+  lagosDate,
   periodRange,
   toCsv,
   type StatementRow,
@@ -140,5 +141,13 @@ describe('toCsv', () => {
     expect(toCsv([row])).toBe(
       '\uFEFFDate (Lagos),Type,Reference,Status,Amount (NGN),Fee (NGN),Sent (NGN)\r\n2026-11-10 11:00,Payout,payout-801,Completed,100000.00,50.00,99950.00\r\n',
     );
+  });
+});
+
+describe('lagosDate', () => {
+  it('is the Lagos day, not the UTC one, either side of midnight', () => {
+    expect(lagosDate(new Date('2026-11-17T22:59:59.000Z'))).toBe('2026-11-17');
+    expect(lagosDate(new Date('2026-11-17T23:00:00.000Z'))).toBe('2026-11-18');
+    expect(lagosDate(new Date('2026-12-31T23:30:00.000Z'))).toBe('2027-01-01');
   });
 });

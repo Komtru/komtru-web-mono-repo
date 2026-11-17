@@ -19,7 +19,7 @@ import {
 import { useState } from 'react';
 import { useOnline } from '../../shell/OfflineStatus';
 import { Loading } from '../states';
-import { buildStatement, periodRange, toCsv, type PeriodChoice } from './statement';
+import { buildStatement, lagosDate, periodRange, toCsv, type PeriodChoice } from './statement';
 
 const PAGE = 50;
 
@@ -32,8 +32,6 @@ const PERIODS: { kind: Kind; label: string; detail: string }[] = [
   { kind: 'custom', label: 'Custom', detail: 'Pick the first and last day' },
 ];
 
-const stamp = (now: Date): string => now.toISOString().slice(0, 10);
-
 /** Hands the file to the browser as a download. */
 function save(text: string, name: string): void {
   const url = URL.createObjectURL(new Blob([text], { type: 'text/csv;charset=utf-8' }));
@@ -43,7 +41,8 @@ function save(text: string, name: string): void {
   document.body.append(link);
   link.click();
   link.remove();
-  URL.revokeObjectURL(url);
+  // Not at once: older Safari and Firefox start the download after the click returns, and a revoked URL is a failed download.
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
 /**
@@ -96,7 +95,7 @@ export function Statements(): React.JSX.Element {
         setOutcome({ kind: 'empty' });
         return;
       }
-      save(toCsv(rows), `komtru-statement-${stamp(now)}.csv`);
+      save(toCsv(rows), `komtru-statement-${lagosDate(now)}.csv`);
       setOutcome({ kind: 'ready', lines: rows.length });
     } catch {
       setOutcome({ kind: 'failed' });
@@ -133,14 +132,14 @@ export function Statements(): React.JSX.Element {
           <TextField
             label="From"
             type="date"
-            max={stamp(now)}
+            max={lagosDate(now)}
             value={from}
             onChange={(event) => setFrom(event.target.value)}
           />
           <TextField
             label="To"
             type="date"
-            max={stamp(now)}
+            max={lagosDate(now)}
             value={to}
             onChange={(event) => setTo(event.target.value)}
             invalid={backwards}
