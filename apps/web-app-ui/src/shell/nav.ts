@@ -130,6 +130,10 @@ export type AccountItemId =
   | 'notifications'
   | 'security'
   | 'privacy'
+  | 'addresses'
+  | 'display'
+  | 'refunds'
+  | 'statements'
   | 'payouts'
   | 'park-agent';
 
@@ -171,6 +175,11 @@ export function accountItemsFor(viewer: Viewer, links: AccountLinks): readonly A
     { id: 'notifications', label: 'Notifications', href: '/account/notifications' },
     { id: 'security', label: 'Security', href: '/account/security' },
     { id: 'privacy', label: 'Privacy & data', href: '/account/privacy' },
+    // F-044: where items are delivered, how the app looks, and the money and its paperwork.
+    { id: 'addresses', label: 'Saved addresses', href: '/account/addresses' },
+    { id: 'display', label: 'Display & accessibility', href: '/account/display' },
+    { id: 'refunds', label: 'Where’s my refund?', href: '/account/refunds' },
+    { id: 'statements', label: 'Statements', href: '/account/statements' },
   ];
 
   if (viewer.hasSold) items.push({ id: 'payouts', label: 'Payouts', href: '/account/payouts' });

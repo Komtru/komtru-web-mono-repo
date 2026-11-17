@@ -17,13 +17,28 @@ export function AccountSections({
   links: AccountLinks;
 }): React.JSX.Element {
   const items = accountItemsFor(viewer, links);
-  const own = items.filter((item) => item.id !== 'payouts' && item.id !== 'park-agent');
+  const more = ['addresses', 'display', 'refunds', 'statements'];
+  const own = items.filter(
+    (item) => item.id !== 'payouts' && item.id !== 'park-agent' && !more.includes(item.id),
+  );
+  const delivery = items.filter((item) => item.id === 'addresses' || item.id === 'display');
+  const money = items.filter((item) => item.id === 'refunds' || item.id === 'statements');
   const earned = items.filter((item) => item.id === 'payouts' || item.id === 'park-agent');
 
   return (
     <div className="max-w-[480px]">
       <SettingsGroup label="Your account">
         {own.map((item) => (
+          <SettingsRow key={item.id} label={item.label} href={item.href} />
+        ))}
+      </SettingsGroup>
+      <SettingsGroup label="Delivery and display">
+        {delivery.map((item) => (
+          <SettingsRow key={item.id} label={item.label} href={item.href} />
+        ))}
+      </SettingsGroup>
+      <SettingsGroup label="Money and documents">
+        {money.map((item) => (
           <SettingsRow key={item.id} label={item.label} href={item.href} />
         ))}
       </SettingsGroup>
