@@ -3,6 +3,8 @@ import {
   activateOwnTotp,
   closeAccount,
   closeAccountBodySchema,
+  confirmCurrentPhone,
+  confirmNewPhone,
   enrolOwnTotp,
   getMe,
   getVerificationStatus,
@@ -17,6 +19,7 @@ import {
   revokeSession,
   stepUp,
   stepUpBodySchema,
+  startPhoneChange,
   submitLiveness,
 } from '../src/account.js';
 
@@ -182,5 +185,30 @@ describe('account endpoints', () => {
     expect(requestRecovery.schema.response.parse({ receiptId: ID, status: 'RECEIVED' }).status).toBe(
       'RECEIVED',
     );
+  });
+
+  it('mirrors the three steps of a phone change, none of them retried', () => {
+    for (const [endpoint, path] of [
+      [startPhoneChange, '/me/phone/change'],
+      [confirmCurrentPhone, '/me/phone/change/confirm-current'],
+      [confirmNewPhone, '/me/phone/change/confirm-new'],
+    ] as const) {
+      expect(endpoint).toMatchObject({ method: 'post', path, scope: 'CONSUMER', retryable: false });
+    }
+    expect(
+      startPhoneChange.schema.response.parse({
+        changeId: ID,
+        challengeId: ID,
+        maskedDestination: '+23480•••4471',
+        expiresAt: WHEN,
+        delivered: true,
+      }).maskedDestination,
+    ).toBe('+23480•••4471');
+    expect(
+      confirmNewPhone.schema.response.parse({ status: 'CHANGED', maskedPhone: '+23490•••2290' }).status,
+    ).toBe('CHANGED');
+    expect(
+      confirmCurrentPhone.schema.body?.safeParse({ changeId: ID, challengeId: ID, code: '123456' }).success,
+    ).toBe(true);
   });
 });

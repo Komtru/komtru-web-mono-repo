@@ -30,7 +30,7 @@ import {
   splitProofToken,
   type OtpPurpose,
 } from '../domain/otp/challenge.js';
-import { identityOtpRequestedEvent } from '../domain/events.js';
+import { identityOtpRequestedEvent, identityPhoneChangeCodeRequestedEvent } from '../domain/events.js';
 import { otpChallenges } from '../infrastructure/postgres/schema/sessions.js';
 
 export interface OtpDeps {
@@ -70,6 +70,12 @@ export interface IssueOtpInput {
    * never delivers it. Defaults to true.
    */
   deliver?: boolean;
+  /**
+   * Which event carries the code out. `PHONE_CHANGE` is the code for the NEW number in a phone change, which must reach
+   * the number being proven and not the account's proven one, so it has an event (and a notify binding) of its own.
+   * Defaults to the ordinary OTP event.
+   */
+  delivery?: 'OTP' | 'PHONE_CHANGE';
 }
 
 export interface IssuedOtp {
@@ -212,7 +218,20 @@ export async function issueOtp(tx: Tx, deps: OtpDeps, input: IssueOtpInput): Pro
   )[0];
   if (!row) throw new Error('issueOtp: the insert returned no row');
 
-  if (deliver) {
+  if (deliver && input.delivery === 'PHONE_CHANGE') {
+    if (!input.userId) throw new Error('issueOtp: a phone change code needs a user');
+    await publish(tx, identityPhoneChangeCodeRequestedEvent, {
+      payload: {
+        userId: input.userId,
+        challengeId: row.id,
+        code,
+        expiresInMinutes: Math.round(OTP_TTL_SECONDS / 60),
+      },
+      aggregateType: 'identity.otp',
+      aggregateId: row.id,
+      actor: { type: 'CONSUMER' as const, id: input.userId },
+    });
+  } else if (deliver) {
     await publish(tx, identityOtpRequestedEvent, {
       payload: {
         userId: input.userId,

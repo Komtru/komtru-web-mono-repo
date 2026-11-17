@@ -3,7 +3,7 @@
 // Resolved from identity every time, never copied into notify: an address changes, and a second
 // copy of everyone's phone number is a second thing to leak. The notification row keeps only the
 // masked form, which is what support needs and what an attacker cannot use.
-import { and, asc, eq, inArray, isNotNull, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, isNotNull, isNull, sql } from 'drizzle-orm';
 import type { NotificationChannel } from '@komtru/shared-types';
 import { devices, userEmails, userPhones, users } from '../../identity/index.js';
 import { maskEmail, maskPhone } from '../../../platform/identifiers.js';
@@ -40,6 +40,11 @@ export interface DestinationOptions {
    * answer taken consistently.
    */
   allowUnverified?: boolean;
+  /**
+   * Which phone a phone channel goes to: the proven one (default), the one being proven, or the one just replaced. Only the
+   * phone-change templates set it, and only through `phoneTargetFor` (domain/binding.ts).
+   */
+  phoneTarget?: 'PRIMARY' | 'PENDING' | 'RETIRED';
 }
 
 export async function resolveDestination(
@@ -75,6 +80,25 @@ export async function resolveDestination(
     // address verified — demanding verification before sending it is a cycle no user can break.
     if (!row) return undefined;
     return { address: [row.email], masked: maskEmail(row.email) };
+  }
+
+  if (
+    PHONE_CHANNELS.includes(channel) &&
+    options.phoneTarget !== undefined &&
+    options.phoneTarget !== 'PRIMARY'
+  ) {
+    // The pending number and the retired one are the same shape: not primary, not verified. The identity module keeps
+    // at most one such row, so "the newest" is the one (see `phone-change.service.ts`).
+    const rows = await reader
+      .select({ phone: userPhones.phoneE164 })
+      .from(userPhones)
+      .where(
+        and(eq(userPhones.userId, userId), eq(userPhones.isPrimary, false), isNull(userPhones.verifiedAt)),
+      )
+      .orderBy(desc(userPhones.createdAt))
+      .limit(1);
+    const row = rows[0];
+    return row ? { address: [row.phone], masked: maskPhone(row.phone) } : undefined;
   }
 
   if (PHONE_CHANNELS.includes(channel)) {

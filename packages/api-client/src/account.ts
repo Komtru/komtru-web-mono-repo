@@ -449,3 +449,60 @@ export const requestRecovery = defineEndpoint({
     response: z.object({ receiptId: z.uuid(), status: z.literal('RECEIVED') }),
   },
 });
+
+// --- change phone number (SP-M05) ---------------------------------------------------------------------------
+// Three steps (`identity/services/phone-change.service.ts`): name the new number and a code goes to the CURRENT one; prove
+// the current one and a code goes to the NEW one; prove the new one and the change is made, the old number is told.
+
+const phoneCode = z.string().trim().min(1).max(64);
+
+export const startPhoneChange = defineEndpoint({
+  method: 'post',
+  path: '/me/phone/change',
+  scope: 'CONSUMER',
+  retryable: false,
+  schema: {
+    body: z.strictObject({ newPhone: z.string().trim().min(5).max(32) }),
+    response: z.object({
+      /** The handle the next two steps carry. */
+      changeId: z.uuid(),
+      challengeId: z.uuid(),
+      /** The CURRENT number, masked: where the first code went. */
+      maskedDestination: z.string(),
+      expiresAt: iso,
+      /** False when the send budget for that number was spent, so nothing was sent. */
+      delivered: z.boolean(),
+    }),
+  },
+});
+
+const phoneStepBody = z.strictObject({ changeId: z.uuid(), challengeId: z.uuid(), code: phoneCode });
+export type PhoneStepBody = z.input<typeof phoneStepBody>;
+
+export const confirmCurrentPhone = defineEndpoint({
+  method: 'post',
+  path: '/me/phone/change/confirm-current',
+  scope: 'CONSUMER',
+  retryable: false,
+  schema: {
+    body: phoneStepBody,
+    response: z.object({
+      challengeId: z.uuid(),
+      /** The NEW number, masked: where the second code went. */
+      maskedDestination: z.string(),
+      expiresAt: iso,
+      delivered: z.boolean(),
+    }),
+  },
+});
+
+export const confirmNewPhone = defineEndpoint({
+  method: 'post',
+  path: '/me/phone/change/confirm-new',
+  scope: 'CONSUMER',
+  retryable: false,
+  schema: {
+    body: phoneStepBody,
+    response: z.object({ status: z.literal('CHANGED'), maskedPhone: z.string() }),
+  },
+});

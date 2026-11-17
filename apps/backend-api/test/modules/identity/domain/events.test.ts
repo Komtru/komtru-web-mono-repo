@@ -13,6 +13,8 @@ import {
   identityStaffInvitationCreatedEvent,
   identityPartyLookupPerformedEvent,
   identityPasswordChangedEvent,
+  identityPhoneChangeCodeRequestedEvent,
+  identityPhoneChangedEvent,
   identityPhoneVerifiedEvent,
   identityUserRegisteredEvent,
   identityUserStatusChangedEvent,
@@ -254,5 +256,23 @@ describe('T-035 party events (M1 §11)', () => {
         invitationId,
       }),
     ).toMatchObject({ invitationId });
+  });
+});
+
+describe("identity's phone change events (F-045)", () => {
+  it('are named so the notify mappings can find them', () => {
+    const mapped = new Set(CATALOGUE.mappings.map((m) => m.eventName));
+    for (const event of [identityPhoneChangeCodeRequestedEvent, identityPhoneChangedEvent]) {
+      expect(mapped).toContain(event.eventType);
+    }
+  });
+
+  it('carry no phone number: the notice has only the masked new one', () => {
+    const payload = identityPhoneChangedEvent.payload.parse({
+      userId: randomUUID(),
+      newPhoneMasked: '+23490•••2290',
+      changedAt: new Date().toISOString(),
+    });
+    expect(JSON.stringify(payload)).not.toMatch(/\+234\d{9}/);
   });
 });

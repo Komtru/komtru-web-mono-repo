@@ -11,6 +11,8 @@ import {
   activateSms,
   activateOwnTotp,
   closeAccount,
+  confirmCurrentPhone,
+  confirmNewPhone,
   enrolSms,
   enrolOwnTotp,
   getMe,
@@ -29,9 +31,11 @@ import {
   stepUpChallenge,
   submitBvn,
   submitLiveness,
+  startPhoneChange,
   submitNin,
   trustDevice,
   type CloseAccountBody,
+  type PhoneStepBody,
   type RecoveryMethod,
   type StepUpBody,
   type SubmitBvnBody,
@@ -218,4 +222,24 @@ export function useRequestRecovery() {
     mutationFn: (body: { identifier: string; method: RecoveryMethod }) =>
       client.call(requestRecovery, { body }),
   });
+}
+
+/** SP-M05 step one: the new number, and a code to the current one. */
+export function useStartPhoneChange() {
+  const client = useApiClient();
+  return useMutation({
+    mutationFn: (newPhone: string) => client.call(startPhoneChange, { body: { newPhone } }),
+  });
+}
+
+/** Step two: the current number's code, and a code to the new one. */
+export function useConfirmCurrentPhone() {
+  const client = useApiClient();
+  return useMutation({ mutationFn: (body: PhoneStepBody) => client.call(confirmCurrentPhone, { body }) });
+}
+
+/** Step three: the new number's code, and the change is made. The profile and the account are read again. */
+export function useConfirmNewPhone() {
+  const client = useApiClient();
+  return useAccountMutation((body: PhoneStepBody) => client.call(confirmNewPhone, { body }));
 }

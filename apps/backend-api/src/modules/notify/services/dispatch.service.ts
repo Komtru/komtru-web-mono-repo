@@ -14,7 +14,11 @@ import { decideDelivery, rateLimitWindowStart, type DeliveryDecision } from '../
 import { notificationDeadLettered, notificationSent } from '../domain/events.js';
 import { notificationIdFor } from '../domain/identity.js';
 import { TemplateRenderError, renderTemplate, type NotificationTemplate } from '../domain/template.js';
-import { allowsUnverifiedDestination, type NotificationRecipient } from '../domain/binding.js';
+import {
+  allowsUnverifiedDestination,
+  phoneTargetFor,
+  type NotificationRecipient,
+} from '../domain/binding.js';
 import {
   notificationEventMappings,
   notificationPreferences,
@@ -166,6 +170,7 @@ async function dispatchOne(
   const { channel, category, templateKey } = template;
   const destination = await resolveDestination(tx, userId, channel, {
     allowUnverified: allowsUnverifiedDestination(templateKey),
+    phoneTarget: phoneTargetFor(templateKey),
   });
   const windowStart = rateLimitWindowStart(new Date(envelope.occurredAt), deps.config.rateLimitWindowMinutes);
 
