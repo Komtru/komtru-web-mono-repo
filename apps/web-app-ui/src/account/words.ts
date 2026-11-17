@@ -67,7 +67,8 @@ export function accountProblem(error: unknown, action: AccountAction): string {
         return 'Confirm your email and phone number first, then send this again.';
       case 'CONFLICT':
         if (isPhoneCooldown(error)) {
-          const at = whenLabel(String((error.problem as { retryAt?: unknown }).retryAt ?? ''));
+          const retryAt = (error.problem as { retryAt?: unknown }).retryAt;
+          const at = typeof retryAt === 'string' ? whenLabel(retryAt) : '';
           return `Your number was changed a moment ago. To protect your account, you can change it again${at === '' ? ' in a little while' : ` after ${at}`}. If you didn’t change it, contact support now.`;
         }
         if (isActiveTradesRefusal(error)) {
