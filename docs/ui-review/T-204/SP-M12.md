@@ -22,3 +22,4 @@
 - **Empty is honest.** With no refund the screen says "No refunds" and what makes one appear; it does not describe cancelling or returning as if it were a feature of this page.
 - The list is polled while a refund is on its way back and stops once settled (`useMyRefunds`).
 - Shot with one refund `PROCESSING`. Loading, empty, error, offline, held, a retained fee and a finished refund are held by `test/refunds-screen.test.tsx`, each with an axe pass.
+- The poll backs off (5s, 10s, 20s, 40s, then once a minute) and stops after about half an hour (`refundPollDelay`): a refund can sit `PROCESSING` for days, and every ask re-reads every loaded page of the list. Coming back to the screen starts the count again.

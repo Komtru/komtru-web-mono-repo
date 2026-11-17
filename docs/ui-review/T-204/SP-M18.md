@@ -21,3 +21,4 @@
 - **"You can change this any time in Privacy & data" is "You can see where this stands in Privacy & data" with a link.** A page cannot switch a camera permission, and SP-M03 states the browser's answer and says where to change it, so no switch is promised.
 - On browsers that cannot say either way (Safari has no camera permission query) the explanation is shown once per device; that is most of the point there.
 - The camera suites (`test/proof-capture.test.tsx`) now start with the device already past this step, and `test/camera-permission-flow.test.tsx` holds this one: explain first and not touch the camera, Allow, Not now, already allowed or blocked, once per device, with axe.
+- The sheet waits for the browser's answer about the permission ("Getting the camera ready…") before it shows the explainer or opens the camera, so someone whose camera is already allowed never sees the explainer flash, and the browser's prompt is never raised before the person has read why.

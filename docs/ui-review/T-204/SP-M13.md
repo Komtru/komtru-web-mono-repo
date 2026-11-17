@@ -22,3 +22,4 @@
 - A period with nothing in it says "Nothing moved in this period" and saves no file.
 - Money is each kobo amount written out as naira with two decimals; none is summed.
 - Shot at the first state, before any export. Preparing, a failed export, offline, a period with nothing, every period, and the file itself (read back byte for byte) are held by `test/statement.test.ts` and `test/statements-screen.test.tsx`, each state with an axe pass. The only stand-in is the browser's "save a file", which jsdom cannot do.
+- The file name and the date inputs' latest day use the **Lagos** day (not UTC), so between 00:00 and 01:00 Lagos the file is dated today and today can be chosen. The download's address is released a second after the click, not at once, because older Safari and Firefox start the download after the click returns.
