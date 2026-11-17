@@ -906,6 +906,11 @@
       "definition": "[O] CREATE TRIGGER komtru_append_only BEFORE DELETE OR UPDATE ON trade.trade_activity FOR EACH ROW EXECUTE FUNCTION platform.reject_mutation()"
     },
     {
+      "table": "trade.trade_evidence_media",
+      "name": "komtru_append_only",
+      "definition": "[O] CREATE TRIGGER komtru_append_only BEFORE DELETE OR UPDATE ON trade.trade_evidence_media FOR EACH ROW EXECUTE FUNCTION platform.reject_mutation()"
+    },
+    {
       "table": "trade.trade_state_changes",
       "name": "komtru_append_only",
       "definition": "[O] CREATE TRIGGER komtru_append_only BEFORE DELETE OR UPDATE ON trade.trade_state_changes FOR EACH ROW EXECUTE FUNCTION platform.reject_mutation()"

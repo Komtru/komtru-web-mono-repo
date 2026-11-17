@@ -254,6 +254,11 @@
       "tag": "0050_merchant_applications",
       "when": 1794737471314,
       "sha256": "c6843e3fb438d61031eb62c107eaeeb6be400483104347438be24a5e3c7f8789"
+    },
+    {
+      "tag": "0051_trade_evidence_media",
+      "when": 1794922711319,
+      "sha256": "40ad43458bc396f3f2d25e099de6c23587c35093f5fbb52596049918a9f4f8cc"
     }
   ]
 }

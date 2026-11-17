@@ -4,6 +4,7 @@
 // own capture (local previews, removable, flagged), the buyer's review and compare, the evidence trail and the record
 // (signed private files). A tile is a file the platform holds (`fileId`, signed on demand and never kept) or a file
 // still on this device (`src`, an object URL).
+import { ProblemError } from '@komtru/api-client';
 import { useFileUrl } from '@komtru/api-client/react';
 import { Skeleton } from '@komtru/ui-kit';
 
@@ -39,6 +40,17 @@ export function FileTile({ fileId, label }: { fileId: string; label: string }): 
   const file = useFileUrl(fileId);
   const frame = `${TILE} border border-solid border-border-hairline bg-surface-secondary object-cover`;
   if (file.isPending) return <Skeleton width="full" lines={3} />;
+  if (file.isError && file.error instanceof ProblemError && file.error.status === 410) {
+    // Staff removed the file (tombstoned): it will never load, so say so rather than offering another try.
+    return (
+      <p
+        role="status"
+        className="flex aspect-square items-center justify-center rounded-md bg-surface-secondary p-[8px] text-center text-[11px] text-slate"
+      >
+        {label} was removed.
+      </p>
+    );
+  }
   if (file.isError) {
     return (
       <p
