@@ -4,9 +4,14 @@ import type { HmacHasher } from '../../../platform/crypto/hmac.js';
 
 /**
  * The two codes of a change are `SENSITIVE_ACTION` challenges, like a step-up and a staff acceptance, and are told apart
- * from those (and from each other) by the destination they are issued against: a hash bound to ONE pending number and to
- * which end of the move the code is for. A code from any other flow, or the code for the other number, hashes to a
- * different destination and can never satisfy this one. The same pattern as `staffInvitationOtpDestinationHash`.
+ * from those (and from each other) by the destination they are issued against: a hash bound to ONE number and to which end of
+ * the move the code is for. A code from any other flow, or the code for the other number, hashes to a different destination
+ * and can never satisfy this one. The same pattern as `staffInvitationOtpDestinationHash`.
+ *
+ * Keyed on the NUMBER and not on the pending row, so the per-destination send budget (3 in ten minutes, 10 a day, §S4) counts
+ * every code sent to that number however many times a change is started: a key that was new on every start made the budget
+ * unreachable, and a stranger's number could be sent codes without limit. The challenge's own `user_id` (checked by
+ * the service) is what ties a code to one account.
  */
 export const PHONE_CHANGE_OTP_DOMAIN = 'identity:phone-change:otp';
 
@@ -14,5 +19,5 @@ export type PhoneChangeEnd = 'CURRENT' | 'NEW';
 
 export const phoneChangeDestinationHash = (
   hasher: HmacHasher,
-  input: { userId: string; pendingPhoneId: string; end: PhoneChangeEnd },
-): Buffer => hasher.hmac(PHONE_CHANGE_OTP_DOMAIN, `${input.userId}:${input.pendingPhoneId}:${input.end}`);
+  input: { phoneE164: string; end: PhoneChangeEnd },
+): Buffer => hasher.hmac(PHONE_CHANGE_OTP_DOMAIN, `${input.phoneE164}:${input.end}`);

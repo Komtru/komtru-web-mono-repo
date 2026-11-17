@@ -7,6 +7,8 @@ const handle = { changeId: z.uuid(), challengeId: z.uuid(), code };
 export const startPhoneChangeBody = z.strictObject({
   /** As people write it: `0905 118 2290` or `+234 905 118 2290`. The platform makes it canonical. */
   newPhone: z.string().trim().min(5).max(32),
+  /** §S7: required by the gate and optional in the schema, so a refusal is a 403 naming the remedy rather than a 422. */
+  stepUpToken: z.string().min(1).max(512).optional(),
 });
 
 export const startPhoneChangeResponse = z.object({

@@ -43,6 +43,7 @@ export async function postStartPhoneChange(
   const result = await startPhoneChange(deps, {
     userId: requireUserId(actor, SIGN_IN),
     newPhone: body.newPhone,
+    stepUpToken: body.stepUpToken,
     ip: callerIp(req),
     userAgent: callerAgent(req),
   });
@@ -85,6 +86,7 @@ export async function postConfirmCurrentPhone(
     challengeId: body.challengeId,
     code: body.code,
     ip: callerIp(req),
+    userAgent: callerAgent(req),
   });
   if (result.outcome === 'CODE_SENT') {
     return {

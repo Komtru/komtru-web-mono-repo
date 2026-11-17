@@ -258,21 +258,26 @@ export async function markEmailVerified(
 
 export async function markPhoneVerified(tx: Tx, input: { userId: string; phoneId: string }): Promise<void> {
   try {
-    const updated = await tx
-      .update(userPhones)
-      .set({
-        verifiedAt: sql`now()`,
-        // M1 D4: SIM recycling in Nigeria is real, so a verified number has a shelf life.
-        reverifyAfter: phoneReverifyAfter(new Date()),
-      })
-      .where(
-        and(
-          eq(userPhones.id, input.phoneId),
-          eq(userPhones.userId, input.userId),
-          isNull(userPhones.verifiedAt),
-        ),
-      )
-      .returning({ id: userPhones.id });
+    // A SAVEPOINT, for `markEmailVerified`'s reason: the 23505 below is a LIVE constraint violation, and one of those
+    // aborts the whole Postgres transaction, which would refund the OTP attempt charged a moment earlier (so the loser
+    // could replay the same code without limit) and lose the audit row for the conflict.
+    const updated = await tx.transaction((sp) =>
+      sp
+        .update(userPhones)
+        .set({
+          verifiedAt: sql`now()`,
+          // M1 D4: SIM recycling in Nigeria is real, so a verified number has a shelf life.
+          reverifyAfter: phoneReverifyAfter(new Date()),
+        })
+        .where(
+          and(
+            eq(userPhones.id, input.phoneId),
+            eq(userPhones.userId, input.userId),
+            isNull(userPhones.verifiedAt),
+          ),
+        )
+        .returning({ id: userPhones.id }),
+    );
     if (!updated.length) return;
   } catch (error) {
     if (isUniqueViolation(error, 'user_phones_verified_unique')) throw new ContactTakenError('PHONE');

@@ -462,7 +462,11 @@ export const startPhoneChange = defineEndpoint({
   scope: 'CONSUMER',
   retryable: false,
   schema: {
-    body: z.strictObject({ newPhone: z.string().trim().min(5).max(32) }),
+    body: z.strictObject({
+      newPhone: z.string().trim().min(5).max(32),
+      /** §S7: the proof of a step-up, spent by this call. Any factor the account holds may give it. */
+      stepUpToken: z.string().min(1).max(512).optional(),
+    }),
     response: z.object({
       /** The handle the next two steps carry. */
       changeId: z.uuid(),

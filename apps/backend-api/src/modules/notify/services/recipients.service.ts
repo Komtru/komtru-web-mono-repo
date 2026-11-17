@@ -3,7 +3,7 @@
 // Resolved from identity every time, never copied into notify: an address changes, and a second
 // copy of everyone's phone number is a second thing to leak. The notification row keeps only the
 // masked form, which is what support needs and what an attacker cannot use.
-import { and, asc, desc, eq, inArray, isNotNull, isNull, sql } from 'drizzle-orm';
+import { and, asc, eq, inArray, isNotNull, sql } from 'drizzle-orm';
 import type { NotificationChannel } from '@komtru/shared-types';
 import { devices, userEmails, userPhones, users } from '../../identity/index.js';
 import { maskEmail, maskPhone } from '../../../platform/identifiers.js';
@@ -87,15 +87,17 @@ export async function resolveDestination(
     options.phoneTarget !== undefined &&
     options.phoneTarget !== 'PRIMARY'
   ) {
-    // The pending number and the retired one are the same shape: not primary, not verified. The identity module keeps
-    // at most one such row, so "the newest" is the one (see `phone-change.service.ts`).
+    // Addressed by the number's STATED place in a phone change (`user_phones.change_state`), never by what its row looks like:
+    // the identity module writes `PENDING` and `RETIRED` only through a change that needs a step-up and both codes, and a
+    // partial unique index keeps one of each per user. This branch deliberately does not go through the verified-first rule
+    // below, because the number it wants is by definition not the proven one; what stands in for that rule is that
+    // `phoneTarget` comes only from `phoneTargetFor`, a code-side map of two template keys, and that the state is not
+    // something a session can forge. Anything else that wants an unproven number goes through `allowUnverified`.
+    const state = options.phoneTarget === 'PENDING' ? 'PENDING' : 'RETIRED';
     const rows = await reader
       .select({ phone: userPhones.phoneE164 })
       .from(userPhones)
-      .where(
-        and(eq(userPhones.userId, userId), eq(userPhones.isPrimary, false), isNull(userPhones.verifiedAt)),
-      )
-      .orderBy(desc(userPhones.createdAt))
+      .where(and(eq(userPhones.userId, userId), eq(userPhones.changeState, state)))
       .limit(1);
     const row = rows[0];
     return row ? { address: [row.phone], masked: maskPhone(row.phone) } : undefined;

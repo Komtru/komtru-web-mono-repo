@@ -1,11 +1,14 @@
 'use client';
 
 // Account security and lifecycle (F-045, T-205), over `../account.ts`. Reads sit under `accountKeys.all`, so a change that
-// moves one (a factor added, a device retired) refreshes what it touches with one invalidation. The seed, the backup
-// codes and the step-up token come back as a mutation's result, and TanStack keeps a mutation's result in its
-// MutationCache until it is collected. The hooks that carry them set `gcTime: 0`, so the result is dropped the moment the
-// screen that made the call unmounts and nothing a later screen could read is left behind; a screen also holds what it
-// shows in its own state and clears it when the person is done.
+// moves one (a factor added, a device retired) refreshes what it touches with one invalidation.
+//
+// Secrets and the cache. TanStack keeps a mutation's *variables* and its *result* in the MutationCache until the mutation is
+// collected (five minutes by default, after the screen has gone). Some of what passes through here must not outlive the
+// screen: the TOTP seed and the backup codes (results), and a password, a step-up token, a one-time code, a national ID
+// number or a phone number (variables). Every hook that carries one sets `gcTime: 0`, so it is dropped the moment the screen
+// that made the call unmounts and nothing a later screen could read is left behind. A screen also holds what it shows in its
+// own state and clears it when the person is done.
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   activateSms,
@@ -108,7 +111,7 @@ function useAccountMutation<TVariables, TData>(
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn,
-    // A secret result (the seed, backup codes) must not outlive the screen that showed it.
+    // A secret result or secret variables must not outlive the screen that made the call.
     ...(options.secret === true ? { gcTime: 0 } : {}),
     onSettled: () => queryClient.invalidateQueries({ queryKey: accountKeys.all }),
   });
@@ -185,7 +188,10 @@ export function useRevokeSession() {
 /** CA2. On success every session is revoked, this one included: the screen signs this device out. */
 export function useCloseAccount() {
   const client = useApiClient();
-  return useMutation({ mutationFn: (body: CloseAccountBody) => client.call(closeAccount, { body }) });
+  return useMutation({
+    mutationFn: (body: CloseAccountBody) => client.call(closeAccount, { body }),
+    gcTime: 0,
+  });
 }
 
 export function useRequestDataExport() {
@@ -195,17 +201,20 @@ export function useRequestDataExport() {
 
 export function useRequestErasure() {
   const client = useApiClient();
-  return useMutation({ mutationFn: (body: CloseAccountBody) => client.call(requestErasure, { body }) });
+  return useMutation({
+    mutationFn: (body: CloseAccountBody) => client.call(requestErasure, { body }),
+    gcTime: 0,
+  });
 }
 
 export function useSubmitNin() {
   const client = useApiClient();
-  return useAccountMutation((body: SubmitNinBody) => client.call(submitNin, { body }));
+  return useAccountMutation((body: SubmitNinBody) => client.call(submitNin, { body }), { secret: true });
 }
 
 export function useSubmitBvn() {
   const client = useApiClient();
-  return useAccountMutation((body: SubmitBvnBody) => client.call(submitBvn, { body }));
+  return useAccountMutation((body: SubmitBvnBody) => client.call(submitBvn, { body }), { secret: true });
 }
 
 export function useSubmitLiveness() {
@@ -221,25 +230,33 @@ export function useRequestRecovery() {
   return useMutation({
     mutationFn: (body: { identifier: string; method: RecoveryMethod }) =>
       client.call(requestRecovery, { body }),
+    gcTime: 0,
   });
 }
 
-/** SP-M05 step one: the new number, and a code to the current one. */
+/** SP-M05 step one: the new number behind a step-up proof, and a code to the current number. */
 export function useStartPhoneChange() {
   const client = useApiClient();
   return useMutation({
-    mutationFn: (newPhone: string) => client.call(startPhoneChange, { body: { newPhone } }),
+    mutationFn: (variables: { newPhone: string; stepUpToken: string }) =>
+      client.call(startPhoneChange, { body: variables }),
+    gcTime: 0,
   });
 }
 
 /** Step two: the current number's code, and a code to the new one. */
 export function useConfirmCurrentPhone() {
   const client = useApiClient();
-  return useMutation({ mutationFn: (body: PhoneStepBody) => client.call(confirmCurrentPhone, { body }) });
+  return useMutation({
+    mutationFn: (body: PhoneStepBody) => client.call(confirmCurrentPhone, { body }),
+    gcTime: 0,
+  });
 }
 
 /** Step three: the new number's code, and the change is made. The profile and the account are read again. */
 export function useConfirmNewPhone() {
   const client = useApiClient();
-  return useAccountMutation((body: PhoneStepBody) => client.call(confirmNewPhone, { body }));
+  return useAccountMutation((body: PhoneStepBody) => client.call(confirmNewPhone, { body }), {
+    secret: true,
+  });
 }

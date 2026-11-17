@@ -459,7 +459,7 @@ export function createIdentityAuth(options: IdentityAuthOptions): IdentityAuth {
       ...meRoutes({ db, logger, ports: options.avatar ?? missingAvatarPorts }),
       ...mfaRoutes(account),
       ...lifecycleRoutes(lifecycle),
-      ...phoneChangeRoutes({ db, hasher: account.otpHasher, logger }),
+      ...phoneChangeRoutes(account),
     ],
     schedules: [
       {

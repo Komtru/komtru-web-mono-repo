@@ -1,0 +1,5 @@
+ALTER TABLE "identity"."user_phones" ADD COLUMN "change_state" text DEFAULT 'NONE' NOT NULL;--> statement-breakpoint
+CREATE UNIQUE INDEX "user_phones_one_pending" ON "identity"."user_phones" USING btree ("user_id") WHERE "identity"."user_phones"."change_state" = 'PENDING';--> statement-breakpoint
+CREATE UNIQUE INDEX "user_phones_one_retired" ON "identity"."user_phones" USING btree ("user_id") WHERE "identity"."user_phones"."change_state" = 'RETIRED';--> statement-breakpoint
+ALTER TABLE "identity"."user_phones" ADD CONSTRAINT "user_phones_change_state" CHECK ("identity"."user_phones"."change_state" IN ('NONE', 'PENDING', 'RETIRED'));--> statement-breakpoint
+ALTER TABLE "identity"."user_phones" ADD CONSTRAINT "user_phones_change_state_unproven" CHECK ("identity"."user_phones"."change_state" = 'NONE' OR (NOT "identity"."user_phones"."is_primary" AND "identity"."user_phones"."verified_at" IS NULL));
