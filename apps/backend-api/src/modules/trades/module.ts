@@ -138,7 +138,7 @@ export function buildEvidenceDeps(deps: TradeDeps): EvidenceDeps {
     db: deps.db,
     proofFiles: (tx, ids) => deps.proofFiles(tx, ids),
     fileProgress: postgresFileProgress,
-    grantEvidenceAccess: postgresGrantEvidenceAccess(deps.db),
+    grantEvidenceAccess: postgresGrantEvidenceAccess,
   };
 }
 

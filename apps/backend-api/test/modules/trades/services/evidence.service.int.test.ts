@@ -15,6 +15,7 @@ describe.runIf(infraEnabled)('trade evidence (F-028 CWT-S13)', () => {
   const world: FakeWorld = newWorld();
   const progress = new Map<string, { uploaderUserId: string; uploadState: string; status: string }>();
   const grants: { fileIds: readonly string[]; to: string }[] = [];
+  const grantFails = { on: false };
 
   const deps = (): EvidenceDeps => ({
     db: t.db(),
@@ -27,7 +28,8 @@ describe.runIf(infraEnabled)('trade evidence (F-028 CWT-S13)', () => {
       ),
     fileProgress: (_tx, ids) =>
       Promise.resolve(new Map(ids.flatMap((id) => (progress.has(id) ? [[id, progress.get(id)!]] : [])))),
-    grantEvidenceAccess: (fileIds, to) => {
+    grantEvidenceAccess: (_tx, fileIds, to) => {
+      if (grantFails.on) return Promise.reject(new Error('grant failed'));
       grants.push({ fileIds, to });
       return Promise.resolve();
     },
@@ -38,6 +40,7 @@ describe.runIf(infraEnabled)('trade evidence (F-028 CWT-S13)', () => {
     const id = randomUUID();
     world.files.set(id, {
       contentType: 'image/jpeg',
+      category: 'OTHER',
       uploaderUserId: owner,
       visibility: 'PRIVATE_CASE',
       grantedUserIds: [],
@@ -234,6 +237,106 @@ describe.runIf(infraEnabled)('trade evidence (F-028 CWT-S13)', () => {
         .owner()
         .query(`SELECT 1 FROM trade.trade_evidence_media WHERE file_id = $1`, [over]);
       expect(rows).toHaveLength(0);
+    });
+    it('takes only images and PDFs made for evidence: not video, not another job’s category', async () => {
+      const f = await tradeAt(t, 'INSPECTION');
+      const attempts = {
+        video: upload(f.buyer, { contentType: 'video/mp4' }),
+        ticket: upload(f.buyer, { category: 'TICKET_ATTACHMENT' }),
+        chat: upload(f.buyer, { category: 'CHAT_ATTACHMENT' }),
+        unknownCategory: upload(f.buyer, { category: undefined }),
+      };
+      for (const [name, file] of Object.entries(attempts)) {
+        const error = await failure(
+          attachEvidence(deps(), { userId: f.buyer, tradeId: f.tradeId, event: 'DELIVERY', fileIds: [file] }),
+        );
+        expect(error.status, name).toBe(422);
+      }
+      const pdf = upload(f.buyer, { contentType: 'application/pdf' });
+      const dispute = upload(f.buyer, { category: 'DISPUTE_EVIDENCE', contentType: 'image/png' });
+      const ok = await attachEvidence(deps(), {
+        userId: f.buyer,
+        tradeId: f.tradeId,
+        event: 'DELIVERY',
+        fileIds: [pdf, dispute],
+      });
+      expect(ok.evidence).toHaveLength(2);
+    });
+
+    it('keeps the cap per party, so one side cannot lock the other out of an event', async () => {
+      const f = await tradeAt(t, 'INSPECTION');
+      await attachEvidence(deps(), {
+        userId: f.buyer,
+        tradeId: f.tradeId,
+        event: 'ISSUE',
+        fileIds: Array.from({ length: 10 }, () => upload(f.buyer)),
+      });
+      await attachEvidence(deps(), {
+        userId: f.buyer,
+        tradeId: f.tradeId,
+        event: 'ISSUE',
+        fileIds: Array.from({ length: MAX_FILES_PER_EVENT - 10 }, () => upload(f.buyer)),
+      });
+      const mine = await attachEvidence(deps(), {
+        userId: f.seller,
+        tradeId: f.tradeId,
+        event: 'ISSUE',
+        fileIds: [upload(f.seller)],
+      });
+      expect(mine.evidence).toHaveLength(1);
+    });
+
+    it('commits the evidence and the grant together: a failed grant leaves nothing behind', async () => {
+      const f = await tradeAt(t, 'INSPECTION');
+      const file = upload(f.buyer);
+      grantFails.on = true;
+      const error = await failure(
+        attachEvidence(deps(), { userId: f.buyer, tradeId: f.tradeId, event: 'DELIVERY', fileIds: [file] }),
+      );
+      grantFails.on = false;
+      expect(error.message).toBe('grant failed');
+      const { rows } = await t
+        .owner()
+        .query(`SELECT 1 FROM trade.trade_evidence_media WHERE file_id = $1`, [file]);
+      expect(rows).toHaveLength(0);
+      const retry = await attachEvidence(deps(), {
+        userId: f.buyer,
+        tradeId: f.tradeId,
+        event: 'DELIVERY',
+        fileIds: [file],
+      });
+      expect(retry.evidence).toHaveLength(1);
+    });
+
+    it('answers a replay after the trade has closed, and grants again, but takes nothing new', async () => {
+      // Evidence attached while the trade was open (the row as the attach leaves it); the trade has since closed.
+      const f = await tradeAt(t, 'COMPLETED');
+      const file = upload(f.buyer);
+      await insertRow(t.owner(), 'trade.trade_evidence_media', {
+        trade_id: f.tradeId,
+        file_id: file,
+        event: 'DELIVERY',
+        attached_by_user_id: f.buyer,
+        attached_by_role: 'BUYER',
+      });
+      grants.length = 0;
+      const again = await attachEvidence(deps(), {
+        userId: f.buyer,
+        tradeId: f.tradeId,
+        event: 'DELIVERY',
+        fileIds: [file],
+      });
+      expect(again.evidence).toHaveLength(1);
+      expect(grants).toEqual([{ fileIds: [file], to: f.seller }]);
+      const fresh = await failure(
+        attachEvidence(deps(), {
+          userId: f.buyer,
+          tradeId: f.tradeId,
+          event: 'DELIVERY',
+          fileIds: [upload(f.buyer)],
+        }),
+      );
+      expect(fresh.status).toBe(409);
     });
   });
 

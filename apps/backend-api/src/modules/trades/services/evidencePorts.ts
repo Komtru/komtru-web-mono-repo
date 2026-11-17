@@ -17,8 +17,16 @@ export interface EvidenceDeps {
   /** READY, ACTIVE files only, with who uploaded them, how they may be seen and who already holds a grant. */
   proofFiles: TradeDeps['proofFiles'];
   fileProgress(tx: Tx, ids: readonly string[]): Promise<Map<string, FileProgress>>;
-  /** Lets the other party see the files (M20 PRIVATE_CASE). Idempotent; called after the evidence commits. */
-  grantEvidenceAccess(fileIds: readonly string[], granteeUserId: string, tradeCode: string): Promise<void>;
+  /**
+   * Lets the other party see the files (M20 PRIVATE_CASE). Idempotent, and run inside the attach's own transaction, so
+   * the evidence and the grant that makes it readable commit together or not at all.
+   */
+  grantEvidenceAccess(
+    tx: Tx,
+    fileIds: readonly string[],
+    granteeUserId: string,
+    tradeCode: string,
+  ): Promise<void>;
 }
 
 export const postgresFileProgress: EvidenceDeps['fileProgress'] = async (tx, ids) => {
@@ -35,10 +43,13 @@ export const postgresFileProgress: EvidenceDeps['fileProgress'] = async (tx, ids
   return out;
 };
 
-export const postgresGrantEvidenceAccess =
-  (db: Db): EvidenceDeps['grantEvidenceAccess'] =>
-  async (fileIds, granteeUserId, tradeCode) => {
-    for (const fileId of fileIds) {
-      await grantAccess(db, { fileId, granteeUserId, reason: `Evidence on trade ${tradeCode}` });
-    }
-  };
+export const postgresGrantEvidenceAccess: EvidenceDeps['grantEvidenceAccess'] = async (
+  tx,
+  fileIds,
+  granteeUserId,
+  tradeCode,
+) => {
+  for (const fileId of fileIds) {
+    await grantAccess(tx, { fileId, granteeUserId, reason: `Evidence on trade ${tradeCode}` });
+  }
+};

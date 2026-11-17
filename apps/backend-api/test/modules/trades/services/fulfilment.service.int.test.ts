@@ -273,5 +273,22 @@ describe.runIf(infraEnabled)('ship step (T-064)', () => {
       world.files.get(receiptFileId)!.uploaderUserId = second.seller;
       expect(await failure(ship(second, { receiptFileId }))).toMatchObject({ status: 422 });
     });
+
+    it('refuses a receipt that is evidence on any trade, since that trade’s other party can read it', async () => {
+      const other = await tradeAt(t, 'INSPECTION');
+      const trade = await tradeAt(t, 'FUNDED');
+      const receiptFileId = receipt(trade.seller);
+      await insertRow(t.owner(), 'trade.trade_evidence_media', {
+        trade_id: other.tradeId,
+        file_id: receiptFileId,
+        event: 'DELIVERY',
+        attached_by_user_id: trade.seller,
+        attached_by_role: 'SELLER',
+      });
+      const error = await failure(ship(trade, { receiptFileId }));
+      expect(error).toMatchObject({ status: 422 });
+      expect(error.fieldErrors?.[0]?.path).toBe('receiptFileId');
+      expect(await statusOf(t.owner(), trade.tradeId)).toBe('FUNDED');
+    });
   });
 });

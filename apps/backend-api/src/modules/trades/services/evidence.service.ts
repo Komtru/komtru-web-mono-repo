@@ -8,6 +8,8 @@ import { and, eq, inArray, sql } from 'drizzle-orm';
 import type { CursorKey } from '../../../platform/http/paginate.js';
 import { cursorPage } from '../../../platform/http/paginate.js';
 import {
+  EVIDENCE_CONTENT_TYPES,
+  EVIDENCE_FILE_CATEGORIES,
   EVIDENCE_OPEN_STATUSES,
   evidenceClosedError,
   evidenceCursor,
@@ -56,7 +58,6 @@ export async function attachEvidence(
     const trade = await loadTrade(tx, input.tradeId, true);
     const role = requireParty(trade, input.userId);
     if (!mayAttach(role, input.event)) throw wrongRoleError(input.event);
-    if (!EVIDENCE_OPEN_STATUSES.includes(trade.status)) throw evidenceClosedError();
 
     const existing = await tx
       .select()
@@ -71,6 +72,8 @@ export async function attachEvidence(
         .map((row) => [row.fileId, row]),
     );
     const fresh = unique.filter((id) => !mine.has(id));
+    // A replay of what is already attached is answered (and its grant made) even after the trade has closed.
+    if (fresh.length > 0 && !EVIDENCE_OPEN_STATUSES.includes(trade.status)) throw evidenceClosedError();
     // A file already evidence somewhere else, or on this trade under another event or by the other party, is no good.
     const taken = new Set(existing.map((row) => row.fileId).filter((id) => !mine.has(id)));
 
@@ -82,6 +85,9 @@ export async function attachEvidence(
             (file) =>
               file.uploaderUserId === input.userId &&
               file.visibility === 'PRIVATE_CASE' &&
+              file.category !== undefined &&
+              EVIDENCE_FILE_CATEGORIES.includes(file.category) &&
+              EVIDENCE_CONTENT_TYPES.includes(file.contentType.toLowerCase()) &&
               file.grantedUserIds.length === 0 &&
               !taken.has(file.id),
           )
@@ -122,7 +128,13 @@ export async function attachEvidence(
       const [{ count } = { count: 0 }] = await tx
         .select({ count: sql<number>`count(*)::int` })
         .from(tradeEvidenceMedia)
-        .where(and(eq(tradeEvidenceMedia.tradeId, trade.id), eq(tradeEvidenceMedia.event, input.event)));
+        .where(
+          and(
+            eq(tradeEvidenceMedia.tradeId, trade.id),
+            eq(tradeEvidenceMedia.event, input.event),
+            eq(tradeEvidenceMedia.attachedByUserId, input.userId),
+          ),
+        );
       if (count + fresh.length > MAX_FILES_PER_EVENT) throw tooManyEvidenceError(input.event);
 
       const inserted = await tx
@@ -153,26 +165,25 @@ export async function attachEvidence(
       });
     }
 
+    // In the same transaction as the rows: evidence the other side cannot open is never left behind. Re-run on a
+    // replay, which is how an earlier grant that was lost heals.
     const counterparty = role === 'BUYER' ? trade.sellerUserId : trade.buyerUserId;
-    return {
-      rows: unique.flatMap((id) => {
-        const row = mine.get(id);
-        return row ? [row] : [];
-      }),
-      counterparty,
-      tradeCode: trade.tradeCode,
-    };
+    const rows = unique.flatMap((id) => {
+      const row = mine.get(id);
+      return row ? [row] : [];
+    });
+    if (counterparty) {
+      await deps.grantEvidenceAccess(
+        tx,
+        rows.map((row) => row.fileId),
+        counterparty,
+        trade.tradeCode,
+      );
+    }
+    return rows;
   });
 
-  // After commit, and only once the other side exists: they may open what was added (M20 PRIVATE_CASE).
-  if (done.counterparty) {
-    await deps.grantEvidenceAccess(
-      done.rows.map((row) => row.fileId),
-      done.counterparty,
-      done.tradeCode,
-    );
-  }
-  return { evidence: done.rows.map(view) };
+  return { evidence: done.map(view) };
 }
 
 const MICRO = sql.raw(`to_char(created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"')`);

@@ -39,7 +39,13 @@ export interface FakeWorld {
   companies: { id: string; name: string; isDefault: boolean }[];
   files: Map<
     string,
-    { contentType: string; uploaderUserId: string; visibility: string; grantedUserIds: string[] }
+    {
+      contentType: string;
+      category?: string;
+      uploaderUserId: string;
+      visibility: string;
+      grantedUserIds: string[];
+    }
   >;
   clock: { now: Date };
 }

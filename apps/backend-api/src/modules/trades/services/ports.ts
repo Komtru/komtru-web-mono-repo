@@ -27,6 +27,8 @@ export interface ProofFile {
   contentType: string;
   uploaderUserId: string;
   visibility: string;
+  /** The M20 category the upload was made under; evidence accepts only the ones a person can choose for it. */
+  category?: string;
   /** Users holding a live access grant on the file; a file granted to anyone is already in use. */
   grantedUserIds: string[];
 }
@@ -94,6 +96,7 @@ export const postgresProofFiles = (): TradeDeps['proofFiles'] => async (tx, ids)
               contentType: file.contentType,
               uploaderUserId: file.uploaderUserId,
               visibility: file.visibility,
+              category: file.category,
               grantedUserIds: grants.flatMap((g) => (g.granteeUserId ? [g.granteeUserId] : [])),
             })),
           ]

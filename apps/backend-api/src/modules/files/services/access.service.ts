@@ -65,7 +65,7 @@ export interface GrantInput {
  * on nothing else: a `KYC_DOCUMENT` is `PRIVATE_OWNER`, and its reviewer grant has its own function
  * below that no route can call.
  */
-export const grantAccess = async (db: Db, input: GrantInput): Promise<FileAccessGrant> => {
+export const grantAccess = async (db: Reader, input: GrantInput): Promise<FileAccessGrant> => {
   if (Boolean(input.granteeUserId) === Boolean(input.granteeRole)) {
     throw new ApiError(
       400,
@@ -127,7 +127,7 @@ export const revokeAllGrants = async (db: Db, fileId: string): Promise<number> =
   return revoked.length;
 };
 
-const insertGrant = async (db: Db, input: GrantInput): Promise<FileAccessGrant> => {
+const insertGrant = async (db: Reader, input: GrantInput): Promise<FileAccessGrant> => {
   const existing = await findActiveGrant(db, input);
   if (existing) return existing;
 

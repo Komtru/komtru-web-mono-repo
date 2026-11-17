@@ -26,8 +26,23 @@ export const EVENT_ROLES: Record<TradeEvidenceEvent, readonly PartyRole[]> = {
   ISSUE: ['BUYER', 'SELLER'],
 };
 
+/**
+ * What the platform will take as evidence: the file's own upload, made under one of the categories a person can pick
+ * for it (the screen uses OTHER), and a type the files module stores for those categories. Video is not among them.
+ * Other categories (a support-ticket attachment, a chat attachment) were made for another job and may already be
+ * shared under that job's rules.
+ */
+export const EVIDENCE_FILE_CATEGORIES: readonly string[] = ['OTHER', 'DISPUTE_EVIDENCE'];
+export const EVIDENCE_CONTENT_TYPES: readonly string[] = [
+  'image/jpeg',
+  'image/png',
+  'image/webp',
+  'application/pdf',
+];
+
 export const MAX_FILES_PER_ATTACH = 10;
 export const MAX_FILES_PER_EVENT = 20;
+/** Per party, so one side filling an event cannot lock the other out of it. */
 
 export const mayAttach = (role: PartyRole, event: TradeEvidenceEvent): boolean =>
   EVENT_ROLES[event].includes(role);
@@ -55,7 +70,7 @@ export const tooManyEvidenceError = (event: TradeEvidenceEvent): ApiError =>
   new ApiError(
     422,
     'VALIDATION_FAILED',
-    `A trade can carry at most ${String(MAX_FILES_PER_EVENT)} ${event.toLowerCase()} files`,
+    `You can add at most ${String(MAX_FILES_PER_EVENT)} ${event.toLowerCase()} files to a trade`,
     undefined,
     [{ path: 'fileIds', message: 'Too many files for this category' }],
   );

@@ -41,7 +41,7 @@ import {
 import { feeSnapshotColumns } from '../domain/feeSnapshot.js';
 import { checkProofMedia, otherRole, type ProofRequirement } from '../domain/proposal.js';
 import type { BuyerPath } from '../domain/eligibility.js';
-import { tradeProofMedia } from '../infrastructure/postgres/schema/proof.js';
+import { tradeEvidenceMedia, tradeProofMedia } from '../infrastructure/postgres/schema/proof.js';
 import { tradeTermsVersions } from '../infrastructure/postgres/schema/terms.js';
 import { trades } from '../infrastructure/postgres/schema/trades.js';
 import { readTradePrincipal, recordEligibilityBlock } from '../infrastructure/postgres/principals.js';
@@ -137,13 +137,25 @@ async function checkProofFiles(
         ).map((row) => row.fileId),
       )
     : new Set<string>();
+  // A file already added as evidence on any trade is shared with that trade's other party: never seller proof.
+  const asEvidence = fresh.length
+    ? new Set(
+        (
+          await tx
+            .select({ fileId: tradeEvidenceMedia.fileId })
+            .from(tradeEvidenceMedia)
+            .where(inArray(tradeEvidenceMedia.fileId, fresh))
+        ).map((row) => row.fileId),
+      )
+    : new Set<string>();
   const usable = new Set(
     found
       .filter(
         (f) =>
           f.uploaderUserId === sellerUserId &&
           f.visibility === 'PRIVATE_CASE' &&
-          (attached.has(f.id) || (!elsewhere.has(f.id) && f.grantedUserIds.length === 0)),
+          (attached.has(f.id) ||
+            (!elsewhere.has(f.id) && !asEvidence.has(f.id) && f.grantedUserIds.length === 0)),
       )
       .map((f) => f.id),
   );
