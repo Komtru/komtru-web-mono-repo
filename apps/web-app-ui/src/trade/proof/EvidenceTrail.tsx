@@ -216,6 +216,9 @@ function Record({ trade }: { trade: TradeView }): React.JSX.Element {
         <Button asChild variant="secondary">
           <a href={evidenceHref(trade.id)}>View all evidence</a>
         </Button>
+        <Button asChild variant="secondary">
+          <a href={`/trade/${trade.id}/documents`}>Receipt &amp; documents</a>
+        </Button>
         <Button asChild variant="ghost">
           <a href="/trades" className="mx-auto block text-center">
             Back to Trades
