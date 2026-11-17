@@ -12,7 +12,9 @@ const TITLE = 'Trade Evidence';
 
 /**
  * CWT-S12 / PM-6 (Z4): the media kept with the trade, by event, drawn by F-029's `Trail`. Only what the platform can
-XX
+ * Only what the platform lists is shown: the seller's proof, the dispatch record (and, for the seller, the waybill
+ * photo), the delivery records, and the media either side added under dispatch, delivery, inspection or an issue
+ * (CWT-S13), read per event, each group with its own loading, empty and failed states.
  */
 export function Evidence({ id }: { id: string }): React.JSX.Element {
   return (

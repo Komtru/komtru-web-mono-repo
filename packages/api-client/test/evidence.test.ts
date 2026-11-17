@@ -1,6 +1,13 @@
 import { describe, expect, it, vi } from 'vitest';
 import { createApiClient } from '../src/client.js';
-import { attachEvidence, EVIDENCE_EVENTS, evidenceEventsFor, listTradeEvidence } from '../src/evidence.js';
+import { readFileSync } from 'node:fs';
+import {
+  attachEvidence,
+  EVIDENCE_CONTENT_TYPES,
+  EVIDENCE_EVENTS,
+  evidenceEventsFor,
+  listTradeEvidence,
+} from '../src/evidence.js';
 
 const id = (n: number) => `0190b0a0-0000-7000-8000-${String(n).padStart(12, '0')}`;
 const item = {
@@ -68,5 +75,27 @@ describe('the evidence endpoints (F-028)', () => {
     });
     expect(calls[0]?.url).toBe(`https://api.test/v1/trades/${id(1)}/evidence?event=DELIVERY&limit=40`);
     expect(page.items).toHaveLength(1);
+  });
+});
+
+describe('the content types evidence accepts', () => {
+  const backend = (path: string) =>
+    readFileSync(new URL(`../../../apps/backend-api/src/modules/${path}`, import.meta.url), 'utf8');
+  const types = (block: string) => [...block.matchAll(/'([a-z]+\/[a-z+.-]+)'/g)].map((match) => match[1]);
+
+  it('are exactly what the platform stores for the category evidence is uploaded under, so no upload is refused', () => {
+    // The platform's own policy read from its source, not a stub: a type the screen offers that the files module
+    // refuses would fail every upload with an error the person cannot act on.
+    const policy = backend('files/domain/pools.ts');
+    const other = /^\s*OTHER: Object\.freeze\(\[([^\]]*)\]/m.exec(policy)?.[1] ?? '';
+    expect(types(other).length).toBeGreaterThan(0);
+    expect([...EVIDENCE_CONTENT_TYPES].sort()).toEqual(types(other).sort());
+    expect(EVIDENCE_CONTENT_TYPES.some((type) => type.startsWith('video/'))).toBe(false);
+  });
+
+  it('are the same set the platform accepts on the attach call', () => {
+    const domain = backend('trades/domain/evidence.ts');
+    const block = /EVIDENCE_CONTENT_TYPES: readonly string\[\] = \[([^\]]*)\]/.exec(domain)?.[1] ?? '';
+    expect([...EVIDENCE_CONTENT_TYPES].sort()).toEqual(types(block).sort());
   });
 });

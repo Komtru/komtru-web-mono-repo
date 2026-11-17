@@ -11,7 +11,7 @@ Park is deferred for the MVP, so CWT-S09 and CWT-S11 render the self-arranged pa
 | CWT-S10 | `/trade/<id>/track`            | buyer, in transit          | 13.41%           |
 | CWT-S11 | `/trade/<id>/pickup`           | buyer, in transit          | 20.20%           |
 | CWT-S12 | `/trade/<id>/evidence`         | buyer, inspection          | 22.98%           |
-| CWT-S13 | `/trade/<id>/evidence/new`     | buyer, inspection, empty   | 8.29%            |
+| CWT-S13 | `/trade/<id>/evidence/new`     | buyer, inspection, empty   | 8.26%            |
 
 ## Judgement
 

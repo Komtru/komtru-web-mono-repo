@@ -64,7 +64,14 @@ const pick = (container: HTMLElement, ...names: string[]) =>
   fireEvent.change(container.querySelector('input[type="file"]') as HTMLInputElement, {
     target: {
       files: names.map(
-        (name) => new File(['x'], name, { type: name.endsWith('.mp4') ? 'video/mp4' : 'image/jpeg' }),
+        (name) =>
+          new File(['x'], name, {
+            type: name.endsWith('.pdf')
+              ? 'application/pdf'
+              : name.endsWith('.mp4')
+                ? 'video/mp4'
+                : 'image/jpeg',
+          }),
       ),
     },
   });
@@ -86,7 +93,11 @@ describe('CWT-S13 add evidence', () => {
     // Dispatch is the seller's to add.
     expect(options).toEqual(['INSPECTION', 'DELIVERY', 'ISSUE']);
     expect(screen.getByRole<HTMLInputElement>('radio', { name: 'Inspection' }).checked).toBe(true);
-    expect(screen.getByText('Add photos and video')).toBeTruthy();
+    expect(screen.getByText('Add photos or PDFs')).toBeTruthy();
+    // Only what the platform stores: no video, and the picker is limited to the same set.
+    expect(container.querySelector('input[type="file"]')?.getAttribute('accept')).toBe(
+      'image/jpeg,image/png,image/webp,application/pdf',
+    );
     expect(screen.getByText('Stored with this trade')).toBeTruthy();
     expect(submit().disabled).toBe(true);
     expect(screen.getByRole('link', { name: 'Cancel' }).getAttribute('href')).toBe(
@@ -108,13 +119,14 @@ describe('CWT-S13 add evidence', () => {
     const { container } = serve(workspaceTrade('INSPECTION', 'BUYER'));
     await screen.findByRole('group', { name: 'Evidence category' });
     fireEvent.click(screen.getByRole('radio', { name: 'Delivery' }));
-    pick(container, 'box.jpg', 'unboxing.mp4');
+    pick(container, 'box.jpg', 'invoice.pdf');
     await waitFor(() => {
-      expect(screen.getByRole('button', { name: 'Remove unboxing.mp4' })).toBeTruthy();
+      expect(screen.getByRole('button', { name: 'Remove invoice.pdf' })).toBeTruthy();
     });
     expect(submit().disabled).toBe(false);
     fireEvent.click(submit());
     expect(await screen.findByText('Evidence added')).toBeTruthy();
+    await expectNoAxeViolations(container, SHELL_RULES);
     const order = api.call.mock.calls.map(([e]) => `${e.method.toUpperCase()} ${e.path}`);
     expect(order.indexOf('POST /trades/:id/evidence')).toBeGreaterThan(
       order.lastIndexOf('POST /files/:id/finalize'),
@@ -136,13 +148,13 @@ describe('CWT-S13 add evidence', () => {
     expect(submit().disabled).toBe(true);
   });
 
-  it('turns away a file that is not a photo or video, in words, and attaches nothing', async () => {
+  it('turns away a file the platform cannot store, video included, in words, and attaches nothing', async () => {
     const { container } = serve(workspaceTrade('INSPECTION', 'BUYER'));
     await screen.findByRole('group', { name: 'Evidence category' });
-    fireEvent.change(container.querySelector('input[type="file"]') as HTMLInputElement, {
-      target: { files: [new File(['x'], 'notes.pdf', { type: 'application/pdf' })] },
-    });
-    expect(await screen.findByText(/notes\.pdf isn’t a photo or video/)).toBeTruthy();
+    pick(container, 'clip.mp4');
+    expect(
+      await screen.findByText(/clip\.mp4 can’t be added. Choose a photo \(JPEG, PNG or WebP\) or a PDF/),
+    ).toBeTruthy();
     expect(callsTo(api.call, 'POST', '/files/upload-url')).toHaveLength(0);
   });
 
@@ -215,10 +227,38 @@ describe('CWT-S13 add evidence', () => {
     await screen.findByRole('button', { name: 'Remove a.jpg' });
     fireEvent.click(submit());
     expect(await screen.findByText(/Evidence must be your own finished uploads/)).toBeTruthy();
+    await expectNoAxeViolations(container, SHELL_RULES);
     expect(screen.getByRole('button', { name: 'Remove a.jpg' })).toBeTruthy();
     await waitFor(() => {
       expect(submit().disabled).toBe(false);
     });
+  });
+
+  it('stops waiting on a file that is still processing once the screen is gone', async () => {
+    let attempts = 0;
+    const processing = () =>
+      new ProblemError(
+        { type: 'about:blank', title: 'x', status: 409, code: 'CONFLICT', reason: 'FILE_PROCESSING' },
+        { status: 409, requestId: undefined, retryAfterMs: undefined, rateLimit: undefined, replayed: false },
+        false,
+      );
+    const view = serve(workspaceTrade('INSPECTION', 'BUYER'), {
+      'POST /trades/:id/evidence': () => {
+        attempts += 1;
+        return processing();
+      },
+    });
+    const container = view.container;
+    await screen.findByRole('group', { name: 'Evidence category' });
+    pick(container, 'late.jpg');
+    await screen.findByRole('button', { name: 'Remove late.jpg' });
+    fireEvent.click(submit());
+    await waitFor(() => {
+      expect(attempts).toBe(1);
+    });
+    view.unmount();
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    expect(attempts).toBeLessThanOrEqual(2);
   });
 
   it('sends one attach for a double press', async () => {
@@ -250,9 +290,10 @@ describe('CWT-S13 add evidence', () => {
     const online = vi.spyOn(window.navigator, 'onLine', 'get').mockReturnValue(false);
     const { container } = serve(workspaceTrade('INSPECTION', 'BUYER'));
     expect(await screen.findByText('You’re offline')).toBeTruthy();
-    expect(screen.getByText(/Photos and video can’t be added until you’re back online/)).toBeTruthy();
+    expect(screen.getByText(/Photos and PDFs can’t be added until you’re back online/)).toBeTruthy();
     expect(container.querySelector<HTMLInputElement>('input[type="file"]')).toBeTruthy();
     expect(submit().disabled).toBe(true);
+    await expectNoAxeViolations(container, SHELL_RULES);
     online.mockRestore();
   });
 });

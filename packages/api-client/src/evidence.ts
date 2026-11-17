@@ -14,6 +14,13 @@ export const EVIDENCE_EVENTS = ['DISPATCH', 'DELIVERY', 'INSPECTION', 'ISSUE'] a
 export const evidenceEventSchema = z.enum(EVIDENCE_EVENTS);
 export type EvidenceEvent = z.infer<typeof evidenceEventSchema>;
 
+/**
+ * What can be attached as evidence: the types the files module stores for the category evidence is uploaded under
+ * (photos and PDF; video is not stored). The screen offers exactly these. `test/evidence.test.ts` checks the set
+ * against the platform's own `ALLOWED_CONTENT_TYPES`, so the two cannot drift apart unseen.
+ */
+export const EVIDENCE_CONTENT_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'application/pdf'] as const;
+
 /** At most this many files per attach call, and per event on a trade. */
 export const MAX_EVIDENCE_PER_ATTACH = 10;
 export const MAX_EVIDENCE_PER_EVENT = 20;

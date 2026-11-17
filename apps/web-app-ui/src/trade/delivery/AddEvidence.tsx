@@ -1,6 +1,7 @@
 'use client';
 
 import {
+  EVIDENCE_CONTENT_TYPES,
   EVIDENCE_OPEN_STATUSES,
   evidenceEventsFor,
   MAX_EVIDENCE_PER_ATTACH,
@@ -23,7 +24,7 @@ import {
   StatusHero,
   type MediaItem,
 } from '@komtru/ui-kit';
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useOnline } from '../../shell/OfflineStatus';
 import { platformWords } from '../format';
 import { evidenceHref } from '../workspace-state';
@@ -95,6 +96,14 @@ function Form({ trade, waitMs }: { trade: TradeView; waitMs: number }): React.JS
   // What is added, kept current between the awaits of one batch (state alone would be a render behind).
   const current = useRef<Added[]>([]);
   const sent = useRef(false);
+  // The wait-and-retry for a file still being checked must not keep calling the platform once the screen is gone.
+  const mounted = useRef(true);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
 
   const onAdd = async (files: File[]) => {
     const notes: string[] = [];
@@ -102,8 +111,8 @@ function Form({ trade, waitMs }: { trade: TradeView; waitMs: number }): React.JS
     setUploading((count) => count + files.length);
     for (const file of files) {
       try {
-        if (!file.type.startsWith('image/') && !file.type.startsWith('video/')) {
-          notes.push(`${file.name} isn’t a photo or video. Choose a photo or video.`);
+        if (!(EVIDENCE_CONTENT_TYPES as readonly string[]).includes(file.type.toLowerCase())) {
+          notes.push(`${file.name} can’t be added. Choose a photo (JPEG, PNG or WebP) or a PDF.`);
         } else if (current.current.length >= MAX_EVIDENCE_PER_ATTACH) {
           notes.push(
             `${file.name} wasn’t added. You can send up to ${String(MAX_EVIDENCE_PER_ATTACH)} files at a time.`,
@@ -116,7 +125,7 @@ function Form({ trade, waitMs }: { trade: TradeView; waitMs: number }): React.JS
               id: fileId,
               fileId,
               alt: file.name,
-              kind: file.type.startsWith('video/') ? 'video' : 'photo',
+              kind: 'photo',
             },
           ];
           setAdded(current.current);
@@ -156,6 +165,7 @@ function Form({ trade, waitMs }: { trade: TradeView; waitMs: number }): React.JS
             return;
           }
           await sleep(waitMs);
+          if (!mounted.current) return;
         }
       }
     } catch (error) {
@@ -190,7 +200,7 @@ function Form({ trade, waitMs }: { trade: TradeView; waitMs: number }): React.JS
       <p className="mb-[14px] text-[12.5px] leading-[1.6] text-slate">{PROSE}</p>
       {!online && (
         <OfflineBanner title="You’re offline">
-          Photos and video can’t be added until you’re back online. What you’ve added is kept here.
+          Photos and PDFs can’t be added until you’re back online. What you’ve added is kept here.
         </OfflineBanner>
       )}
       <fieldset className="mb-[14px] min-w-0 border-0 p-0">
@@ -217,11 +227,11 @@ function Form({ trade, waitMs }: { trade: TradeView; waitMs: number }): React.JS
         <RiskBanner key={note}>{note}</RiskBanner>
       ))}
       <FileDropzone
-        label={uploading > 0 ? 'Uploading…' : 'Add photos and video'}
+        label={uploading > 0 ? 'Uploading…' : 'Add photos or PDFs'}
         hint="Stored with this trade"
         media={added}
         requiredCount={0}
-        accept="image/*,video/*"
+        accept={EVIDENCE_CONTENT_TYPES.join(',')}
         onAdd={online && !sending ? (files) => void onAdd(files) : undefined}
         {...(sending
           ? {}
