@@ -1,6 +1,6 @@
 // How the account screens word what the platform says. Pure functions, so the wording is tested without a DOM.
 // A screen branches on the problem's `code` and never on its title or detail, which the platform may reword.
-import { ProblemError } from '@komtru/api-client';
+import { NetworkError, ProblemError } from '@komtru/api-client';
 import { problemMessage } from '../trade/format';
 
 export type AccountAction =
@@ -55,6 +55,7 @@ export function accountProblem(error: unknown, action: AccountAction): string {
         break;
     }
   }
+  if (error instanceof NetworkError) return 'We couldn’t reach Komtru. Check your connection and try again.';
   return problemMessage(error, FALLBACK[action]);
 }
 
