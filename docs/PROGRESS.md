@@ -7,11 +7,11 @@ behind it is [`BUILD_PLAN.md`](BUILD_PLAN.md). The unit of work is the feature, 
 thing in an app.
 
 ```
-MVP   ███████████████████···············  28/49   (57%)
-Total ████████████······················  28/80   (35%)
+MVP   ████████████████████··············  29/49   (59%)
+Total ████████████······················  29/80   (36%)
 ```
 
-21 MVP features left, 31 deferred past it.
+20 MVP features left, 31 deferred past it.
 
 ## Backend done, UI outstanding
 
@@ -21,7 +21,6 @@ The engine exists and only the UI is missing, so these are the highest-value wor
 | ------- | ------------------------------------------------------ | ------------------------ | --- |
 | F-040   | Apply for merchant certification and have it reviewed  | Sell on Komtru           | yes |
 | F-044   | Account basics, addresses, documents and system states | Account, trust & support | yes |
-| F-045   | Verify yourself, and close or recover an account       | Account, trust & support | yes |
 
 ## By journey
 
@@ -38,7 +37,7 @@ The engine exists and only the UI is missing, so these are the highest-value wor
 | Issues & resolution                     | 1    | 7     | 1        | 6         |
 | Complete & grow                         | 1    | 3     | 1        | 1         |
 | Sell on Komtru                          | 0    | 4     | 0        | 1         |
-| Account, trust & support                | 0    | 5     | 0        | 3         |
+| Account, trust & support                | 1    | 5     | 1        | 3         |
 | TrustOps console                        | 3    | 11    | 3        | 3         |
 | Park network                            | 0    | 5     | 0        | 0         |
 | Logistics partner                       | 0    | 2     | 0        | 0         |
@@ -97,11 +96,11 @@ The same work counted per ticket. Useful for the detail in `docs/tickets/`, not 
 it counts backend and frontend layers separately, which is how the build drifted.
 
 ```
-MVP   ██████████████████████████········  78/104  (75%)
-Total ████████████████··················  78/168  (46%)
+MVP   ██████████████████████████········  79/104  (76%)
+Total ████████████████··················  79/168  (47%)
 ```
 
-26 MVP tickets left, 64 deferred past it.
+25 MVP tickets left, 64 deferred past it.
 
 ### Tickets in progress
 
@@ -162,7 +161,6 @@ Total ████████████████·············
 | T-199  | Resolution execution: return track                                 | yes |
 | T-200  | Resolution execution: replacement and mutual settlement            | yes |
 | T-204  | Account basics, money documents and system states                  | yes |
-| T-205  | Account security and lifecycle                                     | yes |
 | T-207  | Desktop: arrive, home and discover                                 | yes |
 | T-208  | Desktop: propose, agree and fund                                   | yes |
 | T-209  | Desktop: fulfil, deliver, inspect and complete                     | yes |

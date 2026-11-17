@@ -627,12 +627,13 @@ list a trade.
 
 - **Journey:** Account, trust & support
 - **Actor:** buyer, seller
-- **Absorbs:** T-039 (done), T-050 (done), T-205 (todo)
-- **Backend scope:** Verification core (NIN/BVN, liveness, levels) and account lifecycle, recovery and NDPA hooks. Already built (T-050, T-039).
+- **Absorbs:** T-039 (done), T-050 (done), T-205 (done)
+- **Backend scope:** Verification core (NIN/BVN, liveness, levels) and account lifecycle, recovery and NDPA hooks. Already built (T-050, T-039). A phone-number change flow was added on 2026-11-17 (see the note).
 - **Frontend scope:** Account security and lifecycle: MFA setup (AS1, AS2, TF1, TF2), verification (VF1), close account (CA1, CA2) and Supporting · Account & settings SP-M03–SP-M05. _10 v2 screens._
-- **Status:** Backend done, UI outstanding
+- **Status:** Done
 - **Depends on:** F-046
 - **MVP:** yes
+- **Note:** Closed 2026-11-17, built ahead of its F-046 parent on the owner's call: the account shell from F-037's payouts UI was extended rather than waiting for trust history. SP-M05 needed a backend that did not exist, so the owner asked for it and the feature grew a three-step change-number flow (`POST /me/phone/change`, `/confirm-current`, `/confirm-new`) with migration 0052 (`user_phones.change_state`, two partial unique indexes, two checks). That new code was reviewed twice on opus, which reproduced two working exploits against a live database — a concurrent-start race that bound a phone number the caller never proved, and an alarm redirect that sent the "your number was changed" SMS to the attacker. Both are closed and re-verified by probe: the invariant is now a database constraint, starting a change needs step-up (any factor, the owner's call), SMS factors are revoked rather than moved on a change, the OTP send budget is keyed per number so toll fraud is capped globally, and a 15-minute cooldown after a completed change stops the alarm being chained away. Declined by the owner: revoking other sessions on a change. Not done: no middleware redirects a suspended account to AS1/AS2, and there is no SMS second-method setup UI.
 
 #### F-046 — Trust history, account and notification settings
 

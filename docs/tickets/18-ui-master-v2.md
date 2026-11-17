@@ -169,6 +169,7 @@ What changed, from [`screens-v2.tsv`](../design-reference/screens-v2.tsv) (437 s
 - **Model:** sonnet
 - **Scope:** Privacy and data, security and devices, change phone number, account suspended (buyer and seller), verification failed, close your account and confirm closure, and two-factor setup with backup codes. Definition of done as epic 13 (frontend-design per screen, ui-kit only, all states, e2e and axe).
 - **Acceptance criteria:** the 10 v2 screens AS1, AS2, VF1, CA1, CA2, TF1, TF2, SP-M03, SP-M04, SP-M05 are built to the reference rows in `SCREEN_INDEX.md`, with copy taken from the reference and every data-backed screen showing loading, empty, error and offline states.
+- **Status:** Done (2026-11-17). Plan: docs/superpowers/plans/2026-11-17-f-045-account-security.md. Review: 4 must-fix and 8 should-fix on the first pass; the change-number backend then had a dedicated opus security review that reproduced 2 live exploits, and a verification pass that found 1 more (a skippable confirm step) — all fixed. Visual check: `docs/ui-review/T-205/` (3.8%-15.88% differing pixels, deviations listed per screen). E2E waived (no harness, as T-192).
 
 ### T-206 — Park agent hub tools and hub count
 
