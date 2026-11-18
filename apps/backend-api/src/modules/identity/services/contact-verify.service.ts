@@ -20,13 +20,16 @@ import { maskEmail, maskPhone, normaliseEmail, normalisePhone } from '../../../p
 import { userEmails, userPhones } from '../infrastructure/postgres/schema/contacts.js';
 import { users } from '../infrastructure/postgres/schema/users.js';
 import {
+  applyVerificationProgress,
   attachEmail,
   attachPhone,
   ContactInvalidError,
   ContactTakenError,
+  markEmailVerified,
+  markPhoneVerified,
   type ContactChannel,
 } from './contact.service.js';
-import { issueOtp } from './otp.service.js';
+import { consumeOtp, issueOtp, type VerifyOutcome } from './otp.service.js';
 
 export type { ContactChannel } from './contact.service.js';
 
@@ -186,6 +189,76 @@ export async function startContactVerification(
       delivered: issued.delivered,
     };
   });
+}
+
+export type ConfirmContactVerificationResult =
+  | { outcome: 'VERIFIED'; verificationLevel: string; maskedDestination: string }
+  /** Somebody else proved this address between the start and this confirm. */
+  | { outcome: 'TAKEN' }
+  | Exclude<VerifyOutcome, { outcome: 'VERIFIED' }>;
+
+export async function confirmContactVerification(
+  deps: ContactVerifyDeps,
+  input: { userId: string; channel: ContactChannel; challengeId: string; code: string },
+): Promise<ConfirmContactVerificationResult> {
+  return deps.db.transaction(async (tx): Promise<ConfirmContactVerificationResult> => {
+    const target = await currentContact(tx, input.userId, input.channel);
+
+    // `consumeOtp` charges the attempt BEFORE comparing, so this transaction must COMMIT on a wrong
+    // code as well as a right one — returning early here is correct, throwing would refund the guess.
+    const verified = await consumeOtp(tx, otpDeps(deps), {
+      challengeId: input.challengeId,
+      code: input.code,
+    });
+    if (verified.outcome !== 'VERIFIED') return verified;
+
+    // The challenge is bound to BOTH the caller and the channel. Another account's code, or this
+    // account's email code offered as a phone code, proves nothing about the row we are about to
+    // mark — and `consumeOtp` alone would have accepted either, because it only knows the id.
+    if (verified.challenge.userId !== input.userId || verified.challenge.purpose !== PURPOSE[input.channel]) {
+      return { outcome: 'UNKNOWN' };
+    }
+
+    // A spent code with nothing to mark is not a verification. `start` always leaves a row, so this
+    // is the deleted-in-between case rather than anything a caller can arrange.
+    if (!target) return { outcome: 'UNKNOWN' };
+
+    try {
+      if (input.channel === 'EMAIL') {
+        await markEmailVerified(tx, {
+          userId: input.userId,
+          emailId: target.id,
+          source: 'OTP',
+        });
+      } else {
+        await markPhoneVerified(tx, { userId: input.userId, phoneId: target.id });
+        // Deferred from `start`: `user_phones_change_state_unproven` refuses a primary row that is
+        // not yet verified, so the pointer can only move once the code is spent.
+        await makePhonePrimary(tx, input.userId, target.id);
+      }
+    } catch (error) {
+      if (error instanceof ContactTakenError) return { outcome: 'TAKEN' };
+      throw error;
+    }
+
+    const progress = await applyVerificationProgress(tx, input.userId);
+
+    return {
+      outcome: 'VERIFIED',
+      verificationLevel: progress.verificationLevel,
+      maskedDestination: maskFor(input.channel, target.address),
+    };
+  });
+}
+
+/** One primary per user is a partial unique index, so the old flag is cleared in the same transaction. */
+async function makePhonePrimary(tx: Tx, userId: string, phoneId: string): Promise<void> {
+  await tx
+    .update(userPhones)
+    .set({ isPrimary: false })
+    .where(and(eq(userPhones.userId, userId), eq(userPhones.isPrimary, true)));
+  await tx.update(userPhones).set({ isPrimary: true }).where(eq(userPhones.id, phoneId));
+  await tx.update(users).set({ primaryPhoneId: phoneId }).where(eq(users.id, userId));
 }
 
 const deleteContact = async (tx: Tx, channel: ContactChannel, id: string): Promise<void> => {
