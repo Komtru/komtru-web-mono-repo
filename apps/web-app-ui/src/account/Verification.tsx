@@ -31,6 +31,7 @@ import {
 } from '@komtru/ui-kit';
 import { useState } from 'react';
 import { ContactSupport } from './ContactSupport';
+import { ContactChecks } from './VerifyContact';
 import { Loading, LoadProblem } from './states';
 import { accountProblem } from './words';
 
@@ -95,6 +96,12 @@ export function Verification(): React.JSX.Element {
   return (
     <ScreenColumn>
       <ScreenHeader title="Verification" backHref="/account" backLabel="Back to your account" />
+      {/*
+        Contact first, and outside the `status` branch above: email and phone are level 1 and they
+        gate trading, so somebody sent here by "confirm both your email address and your phone
+        number" must see which one is missing even while the KYC checks are still loading.
+      */}
+      {me.data !== undefined && <ContactChecks contacts={me.data.contacts} />}
       {status.isPending ? (
         <Loading label="Loading your verification" />
       ) : status.data === undefined ? (

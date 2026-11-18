@@ -12,6 +12,12 @@ export const me = (account: Record<string, unknown> = {}, rest: Record<string, u
   publicId: 'U-AMAKA',
   username: 'amaka',
   verificationLevel: 'LEVEL_2',
+  // F-081. Both proven by default, so a suite that is not about contact verification sees the
+  // inert rows; override `contacts` through `rest` to exercise an unproven channel.
+  contacts: {
+    email: { present: true, masked: 'a•••@example.test', verified: true },
+    phone: { present: true, masked: '+23480•••4471', verified: true },
+  },
   account: {
     status: 'ACTIVE',
     since: null,
