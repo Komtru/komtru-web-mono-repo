@@ -79,7 +79,7 @@ export async function postStartContactVerification(
 
 export async function postConfirmContactVerification(
   deps: ContactVerifyControllerDeps,
-  _req: Request,
+  req: Request,
   actor: Actor,
   channel: ContactChannel,
   body: z.output<typeof confirmContactVerificationBody>,
@@ -89,6 +89,8 @@ export async function postConfirmContactVerification(
     channel,
     challengeId: body.challengeId,
     code: body.code,
+    ip: callerIp(req),
+    userAgent: callerAgent(req),
   });
 
   switch (result.outcome) {

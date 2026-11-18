@@ -1,7 +1,7 @@
 // T-039 as HTTP: `GET /me`, the close and NDPA routes, and account recovery. A thin layer; the rules
 // are in lifecycle.service.ts, ndpa.service.ts and recovery.service.ts. This file resolves who is
 // calling and where from, and nothing here logs a body (the close body carries a password).
-import { desc, eq } from 'drizzle-orm';
+import { desc, eq, sql } from 'drizzle-orm';
 import type { Request } from 'express';
 import type { z } from 'zod';
 import { ApiError } from '../../../../platform/errors.js';
@@ -67,24 +67,35 @@ export async function getMe(deps: LifecycleControllerDeps, actor: Actor) {
 }
 
 /**
+ * "Proven first", spelled out because `DESC` alone would do the opposite.
+ *
+ * Postgres sorts `verified_at DESC` NULLS FIRST, so among rows with the same `is_primary` the
+ * UNPROVEN row wins — which would badge a verified account "Not verified" the moment a channel
+ * holds two rows. `verified_at IS NULL` ascending puts false (proven) first and never depends on a
+ * null ordering default.
+ */
+const PROVEN_FIRST_EMAIL = sql`${userEmails.verifiedAt} IS NULL`;
+const PROVEN_FIRST_PHONE = sql`${userPhones.verifiedAt} IS NULL`;
+
+/**
  * Each channel's state for F-081's badges, masked.
  *
- * The primary row is what a screen means by "your email", but a phone-first account has no primary
- * email at all, and an account part-way through verification has one that is not proven — so
- * "present" and "verified" are two different questions and both are answered here.
+ * The proven row is what a screen means by "your email", but a phone-first account has no email at
+ * all, and an account part-way through verification has one that is not proven — so "present" and
+ * "verified" are two different questions and both are answered here.
  */
 async function contactsOf(db: LifecycleControllerDeps['db'], userId: string) {
   const [email] = await db
     .select({ address: userEmails.email, verifiedAt: userEmails.verifiedAt })
     .from(userEmails)
     .where(eq(userEmails.userId, userId))
-    .orderBy(desc(userEmails.isPrimary), desc(userEmails.verifiedAt))
+    .orderBy(PROVEN_FIRST_EMAIL, desc(userEmails.isPrimary), desc(userEmails.createdAt))
     .limit(1);
   const [phone] = await db
     .select({ address: userPhones.phoneE164, verifiedAt: userPhones.verifiedAt })
     .from(userPhones)
     .where(eq(userPhones.userId, userId))
-    .orderBy(desc(userPhones.isPrimary), desc(userPhones.verifiedAt))
+    .orderBy(PROVEN_FIRST_PHONE, desc(userPhones.isPrimary), desc(userPhones.createdAt))
     .limit(1);
 
   return {

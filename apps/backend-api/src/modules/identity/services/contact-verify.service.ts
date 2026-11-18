@@ -11,7 +11,7 @@
 // `markEmailVerified`/`markPhoneVerified` hold the "only one account may prove an address" invariant
 // against a live 23505 under a SAVEPOINT, `issueOtp` carries the per-destination send budget, and
 // `applyVerificationProgress` owns the level change. This file is the order they go in.
-import { and, desc, eq, isNotNull } from 'drizzle-orm';
+import { and, desc, eq, isNotNull, sql } from 'drizzle-orm';
 import type { Db } from '../../../db/index.js';
 import type { HmacHasher } from '../../../platform/crypto/hmac.js';
 import type { Tx } from '../../../platform/events/publish.js';
@@ -29,6 +29,8 @@ import {
   markPhoneVerified,
   type ContactChannel,
 } from './contact.service.js';
+import { hashDestination } from '../domain/otp/challenge.js';
+import { AUDIT_ACTIONS, writeAudit } from './audit.service.js';
 import { consumeOtp, issueOtp, type VerifyOutcome } from './otp.service.js';
 
 export type { ContactChannel } from './contact.service.js';
@@ -61,7 +63,13 @@ export type StartContactVerificationResult =
   /** Somebody else has already proven this address. */
   | { outcome: 'TAKEN' };
 
-/** The row this channel would prove: the primary first, then the newest, mirroring what `/me` reports. */
+/**
+ * The row this channel would prove: the PROVEN one first, then the primary, then the newest.
+ *
+ * "Proven first" is spelled as `verified_at IS NULL` ascending and not as `verified_at DESC`,
+ * because Postgres sorts `DESC` NULLS FIRST — which would hand back the UNPROVEN row and quietly
+ * stop `ALREADY_VERIFIED` from firing, the one rule this feature rests on.
+ */
 async function currentContact(
   tx: Tx,
   userId: string,
@@ -72,7 +80,7 @@ async function currentContact(
       .select({ id: userEmails.id, address: userEmails.email, verifiedAt: userEmails.verifiedAt })
       .from(userEmails)
       .where(eq(userEmails.userId, userId))
-      .orderBy(desc(userEmails.isPrimary), desc(userEmails.verifiedAt))
+      .orderBy(sql`${userEmails.verifiedAt} IS NULL`, desc(userEmails.isPrimary), desc(userEmails.createdAt))
       .limit(1);
     return row ? { id: row.id, address: row.address, verified: row.verifiedAt !== null } : undefined;
   }
@@ -81,7 +89,7 @@ async function currentContact(
     .select({ id: userPhones.id, address: userPhones.phoneE164, verifiedAt: userPhones.verifiedAt })
     .from(userPhones)
     .where(eq(userPhones.userId, userId))
-    .orderBy(desc(userPhones.isPrimary), desc(userPhones.verifiedAt))
+    .orderBy(sql`${userPhones.verifiedAt} IS NULL`, desc(userPhones.isPrimary), desc(userPhones.createdAt))
     .limit(1);
   return row ? { id: row.id, address: row.address, verified: row.verifiedAt !== null } : undefined;
 }
@@ -181,6 +189,27 @@ export async function startContactVerification(
       ip: input.ip,
     });
 
+    // §S10. This route sends a message to an address the caller named, on the platform's budget and
+    // behind nothing but a session — so who asked, for which channel, and whether anything actually
+    // went out all belong on the trail. The address itself does not: ids and a reason only.
+    await writeAudit(tx, {
+      action: AUDIT_ACTIONS.OTP_ISSUED,
+      outcome: 'SUCCESS',
+      actorType: 'USER',
+      actorUserId: input.userId,
+      subjectUserId: input.userId,
+      ip: input.ip,
+      userAgent: input.userAgent,
+      metadata: {
+        challengeId: issued.challengeId,
+        channel: input.channel,
+        contactId: target.id,
+        delivered: issued.delivered,
+        replacedAddress: input.address !== undefined,
+        via: 'F-081',
+      },
+    });
+
     return {
       outcome: 'STARTED',
       challengeId: issued.challengeId,
@@ -191,6 +220,24 @@ export async function startContactVerification(
   });
 }
 
+/**
+ * Does this challenge's destination hash name the address we are about to mark?
+ *
+ * Hashed with the same pepper `issueOtp` used, over the same canonical form, so the comparison is
+ * the one the challenge was created with. `timingSafeEqual` is not needed — both sides are
+ * server-derived and neither is a secret the caller is guessing — but a length guard is, because
+ * `Buffer.equals` on differing lengths is simply false and a malformed row should not throw.
+ */
+function destinationMatches(
+  deps: ContactVerifyDeps,
+  challengeHash: Uint8Array,
+  channel: ContactChannel,
+  address: string,
+): boolean {
+  const expected = hashDestination(deps.otpHasher, canonical(channel, address) ?? address);
+  return Buffer.from(challengeHash).equals(expected);
+}
+
 export type ConfirmContactVerificationResult =
   | { outcome: 'VERIFIED'; verificationLevel: string; maskedDestination: string }
   /** Somebody else proved this address between the start and this confirm. */
@@ -199,10 +246,35 @@ export type ConfirmContactVerificationResult =
 
 export async function confirmContactVerification(
   deps: ContactVerifyDeps,
-  input: { userId: string; channel: ContactChannel; challengeId: string; code: string },
+  input: {
+    userId: string;
+    channel: ContactChannel;
+    challengeId: string;
+    code: string;
+    ip?: string | null;
+    userAgent?: string | null;
+  },
 ): Promise<ConfirmContactVerificationResult> {
   return deps.db.transaction(async (tx): Promise<ConfirmContactVerificationResult> => {
     const target = await currentContact(tx, input.userId, input.channel);
+
+    /** Ids and a reason, never an address or a code — the shape `auditFailure` uses in F-045. */
+    const refuse = async (
+      result: ConfirmContactVerificationResult,
+      reason: string,
+    ): Promise<ConfirmContactVerificationResult> => {
+      await writeAudit(tx, {
+        action: AUDIT_ACTIONS.OTP_FAILED,
+        outcome: 'FAILURE',
+        actorType: 'USER',
+        actorUserId: input.userId,
+        subjectUserId: input.userId,
+        ip: input.ip ?? null,
+        userAgent: input.userAgent ?? null,
+        metadata: { challengeId: input.challengeId, channel: input.channel, reason },
+      });
+      return result;
+    };
 
     // `consumeOtp` charges the attempt BEFORE comparing, so this transaction must COMMIT on a wrong
     // code as well as a right one — returning early here is correct, throwing would refund the guess.
@@ -210,18 +282,33 @@ export async function confirmContactVerification(
       challengeId: input.challengeId,
       code: input.code,
     });
-    if (verified.outcome !== 'VERIFIED') return verified;
+    if (verified.outcome !== 'VERIFIED') return refuse(verified, verified.outcome);
 
-    // The challenge is bound to BOTH the caller and the channel. Another account's code, or this
+    // The challenge is bound to the caller and the channel. Another account's code, or this
     // account's email code offered as a phone code, proves nothing about the row we are about to
     // mark — and `consumeOtp` alone would have accepted either, because it only knows the id.
     if (verified.challenge.userId !== input.userId || verified.challenge.purpose !== PURPOSE[input.channel]) {
-      return { outcome: 'UNKNOWN' };
+      return refuse({ outcome: 'UNKNOWN' }, 'challenge_not_for_caller_or_channel');
     }
 
     // A spent code with nothing to mark is not a verification. `start` always leaves a row, so this
     // is the deleted-in-between case rather than anything a caller can arrange.
-    if (!target) return { outcome: 'UNKNOWN' };
+    if (!target) return refuse({ outcome: 'UNKNOWN' }, 'no_contact_row');
+
+    // And bound to the DESTINATION, which is the one that matters.
+    //
+    // `start` replaces the unproven row, but `issueOtp` only supersedes challenges with the same
+    // destination hash — so starting twice with two addresses leaves the first code live while the
+    // row holds the second. Without this, a caller could spend the code delivered to an address
+    // they control and have it mark an address they do not: a stranger's email verified on their
+    // account, and — because `user_emails_verified_unique` is global — permanently unusable by its
+    // real owner, who also loses the login and password-reset paths that resolve through it.
+    //
+    // Checked AFTER `consumeOtp` on purpose: the attempt is charged either way, so this is not a
+    // free oracle for "is this challenge still live".
+    if (!destinationMatches(deps, verified.challenge.destinationHash, input.channel, target.address)) {
+      return refuse({ outcome: 'UNKNOWN' }, 'code_was_sent_to_a_different_address');
+    }
 
     try {
       if (input.channel === 'EMAIL') {
@@ -237,9 +324,24 @@ export async function confirmContactVerification(
         await makePhonePrimary(tx, input.userId, target.id);
       }
     } catch (error) {
-      if (error instanceof ContactTakenError) return { outcome: 'TAKEN' };
+      if (error instanceof ContactTakenError) {
+        return refuse({ outcome: 'TAKEN' }, 'address_proven_by_another_account');
+      }
       throw error;
     }
+
+    // §S10: this route changes `verification_level` and moves `users.primary_phone_id`, so it leaves
+    // the same trail the other route that proves a channel does (`auth.service.ts`).
+    await writeAudit(tx, {
+      action: input.channel === 'EMAIL' ? AUDIT_ACTIONS.EMAIL_VERIFIED : AUDIT_ACTIONS.PHONE_VERIFIED,
+      outcome: 'SUCCESS',
+      actorType: 'USER',
+      actorUserId: input.userId,
+      subjectUserId: input.userId,
+      ip: input.ip ?? null,
+      userAgent: input.userAgent ?? null,
+      metadata: { challengeId: input.challengeId, contactId: target.id, via: 'F-081' },
+    });
 
     const progress = await applyVerificationProgress(tx, input.userId);
 

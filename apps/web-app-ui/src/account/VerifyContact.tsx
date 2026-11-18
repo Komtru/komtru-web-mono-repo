@@ -9,7 +9,7 @@
 // Only an UNPROVEN channel offers anything. A verified row is inert by design: the platform refuses to
 // re-send for one (409 ALREADY_VERIFIED), because moving a proven address is the account-takeover path
 // this feature deliberately does not open. Changing a proven number is SP-M05's job.
-import type { ContactChannelState } from '@komtru/api-client';
+import { ProblemError, type ContactChannelState } from '@komtru/api-client';
 import { useConfirmContactVerification, useStartContactVerification } from '@komtru/api-client/react';
 import { Button, Chip, SectionLabel, TextField } from '@komtru/ui-kit';
 import { useState } from 'react';
@@ -25,6 +25,41 @@ const WORDING: Record<Channel, { label: string; field: string; placeholder: stri
   EMAIL: { label: 'Email address', field: 'Email address', placeholder: 'you@example.com' },
   PHONE: { label: 'Phone number', field: 'Phone number', placeholder: '0803 000 0000' },
 };
+
+/**
+ * The platform's refusals, said in words a person can act on.
+ *
+ * Each of these codes exists precisely because it sends somebody somewhere different — collapsing
+ * them into "we couldn't send a code" would tell a person to retry a send that will never succeed,
+ * or to re-check digits that were never the problem.
+ */
+function startProblem(error: unknown, channelWord: string): string {
+  if (error instanceof ProblemError) {
+    if (error.is('CONTACT_TAKEN')) {
+      return `That ${channelWord} belongs to another account. Use a different one, or contact support if it is yours.`;
+    }
+    if (error.is('ALREADY_VERIFIED')) return `Your ${channelWord} is already verified.`;
+    if (error.is('CONTACT_REQUIRED')) return `Tell us the ${channelWord} to verify.`;
+    if (error.is('VALIDATION_FAILED')) return `That does not look like a ${channelWord} we can use.`;
+    if (error.is('RATE_LIMITED')) return 'Too many attempts just now. Try again in a few minutes.';
+  }
+  return `We couldn’t send a code to that ${channelWord}.`;
+}
+
+function confirmProblem(error: unknown, channelWord: string): string {
+  if (error instanceof ProblemError) {
+    if (error.is('CONTACT_TAKEN')) {
+      return `That ${channelWord} belongs to another account — somebody confirmed it first.`;
+    }
+    // One code covers a wrong code, an expired one and a spent attempt cap. "Check the digits" is
+    // wrong for the last two, so the copy says what to do in either case.
+    if (error.is('OTP_INVALID')) {
+      return 'That code didn’t match, or it has lapsed. Check it, or ask for a new one.';
+    }
+    if (error.is('RATE_LIMITED')) return 'Too many attempts just now. Try again in a few minutes.';
+  }
+  return 'We couldn’t confirm that code.';
+}
 
 export function ContactChecks({ contacts }: { contacts: Contacts }): React.JSX.Element {
   return (
@@ -42,7 +77,6 @@ function ContactRow({ channel, state }: { channel: Channel; state: ContactChanne
   const [code, setCode] = useState('');
   const [sentTo, setSentTo] = useState<string | null>(null);
   const [challengeId, setChallengeId] = useState<string | null>(null);
-  const [asking, setAsking] = useState(false);
   const [problem, setProblem] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
 
@@ -54,14 +88,13 @@ function ContactRow({ channel, state }: { channel: Channel; state: ContactChanne
     setNotice(null);
     // An account with nothing on this channel has to say what to send to before anything can go out.
     if (!state.present && address.trim() === '') {
-      setAsking(true);
+      setProblem(`Tell us the ${words.label.toLowerCase()} to verify.`);
       return;
     }
     try {
       const started = await start.mutateAsync(address.trim() === '' ? {} : { address: address.trim() });
       setChallengeId(started.challengeId);
       setSentTo(started.maskedDestination);
-      setAsking(false);
       // `delivered: false` means the send budget was spent and NOTHING went out. Saying "we sent a
       // code" here would be a lie the person would wait on.
       setNotice(
@@ -69,8 +102,8 @@ function ContactRow({ channel, state }: { channel: Channel; state: ContactChanne
           ? `We sent a code to ${started.maskedDestination}.`
           : `We couldn’t send another code to ${started.maskedDestination} just yet. Try again in a few minutes.`,
       );
-    } catch {
-      setProblem(`We couldn’t send a code to that ${words.label.toLowerCase()}.`);
+    } catch (error) {
+      setProblem(startProblem(error, words.label.toLowerCase()));
     }
   };
 
@@ -82,8 +115,8 @@ function ContactRow({ channel, state }: { channel: Channel; state: ContactChanne
       setChallengeId(null);
       setCode('');
       setNotice(null);
-    } catch {
-      setProblem('That code didn’t match. Check it and try again.');
+    } catch (error) {
+      setProblem(confirmProblem(error, words.label.toLowerCase()));
     }
   };
 
@@ -107,10 +140,17 @@ function ContactRow({ channel, state }: { channel: Channel; state: ContactChanne
 
       {!state.verified && (
         <div className="mt-[10px] flex flex-col gap-[8px]">
-          {(asking || !state.present) && challengeId === null && (
+          {challengeId === null && (
+            // Always editable while the channel is unproven, not only when the account has nothing
+            // on file. The common case this feature exists for is a registration address that was
+            // MISTYPED — present, unverified, and wrong — and a read-only row would send every code
+            // to the wrong place forever. Left blank, `start` uses the address already on file.
             <TextField
               label={words.field}
               placeholder={words.placeholder}
+              helper={
+                state.present && state.masked !== null ? `Leave blank to use ${state.masked}` : undefined
+              }
               value={address}
               onChange={(event) => setAddress(event.target.value)}
             />
