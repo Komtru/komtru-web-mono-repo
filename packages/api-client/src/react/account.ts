@@ -15,7 +15,9 @@ import {
   activateOwnTotp,
   closeAccount,
   confirmCurrentPhone,
+  confirmEmailVerification,
   confirmNewPhone,
+  confirmPhoneVerification,
   enrolSms,
   enrolOwnTotp,
   getMe,
@@ -34,10 +36,13 @@ import {
   stepUpChallenge,
   submitBvn,
   submitLiveness,
+  startEmailVerification,
   startPhoneChange,
+  startPhoneVerification,
   submitNin,
   trustDevice,
   type CloseAccountBody,
+  type ConfirmContactBody,
   type PhoneStepBody,
   type RecoveryMethod,
   type StepUpBody,
@@ -257,6 +262,36 @@ export function useConfirmCurrentPhone() {
 export function useConfirmNewPhone() {
   const client = useApiClient();
   return useAccountMutation((body: PhoneStepBody) => client.call(confirmNewPhone, { body }), {
+    secret: true,
+  });
+}
+
+// --- F-081: verify a contact channel from VF1 ----------------------------------------------------------------
+
+/**
+ * Send a code to one channel. Keyed by channel rather than split into two hooks: the screen shows
+ * both rows and the call differs only in which endpoint it names.
+ *
+ * `gcTime: 0` for `useStartPhoneChange`'s reason — the response names where a code went, and that
+ * must not outlive the screen that asked for it.
+ */
+export function useStartContactVerification(channel: 'EMAIL' | 'PHONE') {
+  const client = useApiClient();
+  const endpoint = channel === 'EMAIL' ? startEmailVerification : startPhoneVerification;
+  return useMutation({
+    mutationFn: (variables: { address?: string } = {}) => client.call(endpoint, { body: variables }),
+    gcTime: 0,
+  });
+}
+
+/**
+ * Spend the code. On success the account is read again, because the badge, `verificationLevel` and
+ * everything gated on CONTACT_VERIFIED all change at once.
+ */
+export function useConfirmContactVerification(channel: 'EMAIL' | 'PHONE') {
+  const client = useApiClient();
+  const endpoint = channel === 'EMAIL' ? confirmEmailVerification : confirmPhoneVerification;
+  return useAccountMutation((body: ConfirmContactBody) => client.call(endpoint, { body }), {
     secret: true,
   });
 }
