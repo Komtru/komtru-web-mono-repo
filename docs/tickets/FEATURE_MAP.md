@@ -1058,6 +1058,17 @@ list a trade.
 - **Note:** **Deferred 2026-11-15 by the owner**, with F-041, for the reason this note already gave.
   Split out of F-017 on 2026-11-09. It genuinely needs listings (T-056 via F-041); the rest of proposing a trade does not, and keeping them together put the entire trade journey behind the storefront.
 
+#### F-081 — Verify your email and phone from the verification screen
+
+- **Journey:** Account, trust & support
+- **Actor:** buyer, seller
+- **Backend scope:** Four `/me` routes over one service — add or replace an **unverified** email or phone and prove it with a code. Reuses the `EMAIL_VERIFICATION` and `PHONE_VERIFICATION` OTP purposes (already in the enum, previously unused), the per-destination send budget, and `applyVerificationProgress` for the level change. `GET /me` gains a `contacts` block. No migration.
+- **Frontend scope:** A contact section on VF1 (`/account/verification`): a badge per channel and a code sheet for whichever is unproven. _No new screen._
+- **Status:** In progress
+- **Depends on:** F-045
+- **MVP:** yes
+- **Note:** Opened 2026-11-18. Scope is **add + verify only**, the owner's call: changing an address that is already verified stays impossible, and that is what keeps this off the account-takeover path — `start` only ever writes an unverified row, so no request here can move a contact somebody already proved. No step-up gate, unlike F-045's phone change. Found because an account registered phone-first could never reach `CONTACT_VERIFIED`: the email captured at registration was never challenged, and no route existed to challenge it afterwards, so `POST /trades/:id/send` refused with "Confirm both your email address and your phone number".
+
 ## 3. Coverage table
 
 Every ticket in `docs/tickets/`, in id order, with the feature that absorbs it.
