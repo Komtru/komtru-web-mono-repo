@@ -142,5 +142,10 @@ describe('the repository', () => {
     expect(existsSync(join(root, 'pnpm-workspace.yaml'))).toBe(true);
 
     await expect(findForbiddenPaystackPrimitives(root)).resolves.toEqual([]);
-  });
+    // The same explicit budget, and for a stronger version of the reason given above: this case
+    // walks the REAL repository rather than a fixture, so it is the most expensive scan in the
+    // suite, and it was the only one left on Vitest's 5s default. Alone it takes under a second;
+    // under `turbo run test`, with the web suite's workers running beside it, it timed out and read
+    // as a real finding (F-081).
+  }, 60_000);
 });

@@ -51,6 +51,10 @@ describe('account endpoints', () => {
       publicId: 'U-AMAKA',
       username: null,
       verificationLevel: 'LEVEL_2',
+      contacts: {
+        email: { present: true, masked: 'a•••@x.test', verified: true },
+        phone: { present: true, masked: '+23480•••4471', verified: true },
+      },
       account: {
         status: 'SUSPENDED',
         since: WHEN,

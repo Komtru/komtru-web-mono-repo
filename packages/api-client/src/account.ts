@@ -27,11 +27,25 @@ export const LIFECYCLE_STATUSES = [
 ] as const;
 export type LifecycleStatus = (typeof LIFECYCLE_STATUSES)[number];
 
+/**
+ * One contact channel as VF1 badges it (F-081). Masked, never the address: the person already knows
+ * their own email, so sending the plaintext would be a leak bought for nothing.
+ */
+export const contactChannelSchema = z.object({
+  /** False when the account holds no address on this channel at all — a phone-first signup has no email. */
+  present: z.boolean(),
+  masked: z.string().nullable(),
+  verified: z.boolean(),
+});
+export type ContactChannelState = z.infer<typeof contactChannelSchema>;
+
 export const meSchema = z.object({
   id: z.uuid(),
   publicId: z.string(),
   username: z.string().nullable(),
   verificationLevel: z.string(),
+  /** `verificationLevel` says whether BOTH are proven; this says which one is missing. */
+  contacts: z.object({ email: contactChannelSchema, phone: contactChannelSchema }),
   account: z.object({
     status: z.enum(LIFECYCLE_STATUSES),
     since: iso.nullable(),
@@ -509,4 +523,71 @@ export const confirmNewPhone = defineEndpoint({
     body: phoneStepBody,
     response: z.object({ status: z.literal('CHANGED'), maskedPhone: z.string() }),
   },
+});
+
+// --- verify a contact channel (F-081, screen VF1) ------------------------------------------------------------
+// Two steps per channel: send a code, then spend it. Scope is add + verify only — a channel that is
+// ALREADY verified is refused (409 `ALREADY_VERIFIED`) rather than re-sent, which is what keeps this
+// off the account-takeover path. Changing a proven number is F-045's three-step flow above.
+
+const startVerificationResponse = z.object({
+  challengeId: z.uuid(),
+  /** Where the code went, masked. */
+  maskedDestination: z.string(),
+  expiresAt: iso,
+  /** False when the per-destination send budget was spent, so nothing was sent. Say so; do not imply a send. */
+  delivered: z.boolean(),
+});
+
+const confirmVerificationBody = z.strictObject({
+  challengeId: z.uuid(),
+  code: z.string().trim().min(1).max(64),
+});
+export type ConfirmContactBody = z.input<typeof confirmVerificationBody>;
+
+const confirmVerificationResponse = z.object({
+  status: z.literal('VERIFIED'),
+  /** `CONTACT_VERIFIED` once BOTH channels are proven; otherwise unchanged. */
+  verificationLevel: z.string(),
+  maskedDestination: z.string(),
+});
+
+/** Omit `address` to use the one already on file; supply it to add one, or to correct an unproven one. */
+export const startEmailVerification = defineEndpoint({
+  method: 'post',
+  path: '/me/email/verify/start',
+  scope: 'CONSUMER',
+  retryable: false,
+  schema: {
+    body: z.strictObject({ address: z.string().trim().min(3).max(254).optional() }),
+    response: startVerificationResponse,
+  },
+});
+
+export const confirmEmailVerification = defineEndpoint({
+  method: 'post',
+  path: '/me/email/verify/confirm',
+  scope: 'CONSUMER',
+  retryable: false,
+  schema: { body: confirmVerificationBody, response: confirmVerificationResponse },
+});
+
+export const startPhoneVerification = defineEndpoint({
+  method: 'post',
+  path: '/me/phone/verify/start',
+  scope: 'CONSUMER',
+  retryable: false,
+  schema: {
+    // The bound `startPhoneChange` uses, so the two ways into a phone number agree.
+    body: z.strictObject({ address: z.string().trim().min(5).max(32).optional() }),
+    response: startVerificationResponse,
+  },
+});
+
+export const confirmPhoneVerification = defineEndpoint({
+  method: 'post',
+  path: '/me/phone/verify/confirm',
+  scope: 'CONSUMER',
+  retryable: false,
+  schema: { body: confirmVerificationBody, response: confirmVerificationResponse },
 });

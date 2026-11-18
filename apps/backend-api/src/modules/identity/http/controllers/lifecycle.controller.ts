@@ -1,11 +1,13 @@
 // T-039 as HTTP: `GET /me`, the close and NDPA routes, and account recovery. A thin layer; the rules
 // are in lifecycle.service.ts, ndpa.service.ts and recovery.service.ts. This file resolves who is
 // calling and where from, and nothing here logs a body (the close body carries a password).
-import { eq } from 'drizzle-orm';
+import { desc, eq, sql } from 'drizzle-orm';
 import type { Request } from 'express';
 import type { z } from 'zod';
 import { ApiError } from '../../../../platform/errors.js';
 import { requireUserId, type Actor } from '../../../../platform/http/principal.js';
+import { maskEmail, maskPhone } from '../../../../platform/identifiers.js';
+import { userEmails, userPhones } from '../../infrastructure/postgres/schema/contacts.js';
 import { users } from '../../infrastructure/postgres/schema/users.js';
 import { getAccountNotice, closeOwnAccount, type CloseInput } from '../../services/lifecycle.service.js';
 import { requestDataExport, requestErasure, type NdpaDeps } from '../../services/ndpa.service.js';
@@ -57,7 +59,53 @@ export async function getMe(deps: LifecycleControllerDeps, actor: Actor) {
       .limit(1)
   )[0];
   if (!user) throw new ApiError(404, 'NOT_FOUND', 'User not found');
-  return { ...user, account: await getAccountNotice(deps.db, deps.ports ?? {}, userId) };
+  return {
+    ...user,
+    contacts: await contactsOf(deps.db, userId),
+    account: await getAccountNotice(deps.db, deps.ports ?? {}, userId),
+  };
+}
+
+/**
+ * "Proven first", spelled out because `DESC` alone would do the opposite.
+ *
+ * Postgres sorts `verified_at DESC` NULLS FIRST, so among rows with the same `is_primary` the
+ * UNPROVEN row wins — which would badge a verified account "Not verified" the moment a channel
+ * holds two rows. `verified_at IS NULL` ascending puts false (proven) first and never depends on a
+ * null ordering default.
+ */
+const PROVEN_FIRST_EMAIL = sql`${userEmails.verifiedAt} IS NULL`;
+const PROVEN_FIRST_PHONE = sql`${userPhones.verifiedAt} IS NULL`;
+
+/**
+ * Each channel's state for F-081's badges, masked.
+ *
+ * The proven row is what a screen means by "your email", but a phone-first account has no email at
+ * all, and an account part-way through verification has one that is not proven — so "present" and
+ * "verified" are two different questions and both are answered here.
+ */
+async function contactsOf(db: LifecycleControllerDeps['db'], userId: string) {
+  const [email] = await db
+    .select({ address: userEmails.email, verifiedAt: userEmails.verifiedAt })
+    .from(userEmails)
+    .where(eq(userEmails.userId, userId))
+    .orderBy(PROVEN_FIRST_EMAIL, desc(userEmails.isPrimary), desc(userEmails.createdAt))
+    .limit(1);
+  const [phone] = await db
+    .select({ address: userPhones.phoneE164, verifiedAt: userPhones.verifiedAt })
+    .from(userPhones)
+    .where(eq(userPhones.userId, userId))
+    .orderBy(PROVEN_FIRST_PHONE, desc(userPhones.isPrimary), desc(userPhones.createdAt))
+    .limit(1);
+
+  return {
+    email: email
+      ? { present: true, masked: maskEmail(email.address), verified: email.verifiedAt !== null }
+      : { present: false, masked: null, verified: false },
+    phone: phone
+      ? { present: true, masked: maskPhone(phone.address), verified: phone.verifiedAt !== null }
+      : { present: false, masked: null, verified: false },
+  };
 }
 
 export async function postClose(

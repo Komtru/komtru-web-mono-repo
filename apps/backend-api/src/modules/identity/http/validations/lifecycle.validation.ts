@@ -36,12 +36,28 @@ export const dataExportResponse = z.object({
   dueBy: z.iso.datetime(),
 });
 
+/**
+ * One contact channel as a screen may know it (F-081). Masked, never the address itself: VF1 draws a
+ * badge and the person already knows their own email, so the plaintext would be a leak bought for nothing.
+ */
+const contactChannel = z.object({
+  /** False when the account holds no address on this channel at all — a phone-first signup has no email. */
+  present: z.boolean(),
+  masked: z.string().nullable(),
+  verified: z.boolean(),
+});
+
 /** What screens AS1, AS2, CA1 and CA2 read. Never the staff-written reason (plan, owner decision 2). */
 export const meResponse = z.object({
   id: z.uuid(),
   publicId: z.string(),
   username: z.string().nullable(),
   verificationLevel: z.string(),
+  /**
+   * F-081. `verificationLevel` says CONTACT_VERIFIED or not; it cannot say WHICH channel is missing,
+   * and the verification screen has to badge each one separately.
+   */
+  contacts: z.object({ email: contactChannel, phone: contactChannel }),
   account: z.object({
     status: z.enum(LIFECYCLE_STATUSES),
     since: z.iso.datetime().nullable(),
