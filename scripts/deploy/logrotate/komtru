@@ -1,0 +1,24 @@
+# Rotation for the Komtru backend's PM2 logs.
+#
+# Installed to /etc/logrotate.d/komtru by bootstrap-ec2.sh. Ubuntu runs logrotate from
+# logrotate.timer (a systemd timer, not crontab) once a day; `maxsize` below means a log that
+# grows fast is also rotated by the hourly-ish timer run rather than waiting for midnight.
+#
+# This matters more than it looks. An unrotated PM2 error log — a single 651 MB ui-error.log —
+# is what filled this instance's root volume to 100% and took the previous tenant's apps down.
+
+/srv/komtru/logs/*.log {
+    daily
+    rotate 7
+    # 50M so a crash loop cannot outrun the daily schedule and fill an 8 GB volume overnight.
+    maxsize 50M
+    missingok
+    notifempty
+    compress
+    delaycompress
+    # copytruncate, NOT create: PM2 holds these files open and writes by descriptor. Renaming
+    # them out from under it would leave PM2 appending to an unlinked inode — the log would
+    # appear to stop, while the disk kept filling invisibly.
+    copytruncate
+    su komtru komtru
+}

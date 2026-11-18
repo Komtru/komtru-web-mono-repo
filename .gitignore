@@ -50,3 +50,6 @@ tools/tickets/.tickets.json
 
 # Python bytecode from tools/tickets
 __pycache__/
+
+# Vercel CLI link state (contains project and org ids, not secrets)
+.vercel

@@ -22,4 +22,13 @@ export default [
       'komtru/provider-clients': 'error',
     },
   },
+  {
+    // PM2 reads ecosystem.config.cjs with require(), so the file has to be CommonJS and
+    // `require` in it is correct rather than legacy. It is deployment configuration, not
+    // application code: none of the module rules above apply to it either.
+    files: ['*.cjs'],
+    rules: {
+      '@typescript-eslint/no-require-imports': 'off',
+    },
+  },
 ];

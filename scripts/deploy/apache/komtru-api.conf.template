@@ -1,0 +1,40 @@
+# Komtru backend API behind Apache. __API_DOMAIN__ and __API_PORT__ are substituted on install.
+#
+# Apache rather than nginx because the host already runs it. certbot --apache generates the
+# :443 mirror of this block (komtru-api-le-ssl.conf) and the redirect; never hand-edit that
+# file — change this one and re-run certbot.
+
+<VirtualHost *:80>
+    ServerName __API_DOMAIN__
+
+    ProxyPreserveHost On
+    ProxyRequests Off
+    # mod_proxy appends X-Forwarded-For itself, and TRUST_PROXY_HOPS=1 in .env.backend counts
+    # exactly this one hop. Put a load balancer in front and both numbers must rise together,
+    # or the rate limiter buckets every request under the proxy's own address.
+    # expr=, not a literal "http": certbot copies this whole block verbatim into the generated
+    # :443 vhost, and a hardcoded scheme would tell the app that every TLS request arrived in
+    # plaintext — breaking OAuth redirect URLs and any secure-cookie decision downstream.
+    RequestHeader set X-Forwarded-Proto expr=%{REQUEST_SCHEME}
+
+    # Socket.IO opens with HTTP long-polling and then upgrades. The rewrite catches the upgrade
+    # handshake — rewrite rules run before ProxyPass — and the ProxyPass below carries the
+    # polling transport that comes first. With only one of the two the connection silently
+    # degrades to polling forever, or fails outright.
+    RewriteEngine On
+    RewriteCond %{HTTP:Upgrade} =websocket [NC]
+    RewriteRule ^/?(.*) ws://127.0.0.1:__API_PORT__/$1 [P,L]
+
+    ProxyPass        /socket.io/ http://127.0.0.1:__API_PORT__/socket.io/
+    ProxyPassReverse /socket.io/ http://127.0.0.1:__API_PORT__/socket.io/
+
+    ProxyPass        / http://127.0.0.1:__API_PORT__/
+    ProxyPassReverse / http://127.0.0.1:__API_PORT__/
+
+    # Uploads go browser-to-Cloudinary, so nothing large transits Apache.
+    # FILES_MAX_UPLOAD_BYTES is 10 MiB; this leaves room for the multipart envelope.
+    LimitRequestBody 12582912
+
+    ErrorLog  ${APACHE_LOG_DIR}/komtru-api.error.log
+    CustomLog ${APACHE_LOG_DIR}/komtru-api.access.log combined
+</VirtualHost>

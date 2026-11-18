@@ -1,0 +1,67 @@
+# Deployment configuration for the Komtru backend host.
+#
+# Copy to /srv/komtru/deploy.conf on the instance and edit. bootstrap-ec2.sh and deploy.sh both
+# source it. It holds no application secrets — those live in /srv/komtru/.env.backend, which is
+# mode 0600 and written separately.
+#
+# The committed values are the ones the staging host actually runs with.
+
+# --- Where the code comes from ----------------------------------------------
+# "git"   clone/fetch REPO_URL. Needs the monorepo to exist on a remote and the instance to
+#         hold a read-only deploy key. This is the target state.
+# "rsync" the code is pushed from a workstation with scripts/deploy/push.sh. Used today because
+#         the monorepo has no remote yet; deploy.sh then skips fetching and builds what is there.
+APP_SOURCE="rsync"
+REPO_URL=""
+REPO_REF="main"
+
+# --- Where it lives ----------------------------------------------------------
+APP_USER="komtru"
+APP_HOME="/srv/komtru"
+APP_DIR="/srv/komtru/app"
+# PM2 writes its process list here. Set explicitly: PM2 derives it from $HOME, and sudo does not
+# always carry HOME across, so an unset value silently lands in /tmp — where the dump is erased
+# on reboot and `pm2 resurrect` brings back nothing.
+PM2_HOME="/srv/komtru/.pm2"
+
+# --- Node runtime ------------------------------------------------------------
+NODE_MAJOR="22"                   # the root package.json declares engines.node ">=22.12 <23"
+PNPM_VERSION="10.18.2"
+
+# --- Postgres ----------------------------------------------------------------
+# Always external: the backend talks to RDS. POSTGRES_URL, POSTGRES_DIRECT_URL and
+# POSTGRES_APP_PASSWORD live in .env.backend, not here.
+#
+# RDS requires TLS verification against Amazon's bundle, and POSTGRES_CA_CERT is a PATH to a PEM
+# file rather than the PEM itself. bootstrap downloads it here; .env.backend must point at it.
+POSTGRES_CA_BUNDLE="/srv/komtru/certs/rds-global-bundle.pem"
+
+# --- Redis -------------------------------------------------------------------
+# "native"   install redis-server from the distribution and bind it to loopback.
+# "external" ElastiCache or similar; nothing is installed and REDIS_URL must already point at it.
+REDIS_MODE="native"
+
+# --- Swap --------------------------------------------------------------------
+# A safety net for build spikes, not a memory extension: tsc over the backend and its workspace
+# packages is the peak, and an OOM there kills a deploy halfway through. Set 0 to skip.
+#
+# It comes out of the SAME root volume as everything else. On the current 8 GB disk 1024 is the
+# most that leaves sane headroom; raise it only after growing the volume.
+SWAP_SIZE_MB="1024"
+
+# --- Logs ----------------------------------------------------------------------
+# Ubuntu runs logrotate from logrotate.timer daily. bootstrap installs a config for the PM2 logs
+# and adds a `maxsize` ceiling to the distribution's rsyslog entry, so neither can outrun the
+# schedule — a single unrotated PM2 error log is what filled this host's disk to 100% once.
+LOGROTATE_MAX_SIZE="50M"
+LOGROTATE_KEEP="7"
+
+# --- HTTP front door ---------------------------------------------------------
+# "apache" or "nginx". Apache on the current host because it was already installed and certbot's
+# apache plugin was already present.
+WEB_SERVER="apache"
+API_DOMAIN="staging-api.komtru.com"
+API_PORT="7813"                   # must match PORT in .env.backend
+# certbot reuses the host's existing Let's Encrypt account when there is one, and only needs an
+# address to register a new account. Leave empty to skip issuance entirely.
+TLS_EMAIL=""

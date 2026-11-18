@@ -200,7 +200,50 @@ jobs:
     needs: [test, build, migration-safety]
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
+    # Named so the repository can require a reviewer, or restrict which branches reach it, from
+    # Settings -> Environments without touching this file.
+    environment: backend-production
+    # One deploy at a time. Two overlapping runs would race on the same checkout, the same
+    # migration and the same PM2 reload.
+    concurrency:
+      group: deploy-backend-api
+      cancel-in-progress: false
     steps:
-      # Placeholder: the hosting target is design §12 Q1, confirmed and wired up in T-005. Real
-      # credentials will arrive as ${{ secrets.* }}; never as literals in this file.
-      - run: echo "No deploy target for backend-api yet - T-005 confirms the hosting target and replaces this step."
+      # No checkout: nothing from the workspace is sent to the host. The instance clones the
+      # public repository itself, so this job only needs to say "deploy main".
+      - name: Open an SSH session that can do exactly one thing
+        env:
+          SSH_KEY: ${{ secrets.EC2_SSH_PRIVATE_KEY }}
+          KNOWN_HOSTS: ${{ secrets.EC2_SSH_KNOWN_HOSTS }}
+          EC2_HOST: ${{ secrets.EC2_HOST }}
+        run: |
+          set -euo pipefail
+          install -d -m 700 ~/.ssh
+          printf '%s\n' "$SSH_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          # Pinned host key rather than StrictHostKeyChecking=no: accepting any key would let
+          # anything that can answer on that address collect a deploy session.
+          printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 644 ~/.ssh/known_hosts
+          # `main` is the argument to the forced command in the host's authorized_keys, not a
+          # shell command: sshd runs /srv/komtru/bin/ci-deploy and hands it this string, which
+          # ci-deploy matches against an allowlist before using. A session opened with this key
+          # cannot reach a shell.
+          ssh -i ~/.ssh/deploy_key \
+              -o BatchMode=yes \
+              -o UserKnownHostsFile=~/.ssh/known_hosts \
+              -o StrictHostKeyChecking=yes \
+              -o ConnectTimeout=20 \
+              "komtru@${EC2_HOST}" main
+
+      - name: Confirm the API is serving the new build
+        run: |
+          set -euo pipefail
+          for attempt in $(seq 1 10); do
+            if curl -fsS --max-time 10 https://staging-api.komtru.com/health/ready; then
+              echo; echo "healthy after ${attempt} attempt(s)"; exit 0
+            fi
+            sleep 10
+          done
+          echo "API did not report ready after the deploy" >&2
+          exit 1

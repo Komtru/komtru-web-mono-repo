@@ -1,0 +1,13 @@
+# What never needs to reach Vercel.
+#
+# Deliberately does NOT list node_modules: `vercel build` traces individual files out of it into
+# the prebuilt serverless functions, and excluding it makes the deploy fail with ENOENT. The
+# upload list is computed from the build output, so this costs nothing in size.
+.git
+.turbo
+coverage
+*.log
+.env
+.env.local
+.env.*.local
+docs/specs/backend-apis.env

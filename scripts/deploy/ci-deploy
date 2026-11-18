@@ -1,0 +1,34 @@
+#!/usr/bin/env bash
+#
+# The ONLY thing the CI SSH key can run.
+#
+# Installed at /srv/komtru/bin/ci-deploy and named in a forced command in the komtru account's
+# authorized_keys, so a session opened with that key never reaches a shell — sshd runs this
+# instead of whatever the client asked for, and the client's command string arrives in
+# $SSH_ORIGINAL_COMMAND as data rather than as something to execute.
+#
+# That matters more than usual here: the repository is public, so the private half of this key
+# lives in a GitHub Actions secret attached to a repo anyone can read the workflows of. If the
+# secret ever leaks, this bounds the damage to "can deploy a ref that is already on the remote"
+# rather than "has the service account".
+#
+# The client may ask for a ref:   ssh komtru@host 'main'
+# Anything not in the allowlist below is refused.
+set -euo pipefail
+
+APP_HOME="${APP_HOME:-/srv/komtru}"
+APP_DIR="${APP_DIR:-${APP_HOME}/app}"
+REQUESTED="${SSH_ORIGINAL_COMMAND:-main}"
+
+log() { printf '[ci-deploy] %s\n' "$*"; }
+
+# Branch names we deploy, or a full 40-character commit sha for a rollback. Deliberately strict:
+# this string came off the network, and REPO_REF is interpolated into git commands downstream.
+if [[ ! ${REQUESTED} =~ ^(main|staging|[0-9a-f]{40})$ ]]; then
+  log "refusing ref '${REQUESTED}'. Allowed: main, staging, or a full commit sha."
+  exit 64
+fi
+
+log "deploying ${REQUESTED}"
+cd "${APP_DIR}"
+exec env REPO_REF="${REQUESTED}" bash "${APP_DIR}/scripts/deploy/deploy.sh"
