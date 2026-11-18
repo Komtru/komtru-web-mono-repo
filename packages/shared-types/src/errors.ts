@@ -88,6 +88,19 @@ export const PROBLEM_CODES = [
   'PAYOUT_ACCOUNT_REQUIRED',
   'INSUFFICIENT_BALANCE',
   'PAYOUT_HELD',
+  /**
+   * F-081. The three refusals of "verify this contact channel", each sending the client somewhere
+   * different, which a bare `CONFLICT` cannot do.
+   *
+   * `ALREADY_VERIFIED` is not a problem to solve: the badge is already green and the screen should
+   * stop offering the action. `CONTACT_TAKEN` means somebody else has PROVEN that address — the
+   * person needs a different one, or support. `CONTACT_REQUIRED` means the account holds no address
+   * on that channel at all (a phone-first signup has no email), so the form must ask for one before
+   * a code can go anywhere.
+   */
+  'ALREADY_VERIFIED',
+  'CONTACT_TAKEN',
+  'CONTACT_REQUIRED',
   // Deliberately NOT added: `TOO_MANY_REQUESTS`. `RATE_LIMITED` above is already this platform's
   // 429, used by the route limiter, by identity's party-lookup budget and by the OTP resend
   // throttle, and it already carries `retryAfter` as an extension member. The social-proof
