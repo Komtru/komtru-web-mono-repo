@@ -27,6 +27,25 @@ concurrency:
 jobs:
   checks:
     runs-on: ubuntu-latest
+    # This job runs the backend suite unfiltered (see "Every workspace package" below), and parts
+    # of that suite build the socket module — which opens the Socket.IO adapter's Redis pair even
+    # in a unit test, because the registry is a pure function of its dependencies and builds every
+    # module. Without a Redis here those are refused connections, which is not a fair test of
+    # anything. Same image and published port as backend-api.yml and docker-compose.yml, because
+    # the tests hard-code redis://localhost:56379. Throwaway container; nothing here is a secret.
+    #
+    # Postgres is deliberately absent: the integration suites are gated on KOMTRU_INFRA_TESTS,
+    # which this job does not set, so they skip and nothing in the unfiltered run dials Postgres.
+    services:
+      redis:
+        image: redis:7-alpine
+        ports:
+          - '56379:6379'
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 2s
+          --health-timeout 3s
+          --health-retries 30
     steps:
       # Full history. `scripts/test/migration-safety.test.ts` resolves a commit from before the
       # drizzle folder existed, to prove the tool explains itself rather than throwing when the

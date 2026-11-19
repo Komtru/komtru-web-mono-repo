@@ -34,18 +34,23 @@ const socket = (overrides: Record<string, string> = {}): SocketModule => {
 };
 
 /*
- * Tearing a registry down closes real Redis adapter connections, so this hook does I/O. Alone it
- * is instant; in the repo workflow's unfiltered run, where every package's lint, typecheck, test
- * and build share a two-core runner, it passed Vitest's 10s hook default and failed all ten cases
- * in the file at once — none of which had anything wrong with them.
+ * Tearing a registry down closes real Redis adapter connections, so this hook does I/O.
  *
- * An explicit budget, as the visual-check carve and the app-kit template scan have. The teardown
- * still has to finish; it is just allowed to be slow on a busy machine.
+ * It once failed all ten enabled cases in this file at once, and was read twice as slowness — a
+ * two-core runner timeslicing ten turbo tasks — which bought it a 60s budget and a concurrency
+ * cap, and fixed nothing. It was never slow. The repo workflow had no Redis service, so `quit()`
+ * sat in the offline queue behind the adapter's `psubscribe` while the client retried forever,
+ * and the teardown had no path to finishing at any budget. `createAdapterConnections` now puts a
+ * deadline on that close, and this job has a Redis.
+ *
+ * So the budget is back to something a hang cannot hide behind: well clear of the close deadline
+ * the teardown may legitimately pay per registry, and far short of pretending an unbounded wait
+ * is a slow one.
  */
 afterEach(async () => {
   while (built.length > 0) await built.pop()?.stop?.();
   vi.restoreAllMocks();
-}, 60_000);
+}, 15_000);
 
 describe('the socket module', () => {
   it('is in the registry under the name socket', () => {
