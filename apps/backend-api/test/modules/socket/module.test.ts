@@ -33,10 +33,19 @@ const socket = (overrides: Record<string, string> = {}): SocketModule => {
   return found;
 };
 
+/*
+ * Tearing a registry down closes real Redis adapter connections, so this hook does I/O. Alone it
+ * is instant; in the repo workflow's unfiltered run, where every package's lint, typecheck, test
+ * and build share a two-core runner, it passed Vitest's 10s hook default and failed all ten cases
+ * in the file at once — none of which had anything wrong with them.
+ *
+ * An explicit budget, as the visual-check carve and the app-kit template scan have. The teardown
+ * still has to finish; it is just allowed to be slow on a busy machine.
+ */
 afterEach(async () => {
   while (built.length > 0) await built.pop()?.stop?.();
   vi.restoreAllMocks();
-});
+}, 60_000);
 
 describe('the socket module', () => {
   it('is in the registry under the name socket', () => {
