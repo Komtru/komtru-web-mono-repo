@@ -11,8 +11,8 @@
 2. Write the ticket's implementation plan (`superpowers:writing-plans`), then implement it with `superpowers:subagent-driven-development` or `superpowers:executing-plans`, test-first throughout (`superpowers:test-driven-development`).
 3. UI tickets invoke the `frontend-design` skill per screen and attach the reference-vs-built visual check from `docs/ui-review/<ticket>/`, with deviations listed.
 4. AI review (`superpowers:requesting-code-review`), act on it (`superpowers:receiving-code-review`), verify (`superpowers:verification-before-completion`: tests green, lint and typecheck clean, visual check where applicable).
-5. Merge locally into `main` (`superpowers:finishing-a-development-branch`) and update the status below.
-6. **Nothing is pushed** to any remote until every ticket is merged and verified (T-183).
+5. Merge into `staging` (`superpowers:finishing-a-development-branch`) and update the status below.
+6. Push `staging`; that deploys the staging apps and backend. **Never push to `main`** — the owner releases production on their say-so and nothing else.
 
 ## Status legend
 

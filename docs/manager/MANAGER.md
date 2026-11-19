@@ -43,7 +43,7 @@ Read summaries, not whole files, and delegate everything heavy to subagents.
   up capacity first. A feature whose status says one layer is done (for example "backend merged,
   UI in progress") resumes at the other layer.
 - Check the features' `- **Status:**` lines in `docs/tickets/FEATURE_MAP.md` against what is merged
-  on `main`. A feature is Done only if its absorbed tickets are all Done **and** a user can do the
+  on `staging`. A feature is Done only if its absorbed tickets are all Done **and** a user can do the
   thing in an app. If tickets are all merged but the status still says `Not started`, correct the
   status in the feature map (the status line only, not the definition).
 - Bring infrastructure up: `pnpm infra:up`. If Docker is not running, log it and run only
@@ -94,7 +94,7 @@ drop each other's databases.
 ## 3. Run each feature: implement → review → fix → merge
 
 Use one git worktree per feature under `.claude/worktrees/f-0xx-slug`, branch `f-0xx-slug` from
-`main`. (Older `t-0xx-slug` worktrees from before the feature plan resume as they are.) The roles below are separate subagents (Agent tool). With capacity 2, start both
+`staging`. (Older `t-0xx-slug` worktrees from before the feature plan resume as they are.) The roles below are separate subagents (Agent tool). With capacity 2, start both
 implementers in the same message so they run in parallel.
 
 | Role        | Model                                                                                                                                                  | Brief                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
@@ -117,11 +117,11 @@ start the next phase. Instead:
 
 1. First run `pnpm --filter "./packages/**" build`. Apps typecheck against the packages' built
    `dist`, so stale output there shows up as false type errors, which happened after T-051 and
-   T-191. Then run the whole-repo checks in the worktree, and again on `main` after merging:
+   T-191. Then run the whole-repo checks in the worktree, and again on `staging` after merging:
    `pnpm -w exec turbo run lint typecheck test --force` (scoped with `--filter` to the touched
    packages if the full suite will not fit the budget), then `pnpm format:check` and
    `pnpm migration:safety` if there is a migration.
-2. On `main`, run
+2. On `staging`, run
    `git merge --no-ff f-0xx-slug -m "chore(merge): merge F-0xx <lower-case summary>"`.
 3. Mark each absorbed ticket whose work is merged done, keeping its engineering notes:
    `- **Status:** Done (YYYY-MM-DD). Plan: <path>. Review: <n> items fixed.` Then set the feature's
@@ -129,7 +129,9 @@ start the next phase. Instead:
    user can do the thing in an app; otherwise `Backend done, UI outstanding`.
 4. Run `pnpm tickets:index && pnpm progress:write`, commit as
    `docs(tickets): mark F-0xx done and regenerate the index` (or `... record F-0xx backend done ...`), then remove the worktree.
-5. **Never push.** Nothing leaves this machine until T-183 and the owner's go-ahead.
+5. **Push `staging`.** That deploys the staging apps and the staging backend.
+   **Never push to `main`** — it deploys komtru.com and api.komtru.com, and the owner releases
+   it on their say-so and nothing else. See the hard rules in [`../../CLAUDE.md`](../../CLAUDE.md).
 
 If a feature fails verification twice, leave it on its branch with an in-progress status naming
 the failure. Log it, and do not loop on it. Pick something else next run, and say in the log
