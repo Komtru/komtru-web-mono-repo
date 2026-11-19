@@ -1,9 +1,9 @@
 # CWT-01 — Workspace — Awaiting Funding (T-116)
 
 - **Reference:** `docs/design-reference/Komtru — UI Living Master v2.html` line 10607 — Canonical Mobile Architecture — Trade Workspace · Tabbed
-- **Built:** http://localhost:3102/trade/0190b0a0-0000-7000-8000-000000000001
+- **Built:** http://localhost:3916/trade/0190b0a0-0000-7000-8000-000000000502
 - **Frame:** mobile, 340px reference frame; compared at 340 × 660
-- **Differing pixels:** 22,076 of 224,400 (9.84%)
+- **Differing pixels:** 22,760 of 224,400 (10.14%)
 - **Side by side:** `CWT-01.png` (reference · built · heat map) — **heat map:** `CWT-01.diff.png`
 
 ## Deviations
@@ -26,3 +26,5 @@
 - **A tab strip (Overview, Terms, Activity, Actions) sits under the card.** The reference reaches Terms, Activity and Actions from buttons and rows, one per state; the brief asks for tabs, and Activity and Actions need an entry that does not depend on the state.
 - **The card's item line reads "Apple iPhone 13 · TechEdge NG"** where the drawing has "iPhone 13 · 128GB · TechEdge NG": the item title is the brand and model, and the storage is the second line of the item card below.
 - **Amounts in the item card keep ".00"** ("₦195,000.00") as on every F-017 screen; the money rows drop it as the drawing does.
+
+**Stand-in run, 2026-11-19.** The shot is the fixture trade KMT-88230-NG (Mesh office chair · Tunde Bello, ₦45,000), not the drawing's trade. The "Fund this trade" button and the expiry line are not in the 660px frame; the note above says funding is not drawn in this state.

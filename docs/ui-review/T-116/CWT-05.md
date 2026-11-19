@@ -1,9 +1,9 @@
 # CWT-05 — Workspace — Disputed (T-116)
 
 - **Reference:** `docs/design-reference/Komtru — UI Living Master v2.html` line 10731 — Canonical Mobile Architecture — Trade Workspace · Tabbed
-- **Built:** http://localhost:3102/trade/0190b0a0-0000-7000-8000-000000000005
+- **Built:** http://localhost:3916/trade/0190b0a0-0000-7000-8000-000000000504
 - **Frame:** mobile, 340px reference frame; compared at 340 × 660
-- **Differing pixels:** 24,195 of 224,400 (10.78%)
+- **Differing pixels:** 20,529 of 224,400 (9.15%)
 - **Side by side:** `CWT-05.png` (reference · built · heat map) — **heat map:** `CWT-05.diff.png`
 
 ## Deviations
@@ -11,15 +11,15 @@
 <!-- One line per deviation the heat map shows: what differs, where, and whether it is intended.
      Everything below this comment survives the next run; everything above it is regenerated. -->
 
-**Shell chrome and the stub.** The reference draws a full-screen mobile frame with its own top bar and a pinned footer. The built screen sits in `AppShell` (shot with `--content main`, so the shell's brand row does not shift every line) and its actions are in the page flow, because a pinned footer would sit on the tab bar. The shot ran against the real app and a canned stand-in for the platform (trade ids mapped to states, one proxy adding the session cookie), so copy and layout are the real screen and the data is illustrative: the trade code, counterparty and amounts differ from the drawing for that reason only.
+**Shell.** The shot is the built page cropped to `main`, so the app header is out of frame. The bottom tab bar is the app's own shell, which the reference frame does not draw; it shows the buyer tabs (Home, Trades, Messages, Discover, Account).
 
-**Correctly shows less (post-MVP or not built yet).** The chat icon in the top bar is messaging (F-044). **Real differences** are listed under their own heading.
+**Data.** The stand-in's fixtures are illustrative. The built page shows the fixture trade KMT-88244-NG (JBL Flip 6 · Tunde Bello, ₦98,000) and case DIS-088244. The drawing shows KMT-90428-NG, iPhone 13 · 128GB · TechEdge NG, ₦195,000 and DIS-88213. Differences in those values are expected.
 
-**Correctly shows less**
+**Differences**
 
-- **No case reference ("DIS-88213"), issue, stage, exposure, "Evidence response due in 17h 05m", and no "Submit evidence" or "Open dispute status" buttons.** The dispute module (T-080) and its screens (F-032) are not built; the trade only knows it is DISPUTED. The screen says funds remain protected and that the case is not in the app yet, and invents no case.
-
-**Real differences**
-
-- Tab strip and item line as in CWT-01.
-- **Money rows are added** ("You paid", "Seller payout · held while the case is open"), which the drawing does not have in this state, because they are what the person most wants to know here and the platform has them.
+- **Tabs.** The built page has a tab strip (Overview, Terms, Activity, Actions) under the card. The drawing has none on this frame.
+- **Banner.** The heading matches ("Issue reported — funds remain protected"). The body differs: the built page says "The issue is now a case. The payment stays held until it is decided against the agreed terms."; the drawing says "The item issue is now a case. Submit evidence through the case so it can be reviewed against the agreed terms."
+- **Countdown.** The drawing's "Evidence response due in 17h 05m" strip is not in the built frame.
+- **Case rows.** "Case", "Issue" ("Not as described") and "Stage" ("Evidence requested") match. The drawing's "Exposure" row is not in the built frame.
+- **Money rows are added** ("You paid ₦102,900", "Seller payout: held while the case is open"). The drawing has no money block in this state. This was an intended choice in an earlier run, kept: the person most wants to know these.
+- **Actions.** The drawing puts "Submit evidence" and "Open dispute status" at the foot of the frame. The built actions start below the 660px frame, and a dark button is cut off at the bottom edge.
