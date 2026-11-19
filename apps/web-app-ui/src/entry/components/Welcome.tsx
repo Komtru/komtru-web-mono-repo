@@ -1,3 +1,5 @@
+'use client';
+
 import { Button, KomtruLogo } from '@komtru/ui-kit';
 import { useViewport } from '../../trade/workspace/viewport';
 import { ENTRY } from '../flow';
