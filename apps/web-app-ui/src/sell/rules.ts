@@ -157,7 +157,7 @@ export function documentsWith(
 export function stepBody(
   step: SellStep,
   values: SellValues,
-): Partial<Pick<SellValues, SellField>> & { businessType?: 'REGISTERED_BUSINESS' } {
+): Partial<SellValues> & { businessType?: 'REGISTERED_BUSINESS' } {
   switch (step) {
     case 'start':
       return {
