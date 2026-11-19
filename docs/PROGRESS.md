@@ -7,11 +7,11 @@ behind it is [`BUILD_PLAN.md`](BUILD_PLAN.md). The unit of work is the feature, 
 thing in an app.
 
 ```
-MVP   █████████████████████·············  31/50   (62%)
-Total █████████████·····················  31/81   (38%)
+MVP   ██████████████████████············  32/50   (64%)
+Total █████████████·····················  32/81   (40%)
 ```
 
-19 MVP features left, 31 deferred past it.
+18 MVP features left, 31 deferred past it.
 
 ## Backend done, UI outstanding
 
@@ -41,7 +41,7 @@ The engine exists and only the UI is missing, so these are the highest-value wor
 | Park network                            | 0    | 5     | 0        | 0         |
 | Logistics partner                       | 0    | 2     | 0        | 0         |
 | Desktop & tablet journeys               | 0    | 8     | 0        | 6         |
-| Launch & assurance (not a user journey) | 1    | 7     | 1        | 5         |
+| Launch & assurance (not a user journey) | 2    | 7     | 2        | 5         |
 
 ## Ready features (every dependency done), MVP first
 
@@ -54,7 +54,6 @@ The engine exists and only the UI is missing, so these are the highest-value wor
 | F-069   | Desktop: fulfil, deliver, inspect and complete                  | Desktop & tablet journeys               | yes |
 | F-072   | Tablet: arrive, home, discover, propose and fund                | Desktop & tablet journeys               | yes |
 | F-073   | Tablet: fulfil, deliver, inspect and payouts                    | Desktop & tablet journeys               | yes |
-| F-075   | Hosting and real deploy jobs                                    | Launch & assurance (not a user journey) | yes |
 | F-078   | Definition-of-done audit and first push                         | Launch & assurance (not a user journey) | yes |
 | F-014   | Sign in with Google, Apple or Facebook                          | Arrive & verify                         |     |
 | F-020   | Verify a phone IMEI before proposing                            | Propose & agree                         |     |
@@ -84,7 +83,6 @@ The engine exists and only the UI is missing, so these are the highest-value wor
 | F-070   | Desktop and tablet: issues and resolution                       | Desktop & tablet journeys               | yes |
 | F-072   | Tablet: arrive, home, discover, propose and fund                | Desktop & tablet journeys               | yes |
 | F-073   | Tablet: fulfil, deliver, inspect and payouts                    | Desktop & tablet journeys               | yes |
-| F-075   | Hosting and real deploy jobs                                    | Launch & assurance (not a user journey) | yes |
 | F-076   | End-to-end critical paths                                       | Launch & assurance (not a user journey) | yes |
 | F-077   | Security review                                                 | Launch & assurance (not a user journey) | yes |
 | F-078   | Definition-of-done audit and first push                         | Launch & assurance (not a user journey) | yes |
@@ -95,11 +93,11 @@ The same work counted per ticket. Useful for the detail in `docs/tickets/`, not 
 it counts backend and frontend layers separately, which is how the build drifted.
 
 ```
-MVP   ██████████████████████████········  80/104  (77%)
-Total ████████████████··················  80/168  (48%)
+MVP   ██████████████████████████········  81/104  (78%)
+Total ████████████████··················  81/168  (48%)
 ```
 
-24 MVP tickets left, 64 deferred past it.
+23 MVP tickets left, 64 deferred past it.
 
 ### Tickets in progress
 
@@ -131,17 +129,15 @@ Total ████████████████·············
 
 ### Tickets blocked on an owner decision
 
-| Ticket | Title                                     | MVP |
-| ------ | ----------------------------------------- | --- |
-| T-005  | Hosting confirmation and real deploy jobs | yes |
-| T-077  | Komtru Wallet top-up                      |     |
-| T-131  | Wallet top-up                             |     |
+| Ticket | Title                | MVP |
+| ------ | -------------------- | --- |
+| T-077  | Komtru Wallet top-up |     |
+| T-131  | Wallet top-up        |     |
 
 ### Remaining MVP tickets
 
 | Ticket | Title                                                              | MVP |
 | ------ | ------------------------------------------------------------------ | --- |
-| T-005  | Hosting confirmation and real deploy jobs                          | yes |
 | T-029  | Isolate the integration suite's shared Redis and queues            | yes |
 | T-055  | Merchant applications and certification                            | yes |
 | T-080  | Disputes core                                                      | yes |

@@ -189,7 +189,7 @@ Hosting, end-to-end paths, security review and the first push. F-079 (load and r
 
 | Feature | Title                                   | Status      | Absorbs |
 | ------- | --------------------------------------- | ----------- | ------- |
-| F-075   | Hosting and real deploy jobs            | Not started | T-005   |
+| F-075   | Hosting and real deploy jobs            | Done        | T-005   |
 | F-076   | End-to-end critical paths               | Not started | T-180   |
 | F-077   | Security review                         | Not started | T-182   |
 | F-078   | Definition-of-done audit and first push | Not started | T-183   |
@@ -327,8 +327,8 @@ depending ticket does for a user; each narrows what it covers.
 
 ## Open decisions that touch this path
 
-- **Q1 — hosting target and the GitHub remote.** Gates T-005 and the first push at T-183.
-  Nothing else is blocked by it, so it can be answered late, but it is on the MVP's last step.
+- **Q1 — hosting target and the GitHub remote.** Answered 2026-11-19: EC2 for the backend,
+  Vercel for the web apps, GitHub `Komtru/komtru-web-mono-repo` as the remote. T-005 is done.
 - **Q16 — which cities seed the location catalog.** Gates T-046, which sits under saved
   addresses and the proposal flow. This one blocks early, not late.
 - **Q3 — ship the Wallet?** Both wallet tickets are deferred either way, so this does not

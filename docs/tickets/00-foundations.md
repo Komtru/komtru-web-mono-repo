@@ -76,7 +76,7 @@ Every ticket in this file runs before feature work. Design reference: `docs/supe
 
 ### T-005 — Hosting confirmation and real deploy jobs
 
-- **Status:** Blocked on design §12 Q1 (hosting targets and GitHub remote)
+- **Status:** Done (2026-11-19). Q1 answered by the owner: the GitHub remote is `Komtru/komtru-web-mono-repo`; the backend runs on EC2 under PM2 as separate `komtru-api` and `komtru-worker` processes, deployed by `backend-api.yml` over SSH after `migration-safety`, with `main` going to production (api.komtru.com) and `staging` to the staging host (staging-api.komtru.com), each polling `/health/ready`; runbook `docs/runbooks/deploy-backend.md`. The web apps deploy through Vercel's git integration rather than from CI: web-site (komtru.com), web-app-ui (app.komtru.com, staging.komtru.com) and operations-app (staging-ops.komtru.com), so their CI `deploy` steps say so instead of pushing. Two criteria were dropped by that choice: per-app Dockerfiles (neither EC2 under PM2 nor Vercel uses one) and a `workflow_dispatch` dry run of a Vercel deploy that CI does not perform. logistics-ops and park-agent-app have no host yet; they are post-MVP and get one with their waves.
 - **Touches:** deploy steps in each workflow, `apps/*/Dockerfile`, `apps/backend-api/ecosystem.config.cjs`, `docs/runbooks/deploy.md`
 - **Depends on:** T-004, owner answer to Q1
 - **Acceptance criteria:**

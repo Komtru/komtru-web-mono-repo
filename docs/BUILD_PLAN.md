@@ -91,7 +91,6 @@ first. Backend tickets are unaffected and continue in parallel.
 
 ## Owner decisions still open
 
-- Q1 (hosting and remote) blocks T-005 and the push in T-183.
 - Q3 (wallet) blocks T-131.
 
 New questions raised by runs collect at the top of `manager/RUN_LOG.md`.

@@ -990,13 +990,13 @@ list a trade.
 
 - **Journey:** Launch & assurance (not a user journey)
 - **Actor:** platform
-- **Absorbs:** T-005 (todo)
+- **Absorbs:** T-005 (done)
 - **Backend scope:** Real deploy jobs per app, a Dockerfile per app and the GitHub remote (T-005).
 - **Frontend scope:** None. Infrastructure.
-- **Status:** Not started
+- **Status:** Done
 - **Depends on:** none
 - **MVP:** yes
-- **Note:** Blocked on owner decision Q1.
+- **Note:** Done 2026-11-19, when the owner answered Q1 and shipped it. The backend deploys from CI to EC2 (production from `main`, staging from `staging`); the web apps deploy through Vercel's git integration, which replaced the per-app Dockerfiles in the original scope. logistics-ops and park-agent-app have no host until their post-MVP waves. Details on T-005.
 
 #### F-076 — End-to-end critical paths
 
@@ -1031,7 +1031,7 @@ list a trade.
 - **Status:** Not started
 - **Depends on:** none
 - **MVP:** yes
-- **Note:** Depends on every other feature; for the MVP cut, on every MVP feature. Nothing is pushed before it.
+- **Note:** Depends on every other feature; for the MVP cut, on every MVP feature. The "first push" half is overtaken: the owner pushed to `Komtru/komtru-web-mono-repo` and deployed from it on 2026-11-19 (F-075), so what is left is the definition-of-done audit.
 
 #### F-079 — Load and resilience
 
@@ -1079,7 +1079,7 @@ Every ticket in `docs/tickets/`, in id order, with the feature that absorbs it.
 | T-002 | Monorepo scaffold and shared config                                       | Done          | F-001   | Done                         |
 | T-003 | Local infrastructure and environment wiring                               | Done          | F-001   | Done                         |
 | T-004 | CI workflows per app                                                      | Done          | F-001   | Done                         |
-| T-005 | Hosting confirmation and real deploy jobs                                 | Blocked       | F-075   | Not started                  |
+| T-005 | Hosting confirmation and real deploy jobs                                 | Done          | F-075   | Done                         |
 | T-006 | Build-agent tooling prerequisites                                         | Done          | F-001   | Done                         |
 | T-010 | `shared-types` foundations                                                | Done          | F-002   | Done                         |
 | T-011 | `ui-kit` tokens, fonts and brand mark                                     | Done          | F-002   | Done                         |
