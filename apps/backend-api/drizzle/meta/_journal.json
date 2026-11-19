@@ -379,6 +379,20 @@
       "when": 1795078029925,
       "tag": "0053_waitlist_signups",
       "breakpoints": true
+    },
+    {
+      "idx": 54,
+      "version": "7",
+      "when": 1795089815765,
+      "tag": "0054_disputes_schema",
+      "breakpoints": true
+    },
+    {
+      "idx": 55,
+      "version": "7",
+      "when": 1795089841385,
+      "tag": "0055_disputes_triggers",
+      "breakpoints": true
     }
   ]
 }

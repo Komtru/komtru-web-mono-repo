@@ -2,6 +2,16 @@
   "postgresMajor": 16,
   "partialUniqueIndexes": [
     {
+      "table": "disputes.dispute_cases",
+      "name": "dispute_cases_one_active_per_trade",
+      "definition": "CREATE UNIQUE INDEX dispute_cases_one_active_per_trade ON disputes.dispute_cases USING btree (trade_id) WHERE (status <> 'CLOSED'::disputes.dispute_status)"
+    },
+    {
+      "table": "disputes.dispute_mediation_proposals",
+      "name": "dispute_mediation_one_open_per_party",
+      "definition": "CREATE UNIQUE INDEX dispute_mediation_one_open_per_party ON disputes.dispute_mediation_proposals USING btree (dispute_id, proposed_by_user_id) WHERE (status = 'PROPOSED'::disputes.mediation_proposal_status)"
+    },
+    {
       "table": "files.file_access_grants",
       "name": "file_access_grants_live_role_uidx",
       "definition": "CREATE UNIQUE INDEX file_access_grants_live_role_uidx ON files.file_access_grants USING btree (file_id, grantee_role) WHERE ((revoked_at IS NULL) AND (grantee_role IS NOT NULL))"
@@ -277,6 +287,76 @@
       "table": "config.trade_standards",
       "name": "trade_standards_version_positive",
       "definition": "CHECK ((version_number > 0))"
+    },
+    {
+      "table": "disputes.dispute_cases",
+      "name": "dispute_cases_closed_together",
+      "definition": "CHECK (((status = 'CLOSED'::disputes.dispute_status) = (closed_at IS NOT NULL)))"
+    },
+    {
+      "table": "disputes.dispute_cases",
+      "name": "dispute_cases_escrow_positive",
+      "definition": "CHECK ((total_escrow_minor > 0))"
+    },
+    {
+      "table": "disputes.dispute_cases",
+      "name": "dispute_cases_parties_differ",
+      "definition": "CHECK ((buyer_user_id <> seller_user_id))"
+    },
+    {
+      "table": "disputes.dispute_cases",
+      "name": "dispute_cases_reason_not_blank",
+      "definition": "CHECK ((length(btrim(opened_reason)) > 0))"
+    },
+    {
+      "table": "disputes.dispute_cases",
+      "name": "dispute_cases_ticket_only_on_escalation",
+      "definition": "CHECK (((creation_path = 'TICKET_ESCALATION'::disputes.dispute_creation_path) OR (source_ticket_id IS NULL)))"
+    },
+    {
+      "table": "disputes.dispute_decision_log",
+      "name": "dispute_decision_amounts_nonnegative",
+      "definition": "CHECK (((amount_to_buyer_minor >= 0) AND (amount_to_seller_minor >= 0)))"
+    },
+    {
+      "table": "disputes.dispute_decision_log",
+      "name": "dispute_decision_appeal_outcome_matches_type",
+      "definition": "CHECK (((decision_type = 'APPEAL'::disputes.decision_type) = (appeal_outcome IS NOT NULL)))"
+    },
+    {
+      "table": "disputes.dispute_decision_log",
+      "name": "dispute_decision_decider_matches_type",
+      "definition": "CHECK (((decision_type = 'MEDIATED'::disputes.decision_type) = (decided_by_user_id IS NULL)))"
+    },
+    {
+      "table": "disputes.dispute_decision_log",
+      "name": "dispute_decision_rationale_not_blank",
+      "definition": "CHECK ((length(btrim(rationale)) > 0))"
+    },
+    {
+      "table": "disputes.dispute_evidence",
+      "name": "dispute_evidence_has_content",
+      "definition": "CHECK (((file_ref_id IS NOT NULL) OR (length(btrim(COALESCE(note, ''::text))) > 0)))"
+    },
+    {
+      "table": "disputes.dispute_mediation_proposals",
+      "name": "dispute_mediation_amounts_nonnegative",
+      "definition": "CHECK (((amount_to_buyer_minor >= 0) AND (amount_to_seller_minor >= 0)))"
+    },
+    {
+      "table": "disputes.dispute_mediation_proposals",
+      "name": "dispute_mediation_answered_together",
+      "definition": "CHECK (((status = 'PROPOSED'::disputes.mediation_proposal_status) = (responded_at IS NULL)))"
+    },
+    {
+      "table": "disputes.dispute_status_changes",
+      "name": "dispute_status_changes_action_not_blank",
+      "definition": "CHECK ((length(btrim(action)) > 0))"
+    },
+    {
+      "table": "disputes.dispute_status_changes",
+      "name": "dispute_status_changes_system_has_no_actor",
+      "definition": "CHECK (((actor_type = 'SYSTEM'::disputes.dispute_actor_type) = (actor_id IS NULL)))"
     },
     {
       "table": "files.file_access_grants",
@@ -784,6 +864,21 @@
       "table": "config.trade_standards",
       "name": "komtru_append_only",
       "definition": "[O] CREATE TRIGGER komtru_append_only BEFORE DELETE OR UPDATE ON config.trade_standards FOR EACH ROW EXECUTE FUNCTION platform.reject_mutation()"
+    },
+    {
+      "table": "disputes.dispute_decision_log",
+      "name": "dispute_decision_log_validate_sum",
+      "definition": "[O] CREATE TRIGGER dispute_decision_log_validate_sum BEFORE INSERT ON disputes.dispute_decision_log FOR EACH ROW EXECUTE FUNCTION disputes.validate_decision_sums_to_escrow()"
+    },
+    {
+      "table": "disputes.dispute_decision_log",
+      "name": "komtru_append_only",
+      "definition": "[O] CREATE TRIGGER komtru_append_only BEFORE DELETE OR UPDATE ON disputes.dispute_decision_log FOR EACH ROW EXECUTE FUNCTION platform.reject_mutation()"
+    },
+    {
+      "table": "disputes.dispute_status_changes",
+      "name": "komtru_append_only",
+      "definition": "[O] CREATE TRIGGER komtru_append_only BEFORE DELETE OR UPDATE ON disputes.dispute_status_changes FOR EACH ROW EXECUTE FUNCTION platform.reject_mutation()"
     },
     {
       "table": "files.file_access_log",
