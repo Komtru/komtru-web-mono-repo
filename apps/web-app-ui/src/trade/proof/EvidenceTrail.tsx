@@ -42,9 +42,61 @@ const proofItems = (read: Read): GridItem[] =>
     label: `Seller’s proof ${String(index + 1)}`,
   }));
 
+/** The seller's proof as it was when the Trade was agreed. `heading` is off where a panel already names it. */
+export function SellerProofSection({
+  trade,
+  read,
+  heading = true,
+}: {
+  trade: TradeView;
+  read: Read;
+  heading?: boolean;
+}): React.JSX.Element {
+  const proof = proofItems(read);
+  // Inside a panel the panel's own heading names it; a second region of the same name would only repeat it.
+  return (
+    <section {...(heading ? { 'aria-label': 'Seller’s proof' } : {})}>
+      {heading && <SectionLabel>Seller’s proof</SectionLabel>}
+      <div className="mb-[6px]">
+        <Chip tone="verified">Shown when the Trade was agreed</Chip>
+      </div>
+      {proof.length === 0 ? (
+        <p className="mt-[10px] mb-[14px] text-[12px] text-slate">
+          No proof photos were attached to this trade.
+        </p>
+      ) : (
+        <MediaGrid aria-label="Seller’s proof files" items={proof} className="mt-[10px] md:max-w-[420px]" />
+      )}
+      {trade.acceptedAt !== null && (
+        <p className={CAPTION}>
+          Agreed {whenLabel(trade.acceptedAt)}. Anything added after that is shown beside it, not over it.
+        </p>
+      )}
+    </section>
+  );
+}
+
 /** PM-6: what was shown, what was added and by whom. */
 export function Trail({ trade, read }: { trade: TradeView; read: Read }): React.JSX.Element {
-  const proof = proofItems(read);
+  return (
+    <>
+      <SellerProofSection trade={trade} read={read} />
+      <AddedDuringTrade trade={trade} read={read} />
+    </>
+  );
+}
+
+/** What either side added once the Trade was running: dispatch, delivery, inspection and an issue, each its own group. */
+export function AddedDuringTrade({
+  trade,
+  read,
+  as,
+}: {
+  trade: TradeView;
+  read: Read;
+  /** The groups' heading level: one down from a panel's own. */
+  as?: 'h2' | 'h3';
+}): React.JSX.Element {
   const shipment = read.deliveryEvidence.selfArranged;
   const signals = read.deliveryEvidence.signals ?? [];
   const seller = trade.yourRole === 'SELLER';
@@ -52,28 +104,10 @@ export function Trail({ trade, read }: { trade: TradeView; read: Read }): React.
   const receipt = seller ? shipment?.receiptFileId : undefined;
   return (
     <>
-      <section aria-label="Seller’s proof">
-        <SectionLabel>Seller’s proof</SectionLabel>
-        <div className="mb-[6px]">
-          <Chip tone="verified">Shown when the Trade was agreed</Chip>
-        </div>
-        {proof.length === 0 ? (
-          <p className="mt-[10px] mb-[14px] text-[12px] text-slate">
-            No proof photos were attached to this trade.
-          </p>
-        ) : (
-          <MediaGrid aria-label="Seller’s proof files" items={proof} className="mt-[10px]" />
-        )}
-        {trade.acceptedAt !== null && (
-          <p className={CAPTION}>
-            Agreed {whenLabel(trade.acceptedAt)}. Anything added after that is shown beside it, not over it.
-          </p>
-        )}
-      </section>
-
       <EvidenceGroup
         trade={trade}
         event="DISPATCH"
+        {...(as === undefined ? {} : { as })}
         heading="Added by the seller · dispatch"
         always={shipment !== null}
       >
@@ -100,6 +134,7 @@ export function Trail({ trade, read }: { trade: TradeView; read: Read }): React.
       <EvidenceGroup
         trade={trade}
         event="DELIVERY"
+        {...(as === undefined ? {} : { as })}
         heading="Added at delivery"
         empty={signals.length > 0 ? undefined : 'Nothing has been added at delivery yet.'}
         always
@@ -119,6 +154,7 @@ export function Trail({ trade, read }: { trade: TradeView; read: Read }): React.
       <EvidenceGroup
         trade={trade}
         event="INSPECTION"
+        {...(as === undefined ? {} : { as })}
         heading="Added at inspection"
         empty={
           seller
@@ -128,11 +164,53 @@ export function Trail({ trade, read }: { trade: TradeView; read: Read }): React.
         always
       />
 
-      <EvidenceGroup trade={trade} event="ISSUE" heading="Added for an issue" />
+      <EvidenceGroup
+        trade={trade}
+        event="ISSUE"
+        heading="Added for an issue"
+        {...(as === undefined ? {} : { as })}
+      />
       <NoteBanner>
         Chat attachments can be linked to the trade, but case evidence should be submitted through the
         evidence flow.
       </NoteBanner>
+    </>
+  );
+}
+
+/** PM-8: what the Trade holds once it is complete, by event, with a glance at the seller's proof. */
+export function KeptSummary({
+  trade,
+  read,
+  heading = true,
+}: {
+  trade: TradeView;
+  read: Read;
+  heading?: boolean;
+}): React.JSX.Element {
+  const proof = proofItems(read);
+  const shipment = read.deliveryEvidence.selfArranged;
+  const signals = read.deliveryEvidence.signals ?? [];
+  const seller = trade.yourRole === 'SELLER';
+  return (
+    <>
+      {heading && <SectionLabel>Evidence kept with this Trade</SectionLabel>}
+      <TermList aria-label="Evidence kept with this Trade">
+        <TermRow label="Seller’s proof">
+          {proof.length === 0 ? 'None attached' : count(proof.length, 'photo or video', 'photos or videos')}
+        </TermRow>
+        {shipment !== null && (
+          <TermRow label="Dispatch">
+            {seller && shipment.receiptFileId !== undefined ? '1 photo · waybill' : 'Waybill noted'}
+          </TermRow>
+        )}
+        {signals.length > 0 && (
+          <TermRow label="Delivery">{count(signals.length, 'record', 'records')}</TermRow>
+        )}
+      </TermList>
+      {proof.length > 0 && (
+        <MediaGrid aria-label="Seller’s proof files" items={proof.slice(0, 4)} columns={4} />
+      )}
     </>
   );
 }
@@ -180,10 +258,6 @@ function Record({ trade }: { trade: TradeView }): React.JSX.Element {
     );
   }
   const read = inspection.data;
-  const proof = proofItems(read);
-  const shipment = read.deliveryEvidence.selfArranged;
-  const signals = read.deliveryEvidence.signals ?? [];
-  const seller = trade.yourRole === 'SELLER';
   const refunded = trade.status.includes('REFUNDED');
   return (
     <Frame title={title} id={trade.id}>
@@ -191,23 +265,7 @@ function Record({ trade }: { trade: TradeView }): React.JSX.Element {
       <div className="mb-[4px]">
         <Chip tone="verified">{refunded ? 'Refund decided' : 'Completed'}</Chip>
       </div>
-      <SectionLabel>Evidence kept with this Trade</SectionLabel>
-      <TermList aria-label="Evidence kept with this Trade">
-        <TermRow label="Seller’s proof">
-          {proof.length === 0 ? 'None attached' : count(proof.length, 'photo or video', 'photos or videos')}
-        </TermRow>
-        {shipment !== null && (
-          <TermRow label="Dispatch">
-            {seller && shipment.receiptFileId !== undefined ? '1 photo · waybill' : 'Waybill noted'}
-          </TermRow>
-        )}
-        {signals.length > 0 && (
-          <TermRow label="Delivery">{count(signals.length, 'record', 'records')}</TermRow>
-        )}
-      </TermList>
-      {proof.length > 0 && (
-        <MediaGrid aria-label="Seller’s proof files" items={proof.slice(0, 4)} columns={4} />
-      )}
+      <KeptSummary trade={trade} read={read} />
       <NoteBanner>
         These files are held privately with the Trade. They aren’t made public, and they’re shared only with
         the people in it.

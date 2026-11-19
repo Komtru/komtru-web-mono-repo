@@ -9,14 +9,21 @@ import {
   disputeDetailFor,
   disputeEvidenceFor,
   disputesFor,
+  deliveryDeadlineFor,
   disputeTimelineFor,
   evidenceComparisonFor,
+  fileFor,
   inspectionFor,
   meFor,
   merchantApplicationFor,
   paymentStatusFor,
   payoutAccountsFor,
+  tradeActivityFor,
+  payoutSummaryFor,
+  payoutsFor,
+  shipOptionsFor,
   tradeDisputeFor,
+  tradeEvidenceFor,
   tradeFor,
   tradeStandardFor,
   tradesFor,
@@ -48,7 +55,7 @@ type ConsumerRoute = {
   method: 'GET';
   path: string;
   kind: 'consumer';
-  handle: (identity: Identity, params: Params) => Reply;
+  handle: (identity: Identity, params: Params, query: URLSearchParams) => Reply;
 };
 
 /** A public read, which the apps call with no session (a trade standard is published to everyone). */
@@ -227,6 +234,64 @@ const ROUTES: readonly (PublicRoute | ConsumerRoute | AnonymousRoute)[] = [
       return comparison === null ? problem(404, 'Dispute not found', id) : { status: 200, body: comparison };
     },
   },
+  // F-069/F-073 fulfil & payouts
+  {
+    method: 'GET',
+    path: '/me/payouts/summary',
+    kind: 'consumer',
+    handle: ({ persona }) => ({ status: 200, body: payoutSummaryFor(persona.id) }),
+  },
+  {
+    method: 'GET',
+    path: '/me/payouts',
+    kind: 'consumer',
+    handle: ({ persona }) => page(payoutsFor(persona.id)),
+  },
+  {
+    method: 'GET',
+    path: '/trades/:id/ship-options',
+    kind: 'consumer',
+    handle: ({ persona, scenario }, { id }) => {
+      const options = shipOptionsFor(persona.id, scenario, id ?? '');
+      return options === null
+        ? problem(409, 'This trade is not waiting to be shipped', id)
+        : { status: 200, body: options };
+    },
+  },
+  // F-069/F-073 deliver & inspect
+  {
+    method: 'GET',
+    path: '/trades/:id/delivery-deadline',
+    kind: 'consumer',
+    handle: ({ persona, scenario }, { id }) => {
+      const read = deliveryDeadlineFor(persona.id, scenario, id ?? '');
+      return read === null ? problem(404, 'Trade not found', id) : { status: 200, body: read };
+    },
+  },
+  {
+    method: 'GET',
+    path: '/trades/:id/activity',
+    kind: 'consumer',
+    handle: ({ persona, scenario }, { id }) => {
+      const activity = tradeActivityFor(persona.id, scenario, id ?? '');
+      return activity === null ? problem(404, 'Trade not found', id) : { status: 200, body: activity };
+    },
+  },
+  {
+    method: 'GET',
+    path: '/trades/:id/evidence',
+    kind: 'consumer',
+    handle: ({ persona, scenario }, { id }, query) => {
+      const items = tradeEvidenceFor(persona.id, scenario, id ?? '', query.get('event'));
+      return items === null ? problem(404, 'Trade not found', id) : page(items);
+    },
+  },
+  {
+    method: 'GET',
+    path: '/files/:id',
+    kind: 'consumer',
+    handle: (_identity, { id }) => ({ status: 200, body: fileFor(id ?? '') }),
+  },
 ];
 
 /** Matches a request path against a route's path, where a `:name` segment matches any one segment. */
@@ -373,7 +438,7 @@ async function handle(
     send(response, problem(403, 'Wrong scope for this route'));
     return;
   }
-  const reply = route.handle(identity, params);
+  const reply = route.handle(identity, params, url.searchParams);
   log(`${label} ${reply.status} (${identity.persona.id}/${identity.scenario})`);
   send(response, reply);
 }

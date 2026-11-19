@@ -1,10 +1,17 @@
 'use client';
 
 import type { Payout, PayoutSummary } from '@komtru/api-client';
-import { usePayoutSummary, usePayouts, useSetPayoutPreference } from '@komtru/api-client/react';
+import {
+  useMyDisputes,
+  usePayoutSummary,
+  usePayouts,
+  useSetPayoutPreference,
+  useTradeList,
+} from '@komtru/api-client/react';
 import { PAYOUT_MODES, type PayoutMode } from '@komtru/shared-types';
 import {
   Button,
+  Chip,
   EmptyState,
   LoadFailed,
   NoteBanner,
@@ -15,9 +22,10 @@ import {
   Skeleton,
   WarnBanner,
 } from '@komtru/ui-kit';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { isProblem, nairaShort, whenLabel } from '../trade/format';
 import { OverTabBar } from '../trade/parts';
+import { useViewportTier } from '../trade/shipping/viewport';
 import { MODE_COPY, accountLabel, payoutProblem, payoutStatus } from './format';
 import { BANK_HREF, BankRow, WITHDRAW_HREF, payoutHref } from './parts';
 
@@ -28,6 +36,7 @@ import { BANK_HREF, BankRow, WITHDRAW_HREF, payoutHref } from './parts';
  */
 export function Payouts(): React.JSX.Element {
   const summary = usePayoutSummary();
+  const tier = useViewportTier();
   const [scheduling, setScheduling] = useState(false);
 
   if (summary.isPending) {
@@ -54,52 +63,102 @@ export function Payouts(): React.JSX.Element {
   const data = summary.data;
   const canWithdraw = !data.held && BigInt(data.availableMinor) > 0n;
 
+  // DX-32 and TX-19: from a tablet up the balance, the performance and the history are one screen, not a column.
+  if (tier !== 'base') {
+    return (
+      <div className="mx-auto w-full md:max-w-[760px] lg:max-w-none">
+        <header className="mb-[16px]">
+          <h1 className="m-0 text-[19px] font-semibold">Payouts &amp; performance</h1>
+          <p className="m-0 mt-[2px] text-[12.5px] text-slate">
+            Where “funds released” lands, and how you are performing.
+          </p>
+        </header>
+        {data.held && <HeldBanner />}
+        <PerformanceTiles />
+        <div className="grid gap-[16px] md:grid-cols-[minmax(0,240px)_minmax(0,1fr)] lg:grid-cols-[minmax(0,1fr)_minmax(0,320px)]">
+          <div className="min-w-0 lg:order-2">
+            <BalanceCard data={data} canWithdraw={canWithdraw} onSchedule={() => setScheduling(true)} />
+            {BigInt(data.inFlightMinor) > 0n && <InFlight minor={data.inFlightMinor} />}
+            <PaidHow summary={data} />
+          </div>
+          <div className="min-w-0">
+            <History wide />
+          </div>
+        </div>
+        <ScheduleSheet open={scheduling} current={data.mode} onClose={() => setScheduling(false)} />
+      </div>
+    );
+  }
+
   return (
     <ScreenColumn>
       <Heading />
-      {data.held && (
-        <WarnBanner title="Payouts on your account are paused">
-          Contact support to find out why. Nothing can be withdrawn until the pause is lifted.
-        </WarnBanner>
-      )}
-      {/* `.balance-mini`. The gradient's far stop is the reference's literal `#1A2440`, which has no token. */}
-      <section
-        aria-label="Your balance"
-        className="mb-[16px] rounded-lg bg-[linear-gradient(135deg,var(--komtru-midnight),rgb(26,36,64))] p-[18px] text-pure-white"
-      >
-        <p className="m-0 text-[10px] uppercase text-[rgba(255,255,255,.6)]">Available for withdrawal</p>
-        <p className="mb-[14px] mt-[5px] font-mono text-[24px] font-semibold">
-          {nairaShort(data.availableMinor)}
-        </p>
-        <div className="flex gap-[8px]">
-          {canWithdraw ? (
-            <Button asChild className="flex-1 bg-pure-white! text-komtru-midnight!">
-              <a href={WITHDRAW_HREF}>Withdraw</a>
-            </Button>
-          ) : (
-            <Button type="button" disabled className="flex-1 bg-pure-white! text-komtru-midnight!">
-              Withdraw
-            </Button>
-          )}
-          <Button
-            type="button"
-            variant="secondary"
-            className="flex-1 border-[rgba(255,255,255,.3)]! text-pure-white!"
-            onClick={() => setScheduling(true)}
-          >
-            Schedule
-          </Button>
-        </div>
-      </section>
-      {BigInt(data.inFlightMinor) > 0n && (
-        <p className="-mt-[6px] mb-[16px] text-[11.5px] text-slate">
-          {nairaShort(data.inFlightMinor)} is on its way to your bank.
-        </p>
-      )}
+      {data.held && <HeldBanner />}
+      <BalanceCard data={data} canWithdraw={canWithdraw} onSchedule={() => setScheduling(true)} />
+      {BigInt(data.inFlightMinor) > 0n && <InFlight minor={data.inFlightMinor} />}
       <PaidHow summary={data} />
       <History />
       <ScheduleSheet open={scheduling} current={data.mode} onClose={() => setScheduling(false)} />
     </ScreenColumn>
+  );
+}
+
+function HeldBanner(): React.JSX.Element {
+  return (
+    <WarnBanner title="Payouts on your account are paused">
+      Contact support to find out why. Nothing can be withdrawn until the pause is lifted.
+    </WarnBanner>
+  );
+}
+
+function InFlight({ minor }: { minor: string }): React.JSX.Element {
+  return (
+    <p className="-mt-[6px] mb-[16px] text-[11.5px] text-slate">
+      {nairaShort(minor)} is on its way to your bank.
+    </p>
+  );
+}
+
+/** The balance and its two actions. */
+function BalanceCard({
+  data,
+  canWithdraw,
+  onSchedule,
+}: {
+  data: PayoutSummary;
+  canWithdraw: boolean;
+  onSchedule: () => void;
+}): React.JSX.Element {
+  // `.balance-mini`. The gradient's far stop is the reference's literal `#1A2440`, which has no token.
+  return (
+    <section
+      aria-label="Your balance"
+      className="mb-[16px] rounded-lg bg-[linear-gradient(135deg,var(--komtru-midnight),rgb(26,36,64))] p-[18px] text-pure-white"
+    >
+      <p className="m-0 text-[10px] uppercase text-[rgba(255,255,255,.6)]">Available for withdrawal</p>
+      <p className="mb-[14px] mt-[5px] font-mono text-[24px] font-semibold">
+        {nairaShort(data.availableMinor)}
+      </p>
+      <div className="flex gap-[8px]">
+        {canWithdraw ? (
+          <Button asChild className="flex-1 bg-pure-white! text-komtru-midnight!">
+            <a href={WITHDRAW_HREF}>Withdraw</a>
+          </Button>
+        ) : (
+          <Button type="button" disabled className="flex-1 bg-pure-white! text-komtru-midnight!">
+            Withdraw
+          </Button>
+        )}
+        <Button
+          type="button"
+          variant="secondary"
+          className="flex-1 border-[rgba(255,255,255,.3)]! text-pure-white!"
+          onClick={onSchedule}
+        >
+          Schedule
+        </Button>
+      </div>
+    </section>
   );
 }
 
@@ -137,14 +196,14 @@ function PaidHow({ summary }: { summary: PayoutSummary }): React.JSX.Element {
   );
 }
 
-function History(): React.JSX.Element {
+function History({ wide = false }: { wide?: boolean }): React.JSX.Element {
   const list = usePayouts();
   const payouts = (list.data?.pages ?? []).flatMap((page) => page.items);
 
   return (
     <section aria-labelledby="recent-payouts">
       <SectionLabel>
-        <span id="recent-payouts">Recent payouts</span>
+        <span id="recent-payouts">{wide ? 'Payout history' : 'Recent payouts'}</span>
       </SectionLabel>
       {list.isPending ? (
         <div role="status" aria-label="Loading your payouts" aria-busy="true">
@@ -163,13 +222,17 @@ function History(): React.JSX.Element {
         />
       ) : (
         <>
-          <ul aria-label="Recent payouts" className="m-0 list-none p-0">
-            {payouts.map((payout) => (
-              <li key={payout.id}>
-                <PayoutRow payout={payout} />
-              </li>
-            ))}
-          </ul>
+          {wide ? (
+            <PayoutTable payouts={payouts} />
+          ) : (
+            <ul aria-label="Recent payouts" className="m-0 list-none p-0">
+              {payouts.map((payout) => (
+                <li key={payout.id}>
+                  <PayoutRow payout={payout} />
+                </li>
+              ))}
+            </ul>
+          )}
           {list.isFetchNextPageError && (
             <RiskBanner title="Older payouts didn’t load">
               <Button type="button" variant="ghost" onClick={() => void list.fetchNextPage()}>
@@ -190,6 +253,108 @@ function History(): React.JSX.Element {
         </>
       )}
     </section>
+  );
+}
+
+const TH = 'px-[14px] py-[10px] text-left text-[10.5px] font-semibold uppercase text-slate';
+const TD = 'px-[14px] py-[12px] align-middle text-[12.5px]';
+
+/** DX-32's payout history: when it was asked for, where it went, how much, and how it ended. */
+function PayoutTable({ payouts }: { payouts: readonly Payout[] }): React.JSX.Element {
+  return (
+    <div className="mb-[10px] overflow-hidden rounded-md border border-solid border-border-hairline bg-surface-primary">
+      <table aria-label="Payout history" className="w-full border-collapse">
+        <thead className="bg-surface-secondary">
+          <tr>
+            <th scope="col" className={TH}>
+              Date
+            </th>
+            <th scope="col" className={TH}>
+              To
+            </th>
+            <th scope="col" className={TH}>
+              Amount
+            </th>
+            <th scope="col" className={TH}>
+              Status
+            </th>
+          </tr>
+        </thead>
+        <tbody>
+          {payouts.map((payout) => {
+            const status = payoutStatus(payout.status);
+            return (
+              <tr key={payout.id} className="border-t border-solid border-border-hairline">
+                <td className={TD}>
+                  <a href={payoutHref(payout.id)} className="font-semibold text-info-on-soft">
+                    {whenLabel(payout.requestedAt)}
+                    <span className="sr-only"> receipt</span>
+                  </a>
+                </td>
+                <td className={TD}>
+                  {payout.destination === null ? 'Bank account' : accountLabel(payout.destination)}
+                </td>
+                <td className={`${TD} font-mono font-semibold`}>{nairaShort(payout.amountMinor)}</td>
+                <td className={TD}>
+                  <Chip tone={status.tone}>{status.label}</Chip>
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+/**
+ * The tiles DX-32 and TX-19 draw above the balance. Only what the platform can answer is drawn: what is waiting to
+ * ship and on its way (the seller's open trades) and the cases still open. The reference's fulfilment rate, average
+ * dispatch time and returns have no source yet. A figure that cannot be read is a dash, never a zero.
+ */
+function PerformanceTiles(): React.JSX.Element {
+  const trades = useTradeList('OPEN');
+  const disputes = useMyDisputes();
+  const { hasNextPage, isFetchingNextPage, isFetchNextPageError, fetchNextPage } = trades;
+  // Read to the last page, as Orders does: a count of the first twenty would be a plausible wrong number.
+  useEffect(() => {
+    if (hasNextPage && !isFetchingNextPage && !isFetchNextPageError) void fetchNextPage();
+  }, [hasNextPage, isFetchingNextPage, isFetchNextPageError, fetchNextPage]);
+  const allRead = trades.data !== undefined && !hasNextPage;
+  const selling = (trades.data?.pages ?? [])
+    .flatMap((page) => page.items)
+    .filter((trade) => trade.yourRole === 'SELLER');
+  const count = (statuses: readonly string[]): string =>
+    allRead ? String(selling.filter((trade) => statuses.includes(trade.status)).length) : '—';
+  // Open means neither decided nor closed: a decided case has its answer, and only an appeal reopens it (APPEALED).
+  // The list is one page of twenty, so when there are more the count is a floor and is written as one.
+  const openCases = (disputes.data?.items ?? []).filter(
+    (item) => item.status !== 'DECIDED' && item.status !== 'CLOSED',
+  ).length;
+  const open =
+    disputes.data === undefined
+      ? '—'
+      : disputes.data.nextCursor === null
+        ? String(openCases)
+        : `${String(openCases)}+`;
+  const tiles = [
+    { label: 'To ship', value: count(['FUNDED']), note: 'Payment protected' },
+    { label: 'In transit', value: count(['SHIPPED', 'UNCONFIRMED_DELIVERY']), note: 'On the way to buyers' },
+    { label: 'Open disputes', value: open, note: 'Right now' },
+  ];
+  return (
+    <ul aria-label="How you are doing" className="m-0 mb-[16px] grid list-none grid-cols-3 gap-[12px] p-0">
+      {tiles.map((tile) => (
+        <li
+          key={tile.label}
+          className="rounded-md border border-solid border-border-hairline bg-surface-primary p-[14px]"
+        >
+          <p className="m-0 text-[10.5px] uppercase text-slate">{tile.label}</p>
+          <p className="m-0 mt-[4px] font-mono text-[22px] font-semibold">{tile.value}</p>
+          <p className="m-0 mt-[2px] text-[11px] text-slate">{tile.note}</p>
+        </li>
+      ))}
+    </ul>
   );
 }
 

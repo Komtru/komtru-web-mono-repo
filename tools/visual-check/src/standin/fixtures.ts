@@ -13,12 +13,15 @@ import type {
   MerchantApplication,
   MerchantApplicationStatus,
   PaymentStatus,
+  Payout,
   PayoutAccount,
+  PayoutSummary,
+  ShipOptions,
   TradeStandard,
   TradeView,
   VerificationStatus,
 } from '@komtru/api-client';
-import type { Address, TradeListItem, ViewerFacts } from '@komtru/shared-types';
+import type { Address, TradeActivityResponse, TradeListItem, ViewerFacts } from '@komtru/shared-types';
 import { FUNDED_TRADE_STATUSES } from '@komtru/shared-types';
 
 import { PERSONAS, type PersonaId, type ScenarioId } from './personas.ts';
@@ -31,6 +34,14 @@ export const TRADE_IDS = {
   buyerDisputed: '0190b0a0-0000-7000-8000-000000000504',
   sellerShipped: '0190b0a0-0000-7000-8000-000000000511',
   sellerProposal: '0190b0a0-0000-7000-8000-000000000512',
+  // F-069/F-073 deliver & inspect
+  buyerShipped: '0190b0a0-0000-7000-8000-000000000505',
+  buyerSettled: '0190b0a0-0000-7000-8000-000000000506',
+  // F-069/F-073 fulfil & payouts
+  sellerFunded: '0190b0a0-0000-7000-8000-000000000513',
+  sellerFundedTwo: '0190b0a0-0000-7000-8000-000000000514',
+  sellerInspection: '0190b0a0-0000-7000-8000-000000000515',
+  sellerSettled: '0190b0a0-0000-7000-8000-000000000516',
 } as const;
 
 /** The one dispute in the fixtures: the buyer's, on `buyerDisputed`. */
@@ -60,6 +71,14 @@ const PAYMENT_ATTEMPT_IDS: Readonly<Record<string, string>> = {
   [TRADE_IDS.buyerInspection]: '0190b0a0-0000-7000-8000-000000000803',
   [TRADE_IDS.buyerDisputed]: '0190b0a0-0000-7000-8000-000000000804',
   [TRADE_IDS.sellerShipped]: '0190b0a0-0000-7000-8000-000000000811',
+  // F-069/F-073 deliver & inspect
+  [TRADE_IDS.buyerShipped]: '0190b0a0-0000-7000-8000-000000000805',
+  [TRADE_IDS.buyerSettled]: '0190b0a0-0000-7000-8000-000000000806',
+  // F-069/F-073 fulfil & payouts
+  [TRADE_IDS.sellerFunded]: '0190b0a0-0000-7000-8000-000000000813',
+  [TRADE_IDS.sellerFundedTwo]: '0190b0a0-0000-7000-8000-000000000814',
+  [TRADE_IDS.sellerInspection]: '0190b0a0-0000-7000-8000-000000000815',
+  [TRADE_IDS.sellerSettled]: '0190b0a0-0000-7000-8000-000000000816',
 };
 
 const SELLER_CARD = {
@@ -148,6 +167,43 @@ const BUYER_TRADES: TradeListItem[] = [
     createdAt: '2026-11-10T09:40:00.000Z',
     updatedAt: '2026-11-17T09:00:00.000Z',
   },
+  // F-069/F-073 deliver & inspect: the trade the workspace reference draws (in transit), and one that is complete.
+  {
+    id: TRADE_IDS.buyerShipped,
+    tradeCode: 'KMT-90428-NG',
+    status: 'SHIPPED',
+    statusRevision: 5,
+    yourRole: 'BUYER',
+    initiatorRole: 'SELLER',
+    awaiting: null,
+    attention: null,
+    counterparty: SELLER_CARD,
+    item: { title: 'iPhone 13 Pro, 256GB', categoryCode: 'PHONES', categoryName: 'Phones' },
+    currency: 'NGN',
+    itemAmountMinor: '46000000',
+    buyerTotalMinor: '46350000',
+    sentAt: '2026-11-16T09:00:00.000Z',
+    createdAt: '2026-11-16T08:40:00.000Z',
+    updatedAt: '2026-11-18T13:24:00.000Z',
+  },
+  {
+    id: TRADE_IDS.buyerSettled,
+    tradeCode: 'KMT-87904-NG',
+    status: 'SETTLED',
+    statusRevision: 9,
+    yourRole: 'BUYER',
+    initiatorRole: 'SELLER',
+    awaiting: null,
+    attention: null,
+    counterparty: SELLER_CARD,
+    item: { title: 'iPad 9th gen, 64GB', categoryCode: 'ELECTRONICS', categoryName: 'Electronics' },
+    currency: 'NGN',
+    itemAmountMinor: '28500000',
+    buyerTotalMinor: '29640000',
+    sentAt: '2026-11-02T09:00:00.000Z',
+    createdAt: '2026-11-02T08:40:00.000Z',
+    updatedAt: '2026-11-09T11:00:00.000Z',
+  },
 ];
 
 const SELLER_TRADES: TradeListItem[] = [
@@ -187,6 +243,79 @@ const SELLER_TRADES: TradeListItem[] = [
     sentAt: '2026-11-18T07:45:00.000Z',
     createdAt: '2026-11-18T07:40:00.000Z',
     updatedAt: '2026-11-18T07:45:00.000Z',
+  },
+  // F-069/F-073 fulfil & payouts: two orders to ship, one in the buyer's inspection and one completed and paid out.
+  {
+    id: TRADE_IDS.sellerFunded,
+    tradeCode: 'KMT-88331-NG',
+    status: 'FUNDED',
+    statusRevision: 4,
+    yourRole: 'SELLER',
+    initiatorRole: 'BUYER',
+    awaiting: null,
+    attention: 'SHIP',
+    counterparty: BUYER_CARD,
+    item: { title: 'MacBook Air M2', categoryCode: 'ELECTRONICS', categoryName: 'Electronics' },
+    currency: 'NGN',
+    itemAmountMinor: '98000000',
+    buyerTotalMinor: '101920000',
+    sentAt: '2026-11-17T09:00:00.000Z',
+    createdAt: '2026-11-17T08:40:00.000Z',
+    updatedAt: '2026-11-19T07:30:00.000Z',
+  },
+  {
+    id: TRADE_IDS.sellerFundedTwo,
+    tradeCode: 'KMT-88213-NG',
+    status: 'FUNDED',
+    statusRevision: 4,
+    yourRole: 'SELLER',
+    initiatorRole: 'BUYER',
+    awaiting: null,
+    attention: 'SHIP',
+    counterparty: { ...BUYER_CARD, publicId: 'KMT-PUB-0003', username: 'bola.o', displayName: 'Bola Okoro' },
+    item: { title: 'Ankara print armchair', categoryCode: 'FURNITURE', categoryName: 'Furniture' },
+    currency: 'NGN',
+    itemAmountMinor: '8950000',
+    buyerTotalMinor: '9310000',
+    sentAt: '2026-11-17T10:00:00.000Z',
+    createdAt: '2026-11-17T09:40:00.000Z',
+    updatedAt: '2026-11-18T15:10:00.000Z',
+  },
+  {
+    id: TRADE_IDS.sellerInspection,
+    tradeCode: 'KMT-88190-NG',
+    status: 'INSPECTION',
+    statusRevision: 6,
+    yourRole: 'SELLER',
+    initiatorRole: 'BUYER',
+    awaiting: null,
+    attention: null,
+    counterparty: { ...BUYER_CARD, publicId: 'KMT-PUB-0004', username: 'tunde.a', displayName: 'Tunde Ade' },
+    item: { title: 'Galaxy Buds Pro', categoryCode: 'ELECTRONICS', categoryName: 'Electronics' },
+    currency: 'NGN',
+    itemAmountMinor: '8950000',
+    buyerTotalMinor: '9310000',
+    sentAt: '2026-11-13T09:00:00.000Z',
+    createdAt: '2026-11-13T08:40:00.000Z',
+    updatedAt: '2026-11-18T10:20:00.000Z',
+  },
+  {
+    id: TRADE_IDS.sellerSettled,
+    tradeCode: 'KMT-88102-NG',
+    status: 'SETTLED',
+    statusRevision: 9,
+    yourRole: 'SELLER',
+    initiatorRole: 'BUYER',
+    awaiting: null,
+    attention: null,
+    counterparty: BUYER_CARD,
+    item: { title: 'iPhone 13 Pro, 256GB', categoryCode: 'ELECTRONICS', categoryName: 'Electronics' },
+    currency: 'NGN',
+    itemAmountMinor: '45200000',
+    buyerTotalMinor: '47008000',
+    sentAt: '2026-11-05T09:00:00.000Z',
+    createdAt: '2026-11-05T08:40:00.000Z',
+    updatedAt: '2026-11-12T14:14:00.000Z',
   },
 ];
 
@@ -242,6 +371,38 @@ const TRADE_FACTS: Readonly<Record<string, TradeFacts>> = {
     acceptedAt: null,
     proofMediaCount: 0,
     itemSpec: { model: 'Standing desk', top: 'Oak' },
+  },
+  // F-069/F-073 deliver & inspect
+  [TRADE_IDS.buyerShipped]: {
+    acceptedAt: '2026-11-16T09:41:00.000Z',
+    proofMediaCount: 2,
+    itemSpec: { brand: 'Apple', model: 'iPhone 13 Pro', storage: '256GB', colour: 'Sierra Blue' },
+  },
+  [TRADE_IDS.buyerSettled]: {
+    acceptedAt: '2026-11-02T09:30:00.000Z',
+    proofMediaCount: 2,
+    itemSpec: { brand: 'Apple', model: 'iPad 9th gen', storage: '64GB' },
+  },
+  // F-069/F-073 fulfil & payouts
+  [TRADE_IDS.sellerFunded]: {
+    acceptedAt: '2026-11-17T09:40:00.000Z',
+    proofMediaCount: 3,
+    itemSpec: { brand: 'Apple', model: 'MacBook Air M2', storage: '256GB' },
+  },
+  [TRADE_IDS.sellerFundedTwo]: {
+    acceptedAt: '2026-11-17T10:30:00.000Z',
+    proofMediaCount: 2,
+    itemSpec: { model: 'Ankara print armchair', colour: 'Orange' },
+  },
+  [TRADE_IDS.sellerInspection]: {
+    acceptedAt: '2026-11-13T09:40:00.000Z',
+    proofMediaCount: 2,
+    itemSpec: { brand: 'Samsung', model: 'Galaxy Buds Pro' },
+  },
+  [TRADE_IDS.sellerSettled]: {
+    acceptedAt: '2026-11-05T09:40:00.000Z',
+    proofMediaCount: 3,
+    itemSpec: { brand: 'Apple', model: 'iPhone 13 Pro', storage: '256GB' },
   },
 };
 
@@ -989,4 +1150,211 @@ export function addressesFor(persona: PersonaId): Address[] {
     ];
   }
   return [];
+}
+
+// --- F-069/F-073 deliver & inspect: the reads behind the trade workspace and the evidence screens --------------------
+
+const DEADLINE_ID = '0190b0a0-0000-7000-8000-000000000852';
+
+// --- F-069/F-073 fulfil & payouts -----------------------------------------------------------------
+/** `GET /trades/:id/ship-options`: Park is not offered in the seller's city; the seller's own arrangement is. */
+export function shipOptionsFor(
+  persona: PersonaId,
+  scenario: ScenarioId,
+  tradeId: string,
+): ShipOptions | null {
+  const item = tradesFor(persona, scenario).find((candidate) => candidate.id === tradeId);
+  if (item === undefined || item.status !== 'FUNDED' || item.yourRole !== 'SELLER') return null;
+  return {
+    tradeId,
+    tradeCode: item.tradeCode,
+    options: [
+      {
+        kind: 'PARK',
+        label: 'Park Hub Transit',
+        available: false,
+        reason: { code: 'PARK_NOT_AVAILABLE_IN_CITY', message: 'Park isn’t available in Ikeja yet' },
+      },
+      {
+        kind: 'SELF_ARRANGED',
+        label: 'Arrange my own shipping',
+        available: true,
+        requiredFields: ['waybillNumber', 'receiptFileId', 'driverPhone', 'vehiclePlate'],
+      },
+    ],
+  };
+}
+
+/**
+ * `GET /trades/:id/delivery-deadline`: the seller's time to ship a funded trade (the fulfil screens) and the
+ * buyer's delivery window on a shipped one (the deliver screens), from the pinned clock; none after delivery.
+ */
+export function deliveryDeadlineFor(
+  persona: PersonaId,
+  scenario: ScenarioId,
+  tradeId: string,
+): {
+  deadline: { id: string; status: string; dueAt: string; extensionCount: number } | null;
+  extensionRequest: null;
+} | null {
+  const item = tradesFor(persona, scenario).find((candidate) => candidate.id === tradeId);
+  if (item === undefined) return null;
+  return {
+    deadline:
+      item.status === 'FUNDED'
+        ? {
+            id: '0190b0a0-0000-7000-8000-000000000851',
+            status: 'PENDING',
+            dueAt: '2026-11-21T09:00:00.000Z',
+            extensionCount: 0,
+          }
+        : item.status === 'SHIPPED'
+          ? { id: DEADLINE_ID, status: 'PENDING', dueAt: '2026-11-20T18:00:00.000Z', extensionCount: 0 }
+          : null,
+    extensionRequest: null,
+  };
+}
+
+/** The media either side added under each event of a trade: the seller's dispatch photos and the buyer's inspection photos. */
+export function tradeEvidenceFor(
+  persona: PersonaId,
+  scenario: ScenarioId,
+  tradeId: string,
+  event: string | null,
+):
+  | { id: string; fileId: string; event: string; attachedByRole: 'BUYER' | 'SELLER'; attachedAt: string }[]
+  | null {
+  const item = tradesFor(persona, scenario).find((candidate) => candidate.id === tradeId);
+  if (item === undefined) return null;
+  const all = [
+    {
+      id: '0190b0a0-0000-7000-8000-000000000871',
+      fileId: '0190b0a0-0000-7000-8000-000000000823',
+      event: 'DISPATCH',
+      attachedByRole: 'SELLER' as const,
+      attachedAt: '2026-11-14T07:35:00.000Z',
+    },
+    {
+      id: '0190b0a0-0000-7000-8000-000000000872',
+      fileId: '0190b0a0-0000-7000-8000-000000000824',
+      event: 'DISPATCH',
+      attachedByRole: 'SELLER' as const,
+      attachedAt: '2026-11-14T07:36:00.000Z',
+    },
+    {
+      id: '0190b0a0-0000-7000-8000-000000000873',
+      fileId: '0190b0a0-0000-7000-8000-000000000825',
+      event: 'INSPECTION',
+      attachedByRole: 'BUYER' as const,
+      attachedAt: '2026-11-18T11:10:00.000Z',
+    },
+  ];
+  // What exists depends on how far the trade has got: nothing before it ships, the seller's dispatch photos once it
+  // has, and the buyer's inspection photos only from inspection on.
+  const reached = ['SHIPPED', 'UNCONFIRMED_DELIVERY', 'INSPECTION', 'DISPUTED', 'COMPLETED', 'SETTLED'];
+  const inspected = ['INSPECTION', 'DISPUTED', 'COMPLETED', 'SETTLED'];
+  const existing = all.filter((entry) =>
+    entry.event === 'INSPECTION' ? inspected.includes(item.status) : reached.includes(item.status),
+  );
+  return event === null ? existing : existing.filter((entry) => entry.event === event);
+}
+
+/**
+ * `GET /files/:id`: a signed URL for a file the person may see. The stand-in has no storage, so every file is the
+ * same flat tile, as a data URL the browser needs no network for.
+ */
+export function fileFor(fileId: string): {
+  fileId: string;
+  url: string;
+  expiresAt: string | null;
+  contentType: string;
+} {
+  const svg =
+    "<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><defs><linearGradient id='g' x1='0' y1='0' x2='1' y2='1'><stop offset='0' stop-color='%232A3455'/><stop offset='1' stop-color='%2317203A'/></linearGradient></defs><rect width='160' height='160' fill='url(%23g)'/></svg>";
+  return { fileId, url: `data:image/svg+xml,${svg}`, expiresAt: null, contentType: 'image/svg+xml' };
+}
+
+/** `GET /me/payouts/summary`: a seller or merchant has a balance to withdraw; a buyer has nothing and no account. */
+export function payoutSummaryFor(persona: PersonaId): PayoutSummary {
+  const seller = persona === 'seller' || persona === 'merchant';
+  const account = payoutAccountsFor(persona)[0];
+  return {
+    currency: 'NGN',
+    availableMinor: seller ? '120000000' : '0',
+    inFlightMinor: '0',
+    payoutFeeMinor: '0',
+    mode: 'MANUAL',
+    held: false,
+    defaultAccount:
+      account === undefined
+        ? null
+        : {
+            id: account.id,
+            bankCode: account.bankCode,
+            bankName: account.bankName,
+            accountNumberMasked: account.accountNumberMasked,
+            accountName: account.accountName,
+          },
+  };
+}
+
+/** `GET /me/payouts`: three paid withdrawals, newest first. A buyer has none. */
+export function payoutsFor(persona: PersonaId): Payout[] {
+  const summary = payoutSummaryFor(persona);
+  if (summary.defaultAccount === null) return [];
+  const paid = (n: number, amountMinor: string, at: string): Payout => ({
+    id: `0190b0a0-0000-7000-8000-0000000008${String(60 + n)}`,
+    reference: `payout-0190b0a0-0000-7000-8000-0000000008${String(60 + n)}`,
+    status: 'SUCCEEDED',
+    trigger: 'MANUAL',
+    currency: 'NGN',
+    amountMinor,
+    feeMinor: '0',
+    transferAmountMinor: amountMinor,
+    destination: summary.defaultAccount,
+    sourceTradeId: null,
+    failureReason: null,
+    requestedAt: at,
+    dispatchedAt: at,
+    completedAt: at,
+    failedAt: null,
+  });
+  return [
+    paid(1, '45200000', '2026-11-12T13:41:00.000Z'),
+    paid(2, '8950000', '2026-11-08T10:20:00.000Z'),
+    paid(3, '21000000', '2026-11-02T09:05:00.000Z'),
+  ];
+}
+
+/** `GET /trades/:id/activity`: what the platform recorded on the completed sale, newest first. Other trades have none. */
+export function tradeActivityFor(
+  persona: PersonaId,
+  scenario: ScenarioId,
+  tradeId: string,
+): TradeActivityResponse | null {
+  const item = tradesFor(persona, scenario).find((candidate) => candidate.id === tradeId);
+  if (item === undefined) return null;
+  if (item.status !== 'SETTLED') return { items: [], nextCursor: null };
+  const row = (
+    n: number,
+    kind: TradeActivityResponse['items'][number]['kind'],
+    actor: 'YOU' | 'OTHER_PARTY' | 'KOMTRU',
+    at: string,
+  ) => ({
+    id: `S:${String(n)}`,
+    occurredAt: at,
+    kind,
+    actor,
+    toStatus: null,
+    reason: null,
+  });
+  return {
+    items: [
+      row(4, 'SETTLED', 'KOMTRU', '2026-11-12T14:14:00.000Z'),
+      row(3, 'DELIVERY_CONFIRMED', 'OTHER_PARTY', '2026-11-12T14:02:00.000Z'),
+      row(2, 'SHIPPED', 'YOU', '2026-11-07T09:30:00.000Z'),
+      row(1, 'FUNDS_PROTECTED', 'KOMTRU', '2026-11-05T10:05:00.000Z'),
+    ],
+    nextCursor: null,
+  };
 }

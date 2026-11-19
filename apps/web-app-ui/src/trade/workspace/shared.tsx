@@ -3,6 +3,7 @@
 // What more than one state of the workspace draws: the way out of every overview, the money and fulfilment
 // rows, a deadline read from its own route, the fee list, and a banner from `workspace-copy`.
 import type { TradeView } from '@komtru/api-client';
+import { createContext, useContext } from 'react';
 import {
   ActionStack,
   Button,
@@ -19,6 +20,12 @@ import { addressLine, hoursLabel, naira, nairaShort, whenLabel } from '../format
 import { BACK_TO_TRADES } from '../parts';
 import type { Banner } from '../workspace-copy';
 import { tabHref, type TradeRole } from '../workspace-state';
+
+/**
+ * True while the wide workspace's context rail is drawing the money (F-069, F-073). The bodies keep their own money
+ * rows for the phone; with the rail beside them, the same figures must not be drawn twice.
+ */
+export const RailShowsMoney = createContext(false);
 
 export interface BodyProps {
   trade: TradeView;
@@ -58,28 +65,37 @@ export function NotInTheAppYet({ children }: { children: React.ReactNode }): Rea
   return <p className="mb-[14px] text-[11.5px] leading-[1.6] text-trust-gray">{children}</p>;
 }
 
-/** The money, in the reader's terms, straight from the trade's own fee snapshot. */
-export function MoneyRows({ trade, role, held }: BodyProps & { held: string }): React.JSX.Element | null {
+/** The rows of the money, in the reader's terms, straight from the trade's own fee snapshot. */
+export function MoneyTerms({ trade, role, held }: BodyProps & { held: string }): React.JSX.Element | null {
   const { fees } = trade;
   if (fees === null) return null;
   return (
+    <TermList aria-label="Money">
+      {role === 'BUYER' ? (
+        <>
+          <TermRow label="You paid">{nairaShort(fees.buyerTotalMinor)}</TermRow>
+          <TermRow label="Seller payout">{held}</TermRow>
+        </>
+      ) : (
+        <>
+          <TermRow label="Protected funds">Confirmed · {nairaShort(fees.itemAmountMinor)}</TermRow>
+          <TermRow label="Your payout">
+            {nairaShort(fees.sellerProceedsMinor)} · {held}
+          </TermRow>
+        </>
+      )}
+    </TermList>
+  );
+}
+
+/** The money, under its own heading, for the phone's bodies. The wide rail draws it instead (`RailShowsMoney`). */
+export function MoneyRows({ trade, role, held }: BodyProps & { held: string }): React.JSX.Element | null {
+  const inRail = useContext(RailShowsMoney);
+  if (trade.fees === null || inRail) return null;
+  return (
     <>
       <SectionLabel>Money</SectionLabel>
-      <TermList aria-label="Money">
-        {role === 'BUYER' ? (
-          <>
-            <TermRow label="You paid">{nairaShort(fees.buyerTotalMinor)}</TermRow>
-            <TermRow label="Seller payout">{held}</TermRow>
-          </>
-        ) : (
-          <>
-            <TermRow label="Protected funds">Confirmed · {nairaShort(fees.itemAmountMinor)}</TermRow>
-            <TermRow label="Your payout">
-              {nairaShort(fees.sellerProceedsMinor)} · {held}
-            </TermRow>
-          </>
-        )}
-      </TermList>
+      <MoneyTerms trade={trade} role={role} held={held} />
     </>
   );
 }

@@ -62,6 +62,101 @@ export const WALKTHROUGHS: Readonly<Record<string, Walkthrough>> = {
     path: '/account/verification/merchant',
     content: 'main',
   },
+  // F-069/F-073 deliver & inspect: the trade workspace (in transit), inspect and compare, and the trade's evidence,
+  // each drawn at a desktop (DX-) and a tablet (TX-) width. The width is the capture's, not the walk's.
+  'DX-21': {
+    screen: 'DX-21',
+    persona: 'buyer',
+    scenario: 'with-trades',
+    path: `/trade/${TRADE_IDS.buyerShipped}`,
+    content: 'main',
+  },
+  'TX-13': {
+    screen: 'TX-13',
+    persona: 'buyer',
+    scenario: 'with-trades',
+    path: `/trade/${TRADE_IDS.buyerShipped}`,
+    content: 'main',
+  },
+  'DX-23': {
+    screen: 'DX-23',
+    persona: 'buyer',
+    scenario: 'with-trades',
+    path: `/trade/${TRADE_IDS.buyerInspection}/inspect`,
+    content: 'main',
+  },
+  'TX-14': {
+    screen: 'TX-14',
+    persona: 'buyer',
+    scenario: 'with-trades',
+    path: `/trade/${TRADE_IDS.buyerInspection}/inspect`,
+    content: 'main',
+  },
+  'DX-38': {
+    screen: 'DX-38',
+    persona: 'buyer',
+    scenario: 'with-trades',
+    path: `/trade/${TRADE_IDS.buyerInspection}/evidence`,
+    content: 'main',
+  },
+  'TX-22': {
+    screen: 'TX-22',
+    persona: 'buyer',
+    scenario: 'with-trades',
+    path: `/trade/${TRADE_IDS.buyerInspection}/evidence`,
+    content: 'main',
+  },
+  // F-069/F-073 fulfil & payouts: the seller's orders, dispatch workspace, completed trade and payouts, at the desktop
+  // (DX) and tablet (TX) widths. The width is the reference frame's; the same route serves both.
+  'DX-18': {
+    screen: 'DX-18',
+    persona: 'seller',
+    scenario: 'with-trades',
+    path: '/orders',
+    content: 'main',
+  },
+  'TX-11': {
+    screen: 'TX-11',
+    persona: 'seller',
+    scenario: 'with-trades',
+    path: '/orders',
+    content: 'main',
+  },
+  'DX-19': {
+    screen: 'DX-19',
+    persona: 'seller',
+    scenario: 'with-trades',
+    path: `/trade/${TRADE_IDS.sellerFunded}/dispatch`,
+    content: 'main',
+  },
+  'TX-12': {
+    screen: 'TX-12',
+    persona: 'seller',
+    scenario: 'with-trades',
+    path: `/trade/${TRADE_IDS.sellerFunded}/dispatch`,
+    content: 'main',
+  },
+  'DX-31': {
+    screen: 'DX-31',
+    persona: 'seller',
+    scenario: 'with-trades',
+    path: `/trade/${TRADE_IDS.sellerSettled}/completed`,
+    content: 'main',
+  },
+  'DX-32': {
+    screen: 'DX-32',
+    persona: 'seller',
+    scenario: 'with-trades',
+    path: '/account/payouts',
+    content: 'main',
+  },
+  'TX-19': {
+    screen: 'TX-19',
+    persona: 'seller',
+    scenario: 'with-trades',
+    path: '/account/payouts',
+    content: 'main',
+  },
 };
 
 /** The walk for a screen, or a message listing the ones that exist. */

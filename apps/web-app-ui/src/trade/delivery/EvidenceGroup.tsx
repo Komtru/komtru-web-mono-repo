@@ -23,6 +23,8 @@ export interface EvidenceGroupProps {
   children?: React.ReactNode;
   /** The event has something to say even with no files, so the group is drawn regardless. */
   always?: boolean;
+  /** The heading's level: one down from a panel's own heading where the group sits in one. */
+  as?: 'h2' | 'h3';
 }
 
 export function EvidenceGroup({
@@ -32,6 +34,7 @@ export function EvidenceGroup({
   empty,
   children,
   always = false,
+  as,
 }: EvidenceGroupProps): React.JSX.Element | null {
   const media = useTradeEvidence(trade.id, event, true);
   const shown = always || empty !== undefined || children !== undefined;
@@ -41,7 +44,7 @@ export function EvidenceGroup({
     if (!shown) return null;
     return (
       <section aria-label={EVENT_LABEL[event]} aria-busy>
-        <SectionLabel>{heading}</SectionLabel>
+        <SectionLabel {...(as === undefined ? {} : { as })}>{heading}</SectionLabel>
         {children}
         <Skeleton width="full" lines={3} />
       </section>
@@ -50,7 +53,7 @@ export function EvidenceGroup({
   if (media.isError) {
     return (
       <section aria-label={EVENT_LABEL[event]}>
-        <SectionLabel>{heading}</SectionLabel>
+        <SectionLabel {...(as === undefined ? {} : { as })}>{heading}</SectionLabel>
         {children}
         <SubReadFailed noun={`the ${label} files`} onRetry={() => void media.refetch()} />
       </section>
@@ -64,11 +67,15 @@ export function EvidenceGroup({
   if (items.length === 0 && !shown) return null;
   return (
     <section aria-label={EVENT_LABEL[event]}>
-      <SectionLabel>{heading}</SectionLabel>
+      <SectionLabel {...(as === undefined ? {} : { as })}>{heading}</SectionLabel>
       {children}
       {items.length > 0 ? (
         <>
-          <MediaGrid aria-label={`${EVENT_LABEL[event]} files`} items={items} className="mt-[10px]" />
+          <MediaGrid
+            aria-label={`${EVENT_LABEL[event]} files`}
+            items={items}
+            className="mt-[10px] md:max-w-[420px]"
+          />
           <p className={CAPTION}>{count(items.length)} · shared with both sides of the trade</p>
         </>
       ) : (

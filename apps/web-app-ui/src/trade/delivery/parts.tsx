@@ -6,6 +6,7 @@
 import type { TradeView } from '@komtru/api-client';
 import { useTrade } from '@komtru/api-client/react';
 import { ActionStack, Button, LoadFailed, LoadingScreen, ScreenColumn, ScreenHeader } from '@komtru/ui-kit';
+import { TradeColumn } from '../workspace/layout';
 import { useOnline } from '../../shell/OfflineStatus';
 import { LinkNotFound } from '../../system/LinkNotFound';
 import { isProblem, problemMessage } from '../format';
@@ -16,24 +17,38 @@ export const tradeHref = (id: string): string => `/trade/${id}`;
 export function Frame({
   title,
   id,
+  wide = false,
   children,
 }: {
   title: string;
   id: string;
+  /** Lets the screen use a tablet's and a desktop's width. The sheets are drawn for a phone and stay in its column. */
+  wide?: boolean;
   children: React.ReactNode;
 }): React.JSX.Element {
+  const Column = wide ? TradeColumn : ScreenColumn;
   return (
-    <ScreenColumn>
+    <Column>
       <ScreenHeader title={title} backHref={tradeHref(id)} backLabel="Back to the trade" />
       {children}
-    </ScreenColumn>
+    </Column>
   );
 }
 
 /** A screen with nothing to offer this person here: the reason, and the way back. */
-export function Refusal({ id, title, why }: { id: string; title: string; why: string }): React.JSX.Element {
+export function Refusal({
+  id,
+  title,
+  why,
+  wide = false,
+}: {
+  id: string;
+  title: string;
+  why: string;
+  wide?: boolean;
+}): React.JSX.Element {
   return (
-    <Frame title={title} id={id}>
+    <Frame title={title} id={id} wide={wide}>
       <p role="status" className="mb-[14px] text-[12.5px] leading-[1.5] text-slate">
         {why}
       </p>
@@ -97,10 +112,13 @@ export function TradeGate({
   title,
   role,
   deniedWhy,
+  wide = false,
   children,
 }: {
   id: string;
   title: string;
+  /** The screen draws in the wider frame when loaded, so its loading and refusal do too. */
+  wide?: boolean;
   role?: TradeRole;
   deniedWhy?: string;
   children: (trade: TradeView) => React.ReactNode;
@@ -108,7 +126,7 @@ export function TradeGate({
   const trade = useTrade(id);
   if (trade.isPending) {
     return (
-      <Frame title={title} id={id}>
+      <Frame title={title} id={id} wide={wide}>
         <LoadingScreen label="Loading the trade" />
       </Frame>
     );
@@ -124,6 +142,7 @@ export function TradeGate({
       <Refusal
         id={id}
         title={title}
+        wide={wide}
         why={deniedWhy ?? `Only the ${role === 'SELLER' ? 'seller' : 'buyer'} can use this screen.`}
       />
     );

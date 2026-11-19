@@ -3,10 +3,17 @@
 // reject.
 import {
   comparisonSchema,
+  evidenceItemSchema,
+  getFile,
   disputeDetailSchema,
   disputeEvidenceSchema,
   disputeSchema,
+  getDeliveryDeadline,
   getInspection,
+  getPayoutSummary,
+  getShipOptions,
+  listPayouts,
+  listTradeActivity,
   merchantApplicationSchema,
   meSchema,
   paymentStatusSchema,
@@ -20,17 +27,24 @@ import { addressSchema, tradeListItemSchema, viewerFactsSchema } from '@komtru/s
 
 import {
   addressesFor,
+  deliveryDeadlineFor,
   disputeDetailFor,
   disputeEvidenceFor,
   disputesFor,
   disputeTimelineFor,
   evidenceComparisonFor,
+  fileFor,
   inspectionFor,
   meFor,
   merchantApplicationFor,
   paymentStatusFor,
   payoutAccountsFor,
+  payoutSummaryFor,
+  payoutsFor,
+  shipOptionsFor,
+  tradeActivityFor,
   STANDARD_VERSION_IDS_LIST,
+  tradeEvidenceFor,
   tradeFor,
   tradeStandardFor,
   tradesFor,
@@ -117,7 +131,18 @@ function checkConsumerReads(
       getInspection.schema.response,
       inspectionFor(persona, scenario, trade.id),
     );
+    // F-069/F-073 deliver & inspect
+    check(
+      failures,
+      `delivery deadline for ${trade.tradeCode} in ${where}`,
+      getDeliveryDeadline.schema.response,
+      deliveryDeadlineFor(persona, scenario, trade.id),
+    );
+    for (const item of tradeEvidenceFor(persona, scenario, trade.id, null) ?? []) {
+      check(failures, `trade evidence for ${trade.tradeCode} in ${where}`, evidenceItemSchema, item);
+    }
   }
+  check(failures, 'a file', getFile.schema.response, fileFor('0190b0a0-0000-7000-8000-000000000821'));
   for (const dispute of disputesFor(persona, scenario)) {
     const label = `dispute ${dispute.code} for ${where}`;
     check(failures, label, disputeSchema, dispute);
@@ -134,5 +159,29 @@ function checkConsumerReads(
       comparisonSchema,
       evidenceComparisonFor(persona, scenario, dispute.id),
     );
+  }
+  // F-069/F-073 fulfil & payouts
+  check(failures, `payout summary for ${where}`, getPayoutSummary.schema.response, payoutSummaryFor(persona));
+  check(failures, `payouts for ${where}`, listPayouts.schema.response, {
+    items: payoutsFor(persona),
+    nextCursor: null,
+  });
+  for (const trade of tradesFor(persona, scenario)) {
+    // The delivery deadline is checked once, with the deliver & inspect reads above.
+    check(
+      failures,
+      `activity for ${trade.tradeCode} in ${where}`,
+      listTradeActivity.schema.response,
+      tradeActivityFor(persona, scenario, trade.id),
+    );
+    const options = shipOptionsFor(persona, scenario, trade.id);
+    if (options !== null) {
+      check(
+        failures,
+        `ship options for ${trade.tradeCode} in ${where}`,
+        getShipOptions.schema.response,
+        options,
+      );
+    }
   }
 }

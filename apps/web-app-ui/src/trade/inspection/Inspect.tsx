@@ -9,7 +9,6 @@ import {
   LoadingScreen,
   NoteBanner,
   RiskBanner,
-  ScreenColumn,
   ScreenHeader,
   SectionLabel,
   StatusHero,
@@ -30,8 +29,10 @@ import {
 import { ItemSummary } from '../parts';
 import { extensionPending, releasePaused } from '../workspace-copy';
 import { Deadline } from '../workspace/shared';
-import { InspectCompare, MatchChecks } from '../proof/ProofReview';
-import { DeliveryEvidence } from './Proof';
+import { InspectCompare, MatchChecks, MyPhotos, useMatchChecks, useMyPhotos } from '../proof/ProofReview';
+import { TradeColumn, Panel } from '../workspace/layout';
+import { useViewport } from '../workspace/viewport';
+import { DeliveryEvidence, SellerProof } from './Proof';
 import { MoreTimeSheet, ReleaseSheet } from './sheets';
 
 const tradeHref = (id: string) => `/trade/${id}`;
@@ -40,10 +41,10 @@ type Read = NonNullable<ReturnType<typeof useInspection>['data']>;
 
 function Frame({ title, id, children }: { title: string; id: string; children: React.ReactNode }) {
   return (
-    <ScreenColumn>
+    <TradeColumn>
       <ScreenHeader title={title} backHref={tradeHref(id)} backLabel="Back to the trade" />
       {children}
-    </ScreenColumn>
+    </TradeColumn>
   );
 }
 
@@ -185,6 +186,56 @@ function BuyerInspect({ trade, read, query }: Parts): React.JSX.Element {
     trade.terms?.deliveryAddress === null || trade.terms === null
       ? undefined
       : addressLine(trade.terms.deliveryAddress);
+  const viewport = useViewport();
+  // Kept here, above the per-width arrangement, so a rotated tablet keeps the photos and ticks the buyer made.
+  const photos = useMyPhotos();
+  const checks = useMatchChecks();
+  const checksNote = (
+    <p className="mb-[14px] text-[12.5px] leading-[1.5] text-slate">
+      Check the item against the agreed terms before confirming. Confirming releases the payment and can’t be
+      undone.
+    </p>
+  );
+  const delivery = (
+    <>
+      <SectionLabel {...(viewport === 'mobile' ? {} : { as: 'h3' as const })}>
+        Delivery — what you received
+      </SectionLabel>
+      <DeliveryEvidence read={read} deliveredTo={deliveredTo} />
+    </>
+  );
+  const wide = viewport !== 'mobile';
+  // Wide: the buttons are as wide as their labels. A tablet pins them to the foot of the screen (TX-14); a desktop
+  // draws them under the panels (DX-23).
+  const grow = wide ? 'md:w-auto! md:px-[22px]' : '';
+  const actions = (
+    <>
+      <Button
+        type="button"
+        className={grow}
+        onClick={() => {
+          setReleasing(true);
+        }}
+      >
+        Confirm & Release Payment
+      </Button>
+      {read.canRequestMoreTime && (
+        <Button
+          type="button"
+          variant="secondary"
+          className={grow}
+          onClick={() => {
+            setAsking(true);
+          }}
+        >
+          Ask for more time
+        </Button>
+      )}
+      <Button asChild variant="secondary" className={grow}>
+        <a href={tradeHref(trade.id)}>Back to the trade</a>
+      </Button>
+    </>
+  );
   return (
     <Frame title="Inspect & Confirm" id={trade.id}>
       <Window read={read} query={query} buyer />
@@ -201,40 +252,58 @@ function BuyerInspect({ trade, read, query }: Parts): React.JSX.Element {
           The seller declined, so the inspection ends as first agreed.
         </NoteBanner>
       )}
-      <ItemSummary trade={trade} />
-      <SectionLabel>Seller’s proof — before shipping</SectionLabel>
-      <InspectCompare read={read} seller={seller} />
-      <SectionLabel>Delivery — what you received</SectionLabel>
-      <DeliveryEvidence read={read} deliveredTo={deliveredTo} />
-      <MatchChecks />
-      <p className="mb-[14px] text-[12.5px] leading-[1.5] text-slate">
-        Check the item against the agreed terms before confirming. Confirming releases the payment and can’t
-        be undone.
-      </p>
-      <ActionStack>
-        <Button
-          type="button"
-          onClick={() => {
-            setReleasing(true);
-          }}
+      {viewport === 'desktop' ? (
+        // DX-23: what the seller showed beside what you received, so the decision is a comparison, not a memory.
+        <div className="grid grid-cols-2 items-start gap-[16px]">
+          <Panel title="What the seller showed">
+            <ItemSummary trade={trade} />
+            <SellerProof read={read} seller={seller} />
+          </Panel>
+          <Panel title="What you received">
+            <MyPhotos photos={photos} />
+            {delivery}
+            <MatchChecks as="h3" state={checks} />
+            {checksNote}
+          </Panel>
+        </div>
+      ) : viewport === 'tablet' ? (
+        // TX-14: the pills swap the seller's proof and your photos; the checks stay beside them.
+        <div className="grid grid-cols-2 items-start gap-[16px]">
+          <div className="min-w-0">
+            <ItemSummary trade={trade} />
+            <Panel title="Photos">
+              <InspectCompare read={read} seller={seller} photos={photos} />
+            </Panel>
+            {delivery}
+          </div>
+          <Panel title="Checks">
+            <MatchChecks heading={false} state={checks} />
+            {checksNote}
+          </Panel>
+        </div>
+      ) : (
+        <>
+          <ItemSummary trade={trade} />
+          <SectionLabel>Seller’s proof — before shipping</SectionLabel>
+          <InspectCompare read={read} seller={seller} photos={photos} />
+          {delivery}
+          <MatchChecks state={checks} />
+          {checksNote}
+        </>
+      )}
+      {wide ? (
+        <div
+          className={`mt-[16px] flex flex-wrap items-center gap-[10px] ${
+            viewport === 'tablet'
+              ? 'sticky bottom-0 z-10 -mx-[16px] border-0 border-t border-solid border-border-hairline bg-surface-primary px-[16px] py-[12px] md:justify-end'
+              : ''
+          }`}
         >
-          Confirm & Release Payment
-        </Button>
-        {read.canRequestMoreTime && (
-          <Button
-            type="button"
-            variant="secondary"
-            onClick={() => {
-              setAsking(true);
-            }}
-          >
-            Ask for more time
-          </Button>
-        )}
-        <Button asChild variant="secondary">
-          <a href={tradeHref(trade.id)}>Back to the trade</a>
-        </Button>
-      </ActionStack>
+          {actions}
+        </div>
+      ) : (
+        <ActionStack>{actions}</ActionStack>
+      )}
       <p className="mt-[12px] text-[11.5px] leading-[1.6] text-trust-gray">
         Reporting an issue isn’t in the app yet.
       </p>
