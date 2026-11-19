@@ -33,6 +33,7 @@ import { isProblem, partyName, platformWords, problemMessage, whenLabel } from '
 import { ItemSummary } from '../parts';
 import { Deadline } from '../workspace/shared';
 import { checkPhone, checkPlate, checkWaybill, normalisePlate } from './evidence';
+import { useViewportTier } from './viewport';
 
 /** Before the escrow is funded the seller is told to wait (X1); the platform's dispatch guard says the same. */
 const BEFORE_FUNDING = [
@@ -210,6 +211,7 @@ function ShipForm({ trade }: { trade: TradeView }): React.JSX.Element {
   const [uploading, setUploading] = useState(false);
   const [failure, setFailure] = useState<string | undefined>(undefined);
   const [problem, setProblem] = useState<string | undefined>(undefined);
+  const tier = useViewportTier();
 
   // A 409 means the trade is not where this screen thought it was (shipped meanwhile, or the dispatch guard):
   // read the trade again and let its status choose the screen. The platform's words stay until it does.
@@ -336,22 +338,12 @@ function ShipForm({ trade }: { trade: TradeView }): React.JSX.Element {
     );
   };
 
-  return (
-    <Frame title={`Ship ${trade.tradeCode}`} id={trade.id}>
-      <ReadyBanner title="Logistics: ready to ship">
-        Funds are protected. Ship to release them to you.
-      </ReadyBanner>
-      <Deadline
-        label="Ship by"
-        noun="delivery deadline"
-        query={deadline}
-        at={deadline.data?.deadline?.dueAt}
-      />
-      <ItemSummary trade={trade} />
-      <NoteBanner>
-        You arrange the delivery yourself. Collection is confirmed from the waybill, so keep the receipt.
-      </NoteBanner>
-      <SectionLabel>Waybill and driver</SectionLabel>
+  const deadlineStrip = (
+    <Deadline label="Ship by" noun="delivery deadline" query={deadline} at={deadline.data?.deadline?.dueAt} />
+  );
+  const evidence = (
+    <>
+      <SectionLabel>{tier === 'base' ? 'Waybill and driver' : 'Proof of dispatch'}</SectionLabel>
       <TextField {...bind('waybill', 'Waybill number')} />
       <ReceiptPicker
         receipt={receipt}
@@ -365,15 +357,105 @@ function ShipForm({ trade }: { trade: TradeView }): React.JSX.Element {
       <TextField {...bind('phone', 'Driver or rider phone', { inputMode: 'tel' })} />
       <TextField {...bind('plate', 'Vehicle registration plate')} />
       {problem !== undefined && <Alert>{problem}</Alert>}
+    </>
+  );
+  const shipLabel = ship.isPending ? 'Marking as shipped…' : 'Mark as shipped';
+
+  if (tier !== 'base') {
+    return (
+      <Frame
+        title={`Ship ${trade.tradeCode}`}
+        id={trade.id}
+        wide={{ title: `Dispatch ${trade.tradeCode}`, subtitle: DISPATCH_SUBTITLE }}
+      >
+        <div className="grid gap-[16px] md:grid-cols-[minmax(0,1fr)_minmax(0,260px)] lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
+          <div className="min-w-0">
+            <ReadyBanner title="Logistics: ready to ship">
+              Funds are protected. Ship to release them to you.
+            </ReadyBanner>
+            <HandoverChecklist />
+            {evidence}
+          </div>
+          <aside aria-label="Order and route" className="min-w-0">
+            {deadlineStrip}
+            <ItemSummary trade={trade} />
+            <SectionLabel>How it travels</SectionLabel>
+            <NoteBanner>
+              You arrange the delivery yourself. Collection is confirmed from the waybill, so keep the
+              receipt.
+            </NoteBanner>
+          </aside>
+        </div>
+        <ActionStack className="mt-[16px] md:flex-row-reverse md:justify-start">
+          <Button type="button" onClick={onShip} disabled={!ready || uploading || ship.isPending}>
+            {ship.isPending ? shipLabel : 'Mark as dispatched'}
+          </Button>
+          <Button asChild variant="secondary">
+            <a href={ORDERS_HREF}>Back to orders</a>
+          </Button>
+        </ActionStack>
+      </Frame>
+    );
+  }
+
+  return (
+    <Frame title={`Ship ${trade.tradeCode}`} id={trade.id}>
+      <ReadyBanner title="Logistics: ready to ship">
+        Funds are protected. Ship to release them to you.
+      </ReadyBanner>
+      {deadlineStrip}
+      <ItemSummary trade={trade} />
+      <NoteBanner>
+        You arrange the delivery yourself. Collection is confirmed from the waybill, so keep the receipt.
+      </NoteBanner>
+      {evidence}
       <ActionStack>
         <Button type="button" onClick={onShip} disabled={!ready || uploading || ship.isPending}>
-          {ship.isPending ? 'Marking as shipped…' : 'Mark as shipped'}
+          {shipLabel}
         </Button>
         <Button asChild variant="secondary">
           <a href={tradeHref(trade.id)}>Back to the trade</a>
         </Button>
       </ActionStack>
     </Frame>
+  );
+}
+
+const ORDERS_HREF = '/orders';
+const DISPATCH_SUBTITLE = 'Payment is protected. Confirm the route and hand the item over.';
+/** The reminders DX-19 draws; the same two as the phone's dispatch step. The platform's gates are the evidence below. */
+const CHECKLIST = ['Package sealed and labelled', 'Waybill or courier receipt ready'] as const;
+
+/**
+ * DX-19's handover checklist: the seller's own reminder before the item leaves. Ticking opens nothing; the
+ * evidence fields and the platform's own guards are what let the item ship.
+ */
+function HandoverChecklist(): React.JSX.Element {
+  const [ticked, setTicked] = useState<readonly string[]>([]);
+  return (
+    <fieldset className="mb-[14px] min-w-0 border-0 p-0" aria-label="Handover checklist">
+      <legend className="mb-[8px] p-0">
+        <SectionLabel>Handover checklist</SectionLabel>
+      </legend>
+      {CHECKLIST.map((item) => (
+        <label
+          key={item}
+          className="mb-[8px] flex cursor-pointer items-start gap-[10px] rounded-md border-[1.5px] border-solid border-border-hairline bg-surface-primary p-[12px] text-[12.5px] font-semibold has-[:checked]:border-trust-indigo has-[:checked]:bg-trust-indigo-soft"
+        >
+          <input
+            type="checkbox"
+            className="mt-[1px] h-[16px] w-[16px] shrink-0 accent-trust-indigo"
+            checked={ticked.includes(item)}
+            onChange={(event) => {
+              setTicked((current) =>
+                event.target.checked ? [...current, item] : current.filter((entry) => entry !== item),
+              );
+            }}
+          />
+          {item}
+        </label>
+      ))}
+    </fieldset>
   );
 }
 
@@ -446,16 +528,34 @@ function Nothing({ id, code, why }: { id: string; code: string; why: string }): 
 function Frame({
   title,
   id,
+  wide,
   children,
 }: {
   title: string;
   id: string;
+  /** DX-19 and TX-12's own header, drawn from a tablet up in place of the phone's centred title. */
+  wide?: { title: string; subtitle: string };
   children: React.ReactNode;
 }): React.JSX.Element {
+  const tier = useViewportTier();
+  if (tier === 'base') {
+    return (
+      <ScreenColumn>
+        <ScreenHeader title={title} backHref={tradeHref(id)} backLabel="Back to the trade" />
+        {children}
+      </ScreenColumn>
+    );
+  }
   return (
-    <ScreenColumn>
-      <ScreenHeader title={title} backHref={tradeHref(id)} backLabel="Back to the trade" />
+    <div className="mx-auto w-full md:max-w-[760px] lg:max-w-none">
+      <a href={ORDERS_HREF} className="mb-[8px] inline-block text-[12px] font-semibold text-info-on-soft">
+        ‹ Orders
+      </a>
+      <header className="mb-[16px]">
+        <h1 className="m-0 text-[19px] font-semibold">{wide?.title ?? title}</h1>
+        {wide !== undefined && <p className="m-0 mt-[2px] text-[12.5px] text-slate">{wide.subtitle}</p>}
+      </header>
       {children}
-    </ScreenColumn>
+    </div>
   );
 }

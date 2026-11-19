@@ -19,6 +19,9 @@ import {
   paymentStatusFor,
   payoutAccountsFor,
   tradeActivityFor,
+  payoutSummaryFor,
+  payoutsFor,
+  shipOptionsFor,
   tradeDisputeFor,
   tradeEvidenceFor,
   tradeFor,
@@ -229,6 +232,30 @@ const ROUTES: readonly (PublicRoute | ConsumerRoute | AnonymousRoute)[] = [
     handle: ({ persona, scenario }, { id }) => {
       const comparison = evidenceComparisonFor(persona.id, scenario, id ?? '');
       return comparison === null ? problem(404, 'Dispute not found', id) : { status: 200, body: comparison };
+    },
+  },
+  // F-069/F-073 fulfil & payouts
+  {
+    method: 'GET',
+    path: '/me/payouts/summary',
+    kind: 'consumer',
+    handle: ({ persona }) => ({ status: 200, body: payoutSummaryFor(persona.id) }),
+  },
+  {
+    method: 'GET',
+    path: '/me/payouts',
+    kind: 'consumer',
+    handle: ({ persona }) => page(payoutsFor(persona.id)),
+  },
+  {
+    method: 'GET',
+    path: '/trades/:id/ship-options',
+    kind: 'consumer',
+    handle: ({ persona, scenario }, { id }) => {
+      const options = shipOptionsFor(persona.id, scenario, id ?? '');
+      return options === null
+        ? problem(409, 'This trade is not waiting to be shipped', id)
+        : { status: 200, body: options };
     },
   },
   // F-069/F-073 deliver & inspect

@@ -1,8 +1,9 @@
 // @vitest-environment jsdom
 import { cleanup, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
+import { useViewportTier } from '../src/trade/shipping/viewport';
 import { useViewport } from '../src/trade/workspace/viewport';
-import { atWidth, unwidth } from './support/viewport';
+import { atWidth, setWidth, unwidth } from './support/viewport';
 
 afterEach(() => {
   cleanup();
@@ -21,5 +22,26 @@ describe('useViewport', () => {
     atWidth(width);
     render(<Probe />);
     expect(screen.getByText(width)).toBeTruthy();
+  });
+});
+
+function Tier(): React.JSX.Element {
+  return <p>{useViewportTier()}</p>;
+}
+
+describe('useViewportTier', () => {
+  it('is a phone where the window cannot be measured', () => {
+    render(<Tier />);
+    expect(screen.getByText('base')).toBeTruthy();
+  });
+
+  it.each([
+    ['phone', 'base'],
+    ['tablet', 'md'],
+    ['desktop', 'lg'],
+  ] as const)('reads a %s window as %s', (width, tier) => {
+    setWidth(width);
+    render(<Tier />);
+    expect(screen.getByText(tier)).toBeTruthy();
   });
 });

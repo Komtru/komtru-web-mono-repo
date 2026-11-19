@@ -4,12 +4,15 @@
 import {
   comparisonSchema,
   evidenceItemSchema,
-  getDeliveryDeadline,
   getFile,
   disputeDetailSchema,
   disputeEvidenceSchema,
   disputeSchema,
+  getDeliveryDeadline,
   getInspection,
+  getPayoutSummary,
+  getShipOptions,
+  listPayouts,
   merchantApplicationSchema,
   meSchema,
   paymentStatusSchema,
@@ -35,6 +38,9 @@ import {
   merchantApplicationFor,
   paymentStatusFor,
   payoutAccountsFor,
+  payoutSummaryFor,
+  payoutsFor,
+  shipOptionsFor,
   STANDARD_VERSION_IDS_LIST,
   tradeEvidenceFor,
   tradeFor,
@@ -151,5 +157,23 @@ function checkConsumerReads(
       comparisonSchema,
       evidenceComparisonFor(persona, scenario, dispute.id),
     );
+  }
+  // F-069/F-073 fulfil & payouts
+  check(failures, `payout summary for ${where}`, getPayoutSummary.schema.response, payoutSummaryFor(persona));
+  check(failures, `payouts for ${where}`, listPayouts.schema.response, {
+    items: payoutsFor(persona),
+    nextCursor: null,
+  });
+  for (const trade of tradesFor(persona, scenario)) {
+    // The delivery deadline is checked once, with the deliver & inspect reads above.
+    const options = shipOptionsFor(persona, scenario, trade.id);
+    if (options !== null) {
+      check(
+        failures,
+        `ship options for ${trade.tradeCode} in ${where}`,
+        getShipOptions.schema.response,
+        options,
+      );
+    }
   }
 }
