@@ -37,5 +37,14 @@ export default async function setup(): Promise<() => Promise<void>> {
   // application's own `komtru:` keys.
   return async () => {
     await releaseRunKeyspace();
+    const admin = new pg.Client({ connectionString: directUrl('postgres') });
+    await admin.connect();
+    try {
+      await admin.query(`DROP DATABASE IF EXISTS ${templateDatabaseName()} WITH (FORCE)`);
+    } catch {
+      // Teardown must not fail a run that passed; the next run's setup drops it by the same name anyway.
+    } finally {
+      await admin.end();
+    }
   };
 }

@@ -64,6 +64,14 @@ export function useTestDatabase(): TestDatabase {
 
   afterAll(async () => {
     await Promise.all([app?.end(), owner?.end()]);
+    // Each run mints new names, so a database left behind is never reused; drop it here.
+    const admin = new pg.Client({ connectionString: directUrl('postgres') });
+    await admin.connect();
+    try {
+      await admin.query(`DROP DATABASE IF EXISTS ${workerDatabase()} WITH (FORCE)`);
+    } finally {
+      await admin.end();
+    }
   });
 
   return { app: () => need(app), owner: () => need(owner), db: () => createDb(need(app)) };
