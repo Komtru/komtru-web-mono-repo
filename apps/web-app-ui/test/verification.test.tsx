@@ -25,6 +25,13 @@ const LATER = '2026-11-15T10:00:00.000Z';
 const base = { 'GET /me': me() };
 
 describe('Verification failed (VF1)', () => {
+  it('offers merchant verification from the Verifications tab', async () => {
+    answerWith(api.call, { ...base, 'GET /verification/status': status() });
+    renderWithApi(api.call, <Verification />);
+    const entry = await screen.findByRole('link', { name: /^Merchant verification/ });
+    expect(entry.getAttribute('href')).toBe('/account/verification/merchant');
+  });
+
   it('shows what failed, the platform’s own reason and copy, and the way to try again', async () => {
     answerWith(api.call, {
       ...base,
