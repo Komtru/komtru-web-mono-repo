@@ -195,6 +195,8 @@ What changed, from [`screens-v2.tsv`](../design-reference/screens-v2.tsv) (437 s
 
 ### T-209 — Desktop: fulfil, deliver, inspect and complete
 
+- **Status note (2026-11-19):** merged to `staging`, not done; see the F-069 progress note in `docs/tickets/FEATURE_MAP.md`. Plans: `docs/superpowers/plans/2026-11-19-f-069-f-073-fulfil-payouts.md`, `docs/superpowers/plans/2026-11-19-f-069-f-073-deliver-inspect.md`.
+
 - **Depends on:** T-191, T-116, T-118, T-122, T-123, T-124, T-195, T-190
 - **Model:** sonnet
 - **Scope:** Orders table with bulk actions, dispatch workspace, create listing with live preview, the trades workspace, Park pickup, inspect and compare, evidence across the trade, trade complete and review, and payouts and performance. Definition of done as epic 13 (frontend-design per screen, ui-kit only, all states, e2e and axe).
@@ -222,6 +224,8 @@ What changed, from [`screens-v2.tsv`](../design-reference/screens-v2.tsv) (437 s
 - **Acceptance criteria:** the 11 v2 screens TX-01, TX-02, TX-03, TX-04, TX-05, TX-06, TX-07, TX-07B, TX-08, TX-09, TX-10 are built to the reference rows in `SCREEN_INDEX.md`, with copy taken from the reference and every data-backed screen showing loading, empty, error and offline states.
 
 ### T-213 — Tablet: fulfil, deliver, inspect and payouts
+
+- **Status note (2026-11-19):** merged to `staging`, not done; see the F-073 progress note in `docs/tickets/FEATURE_MAP.md`. Plans: `docs/superpowers/plans/2026-11-19-f-069-f-073-fulfil-payouts.md`, `docs/superpowers/plans/2026-11-19-f-069-f-073-deliver-inspect.md`.
 
 - **Depends on:** T-191, T-195, T-118, T-123, T-124, T-190
 - **Model:** sonnet

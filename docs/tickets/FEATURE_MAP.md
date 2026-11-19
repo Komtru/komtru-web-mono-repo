@@ -929,6 +929,7 @@ list a trade.
 - **Status:** Not started
 - **Depends on:** F-022, F-026, F-027, F-028, F-037
 - **MVP:** yes
+- **Progress note (2026-11-19):** Merged to `staging` with F-073 as one responsive pass, built by two agents split by journey (fulfil and payouts; deliver and inspect), each reviewed and fixed. **7 of 9 screens built:** DX-18 orders (no bulk bar: no endpoint, couriers out of MVP, messaging deferred), DX-19 dispatch workspace, DX-21 trades workspace, DX-23 inspect and compare, DX-38 evidence, DX-31 trade completed (at `/trade/[id]/completed`, because `/complete` is F-018's; drawn only from recorded activity, no review form while F-038 is deferred) and DX-32 payouts and performance (no fulfilment-rate, dispatch-time or returns KPIs: no data). **Not built:** DX-20 create listing (F-041, deferred) and DX-22 Park pickup (needs F-062). **Not Done:** those two screens, and the deviations listed in `docs/ui-review/T-209/` await the owner. Visual check ran through the stand-in for every built screen (3–8% of pixels differ).
 
 #### F-070 — Desktop and tablet: issues and resolution
 
@@ -976,6 +977,7 @@ list a trade.
 - **Status:** Not started
 - **Depends on:** F-026, F-027, F-028, F-037
 - **MVP:** yes
+- **Progress note (2026-11-19):** Merged to `staging` with F-069 (see that note). **All 6 screens built:** TX-11 orders (list with a detail pane), TX-12 dispatch, TX-13 trade workspace, TX-14 inspect and compare, TX-22 evidence, TX-19 payouts. **Not Done:** the harness compares tablet screens at the reference frame's 560px, below the app's 768px `md` breakpoint, so its tablet score measures the phone layout; the agents re-rendered the reference at 820px by hand (TX-13 3.9%, TX-14 10.0%, TX-22 7.4%; TX-11, TX-12 and TX-19 read by eye). The harness needs a tablet width before this can pass, and the deviations in `docs/ui-review/T-213/` await the owner.
 
 #### F-074 — Tablet: messages, account and help
 
