@@ -18,12 +18,14 @@ export const WALKTHROUGHS: Readonly<Record<string, Walkthrough>> = {
     persona: 'buyer',
     scenario: 'with-trades',
     path: `/trade/${TRADE_IDS.buyerPending}`,
+    content: 'main',
   },
   'CWT-S03': {
     screen: 'CWT-S03',
     persona: 'buyer',
     scenario: 'with-trades',
     path: `/trade/${TRADE_IDS.buyerPending}/fund`,
+    content: 'main',
   },
   // The disputed trade's workspace, its case status and its evidence comparison (T-116, T-120).
   'CWT-05': {
@@ -31,6 +33,7 @@ export const WALKTHROUGHS: Readonly<Record<string, Walkthrough>> = {
     persona: 'buyer',
     scenario: 'with-trades',
     path: `/trade/${TRADE_IDS.buyerDisputed}`,
+    content: 'main',
   },
   'CWT-S15': {
     screen: 'CWT-S15',
@@ -50,12 +53,14 @@ export const WALKTHROUGHS: Readonly<Record<string, Walkthrough>> = {
     persona: 'seller',
     scenario: 'application-in-review',
     path: '/account/verification/merchant',
+    content: 'main',
   },
   BVR1: {
     screen: 'BVR1',
     persona: 'seller',
     scenario: 'application-rejected',
     path: '/account/verification/merchant',
+    content: 'main',
   },
 };
 
