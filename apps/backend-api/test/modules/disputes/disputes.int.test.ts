@@ -26,7 +26,7 @@ import type { DisputePorts } from '../../../src/modules/disputes/services/ports.
 import { infraEnabled } from '../../support/db-urls.js';
 import { useTestDatabase } from '../../support/db.js';
 import { outboxEventTypes, seedUser } from '../identity/support.js';
-import { driveTo, insertTrade, testFeeSnapshot } from '../trades/support.js';
+import { driveTo, feeSnapshotColumnValues, insertTrade } from '../trades/support.js';
 
 const ESCROW = 45_200_000n;
 
@@ -107,7 +107,7 @@ describe.runIf(infraEnabled)('disputes core (T-080)', () => {
     buyer = (await seedUser(t.app())).userId;
     seller = (await seedUser(t.app())).userId;
     reviewer = (await seedUser(t.app())).userId;
-    tradeId = await insertTrade(t.owner(), { buyer, seller }, testFeeSnapshot(ESCROW));
+    tradeId = await insertTrade(t.owner(), { buyer, seller }, feeSnapshotColumnValues(ESCROW));
     await driveTo(t.owner(), tradeId, 'INSPECTION');
   });
 
