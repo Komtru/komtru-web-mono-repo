@@ -18,7 +18,7 @@ footer with the same classes, so the phone is the same page, and adds the wide a
 | desktop >= 1024 | DX-01: left brand panel (midnight gradient: wordmark, "Trade with strangers, protected.", three numbered points, Trade Code entry), right column holds the screen on `surface-primary`. |
 
 Resizing never remounts a form: the body and its footer sit in one fixed position in the tree. Layout is CSS (`md:`,
-`lg:`). `useViewport` is used only where a width adds content, and only in slots beside the form: the brand panel
+`lg:`). `useSeen` (an entry-local hook, "unknown" on the server so the server HTML carries every variant and CSS chooses) is used only where a width adds content, and only in slots beside the form: the brand panel
 (desktop), the tablet intro and Trade Code line, the wide "Back" link in place of the top bar. It answers "mobile" on
 the server and in jsdom, so a phone render contains none of them. An empty `aside` (the gradient) is always rendered
 so a desktop window shows the right frame before hydration; its contents arrive with the hook.
@@ -82,3 +82,5 @@ both widths. Notes: `docs/ui-review/T-207/DX-01.md`, `docs/ui-review/T-212/TX-01
 ## Not touched
 
 `src/welcome/**`, `src/shell/**`, `src/account/**` (DX-02), `src/trade/**`, `packages/**`, and the ticket indexes.
+
+**Revised after review:** the desktop Trade Code box is on log in, welcome and sign up only; the wide variants render from the server; `next` is carried from log in through sign up and verify.
