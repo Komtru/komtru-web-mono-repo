@@ -82,3 +82,12 @@ export type DisputeActorType = (typeof DISPUTE_ACTOR_TYPES)[number];
 
 /** `DIS-088213`: how CWT-S15 and CWT-S18 print a case number. */
 export const disputeCode = (disputeNumber: number): string => `DIS-${String(disputeNumber).padStart(6, '0')}`;
+
+/**
+ * `DIS-088213`, `088213` and `88213` all name case 88213; anything else names no case number.
+ * Mirrors `parseCaseNumber` in the cases module so staff can paste either kind of code.
+ */
+export function parseDisputeNumber(q: string): number | null {
+  const match = /^(?:dis-?)?0*(\d{1,12})$/i.exec(q.trim());
+  return match?.[1] ? Number(match[1]) : null;
+}
