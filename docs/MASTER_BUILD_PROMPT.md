@@ -116,7 +116,7 @@ Set this up as one of the first tickets, before feature work, so every subsequen
 - One workflow per app under `.github/workflows/` (`backend-api.yml`, `web-app-ui.yml`, `operations-app.yml`, `logistics-ops.yml`, `park-agent-app.yml`), path-filtered to that app's directory plus the `packages/**` it depends on — a change to one app shouldn't trigger a build/deploy of the others.
 - Each workflow: install (shared pnpm/turbo cache) → lint → typecheck → unit + integration tests → build. A `deploy` job depends on tests passing, runs only `if: github.ref == 'refs/heads/main'`, and targets that app's own destination — confirm the real hosting target rather than assuming one.
 - A required migration-safety check for `backend-api` before any deploy job, given how much of this relies on partial unique indexes and schema-level invariants being exactly right.
-- Given the "don't push `main` until every ticket is done" rule below: build and validate these workflows via `workflow_dispatch` on a feature branch as you go — the `deploy`-on-`main` jobs just won't have fired for real until the final push.
+- Both deploy paths are live as of 2026-11-19: a push to `staging` releases the staging backend and apps, and a push to `main` releases production. `workflow_dispatch` remains available for validating a workflow change without a merge.
 
 ---
 
@@ -126,9 +126,19 @@ Set this up as one of the first tickets, before feature work, so every subsequen
 2. **First ticket: a short cannibalization audit.** Skim all four old repos under `/Users/emmanuelahman/Documents/projects/nykon-externals/kumtru/` (and their `.claude/` folders) specifically for pieces worth lifting as-is per Step 0's rule, and name them explicitly in the ticket list below rather than deciding ad hoc mid-build.
 3. **Produce a publishable, numbered ticket list** covering: monorepo scaffolding, CI scaffolding, every module from the 20 conceptual specs, the Park subsystem above, and the specific open items already decided in `m2-logistics-module-spec.md`/`m8-payment-provider-adapter-plan.md` (reuse those decisions, e.g. pricing non-goals, state machine shapes — don't re-litigate them). Each ticket needs: a short title, the files/modules it touches, acceptance criteria, and dependencies. Write this to `docs/TICKETS.md` (or `docs/tickets/` if long) and treat it as the first deliverable — stop and let it be reviewed before executing, don't tunnel straight into code.
 4. **Work the list ticket by ticket**: `superpowers:using-git-worktrees` to isolate each ticket's branch, `superpowers:subagent-driven-development`/`superpowers:executing-plans` to implement it, `superpowers:test-driven-development` throughout — tests are written as part of the ticket, not after.
-5. **Before merging each ticket**, run `superpowers:requesting-code-review` (an AI review pass) and act on it via `superpowers:receiving-code-review`. Only once that's clean does the ticket merge **locally into `main`** via `superpowers:finishing-a-development-branch`.
+5. **Before merging each ticket**, run `superpowers:requesting-code-review` (an AI review pass) and act on it via `superpowers:receiving-code-review`. Only once that's clean does the ticket merge into **`staging`** via `superpowers:finishing-a-development-branch` — see the branching rule below.
 6. Run `superpowers:verification-before-completion` at the end of each ticket (tests green, lint/typecheck clean, the UI screenshot-vs-reference check where applicable) before starting the next ticket.
-7. **Hard constraint: do not `git push` to the shared remote until every ticket on the list is merged locally and verified.** Local commits/merges throughout are expected; the remote stays untouched until the very end, then one final review pass, then push.
+7. **Branching, as of 2026-11-19 — this supersedes the original "don't push until the end" rule.**
+   The remote is live and both branches deploy, so the constraint is no longer *when* to push but
+   *where*:
+   - Every ticket branches off **`staging`**, not `main`.
+   - A reviewed, verified ticket merges into **`staging`** and is pushed. That deploys the staging
+     app, the operations app and the staging backend.
+   - **`main` is released on the owner's say-so and nothing else.** It deploys komtru.com and the
+     production backend at api.komtru.com. **Never push to `main` without being asked** — not to
+     tidy up, not because staging is green, not because a fix looks urgent.
+   The original rule existed because nothing was deployed yet; it was lifted when the owner went
+   live, not by reaching T-183.
 
 ---
 
@@ -141,4 +151,5 @@ Set this up as one of the first tickets, before feature work, so every subsequen
 - The Park module is fully modeled (schema, API, TrustOps review flow, mobile agent app) built on the general logistics-company primitives.
 - Every API endpoint is paginated, rate-limited where it touches auth/PIN attempts, and idempotent where retries are plausible; every external I/O call is BullMQ-backed.
 - The ticket list, and the state of each ticket, is visible in `docs/TICKETS.md`.
-- `main` has not been pushed to the remote until this entire list is true.
+- Every ticket reached `staging` through review, and `main` only ever moved when the owner asked
+  for a release.
