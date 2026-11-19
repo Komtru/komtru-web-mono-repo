@@ -48,6 +48,7 @@ export function EntryFrame({
   tradeCode = false,
   intro = 'wordmark',
   brandHeading = false,
+  wideBack = true,
 }: {
   /** The top bar's name. Omitted for the screens the reference draws without one (E1, TOS2). */
   title?: string;
@@ -61,6 +62,8 @@ export function EntryFrame({
   intro?: 'wordmark' | 'headline' | 'none';
   /** The screen has no heading of its own at desktop width, so the brand story's headline is the page's `h1`. */
   brandHeading?: boolean;
+  /** Whether a wide window draws the Back link. DX-01 and TX-01 draw none on log in, the way in. */
+  wideBack?: boolean;
 }): React.JSX.Element {
   const viewport = useViewport();
   const wide = viewport !== 'mobile';
@@ -84,7 +87,7 @@ export function EntryFrame({
           )}
           {viewport === 'tablet' && intro !== 'none' && <TabletIntro headline={intro === 'headline'} />}
           <div className="flex flex-1 flex-col md:w-full md:max-w-[600px] md:flex-none md:rounded-[var(--r-lg)] md:border md:border-solid md:border-border-hairline md:bg-surface-primary md:p-[26px] lg:max-w-[440px] lg:rounded-none lg:border-0 lg:bg-transparent lg:p-0">
-            {wide && back !== undefined && (
+            {wide && wideBack && back !== undefined && (
               <nav aria-label="Back" className="mb-[16px]">
                 <a href={back} className="text-[12.5px] font-semibold text-trust-indigo">
                   Back

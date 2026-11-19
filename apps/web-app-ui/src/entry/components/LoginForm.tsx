@@ -145,6 +145,7 @@ export function LoginForm({
       back={ENTRY.welcome}
       tradeCode
       intro="headline"
+      wideBack={false}
       footer={
         <>
           <Button type="submit" form={FORM} disabled={busy}>

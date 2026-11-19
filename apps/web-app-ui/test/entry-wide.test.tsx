@@ -313,6 +313,8 @@ describe('the tablet card (TX-01)', () => {
     expect(screen.getByLabelText('Password')).toBeDefined();
     expect(screen.getByRole('button', { name: 'Log in' })).toBeDefined();
     expect(screen.getByRole('link', { name: 'Create account' }).getAttribute('href')).toBe('/signup');
+    // TX-01 draws no Back on log in.
+    expect(wideBack()).toBeNull();
   });
 
   it('puts the wordmark alone above the other cards', () => {
