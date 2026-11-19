@@ -18,9 +18,34 @@ export interface Size {
   height: number;
 }
 
+/**
+ * Chromium's shared-memory directory, when there is reason to think the default is too small.
+ *
+ * This suite grows the viewport to whatever a screen needs and then captures it in one shot, so a
+ * tall screen is a single large bitmap. Chromium puts that in `/dev/shm`, and a CI container's is
+ * commonly 64MB — when it does not fit, `Page.captureScreenshot` fails with a bare "Unable to
+ * capture screenshot" that names neither the screen nor the cause.
+ *
+ * `--disable-dev-shm-usage` moves those allocations to `/tmp`, which is disk-backed and not capped
+ * the same way. It is slower and pointless on a developer's machine, so it is only passed where
+ * the problem exists.
+ *
+ * HONESTLY LABELLED: this is a mitigation for a flake observed on GitHub runners — the same commit
+ * passed at 10:44 and failed at 10:56 — and it could not be reproduced locally, where /dev/shm is
+ * half of RAM. If the failure returns, the next thing to suspect is the size of the clip itself.
+ */
+const launchArgs = (): string[] => (process.env.CI === undefined ? [] : ['--disable-dev-shm-usage']);
+
+/**
+ * The only way this package starts a browser. Exported so the suites that hold one open across
+ * several cases get the same flags — a mitigation that covers one of two launch sites covers
+ * neither reliably.
+ */
+export const launchBrowser = (): Promise<Browser> => chromium.launch({ args: launchArgs() });
+
 /** Launches Chromium and always closes it, so a thrown assertion cannot leak a browser process. */
 export async function withBrowser<T>(run: (browser: Browser) => Promise<T>): Promise<T> {
-  const browser = await chromium.launch();
+  const browser = await launchBrowser();
   try {
     return await run(browser);
   } finally {

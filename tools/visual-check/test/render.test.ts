@@ -6,7 +6,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { Browser } from '@playwright/test';
 
 import { carveScreen } from '../src/reference.ts';
-import { chromium, shootBuilt, shootReference, withBrowser } from '../src/render.ts';
+import { launchBrowser, shootBuilt, shootReference, withBrowser } from '../src/render.ts';
 import { findScreen, loadScreens, REFERENCE_HTML_PATH } from '../src/screen-index.ts';
 
 const enabled = process.env.KOMTRU_BROWSER_TESTS === '1';
@@ -18,7 +18,7 @@ describe.runIf(enabled)('screenshots', () => {
   let browser: Browser;
 
   beforeAll(async () => {
-    browser = await chromium.launch();
+    browser = await launchBrowser();
   }, 60_000);
   afterAll(async () => {
     await browser?.close();
