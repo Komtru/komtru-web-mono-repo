@@ -19,11 +19,16 @@
 // Reading either aggregate as a verdict — or omitting the claim — would attest a level 2 identity
 // for anyone who typed a stranger's valid NIN. The mapper reads the per-field `validated` booleans.
 import type { YouverifyCredentials } from '../../../../config/env.js';
+import type { Logger } from '../../../../platform/logger.js';
+import { providerRequest } from '../../../../platform/providers/http.js';
 import { KycProviderNotConfiguredError } from '../../domain/errors.js';
+import { mapIdentity, type YouverifyIdentityResponse } from './youverify.mapping.js';
+import { bvnRequest, ninRequest, type YouverifyRequest } from './youverify.requests.js';
 import type {
   BankMatchCheckResult,
   BusinessCheckResult,
   IdentityCheckResult,
+  IdentityClaim,
   KycProviderAdapter,
   LivenessCheckResult,
 } from '../../domain/provider.js';
@@ -41,17 +46,46 @@ const LIVENESS_IS_A_WEBHOOK = [
   'nothing — Youverify liveness runs in the browser SDK and resolves over the webhook, so it is never called through this adapter',
 ] as const;
 
-export function createYouverifyClient(_credentials: YouverifyCredentials): KycProviderAdapter {
+export function createYouverifyClient(credentials: YouverifyCredentials, logger: Logger): KycProviderAdapter {
   // Rejected promises rather than synchronous throws: a throw out of an adapter is an exception on
   // the worker's own call stack, not a failed job.
   const refuse = <T>(missing: readonly string[]): Promise<T> =>
     Promise.reject(new KycProviderNotConfiguredError('YOUVERIFY', missing));
 
+  /**
+   * One identity call.
+   *
+   * A non-2xx is left to throw. That is deliberate and it is the whole reason this helper exists
+   * rather than a try/catch per method: Youverify's `402 Insufficient fund`, its `401`, and its
+   * per-ID `429` ("try again after 10mins") are facts about our account and our call rate, not
+   * about whether this person is who they say. Catching them and returning a `FAILED` verdict
+   * would show a user a rejection they did not earn and burn their one in-flight slot. Throwing
+   * leaves the request PROVIDER_PENDING, lets BullMQ retry, and leaves the expiry sweep as the
+   * floor underneath it.
+   */
+  const identity = async (
+    operation: string,
+    build: (baseUrl: string, claim: IdentityClaim, token: string) => YouverifyRequest<unknown>,
+    claim: IdentityClaim,
+  ): Promise<IdentityCheckResult> => {
+    const { url, headers, body } = build(credentials.baseUrl, claim, credentials.secretToken);
+    const response = await providerRequest<YouverifyIdentityResponse>(logger, {
+      provider: 'youverify',
+      operation,
+      method: 'POST',
+      url,
+      headers,
+      body,
+      // Not idempotent: a repeat is a second billed call, and Youverify rate-limits per ID anyway.
+      idempotent: false,
+    });
+    return mapIdentity(response.body);
+  };
+
   return {
     provider: 'YOUVERIFY',
-    // Filled in by the next task, against the captured fixtures.
-    verifyNin: () => refuse<IdentityCheckResult>(['a live NIN call (next task)']),
-    verifyBvn: () => refuse<IdentityCheckResult>(['a live BVN call (next task)']),
+    verifyNin: (claim) => identity('identity.nin', ninRequest, claim),
+    verifyBvn: (claim) => identity('identity.bvn', bvnRequest, claim),
     checkLiveness: () => refuse<LivenessCheckResult>(LIVENESS_IS_A_WEBHOOK),
     verifyBusiness: () => refuse<BusinessCheckResult>(NO_COMPANY_SCOPE),
     verifyBankAccountName: () => refuse<BankMatchCheckResult>(NO_BANK_ENDPOINT),

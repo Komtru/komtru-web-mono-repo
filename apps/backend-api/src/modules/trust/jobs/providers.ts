@@ -35,7 +35,7 @@ export function kycProvider(config: TrustConfig, logger: Logger): KycProviderAda
     // All four or none, like Dojah: which one is missing is a question the operator's own .env
     // answers faster than we can.
     if (!config.youverify) throw new KycProviderNotConfiguredError('YOUVERIFY', YOUVERIFY_VARIABLES);
-    return createYouverifyClient(config.youverify);
+    return createYouverifyClient(config.youverify, logger);
   }
 
   if (config.provider === 'DOJAH') {
