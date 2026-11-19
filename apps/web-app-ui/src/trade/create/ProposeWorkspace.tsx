@@ -11,6 +11,11 @@ export interface ProposeWorkspaceProps {
   preview?: ReactNode;
   /** What the preview column is called for assistive technology. Defaults to "Contract so far". */
   previewLabel?: string;
+  /**
+   * Draws the preview above the stage on a phone too. The contract preview is a tablet and desktop addition, so it
+   * is hidden below `md` unless a screen's own mobile design is the summary (the payment screens' "What you pay").
+   */
+  previewOnMobile?: boolean;
   /** The stage itself. */
   children: ReactNode;
 }
@@ -31,6 +36,7 @@ export function ProposeWorkspace({
   rail,
   preview,
   previewLabel = 'Contract so far',
+  previewOnMobile = false,
   children,
 }: ProposeWorkspaceProps): React.JSX.Element {
   return (
@@ -58,7 +64,11 @@ export function ProposeWorkspace({
         {preview !== undefined && (
           <aside
             aria-label={previewLabel}
-            className="hidden min-w-0 md:sticky md:top-[16px] md:block md:self-start"
+            className={
+              previewOnMobile
+                ? 'order-first min-w-0 md:order-none md:sticky md:top-[16px] md:self-start'
+                : 'hidden min-w-0 md:sticky md:top-[16px] md:block md:self-start'
+            }
           >
             {preview}
           </aside>
