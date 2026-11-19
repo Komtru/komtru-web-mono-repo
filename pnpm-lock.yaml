@@ -702,6 +702,12 @@ importers:
       '@fontsource/space-grotesk':
         specifier: 5.3.0
         version: 5.3.0
+      '@komtru/app-kit':
+        specifier: workspace:*
+        version: link:../../packages/app-kit
+      '@komtru/shared-types':
+        specifier: workspace:*
+        version: link:../../packages/shared-types
       '@komtru/ui-kit':
         specifier: workspace:*
         version: link:../../packages/ui-kit
