@@ -317,6 +317,12 @@ export async function startLivenessSession(
       'A liveness check is matched against a verified identity number, so that step comes first.',
     );
   }
+  // Already done. `submitIdentifierCheck` refuses a verified type for the same reason — before a
+  // provider call is spent — and without this an API caller could mint a billable session and put
+  // a "Not approved" banner on the VF1 of somebody who is already verified.
+  if (facts.livenessVerified) {
+    throw new ApiError(409, 'CONFLICT', 'Your selfie check is already done');
+  }
 
   /**
    * Random, and deliberately not the request id.

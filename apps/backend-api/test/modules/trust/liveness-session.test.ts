@@ -5,6 +5,7 @@
 // it must be unguessable and it must not be anything the caller already knows.
 import { describe, expect, it } from 'vitest';
 import { ApiError } from '../../../src/platform/errors.js';
+import { newSessionReference } from '../../../src/modules/trust/http/controllers.js';
 import { startLivenessSession } from '../../../src/modules/trust/services/verification.service.js';
 import { requestRow, silentLogger, testEncryption, testHasher } from './support.js';
 
@@ -102,10 +103,21 @@ describe('startLivenessSession', () => {
     });
   });
 
-  it('mints a different reference every time it is called for real', async () => {
-    const { randomBytes } = await import('node:crypto');
-    const mint = (): string => randomBytes(32).toString('base64url');
-    expect(mint()).not.toBe(mint());
-    expect(mint()).toHaveLength(43);
+  it('refuses a user whose selfie check is already done', async () => {
+    const { deps: d, created } = deps({
+      store: {
+        identityFacts: () => Promise.resolve({ identifierVerified: true, livenessVerified: true }),
+      },
+    });
+    await expect(startLivenessSession(d, { userId: 'u1' })).rejects.toMatchObject({ status: 409 });
+    expect(created).toHaveLength(0);
+  });
+
+  /** The production mint, not a re-implementation of it — the previous version of this test
+   *  asserted only that Node's CSPRNG returns two different values, which pinned nothing. */
+  it('mints an unguessable reference', () => {
+    expect(newSessionReference()).not.toBe(newSessionReference());
+    expect(newSessionReference()).toHaveLength(43);
+    expect(newSessionReference()).toMatch(/^[A-Za-z0-9_-]+$/);
   });
 });

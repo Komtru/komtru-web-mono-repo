@@ -20,6 +20,13 @@ export const YOUVERIFY_SIGNATURE_HEADER = 'x-yv-signature';
  */
 export function verifyYouverifySignature(raw: Buffer, header: string | undefined, secret: string): boolean {
   if (!header) return false;
+  /*
+    An empty or blank secret is a VALID key to `createHmac`, not a missing one: it produces a
+    perfectly good digest that anyone can reproduce. Since `config.youverify` is absent until all
+    four variables are set — the state of every unconfigured environment — a fallback of `''` behind
+    this function would mean any stranger could sign a body and be believed. Fail closed instead.
+  */
+  if (secret.trim() === '') return false;
 
   const expected = createHmac('sha256', secret).update(raw).digest('hex');
   // Providers spell a hex digest in either case; the bytes it denotes are the same.

@@ -47,8 +47,12 @@ export interface YouverifyIdentityResponse {
   };
 }
 
-/** The identity fields a claim can assert, and the rejection each one's failure maps to. */
-const NAME_FIELDS = ['firstName', 'lastName', 'middleName'] as const;
+/**
+ * The two fields `ninRequest`/`bvnRequest` ALWAYS send, and therefore the two this mapper is
+ * entitled to demand back. `middleName` is never sent, so it is deliberately not here — listing it
+ * would read as a claim this code does not make.
+ */
+const REQUIRED_NAME_FIELDS = ['firstName', 'lastName'] as const;
 
 export function mapIdentity(response: YouverifyIdentityResponse): IdentityCheckResult {
   const { data } = response;
@@ -73,10 +77,20 @@ export function mapIdentity(response: YouverifyIdentityResponse): IdentityCheckR
     };
   }
 
-  const failed = (name: string): boolean => fields[name]?.validated === false;
+  /*
+    Positive, not the absence of a negative.
+
+    Asking "is any field `validated === false`" treats a field the provider did not return as
+    agreement — which is `allValidationPassed`'s exact error ("no checks failed" includes "no
+    checks") reproduced one level down. Youverify echoes only the fields it could evaluate, so a
+    record with a null surname comes back carrying `firstName` alone; under the old reading that
+    was a PASS on a first name, and a verified identity for whoever typed a stranger's NIN.
+  */
+  const matched = (name: string): boolean => fields[name]?.validated === true;
   const dobField = fields.dateOfBirth;
-  const nameFailed = NAME_FIELDS.some((name) => failed(name));
-  const dobFailed = failed('dateOfBirth');
+  const nameFailed = REQUIRED_NAME_FIELDS.some((name) => !matched(name));
+  // A date of birth is only claimed when the caller supplied one, so it is judged only if returned.
+  const dobFailed = dobField !== undefined && dobField.validated !== true;
 
   if (nameFailed || dobFailed) {
     // A name mismatch is reported first: it is the stronger signal that this is not the person, and

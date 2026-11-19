@@ -130,7 +130,7 @@ export async function reapStaleDeliveries(
   db: Db,
   olderThanSeconds: number,
   maxAttempts: number,
-): Promise<number> {
+): Promise<bigint[]> {
   const rows = await db
     .update(providerWebhooks)
     .set({ status: 'FAILED', processingError: 'processing did not finish; worker presumed lost' })
@@ -142,7 +142,7 @@ export async function reapStaleDeliveries(
       ),
     )
     .returning({ id: providerWebhooks.id });
-  return rows.length;
+  return rows.map((row) => row.id);
 }
 
 /** The request a delivery names, found by the reference that travelled through the browser. */
@@ -153,4 +153,23 @@ export async function findRequestBySessionRef(db: Db, sessionRef: string) {
     .where(eq(verificationRequests.providerSessionRef, sessionRef))
     .limit(1);
   return rows[0];
+}
+
+/**
+ * Deletes deliveries that are finished and old.
+ *
+ * The route is public, so this table is the one place an unauthenticated caller can put bytes in
+ * our database. Truncation bounds a single row; only this bounds how many rows there are.
+ */
+export async function pruneDeliveries(db: Db, olderThanDays: number): Promise<number> {
+  const rows = await db
+    .delete(providerWebhooks)
+    .where(
+      and(
+        inArray(providerWebhooks.status, ['PROCESSED', 'SKIPPED']),
+        lt(providerWebhooks.finishedAt, sql`now() - make_interval(days => ${olderThanDays})`),
+      ),
+    )
+    .returning({ id: providerWebhooks.id });
+  return rows.length;
 }

@@ -61,3 +61,26 @@ describe('verifyYouverifySignature', () => {
     expect(verifyYouverifySignature(reserialised, signature, SECRET)).toBe(false);
   });
 });
+
+/**
+ * An empty secret is a VALID HMAC key, not a missing one.
+ *
+ * `config.youverify` is absent unless all four variables are set — the state of both deployed
+ * backends and every laptop — and the route was mounted regardless, with `?? ''` behind it. Anyone
+ * could then sign a body with the empty key and be believed. The verifier now refuses outright, so
+ * a misconfigured environment fails closed rather than open.
+ */
+describe('an unconfigured secret', () => {
+  it('refuses every signature when the secret is empty, including a correct one', () => {
+    const raw = Buffer.from('{"a":1}');
+    const correctlySignedWithEmptyKey = createHmac('sha256', '').update(raw).digest('hex');
+    expect(verifyYouverifySignature(raw, correctlySignedWithEmptyKey, '')).toBe(false);
+  });
+
+  it('refuses a whitespace-only secret too', () => {
+    const raw = Buffer.from('{"a":1}');
+    expect(verifyYouverifySignature(raw, createHmac('sha256', '   ').update(raw).digest('hex'), '   ')).toBe(
+      false,
+    );
+  });
+});

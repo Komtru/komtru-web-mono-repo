@@ -93,3 +93,45 @@ describe('VF1 — starting a verification', () => {
     expect(paths).not.toContain('/verification/liveness/session');
   });
 });
+
+/**
+ * What the screen does after the session is minted.
+ *
+ * The SDK's callbacks are inert by design, so the only thing that can move this screen is the
+ * platform's own view of the check. A review raised the worry that the button would sit on
+ * "Opening…" forever; it does not, because the session mutation invalidates the account query tree
+ * and the refetched status carries the now-pending request. That is a behaviour worth pinning
+ * rather than reasoning about, because it is the entire feedback loop for the user.
+ */
+describe('VF1 — after a session is started', () => {
+  it('replaces the button with the in-flight note once the platform knows the check is running', async () => {
+    const pending = {
+      requestId: '22222222-2222-4222-8222-222222222222',
+      type: 'LIVENESS',
+      status: 'PROVIDER_PENDING',
+      submittedAt: '2026-11-19T10:00:00.000Z',
+      expiresAt: '2026-11-19T11:00:00.000Z',
+    };
+    let started = false;
+    answerWith(api.call, {
+      'GET /me': me,
+      // The platform's answer changes the moment a session exists, which is what the refetch sees.
+      'GET /verification/status': () =>
+        status({
+          requirements: { identifier: true, liveness: false, business: false, businessBankAccount: false },
+          inFlight: started ? [pending] : [],
+        }),
+      'POST /verification/liveness/session': () => {
+        started = true;
+        return { publicMerchantKey: 'pk', sandbox: true, reference: 'ref', requestId: pending.requestId };
+      },
+    });
+    renderWithApi(api.call, <Verification />);
+
+    const button = await screen.findByRole('button', { name: /selfie check/i });
+    button.click();
+
+    expect(await screen.findByText(/we.re checking/i)).toBeTruthy();
+    expect(screen.queryByRole('button', { name: /selfie check/i })).toBeNull();
+  });
+});

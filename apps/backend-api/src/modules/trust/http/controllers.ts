@@ -52,7 +52,7 @@ export interface TrustHttpDeps {
  * browser and comes back inside a webhook, so anything derivable from a request the caller can see
  * would let them name a check that is not theirs.
  */
-const newSessionReference = (): string => randomBytes(32).toString('base64url');
+export const newSessionReference = (): string => randomBytes(32).toString('base64url');
 
 const serviceDeps = (deps: TrustHttpDeps): VerificationDeps => ({
   store: deps.store(),

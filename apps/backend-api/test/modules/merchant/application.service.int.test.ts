@@ -41,7 +41,9 @@ describe.runIf(infraEnabled)('the applicant service (T-055)', () => {
         businessName: 'Techedge',
         addressLine: '12 Allen Avenue',
         // The one normal form trust uses: no prefix, no spaces, upper case.
-        cacRcNumber: '123456',
+        // Normalisation keeps the entity prefix now: 'rc 123456' in, 'RC123456' stored. The prefix
+        // names the kind of registration and the provider refuses the bare form.
+        cacRcNumber: 'RC123456',
       });
       expect(await count(`SELECT count(*) AS n FROM merchant.merchant_applications`)).toBe(1);
       expect(await count(`SELECT count(*) AS n FROM merchant.merchant_application_events`)).toBe(1);

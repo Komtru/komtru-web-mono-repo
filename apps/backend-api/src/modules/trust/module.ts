@@ -27,7 +27,7 @@ import { trustAdminRoutes } from './http/admin.routes.js';
 import { trustRoutes } from './http/routes.js';
 import { youverifyWebhookRoutes } from './http/webhook.routes.js';
 import { resolveLiveness } from './jobs/resolve-liveness.job.js';
-import { reapStaleDeliveries } from './infrastructure/postgres/webhooks.js';
+import { pruneDeliveries, reapStaleDeliveries } from './infrastructure/postgres/webhooks.js';
 import { bindStore } from './infrastructure/postgres/bind-store.js';
 import { scrubErasedAccountFlags } from './infrastructure/postgres/erasure.js';
 import type { TrustStore } from './infrastructure/postgres/store.js';
@@ -59,6 +59,30 @@ export const REAP_WEBHOOKS_CRON = '*/10 * * * *';
 const WEBHOOK_STALE_SECONDS = 300;
 /** After this many claims a delivery is left FAILED and visible rather than queued forever. */
 const WEBHOOK_MAX_ATTEMPTS = 5;
+/**
+ * How long a finished delivery is kept: long enough to investigate one, short enough to bound a
+ * table that a public route can write to.
+ */
+const WEBHOOK_RETENTION_DAYS = 30;
+
+/**
+ * Queues one stored delivery for processing. Used by the webhook route and by the stale sweep —
+ * the sweep needs it because marking a row claimable is not the same as arranging for a claim.
+ */
+async function enqueueDelivery(runtime: { queues: QueueFactory }, webhookId: bigint): Promise<void> {
+  const id = String(webhookId);
+  await runtime.queues.producer<ResolveLivenessJob>(TRUST_QUEUES.RESOLVE_LIVENESS).add(
+    'resolve',
+    { webhookId: id },
+    {
+      // The delivery row is the record; the job is only a pointer to it, so dropping it on
+      // completion loses nothing. The id is safe as a BullMQ job id — it is digits, and BullMQ
+      // rejects a custom id containing its ':' key separator.
+      jobId: id,
+      removeOnComplete: true,
+    },
+  );
+}
 
 /**
  * Two at a time. The provider is the bottleneck, not the database, and a check that queues behind
@@ -136,21 +160,9 @@ export function createTrustModule(options: TrustModuleOptions): KomtruModule {
       // raw-body prefix so the bytes it signs are the bytes we check.
       ...youverifyWebhookRoutes(() => ({
         db: need().db,
+        // Guarded below: the route is not mounted at all unless this is a real secret.
         webhookSecret: need().config.youverify?.webhookSecret ?? '',
-        enqueueDelivery: async (webhookId) => {
-          const id = String(webhookId);
-          await need().queues.producer<ResolveLivenessJob>(TRUST_QUEUES.RESOLVE_LIVENESS).add(
-            'resolve',
-            { webhookId: id },
-            {
-              // The delivery row is the record; the job is only a pointer to it, so dropping it on
-              // completion loses nothing. The id is safe as a BullMQ job id — it is digits, and
-              // BullMQ rejects a custom id containing its ':' key separator.
-              jobId: id,
-              removeOnComplete: true,
-            },
-          );
-        },
+        enqueueDelivery: (webhookId) => enqueueDelivery(need(), webhookId),
         logger: need().logger,
       })),
     ],
@@ -213,12 +225,19 @@ export function createTrustModule(options: TrustModuleOptions): KomtruModule {
       {
         name: TRUST_SCHEDULES.REAP_WEBHOOKS,
         cron: REAP_WEBHOOKS_CRON,
-        description: 'Returns webhook deliveries whose worker died mid-job',
+        description: 'Re-queues webhook deliveries whose worker died, and prunes old ones',
         handler: async () => {
-          const reaped = await reapStaleDeliveries(need().db, WEBHOOK_STALE_SECONDS, WEBHOOK_MAX_ATTEMPTS);
-          if (reaped > 0) {
-            need().logger.warn({ reaped }, 'trust: returned stalled webhook deliveries for retry');
+          const runtime = need();
+          const reaped = await reapStaleDeliveries(runtime.db, WEBHOOK_STALE_SECONDS, WEBHOOK_MAX_ATTEMPTS);
+          // Re-queued, not merely marked claimable. The HTTP route is the only other producer of
+          // this queue and it answered 200 long ago, so a recovered row with no job behind it is a
+          // verdict nobody will ever apply and a user left watching "We're checking".
+          for (const id of reaped) await enqueueDelivery(runtime, id);
+          if (reaped.length > 0) {
+            runtime.logger.warn({ reaped: reaped.length }, 'trust: re-queued stalled deliveries');
           }
+          const pruned = await pruneDeliveries(runtime.db, WEBHOOK_RETENTION_DAYS);
+          if (pruned > 0) runtime.logger.info({ pruned }, 'trust: pruned old webhook deliveries');
         },
       },
     ],

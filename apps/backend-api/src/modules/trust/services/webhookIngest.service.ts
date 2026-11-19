@@ -41,19 +41,22 @@ interface Envelope {
  * replay, which is what a retry is; it only fails to collapse two deliveries that differ in a byte,
  * and those are two events by any reading.
  */
-function eventId(envelope: Envelope, rawSha: string): string {
+function eventId(envelope: Envelope, rawSha: string, signatureValid: boolean): string {
+  /*
+    An unsigned delivery is namespaced away from the signed one.
+
+    Both share a single unique index on (provider, provider_event_id), and the id comes from the
+    body — so without this an anonymous POST could claim the id of an event Youverify has not sent
+    yet. The genuine, signed delivery would then hit `onConflictDoNothing`, be counted as a replay,
+    and never be queued: the real verdict silently swallowed by a stranger's guess.
+  */
+  if (!signatureValid) return `unsigned:${rawSha}`;
   const id = envelope.data?.id;
   return typeof id === 'string' && id.length > 0 ? id : `sha256:${rawSha}`;
 }
 
 const asString = (value: unknown): string | undefined =>
   typeof value === 'string' && value.length > 0 ? value : undefined;
-
-/** The reference the SDK echoed back. Read here only to log; the job re-reads it from the payload. */
-export function referenceOf(payload: unknown): string | undefined {
-  const envelope = payload as Envelope;
-  return asString(envelope.data?.metadata?.reference);
-}
 
 export type RecordWebhookOutcome = RecordDeliveryResult['outcome'] | 'unreadable';
 
@@ -75,7 +78,14 @@ export async function recordWebhook(
     return 'unreadable';
   }
 
-  const envelope = (parsed ?? {}) as Envelope;
+  if (typeof parsed !== 'object' || parsed === null) {
+    // `payload` is `jsonb NOT NULL`; a signed body of literal `null` or `7` would otherwise be an
+    // unauthenticated 500 plus log noise rather than a refusal.
+    deps.logger.warn({ rawBodySha256, signatureValid }, 'trust: youverify delivery was not an object');
+    return 'unreadable';
+  }
+
+  const envelope = parsed as Envelope;
   // An unsigned body is truncated before it is stored: this route is public, so its payload column
   // is the one place an unauthenticated caller can put bytes in our database.
   const payload = signatureValid
@@ -84,7 +94,7 @@ export async function recordWebhook(
 
   const result = await recordDelivery(deps.db, {
     provider: 'YOUVERIFY',
-    providerEventId: eventId(envelope, rawBodySha256),
+    providerEventId: eventId(envelope, rawBodySha256, signatureValid),
     eventType: asString(envelope.event) ?? 'unknown',
     payload,
     rawBodySha256,

@@ -25,17 +25,55 @@ export interface ResolveLivenessDeps extends TrustJobDeps {
 }
 
 /** What Youverify's identity/liveness event carries, read defensively — it crossed the internet. */
-interface LivenessPayload {
+export interface LivenessPayload {
   data?: { status?: unknown; passed?: unknown; metadata?: { reference?: unknown } };
 }
 
-const passed = (payload: LivenessPayload): boolean => {
-  const { status, passed: flag } = payload.data ?? {};
-  if (typeof flag === 'boolean') return flag;
-  // Some events report an outcome word instead of a boolean. Anything we do not recognise is NOT a
-  // pass: an unknown status must never grant a level.
-  return typeof status === 'string' && ['completed', 'passed', 'approved'].includes(status);
-};
+/**
+ * Three values, because "not a pass" and "a failure" are different things and only one is terminal.
+ *
+ * The first version of this was two-valued, and it was wrong in both directions at once:
+ *
+ *  - `completed` sat in the pass list. That is a LIFECYCLE word — the modal closed — and it is
+ *    exactly what D2 says must never be trusted as a verdict. A spoofed check that Youverify
+ *    reported as finished-and-failed would have been read as finished-therefore-passed, and
+ *    granted level 2.
+ *  - everything unrecognised became `FAILED`, which is terminal and visible. A hosted flow emits
+ *    progress events, so the first `pending` carrying our reference would have REJECTED a user who
+ *    was still holding their phone to the camera, and the real verdict arriving seconds later would
+ *    find the request already decided and be discarded.
+ *
+ * `NO_VERDICT` is the honest third answer: leave the request PROVIDER_PENDING, which is what D3
+ * says PENDING is for, and let the real verdict — or the expiry sweep — settle it.
+ */
+export type DeliveryVerdict = 'PASSED' | 'FAILED' | 'NO_VERDICT';
+
+/** Words that are a verdict. Lifecycle words are deliberately absent from both lists. */
+const PASS_WORDS = ['passed', 'approved', 'successful'];
+const FAIL_WORDS = ['failed', 'rejected', 'declined', 'spoof_detected'];
+
+export function readDeliveryVerdict(payload: LivenessPayload): DeliveryVerdict {
+  const { status, passed } = payload.data ?? {};
+  // The boolean is the provider's own answer and outranks any word that disagrees with it.
+  if (typeof passed === 'boolean') return passed ? 'PASSED' : 'FAILED';
+  if (typeof status === 'string') {
+    const word = status.toLowerCase();
+    if (PASS_WORDS.includes(word)) return 'PASSED';
+    if (FAIL_WORDS.includes(word)) return 'FAILED';
+  }
+  return 'NO_VERDICT';
+}
+
+/**
+ * Whether this delivery is even about a liveness check.
+ *
+ * Youverify sends alerts, client events and transaction events down the same webhook. Without this
+ * a signed `tm.alert.created` carrying a known reference would be read as a verdict about a face.
+ */
+export function isLivenessEvent(eventType: string): boolean {
+  const type = eventType.toLowerCase();
+  return type.startsWith('identity.') || type.startsWith('liveness.');
+}
 
 export async function resolveLiveness(deps: ResolveLivenessDeps, job: ResolveLivenessJob): Promise<void> {
   const webhookId = BigInt(job.webhookId);
@@ -87,7 +125,10 @@ export async function resolveLiveness(deps: ResolveLivenessDeps, job: ResolveLiv
     const facts = await deps.store.identityFacts(request.userId);
     const matchedAgainst = facts.latestVerifiedIdentifier;
     if (!matchedAgainst) {
-      await deps.store.applyLivenessOutcome({
+      // The one write in this file that used to discard its guard's answer: if the sweep closed
+      // the request a moment ago the store rolls back, and telling the user they were rejected
+      // anyway would contradict what they were already shown.
+      const refused = await deps.store.applyLivenessOutcome({
         request,
         matchedAgainst: 'NIN',
         matchScore: 0,
@@ -97,19 +138,46 @@ export async function resolveLiveness(deps: ResolveLivenessDeps, job: ResolveLiv
         requestStatus: 'REJECTED',
         rejectionReason: 'LIVENESS_NO_IDENTIFIER',
       });
-      pushOutcome(deps, request, 'REJECTED', 'FAILED');
-      await finishDelivery(deps.db, webhookId, 'PROCESSED');
+      if (refused) pushOutcome(deps, request, 'REJECTED', 'FAILED');
+      await finishDelivery(deps.db, webhookId, refused ? 'PROCESSED' : 'SKIPPED');
       return;
     }
 
-    const livenessPassed = passed(payload);
-    const decision = decideLivenessOutcome(livenessPassed ? 'PASSED' : 'FAILED', livenessPassed);
+    if (!isLivenessEvent(row.eventType)) {
+      await finishDelivery(deps.db, webhookId, 'SKIPPED', `${row.eventType} is not a liveness event`);
+      return;
+    }
+
+    const verdict = readDeliveryVerdict(payload);
+    if (verdict === 'NO_VERDICT') {
+      // A progress event, or a shape we have never seen. Record it and leave the request open: the
+      // real verdict is still coming, and the expiry sweep is the floor underneath that.
+      await finishDelivery(deps.db, webhookId, 'SKIPPED', 'the delivery carried no verdict');
+      return;
+    }
+
+    const livenessPassed = verdict === 'PASSED';
+    /*
+      `matchedAgainst` records which document the selfie was matched to. Until spec §10 question 3
+      is answered it may be recording an intent rather than an event — see `matchScore` below. It
+      is still written, because §4 requires a liveness check to HAVE something to match and this is
+      the record of what that was.
+    */
+    const decision = decideLivenessOutcome(verdict, livenessPassed);
     const applied = await deps.store.applyLivenessOutcome({
       request,
       matchedAgainst,
-      // Youverify's liveness events carry a pass/fail, not a similarity score. Recording 100/0
-      // rather than inventing a number keeps `match_score` readable as "what the provider said".
-      matchScore: livenessPassed ? 100 : 0,
+      /*
+        Zero, always, and the column is the wrong shape for what this provider returns.
+
+        `match_score` is M6 §6.4's similarity between a selfie and an identity document's photo.
+        Youverify's liveness module reports a pass/fail, carries no score, and — per spec §10
+        question 3, which is still unanswered — may be a PRESENCE check that never compares a face
+        to the NIN photo at all. Writing 100 on a pass asserted a comparison nobody performed, in
+        the row an investigator would later read as proof it was performed. A real score goes here
+        the day the entitlement question is answered and the provider sends one.
+      */
+      matchScore: 0,
       livenessPassed,
       provider: deps.adapter.provider,
       providerReference: String(row.providerEventId),

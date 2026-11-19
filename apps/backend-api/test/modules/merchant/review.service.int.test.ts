@@ -149,7 +149,7 @@ describe.runIf(infraEnabled)('the staff review service (T-055)', () => {
           businessName: 'Techedge Nigeria Ltd',
           stateName: 'Lagos',
           cityName: 'Ikeja',
-          cacRcNumber: '123456',
+          cacRcNumber: 'RC123456',
         },
         applicant: {
           userId,
@@ -192,14 +192,17 @@ describe.runIf(infraEnabled)('the staff review service (T-055)', () => {
       const deps = { db: db(), ports: p, logger };
       expect((await getApplicationDetail(deps, { applicationId })).evidence.cacLookup.state).toBe('PENDING');
 
-      // The lookup finishes: a verified business whose number matches the application's.
+      // The lookup finishes: a verified business whose number matches the application's. Stored in
+      // the current normal form, prefix included — a row written before 2026-11-19 holds the
+      // stripped number and would correctly NOT match, which is the documented consequence of that
+      // change rather than a bug in this comparison.
       await t
         .owner()
         .query(`UPDATE trust.verification_requests SET status = 'APPROVED' WHERE id = $1`, [requestId]);
       await t.owner().query(
         `INSERT INTO trust.business_verifications
            (request_id, user_id, cac_rc_number, registered_business_name, business_type, cac_status, officers_match, provider, provider_reference, verified_at)
-         VALUES ($1, $2, '123456', 'TECHEDGE NIGERIA LIMITED', 'LIMITED_LIABILITY', 'active', true, 'FAKE', 'ref', now())`,
+         VALUES ($1, $2, 'RC123456', 'TECHEDGE NIGERIA LIMITED', 'LIMITED_LIABILITY', 'active', true, 'FAKE', 'ref', now())`,
         [requestId, userId],
       );
       const detail = await getApplicationDetail(deps, { applicationId });

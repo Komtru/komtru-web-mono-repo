@@ -127,3 +127,52 @@ describe('request construction', () => {
     expect(companyRequest('https://x.test', 'RC1487322').body.registrationNumber).toBe('RC1487322');
   });
 });
+
+/**
+ * The aggregate trap, one level down.
+ *
+ * `allValidationPassed` is true when nothing was validated. The first fix read the per-field
+ * booleans instead — but asked whether any was `false`, which treats a field the provider did not
+ * return as passed. That is the same "no checks failed includes no checks" error inside the file
+ * written to prevent it, so the check is now positive: the names the request always sends must come
+ * back explicitly validated.
+ */
+describe('mapIdentity — a pass must be earned, not merely unrefuted', () => {
+  const found = (fields: Record<string, { validated: boolean; value?: string }>) => {
+    const base = fixture('nin-name-mismatch-full');
+    return {
+      ...base,
+      data: { ...base.data, allValidationPassed: true, validations: { data: fields } },
+    };
+  };
+
+  it('refuses to pass when the surname was never evaluated', () => {
+    // Youverify echoes only the fields it could compare; a record with a null surname comes back
+    // with firstName alone. Absence is not agreement.
+    const result = mapIdentity(found({ firstName: { validated: true, value: 'Sarah' } }));
+    expect(result.verdict).not.toBe('PASSED');
+    expect(result.failureCode).toBe('ID_NAME_MISMATCH');
+  });
+
+  it('refuses to pass when the first name was never evaluated', () => {
+    expect(mapIdentity(found({ lastName: { validated: true, value: 'Doe' } })).verdict).not.toBe('PASSED');
+  });
+
+  it('refuses a field present but not boolean-true', () => {
+    const odd = found({
+      firstName: { validated: true, value: 'Sarah' },
+      lastName: { validated: null as unknown as boolean, value: 'Doe' },
+    });
+    expect(mapIdentity(odd).verdict).not.toBe('PASSED');
+  });
+
+  it('passes only when both names came back validated', () => {
+    const result = mapIdentity(
+      found({
+        firstName: { validated: true, value: 'Sarah' },
+        lastName: { validated: true, value: 'Doe' },
+      }),
+    );
+    expect(result.verdict).toBe('PASSED');
+  });
+});

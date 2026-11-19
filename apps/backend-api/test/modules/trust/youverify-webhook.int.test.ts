@@ -125,7 +125,10 @@ describe.runIf(infraEnabled)('youverify webhook delivery log', () => {
   it('returns a delivery whose worker died, bounded by attempts', async () => {
     const result = await store(`evt-${randomUUID()}`, `ref-${randomUUID()}`);
     await claimDelivery(db(), result.id);
-    expect(await reapStaleDeliveries(db(), -1, 10)).toBeGreaterThanOrEqual(1);
+    const reaped = await reapStaleDeliveries(db(), -1, 10);
+    // Ids, not a count: the caller has to re-queue them, because marking a row claimable is not
+    // the same as arranging for a claim. Returning a number made that impossible to do.
+    expect(reaped).toContain(result.id);
     const row = await findDelivery(db(), result.id);
     expect(row?.status).toBe('FAILED');
     expect(row?.processingError).toMatch(/worker presumed lost/i);
@@ -136,7 +139,7 @@ describe.runIf(infraEnabled)('youverify webhook delivery log', () => {
   it('stops reaping once attempts are exhausted, so a poisonous delivery becomes visible', async () => {
     const result = await store(`evt-${randomUUID()}`, `ref-${randomUUID()}`);
     await claimDelivery(db(), result.id);
-    expect(await reapStaleDeliveries(db(), -1, 1)).toBe(0);
+    expect(await reapStaleDeliveries(db(), -1, 1)).toEqual([]);
     expect((await findDelivery(db(), result.id))?.status).toBe('PROCESSING');
   });
 
