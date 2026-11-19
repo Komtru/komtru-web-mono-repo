@@ -10,6 +10,9 @@ pnpm --filter @komtru/web-app-ui dev                             # the app under
 pnpm visual-check --screen U4 --url http://localhost:3004/handover/KMT-88213
 ```
 
+No backend, Docker or login is needed for a check: the platform stand-in, a signed-in persona and the walks to a
+screen are in [visual-check.md](../runbooks/visual-check.md).
+
 The harness draws against the v2 master and `SCREEN_INDEX.md` by default (`KOMTRU_VISUAL_CHECK_REFERENCE=v1`
 selects the v1 files). A screen that sits inside an app shell the reference does not draw should be shot with
 `--content main`, so the built shot starts at its own content and the shell's header does not shift every line.
