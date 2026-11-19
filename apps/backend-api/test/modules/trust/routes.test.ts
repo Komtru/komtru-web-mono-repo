@@ -5,6 +5,8 @@ import { describe, expect, it } from 'vitest';
 import type { RouteDefinition } from '../../../src/platform/http/route.js';
 import { routeLabel } from '../../../src/platform/http/route.js';
 import { trustRoutes } from '../../../src/modules/trust/http/routes.js';
+import { WEBHOOK_PATH_PREFIX } from '../../../src/platform/http/raw-body.js';
+import { youverifyWebhookRoutes } from '../../../src/modules/trust/http/webhook.routes.js';
 import { trustAdminRoutes } from '../../../src/modules/trust/http/admin.routes.js';
 import { decideBody } from '../../../src/modules/trust/http/admin.validations.js';
 import { isKnownPermission } from '../../../src/modules/identity/index.js';
@@ -30,6 +32,7 @@ const deps = {
   logger: () => silentLogger(),
   // Never reached: these tests read route declarations, they do not run handlers.
   queues: () => ({ producer: () => ({ add: () => Promise.resolve(undefined) }) }) as never,
+  youverify: () => undefined,
 };
 
 const routes: RouteDefinition[] = trustRoutes(deps);
@@ -46,6 +49,9 @@ describe('trustRoutes', () => {
       'POST /verification/nin',
       'POST /verification/bvn',
       'POST /verification/liveness',
+      // Not in §11's original table: the browser-SDK session, added when liveness stopped being a
+      // call this backend makes and became one the user's browser makes on our behalf.
+      'POST /verification/liveness/session',
       'POST /verification/business',
       'POST /verification/bank-account',
       'POST /verification/address',
@@ -72,11 +78,15 @@ describe('trustRoutes', () => {
   });
 
   it('answers 202 on every check, because the provider is never called on the request path', () => {
-    // The handle claim is the exception, and a deliberate one: unlike every other route here it
-    // really has created the thing it returns, so it answers 201.
-    const checks = labels.filter((l) => l.startsWith('POST') && l !== 'POST /verification/social-proof');
+    // Two deliberate exceptions. The handle claim really has created the thing it returns, so it
+    // answers 201. The liveness session answers 200 because it is not a check at all: it hands the
+    // caller the merchant key and reference its browser needs NOW, and 202 would promise a result
+    // that is never coming on this response — the verdict arrives over a webhook.
+    const synchronous = new Set(['POST /verification/social-proof', 'POST /verification/liveness/session']);
+    const checks = labels.filter((l) => l.startsWith('POST') && !synchronous.has(l));
     for (const label of checks) expect(routeFor(label).status).toBe(202);
     expect(routeFor('POST /verification/social-proof').status).toBe(201);
+    expect(routeFor('POST /verification/liveness/session').status).toBeUndefined();
   });
 
   /**
@@ -106,7 +116,20 @@ describe('trustRoutes', () => {
 
   it('is what the registry mounts', () => {
     const admin = trustAdminRoutes({ db: () => ({}) as never }).map(routeLabel);
-    expect((testModule('trust').routes ?? []).map(routeLabel)).toEqual([...labels, ...admin]);
+    const webhooks = youverifyWebhookRoutes(() => ({}) as never).map(routeLabel);
+    expect((testModule('trust').routes ?? []).map(routeLabel)).toEqual([...labels, ...admin, ...webhooks]);
+  });
+
+  /**
+   * The webhook is the one route here with no session behind it, so its two properties are asserted
+   * rather than assumed: PUBLIC scope is what lets Youverify reach it at all, and the path has to
+   * sit under the raw-body prefix or the signature check has no bytes to verify.
+   */
+  it('mounts the youverify webhook public and under the raw-body prefix', () => {
+    const [route] = youverifyWebhookRoutes(() => ({}) as never);
+    expect(route?.scope).toBe('PUBLIC');
+    expect(`/v1${route?.path ?? ''}/`.startsWith(WEBHOOK_PATH_PREFIX)).toBe(true);
+    expect(route?.rateLimit?.by).toEqual(['ip']);
   });
 });
 

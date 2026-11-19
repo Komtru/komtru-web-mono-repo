@@ -85,7 +85,9 @@ describe('runBusinessCheck', () => {
       JSON.stringify({ rcNumber: 'RC 1487327', firstName: 'Ada', lastName: 'Obi' }),
     );
     await runBusinessCheck(deps, { requestId: request.id, sealed });
-    expect(store.businessOutcomes[0]?.cacRcNumber).toBe('1487327');
+    // Case and separators go; the entity prefix stays. It identifies the kind of registration, the
+    // same digits can exist under more than one, and the provider refuses the bare form.
+    expect(store.businessOutcomes[0]?.cacRcNumber).toBe('RC1487327');
   });
 
   /** §6.5 stores the RC number plainly and the submitter's name nowhere. */

@@ -266,3 +266,91 @@ export async function readVerificationStatus(
     })),
   };
 }
+
+/**
+ * What the browser needs to run the Youverify liveness SDK, and the reference that ties whatever it
+ * produces back to this request.
+ *
+ * The merchant key is served from here rather than baked into the frontend as a `NEXT_PUBLIC_*`
+ * variable on purpose: those are inlined at build time, so rotating the key would need a rebuild of
+ * every web app before it took effect. Served per request, a rotation lands on the next call.
+ */
+export interface LivenessSession {
+  publicMerchantKey: string;
+  /** Whether the SDK should talk to Youverify's sandbox. Derived from the base URL, never typed. */
+  sandbox: boolean;
+  /** The opaque reference to pass as the SDK's `metadata.reference`. */
+  reference: string;
+  requestId: string;
+}
+
+export interface StartLivenessSessionDeps extends VerificationDeps {
+  youverify: { publicMerchantKey: string; baseUrl: string } | undefined;
+  /** Mints the reference. Injected so a test can assert it is used rather than guess its shape. */
+  mintReference: () => string;
+}
+
+export async function startLivenessSession(
+  deps: StartLivenessSessionDeps,
+  input: { userId: string },
+): Promise<LivenessSession> {
+  if (!deps.youverify) {
+    throw new ApiError(
+      503,
+      'VERIFICATION_PROVIDER_UNAVAILABLE',
+      'Identity checks are unavailable right now',
+      'No liveness provider is configured on this environment.',
+    );
+  }
+
+  assertEligible(await deps.store.findSubject(input.userId));
+
+  // M6 §4, the same refusal `submitLivenessCheck` makes: a liveness check matched against nothing
+  // is not a weaker check, it is a meaningless one. Checked BEFORE the session is minted so the
+  // user is not sent into a camera flow that could only ever be discarded.
+  const facts = await deps.store.identityFacts(input.userId);
+  if (!facts.identifierVerified) {
+    throw new ApiError(
+      409,
+      'CONFLICT',
+      'Verify your NIN or BVN first',
+      'A liveness check is matched against a verified identity number, so that step comes first.',
+    );
+  }
+  // Already done. `submitIdentifierCheck` refuses a verified type for the same reason — before a
+  // provider call is spent — and without this an API caller could mint a billable session and put
+  // a "Not approved" banner on the VF1 of somebody who is already verified.
+  if (facts.livenessVerified) {
+    throw new ApiError(409, 'CONFLICT', 'Your selfie check is already done');
+  }
+
+  /**
+   * Random, and deliberately not the request id.
+   *
+   * This value is handed to the browser and echoed back through Youverify's webhook, so it is the
+   * one field in a delivery that an attacker can choose. If it were the request id — a value its
+   * own owner can see — someone could run a liveness check on themselves and name a different
+   * request. Unguessable and minted here, it cannot name a request the caller does not own.
+   */
+  const reference = deps.mintReference();
+  const attemptCount = (await deps.store.countAttempts(input.userId, 'LIVENESS')) + 1;
+  const request = await createRequest(deps, {
+    userId: input.userId,
+    verificationType: 'LIVENESS',
+    targetLevel: IDENTITY_VERIFIED_LEVEL,
+    ttlMinutes: deps.requestTtlMinutes,
+    providerSessionRef: reference,
+    attemptCount,
+  });
+
+  // Straight to PROVIDER_PENDING: the provider has it the moment the browser opens the modal, and
+  // there is no job of ours between here and the webhook that would otherwise move it.
+  await deps.store.markProviderPending(request.id, 'YOUVERIFY');
+
+  return {
+    publicMerchantKey: deps.youverify.publicMerchantKey,
+    sandbox: deps.youverify.baseUrl.includes('sandbox'),
+    reference,
+    requestId: request.id,
+  };
+}

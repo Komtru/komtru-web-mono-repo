@@ -1,0 +1,72 @@
+{
+  "_probe": {
+    "path": "/v2/api/identity/ng/bvn",
+    "status": 200,
+    "capturedAt": "2026-11-19",
+    "env": "sandbox"
+  },
+  "response": {
+    "success": true,
+    "statusCode": 200,
+    "message": "success",
+    "data": {
+      "id": "<id>",
+      "parentId": null,
+      "status": "found",
+      "reason": null,
+      "dataValidation": false,
+      "selfieValidation": false,
+      "firstName": "John",
+      "middleName": null,
+      "lastName": "Doe",
+      "image": "<base64 stripped>",
+      "enrollmentBranch": null,
+      "enrollmentInstitution": null,
+      "mobile": "08000000000",
+      "dateOfBirth": "1988-04-04",
+      "isConsent": true,
+      "idNumber": "11111111111",
+      "nin": "11111111111",
+      "shouldRetrivedNin": true,
+      "businessId": "<businessId>",
+      "type": "bvn",
+      "allValidationPassed": true,
+      "gender": "Male",
+      "requestedAt": "2026-11-19T15:57:51.195Z",
+      "requestedById": "<requestedById>",
+      "country": "NG",
+      "createdAt": "2026-11-19T15:57:51.205Z",
+      "lastModifiedAt": "2026-11-19T15:57:51.205Z",
+      "adverseMediaReport": null,
+      "amlReport": null,
+      "entityId": "<entityId>",
+      "apiKeyPrefix": "<redacted>",
+      "source": "api",
+      "email": null,
+      "registrationDate": null,
+      "levelOfAccount": "Level 1 - Low Level Accounts",
+      "address": {
+        "town": null,
+        "lga": null,
+        "state": "Kano State",
+        "addressLine": "18 Main road"
+      },
+      "title": "Mr",
+      "maritalStatus": "Single",
+      "lgaOfOrigin": "Orlu",
+      "otherMobile": null,
+      "stateOfOrigin": "Lagos State",
+      "watchListed": "NO",
+      "nameOnCard": "John Doe Tim",
+      "fullDetails": false,
+      "metadata": {},
+      "requestedBy": {
+        "firstName": "API",
+        "lastName": "User",
+        "middleName": "",
+        "id": "<id>"
+      }
+    },
+    "links": []
+  }
+}

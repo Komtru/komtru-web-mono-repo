@@ -63,6 +63,7 @@ export const requestRow = (overrides: Partial<VerificationRequest> = {}): Verifi
   targetLevel: 2,
   attemptCount: 0,
   selfieStorageRef: null,
+  providerSessionRef: null,
   submittedAt: new Date(),
   providerCalledAt: null,
   decidedAt: null,

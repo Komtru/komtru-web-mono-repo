@@ -200,7 +200,7 @@ const VARIABLES = {
    * The default is FAKE, and `loadConfig` refuses that default in production: see the cross-field
    * check below.
    */
-  TRUST_KYC_PROVIDER: { schema: z.enum(['FAKE', 'DOJAH']), required: false },
+  TRUST_KYC_PROVIDER: { schema: z.enum(['FAKE', 'DOJAH', 'YOUVERIFY']), required: false },
   /** How long an unanswered verification stays open before the sweep expires it (M6 §6.2). */
   TRUST_REQUEST_TTL_MINUTES: { schema: int(5, 10_080), required: false },
   /**
@@ -211,6 +211,18 @@ const VARIABLES = {
   DOJAH_APP_ID: { schema: z.string().min(1), required: false },
   DOJAH_SECRET_KEY: { schema: z.string().min(1), required: false },
   DOJAH_BASE_URL: { schema: z.url(), required: false },
+  /**
+   * Youverify, the first KYC vendor with a live account behind it. All four or none, like Dojah.
+   *
+   * Two of the four are not interchangeable even though both are "a key": `YOUVERIFY_SECRET_TOKEN`
+   * is the `token` header on the server-to-server calls and must never reach a browser, while
+   * `YOUVERIFY_PUBLIC_MERCHANT_KEY` is handed to the browser on purpose, for the liveness SDK. The
+   * webhook secret is a third, separate value — a leak of it forges deliveries but spends nothing.
+   */
+  YOUVERIFY_SECRET_TOKEN: { schema: z.string().min(1), required: false },
+  YOUVERIFY_PUBLIC_MERCHANT_KEY: { schema: z.string().min(1), required: false },
+  YOUVERIFY_WEBHOOK_SECRET: { schema: z.string().min(1), required: false },
+  YOUVERIFY_BASE_URL: { schema: z.url(), required: false },
 } satisfies Record<string, { schema: z.ZodType; required: boolean }>;
 
 /**
@@ -301,11 +313,22 @@ export interface AppConfig {
 }
 
 /** The adapters M6 D3 has an implementation for. The schema's `kyc_provider` enum is wider. */
-export type KycProviderFlag = 'FAKE' | 'DOJAH';
+export type KycProviderFlag = 'FAKE' | 'DOJAH' | 'YOUVERIFY';
 
 export interface DojahCredentials {
   appId: string;
   secretKey: string;
+  baseUrl: string;
+}
+
+export interface YouverifyCredentials {
+  /** The `token` header. Server-side only. */
+  secretToken: string;
+  /** Public by design: served to the browser for the liveness SDK. */
+  publicMerchantKey: string;
+  /** Verifies `x-yv-signature`, an HMAC-SHA256 hex digest over the raw request body. */
+  webhookSecret: string;
+  /** `https://api.sandbox.youverify.co` or `https://api.youverify.co`. */
   baseUrl: string;
 }
 
@@ -318,6 +341,8 @@ export interface TrustConfig {
   requestTtlMinutes: number;
   /** All three or none, for the reason `filesConfig` gives: two out of three is a 401 nobody can act on. */
   dojah?: DojahCredentials;
+  /** All four or none, for the same reason. */
+  youverify?: YouverifyCredentials;
 }
 
 /** T-027's gateway. A process with `enabled: false` builds no Socket.IO server and no connections. */
@@ -538,10 +563,19 @@ export function loadConfig(env: NodeJS.ProcessEnv): AppConfig {
 /** M6's slice. The production guard on `provider` is in `loadConfig`, where the cross-field checks live. */
 function trustConfig(v: Parsed): TrustConfig {
   const { DOJAH_APP_ID: appId, DOJAH_SECRET_KEY: secretKey, DOJAH_BASE_URL: baseUrl } = v;
+  const {
+    YOUVERIFY_SECRET_TOKEN: secretToken,
+    YOUVERIFY_PUBLIC_MERCHANT_KEY: publicMerchantKey,
+    YOUVERIFY_WEBHOOK_SECRET: webhookSecret,
+    YOUVERIFY_BASE_URL: yvBaseUrl,
+  } = v;
   return {
     provider: v.TRUST_KYC_PROVIDER ?? 'FAKE',
     requestTtlMinutes: v.TRUST_REQUEST_TTL_MINUTES ?? TRUST_REQUEST_TTL_MINUTES,
     ...(appId && secretKey && baseUrl ? { dojah: { appId, secretKey, baseUrl } } : {}),
+    ...(secretToken && publicMerchantKey && webhookSecret && yvBaseUrl
+      ? { youverify: { secretToken, publicMerchantKey, webhookSecret, baseUrl: yvBaseUrl } }
+      : {}),
   };
 }
 

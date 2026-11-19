@@ -50,7 +50,8 @@ on both sides (`KOMTRU_VISUAL_STANDIN_PORT`, and the three `NEXT_PUBLIC_*` value
    value does, because no walk reaches them.
 
    ```bash
-   export NEXT_PUBLIC_KOMTRU_API_URL=http://localhost:7913/v1 \
+   export KOMTRU_NEXT_DIST_DIR=.next-visual-check \
+     NEXT_PUBLIC_KOMTRU_API_URL=http://localhost:7913/v1 \
      NEXT_PUBLIC_KOMTRU_SOCKET_URL=http://localhost:7913 \
      NEXT_PUBLIC_KOMTRU_APP_URL=http://localhost:3913 \
      NEXT_PUBLIC_KOMTRU_PASSPORT_URL=http://localhost:3990 \
@@ -63,6 +64,25 @@ on both sides (`KOMTRU_VISUAL_STANDIN_PORT`, and the three `NEXT_PUBLIC_*` value
 
    A shell variable overrides the app's `.env.local`, so the app's own generated secret does not get in the way.
    The harness was proven against this production build. `pnpm dev` has not been checked against it.
+
+   **`KOMTRU_NEXT_DIST_DIR` is not optional, and it has to be exported so both the build and the
+   `next start` see it.** Without it both write `apps/web-app-ui/.next`, the same directory a
+   running `pnpm dev` is serving from. The build wipes `.next/static/chunks`, which deletes the
+   dev-only runtime chunks the dev server emitted at start-up and never re-emits. That dev server
+   keeps serving HTML that references them, the browser 404s on `app-pages-internals.js`, the app
+   never hydrates, and every form on it falls back to a native submit — a login that reloads the
+   page instead of calling the API. Nothing says so in the console; the only tell is the 404 in the
+   network panel.
+
+   **Stop the server when the check is done** — `next start` does not exit on its own, and a stack
+   of them from earlier runs is how the ports here keep climbing.
+
+   The build rewrites the one line in `apps/web-app-ui/next-env.d.ts` that names the dist directory.
+   That file is generated, so restore it rather than committing it:
+
+   ```bash
+   git checkout -- apps/web-app-ui/next-env.d.ts
+   ```
 
 3. **Check the screen.** For a screen with a registered walk, name it:
 

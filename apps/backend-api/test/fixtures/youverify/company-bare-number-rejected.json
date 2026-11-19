@@ -1,0 +1,27 @@
+{
+  "_probe": {
+    "path": "/v2/api/verifications/ng/company/basic",
+    "status": 400,
+    "capturedAt": "2026-11-19",
+    "env": "sandbox"
+  },
+  "response": {
+    "success": false,
+    "statusCode": 400,
+    "message": "ValidationError: Invalid registration number. Valid format => RCxxxx, BNxxxxx, ITxxxxx, LPxxxxx or LLPxxxxx",
+    "name": "ValidationError",
+    "data": [
+      {
+        "message": "Invalid registration number. Valid format => RCxxxx, BNxxxxx, ITxxxxx, LPxxxxx or LLPxxxxx",
+        "path": ["registrationNumber"],
+        "type": "string.pattern.base",
+        "context": {
+          "regex": {},
+          "value": "1487322",
+          "label": "registrationNumber",
+          "key": "registrationNumber"
+        }
+      }
+    ]
+  }
+}

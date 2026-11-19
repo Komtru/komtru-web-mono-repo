@@ -220,6 +220,11 @@
       "table": "trust.verification_requests",
       "name": "verification_requests_one_in_flight",
       "definition": "CREATE UNIQUE INDEX verification_requests_one_in_flight ON trust.verification_requests USING btree (user_id, verification_type) WHERE (status = ANY (ARRAY['SUBMITTED'::trust.verification_request_status, 'PROVIDER_PENDING'::trust.verification_request_status, 'MANUAL_REVIEW'::trust.verification_request_status]))"
+    },
+    {
+      "table": "trust.verification_requests",
+      "name": "verification_requests_session_ref",
+      "definition": "CREATE UNIQUE INDEX verification_requests_session_ref ON trust.verification_requests USING btree (provider_session_ref) WHERE (provider_session_ref IS NOT NULL)"
     }
   ],
   "checkConstraints": [

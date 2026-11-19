@@ -37,6 +37,7 @@ import {
   submitBvn,
   submitLiveness,
   startEmailVerification,
+  startLivenessSession,
   startPhoneChange,
   startPhoneVerification,
   submitNin,
@@ -220,6 +221,15 @@ export function useSubmitNin() {
 export function useSubmitBvn() {
   const client = useApiClient();
   return useAccountMutation((body: SubmitBvnBody) => client.call(submitBvn, { body }), { secret: true });
+}
+
+/**
+ * Opens a liveness session. A mutation rather than a query because it mints a provider session and
+ * holds the user's one in-flight verification slot — it is not idempotent and must not be prefetched.
+ */
+export function useStartLivenessSession() {
+  const client = useApiClient();
+  return useAccountMutation(() => client.call(startLivenessSession, {}));
 }
 
 export function useSubmitLiveness() {

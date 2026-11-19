@@ -393,6 +393,13 @@
       "when": 1795089841385,
       "tag": "0055_disputes_triggers",
       "breakpoints": true
+    },
+    {
+      "idx": 56,
+      "version": "7",
+      "when": 1795104763797,
+      "tag": "0056_trust_provider_webhooks",
+      "breakpoints": true
     }
   ]
 }
