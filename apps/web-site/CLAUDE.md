@@ -27,5 +27,12 @@ and the three typefaces from `ui-kit`, and calls exactly one backend route.
 takes it from 1.9MB to about 47KB of markup. The weight is app-screen mockups, their CSS and a
 1MB city sprite sheet, none of which you need to read the copy and layout.
 
-Phase 1 (home and chrome) is done. Thirteen routes still render `ComingSoon`; phase 2 writes
-them from the same design file. The app-screen player is phase 3 and deliberately absent.
+Phase 1 (home and chrome) and phase 2 (the other twelve routes) are done — every route in the
+header and the footer is now its real page, and `ComingSoon` is deleted. The app-screen player
+is phase 3 and deliberately absent: where the reference puts a `.pw` phone mockup beside copy,
+those bands are single-column, each with a comment saying why.
+
+Four blocks recur across those pages and live in `src/chrome/Blocks.tsx` — `Checks`, `InfoBox`,
+`Steps` and `IconTile`. Compose them; don't re-write `.cks`/`.info`/`.sp`/`.icn` markup per page.
+Page-private widgets (the fee calculator, the comparison table, the hub chips, the badge
+explainer) keep their CSS in a `*.module.css` beside the page rather than in `app/site.css`.

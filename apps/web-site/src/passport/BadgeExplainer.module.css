@@ -1,0 +1,44 @@
+/*
+ * The badge pills on the Trust Passport page.
+ *
+ * Ported from the reference's `.bg` rules. They are not in `app/site.css` and do not belong
+ * there: this is the only page with a badge row, and eleven other pages are being written against
+ * that sheet right now. Every colour is a token — the reference's `#fff` and `--em` are gone.
+ *
+ * The row sits on a `.band.dk` midnight band, which is what the white border and the white text
+ * are for, and why the focus outline is overridden below: the site's default outline is
+ * `--trust-indigo`, which on midnight is nearly invisible.
+ */
+
+.badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 20px;
+}
+
+.badge {
+  border: 1.5px solid rgb(255 255 255 / 0.25);
+  background: none;
+  color: var(--pure-white);
+  border-radius: 99px;
+  padding: 8px 16px;
+  font-weight: 600;
+  font-size: 13px;
+  transition: background var(--site-fast);
+}
+
+.badge[aria-selected='true'] {
+  background: var(--trust-emerald);
+  border-color: var(--trust-emerald);
+}
+
+.badge:focus-visible,
+.panel:focus-visible {
+  outline-color: var(--pure-white);
+}
+
+.panel {
+  margin-top: 18px;
+  max-width: 460px;
+}

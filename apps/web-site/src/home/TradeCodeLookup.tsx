@@ -17,11 +17,19 @@ import { WhatsAppIcon } from '../art/Icons';
 
 const EXAMPLE_CODE = 'KMT-482731';
 
-const WHATSAPP_MESSAGE = (code: string): string =>
+/**
+ * The sentence someone forwards with a Trade Code.
+ *
+ * Exported because this *is* the anti-phishing instruction — "open Komtru yourself and look it
+ * up" is the behaviour the whole Trade Code feature exists to teach. The /trade-code page sends
+ * the same sentence from its own share box, and two copies of a safety message are two things
+ * that can drift until only one of them still says the safe thing. One definition, imported.
+ */
+export const whatsappShareMessage = (code: string): string =>
   `Your Trade is ready. Search ${code} on Komtru. Open Komtru yourself and look it up; don’t tap links from strangers.`;
 
-const shareHref = (code: string): string =>
-  `https://wa.me/?text=${encodeURIComponent(WHATSAPP_MESSAGE(code))}`;
+export const whatsappShareHref = (code: string): string =>
+  `https://wa.me/?text=${encodeURIComponent(whatsappShareMessage(code))}`;
 
 function Row({ label, value }: { label: string; value: string }): React.JSX.Element {
   return (
@@ -72,7 +80,12 @@ export function TradeCodeLookup(): React.JSX.Element {
             <Row label="Inspection" value="48 hours" />
             <Row label="Status" value="Awaiting acceptance" />
             <p className="note">Example trade for the lookup.</p>
-            <a className="btn bs wa wab" target="_blank" rel="noopener" href={shareHref(EXAMPLE_CODE)}>
+            <a
+              className="btn bs wa wab"
+              target="_blank"
+              rel="noopener"
+              href={whatsappShareHref(EXAMPLE_CODE)}
+            >
               <WhatsAppIcon />
               Share this code on WhatsApp
             </a>

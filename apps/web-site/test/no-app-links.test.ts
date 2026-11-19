@@ -63,6 +63,43 @@ describe('the marketing site', () => {
     expect(hits).toEqual([]);
   });
 
+  /*
+   * The subtler half of the same rule, and the one the patterns above cannot see.
+   *
+   * `src/site/config.ts` says the copy is what has to change, not a flag: a button reading
+   * "Start a trade" that lands on `/waitlist` passes every check above and is still the exact
+   * promise the product cannot keep. The reference design these pages were ported from is full
+   * of these labels, so the failure mode is a future port quietly reintroducing one.
+   *
+   * Comments are exempt because several pages explain in a comment why the label was changed.
+   *
+   * Only imperatives that are false on a closed product are listed. The reference's descriptive
+   * phrases are deliberately absent: "Collect at a hub near you" is honest as the hubs page's
+   * closing heading ("…when Komtru opens"), and "Chat in the app" is honest as the name of a
+   * contact channel that the card itself says opens with the app. Banning those outright would
+   * fail truthful copy and teach the next person to work around this file.
+   */
+  const APP_LABELS: readonly string[] = [
+    'Start a trade',
+    'Start your first trade',
+    'Open my shop',
+    'Protect my first payment',
+  ];
+
+  it.each(APP_LABELS)('never offers "%s" as a label', (label) => {
+    const hits: string[] = [];
+    for (const file of files) {
+      readFileSync(file, 'utf8')
+        .split('\n')
+        .forEach((line, index) => {
+          if (!isComment(line) && line.includes(label)) {
+            hits.push(`${file.slice(ROOT.length + 1)}:${index + 1}  ${line.trim()}`);
+          }
+        });
+    }
+    expect(hits).toEqual([]);
+  });
+
   /* The positive half: the header must still offer the one thing that does work. */
   it('offers the waitlist in the header', () => {
     const nav = readFileSync(join(ROOT, 'src/chrome/SiteNav.tsx'), 'utf8');

@@ -1396,3 +1396,182 @@ details p {
 .avs .avt:not(:first-child) {
   margin-left: -12px;
 }
+
+/* --- Page headers --------------------------------------------------------- */
+
+/*
+ * Every page below the home page opens the same way: a `.ph band` strip holding an `h1`, a lede
+ * and usually an illustration beside them.
+ *
+ * Phase 1 wrote this padding as an inline style on each header because only two pages had one.
+ * With thirteen it is a rule. The inline values are identical, so the pages that still carry
+ * them render the same either way and can drop them as they are touched.
+ */
+.ph {
+  padding: 56px 0 64px;
+}
+
+.ph .split {
+  gap: 36px;
+}
+
+.ph h1 {
+  font-size: clamp(32px, 5vw, 50px);
+}
+
+/* --- The numbered process row --------------------------------------------- */
+
+/*
+ * "How a trade goes", on how-it-works, sellers and hubs. Each page sets its own step count with
+ * `style={{ '--c': 4 }}`; the row is a single column until there is width for them side by side,
+ * because four 25% columns of prose on a phone is four columns of one word.
+ */
+.sp {
+  display: grid;
+  gap: 28px;
+  margin-top: 36px;
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.spi {
+  position: relative;
+}
+
+.spn {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: var(--komtru-midnight);
+  color: var(--pure-white);
+  display: grid;
+  place-items: center;
+  font: 600 13px var(--font-body);
+  margin-bottom: 14px;
+  /* Above the connector line, so the rule runs behind the circle rather than through it. */
+  position: relative;
+  z-index: 1;
+}
+
+.spi b {
+  display: block;
+  font-size: 16px;
+  margin-bottom: 6px;
+}
+
+.spi p {
+  font-size: 14px;
+  color: var(--slate);
+}
+
+@media (min-width: 900px) {
+  .sp {
+    grid-template-columns: repeat(var(--c), minmax(0, 1fr));
+  }
+
+  /*
+   * The hairline joining one step to the next. Only on wide screens: stacked, the steps run down
+   * the page and a horizontal rule between them would point nowhere.
+   */
+  .spi:not(:last-child)::before {
+    content: '';
+    position: absolute;
+    top: 16px;
+    left: 44px;
+    right: -8px;
+    height: 1px;
+    background: var(--border-hairline);
+  }
+}
+
+/* --- Checklists ----------------------------------------------------------- */
+
+/*
+ * A list where each line is a claim and the mark says whether it counts for or against —
+ * "what good evidence looks like" on sellers, "check before you pay" on buyers.
+ */
+.cks {
+  list-style: none;
+  margin: 18px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.cks li {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  font-size: 15px;
+  color: var(--slate);
+}
+
+.cks i {
+  flex: none;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--trust-emerald-soft);
+  display: grid;
+  place-items: center;
+  margin-top: 1px;
+}
+
+/* The same list, for the things that are not true. */
+.cks i.x {
+  background: var(--risk-soft);
+}
+
+.dk .cks li {
+  color: rgb(255 255 255 / 0.85);
+}
+
+/* --- Notes in a box ------------------------------------------------------- */
+
+/*
+ * An aside the page wants read, not skimmed. `.warnb` is the amber variant, used for the one
+ * thing that takes someone's protection away: paying outside Komtru.
+ */
+.info {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  background: var(--trust-indigo-soft);
+  border-radius: var(--site-radius-m);
+  padding: 14px 18px;
+  font-size: 14.5px;
+  color: var(--midnight-text);
+}
+
+.info svg {
+  flex: none;
+  margin-top: 2px;
+}
+
+.warnb {
+  background: var(--warning-soft);
+}
+
+/* --- The icon tile on a card ---------------------------------------------- */
+
+/*
+ * The rounded square above a card's heading. Its colours are a prop rather than a rule: the pair
+ * carries meaning — indigo for information, emerald for protection, amber for a caution — and
+ * which one a card takes is the page's decision.
+ */
+.icn {
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  display: grid;
+  place-items: center;
+  margin-bottom: 14px;
+}
+
+/* The small mono label above a card's heading, for a step or category name. */
+.card .n {
+  font: 600 12px var(--font-mono);
+  color: var(--success-on-soft);
+  display: block;
+  margin-bottom: 8px;
+}

@@ -1,0 +1,15 @@
+/*
+ * The reference's `.calc` card, which holds the share box on this page.
+ *
+ * It is in none of the classes `app/site.css` carries and it is used by one band on one page, so
+ * it lives next to the page rather than in the shared stylesheet. Ported from the reference with
+ * the hexes replaced by tokens; `.card` was the near miss, but it animates its shadow on hover
+ * and nothing here is hoverable.
+ */
+.calc {
+  background: var(--pure-white);
+  border: 1px solid var(--border-hairline);
+  border-radius: var(--site-radius-l);
+  padding: 26px;
+  box-shadow: var(--site-shadow);
+}

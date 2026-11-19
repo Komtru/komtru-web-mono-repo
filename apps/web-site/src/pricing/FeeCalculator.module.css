@@ -1,0 +1,52 @@
+/*
+ * The fee calculator's own three classes, ported from the reference.
+ *
+ * `.calc`, `.seg` and `.amt` appear on one page of the site, so they live beside the component
+ * rather than in `app/site.css` — which is the shared sheet every page loads. Every colour, radius
+ * and shadow is the token the reference's hex value maps to; the two are identical by value.
+ */
+
+.calc {
+  background: var(--pure-white);
+  border: 1px solid var(--border-hairline);
+  border-radius: var(--site-radius-l);
+  padding: 26px;
+  box-shadow: var(--site-shadow);
+}
+
+.calc input[type='range'] {
+  width: 100%;
+  accent-color: var(--trust-emerald);
+}
+
+/*
+ * The reference drew the readout as a `<div>`. It is an `<output>` here, so the figure is tied to
+ * the slider that produces it — and an `<output>` is inline, which the reference's div was not.
+ */
+.amt {
+  display: block;
+  font: 600 32px var(--font-mono);
+}
+
+.seg {
+  display: inline-flex;
+  background: var(--border-hairline);
+  border-radius: var(--site-radius-s);
+  padding: 3px;
+  margin-bottom: 18px;
+}
+
+.seg button {
+  border: 0;
+  background: none;
+  color: var(--slate);
+  padding: 8px 18px;
+  border-radius: 6px;
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.seg button[aria-pressed='true'] {
+  background: var(--midnight-text);
+  color: var(--pure-white);
+}

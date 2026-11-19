@@ -1,0 +1,51 @@
+/*
+ * The planned-hub list, which appears on this page and nowhere else.
+ *
+ * `.hub` and `.chipg` are in the reference stylesheet but not in `app/site.css`, and a two-class
+ * widget used by one page does not belong in the shared component layer. Ported from the
+ * reference with every colour replaced by a token, as `app/site.css` already is.
+ */
+
+/*
+ * A list, not a stack of divs: these are four cities and a screen reader should be told how many
+ * there are before it starts reading them. The reference's inline `margin-top:20px` on the
+ * wrapper lives here instead.
+ */
+.hubs {
+  list-style: none;
+  margin: 20px 0 0;
+  padding: 0;
+}
+
+.hub {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  padding: 16px 0;
+  border-top: 1px solid var(--border-hairline);
+  font-weight: 600;
+}
+
+.hub small {
+  display: block;
+  font-weight: 400;
+  color: var(--slate);
+}
+
+/*
+ * The status pill. Its colour is not the status — the word inside it is — so it reads the same
+ * to someone who cannot see the green.
+ */
+.chipg {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex: none;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 5px 10px;
+  border-radius: 99px;
+  background: var(--trust-emerald-soft);
+  color: var(--success-on-soft);
+}

@@ -1,0 +1,69 @@
+/*
+ * The "ordinary social deal vs. a Komtru trade" table.
+ *
+ * Ported from the reference's `.cmp` rules, with every colour a token. It lives beside the page
+ * rather than in `app/site.css` because this is the only page that compares the two things.
+ *
+ * The reference made the table scroll by putting `display:block;overflow-x:auto` on the `<table>`
+ * itself. That works visually, but a table with `display:block` loses its table role in more than
+ * one browser's accessibility tree — and a comparison table is exactly the markup whose row and
+ * column headers have to survive. The scroll lives on a wrapper instead, and the table stays a
+ * table.
+ */
+
+.scroll {
+  margin-top: 30px;
+  overflow-x: auto;
+  border: 1px solid var(--border-hairline);
+  border-radius: var(--site-radius-l);
+  background: var(--pure-white);
+  -webkit-overflow-scrolling: touch;
+}
+
+/* The wrapper is focusable so the table can be scrolled without a pointer; say where focus is. */
+.scroll:focus-visible {
+  outline: 2px solid var(--trust-indigo);
+  outline-offset: 2px;
+}
+
+.cmp {
+  width: 100%;
+  /* Below this the three columns wrap to one word a line, which is what the scroll is for. */
+  min-width: 560px;
+  border-collapse: collapse;
+  font-size: 15px;
+  background: var(--pure-white);
+}
+
+.cmp th,
+.cmp td {
+  padding: 14px 18px;
+  text-align: left;
+  vertical-align: top;
+  border-bottom: 1px solid var(--border-hairline);
+}
+
+/* The wrapper already draws the outer edge. */
+.cmp tbody tr:last-child th,
+.cmp tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+/* Including the blank corner cell, as the reference did: the whole strip reads as one header. */
+.cmp thead th,
+.cmp thead td {
+  background: var(--komtru-midnight);
+  color: var(--pure-white);
+  font-weight: 600;
+}
+
+/* Row labels are `th` here where the reference used `td`, so they need the body's own weight. */
+.cmp tbody th {
+  font-weight: 600;
+  color: var(--midnight-text);
+}
+
+/* The Komtru column, tinted so the eye lands on the side of the table that is the point. */
+.cmp tbody td:nth-child(3) {
+  background: var(--trust-emerald-soft);
+}
