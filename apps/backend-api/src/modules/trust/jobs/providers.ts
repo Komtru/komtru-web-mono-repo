@@ -9,10 +9,18 @@ import { KycProviderNotConfiguredError } from '../domain/errors.js';
 import type { KycProviderAdapter } from '../domain/provider.js';
 import type { SocialProofAdapter } from '../domain/social-proof.js';
 import { createDojahClient } from '../infrastructure/providers/dojah.client.js';
+import { createYouverifyClient } from '../infrastructure/providers/youverify.client.js';
 import { createFakeKycClient } from '../infrastructure/providers/fake-kyc.client.js';
 import { createFakeSocialClient } from '../infrastructure/providers/fake-social.client.js';
 
 const DOJAH_VARIABLES = ['DOJAH_APP_ID', 'DOJAH_SECRET_KEY', 'DOJAH_BASE_URL'] as const;
+
+const YOUVERIFY_VARIABLES = [
+  'YOUVERIFY_SECRET_TOKEN',
+  'YOUVERIFY_PUBLIC_MERCHANT_KEY',
+  'YOUVERIFY_WEBHOOK_SECRET',
+  'YOUVERIFY_BASE_URL',
+] as const;
 
 /**
  * The adapter this process will attest identities with. One more branch per provider, forever.
@@ -23,6 +31,13 @@ const DOJAH_VARIABLES = ['DOJAH_APP_ID', 'DOJAH_SECRET_KEY', 'DOJAH_BASE_URL'] a
  * is deciding who may sell on this platform.
  */
 export function kycProvider(config: TrustConfig, logger: Logger): KycProviderAdapter {
+  if (config.provider === 'YOUVERIFY') {
+    // All four or none, like Dojah: which one is missing is a question the operator's own .env
+    // answers faster than we can.
+    if (!config.youverify) throw new KycProviderNotConfiguredError('YOUVERIFY', YOUVERIFY_VARIABLES);
+    return createYouverifyClient(config.youverify);
+  }
+
   if (config.provider === 'DOJAH') {
     // `loadConfig` leaves `dojah` absent unless all three are set, so the message lists all three:
     // which one is missing is a question the operator's own .env answers faster than we can.
