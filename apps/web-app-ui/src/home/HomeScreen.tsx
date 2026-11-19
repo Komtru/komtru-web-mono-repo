@@ -73,8 +73,9 @@ export function HomeScreen(): React.JSX.Element {
   const attentionCount = groups.attention.length;
   const activeCount = groups.active.length;
 
+  // Tablet and desktop read the groups as two panels side by side (TX-02); a phone keeps one column.
   return (
-    <ScreenColumn>
+    <div className="mx-auto w-full max-w-[480px] md:max-w-[760px] lg:max-w-none">
       <h1 className="text-[19px] font-semibold">Your trades, at a glance</h1>
       <p className="mb-[14px] mt-[3px] text-[11.5px] text-slate">
         {`${String(attentionCount)} need${attentionCount === 1 ? 's' : ''} your attention · ${String(activeCount)} active`}
@@ -92,44 +93,46 @@ export function HomeScreen(): React.JSX.Element {
         </Button>
       </nav>
 
-      {attentionCount > 0 && (
-        <Group title="Needs your attention" count={attentionCount} trades={groups.attention} />
-      )}
-      {activeCount > 0 && <Group title="Active trades" count={activeCount} trades={groups.active} />}
-      {past.length > 0 && (
-        <Group
-          title="Past trades"
-          count={groups.past.length}
-          trades={past}
-          footer={
-            groups.past.length > PAST_SHOWN ? (
-              <a className="text-[12px] font-semibold text-trust-indigo" href="/trades">
-                See all trades
-              </a>
-            ) : undefined
-          }
-        />
-      )}
+      <div className="md:grid md:grid-cols-2 md:items-start md:gap-x-[16px]">
+        {attentionCount > 0 && (
+          <Group title="Needs your attention" count={attentionCount} trades={groups.attention} />
+        )}
+        {activeCount > 0 && <Group title="Active trades" count={activeCount} trades={groups.active} />}
+        {past.length > 0 && (
+          <Group
+            title="Past trades"
+            count={groups.past.length}
+            trades={past}
+            footer={
+              groups.past.length > PAST_SHOWN ? (
+                <a className="text-[12px] font-semibold text-trust-indigo" href="/trades">
+                  See all trades
+                </a>
+              ) : undefined
+            }
+          />
+        )}
 
-      {!all.complete && !all.nextPageFailed && (
-        <p role="status" className="text-[12px] text-slate">
-          Loading the rest of your trades…
-        </p>
-      )}
-      {all.nextPageFailed && (
-        <div role="alert" className="mb-[12px]">
-          <p className="mb-[8px] text-[12px] font-semibold text-risk-on-soft">
-            Couldn&apos;t load all of your trades. Some may be missing here.
+        {!all.complete && !all.nextPageFailed && (
+          <p role="status" className="text-[12px] text-slate">
+            Loading the rest of your trades…
           </p>
-          <Button type="button" variant="secondary" onClick={all.retry}>
-            Try again
-          </Button>
-        </div>
-      )}
+        )}
+        {all.nextPageFailed && (
+          <div role="alert" className="mb-[12px]">
+            <p className="mb-[8px] text-[12px] font-semibold text-risk-on-soft">
+              Couldn&apos;t load all of your trades. Some may be missing here.
+            </p>
+            <Button type="button" variant="secondary" onClick={all.retry}>
+              Try again
+            </Button>
+          </div>
+        )}
+      </div>
       <a className="mt-[4px] block text-[12px] font-semibold text-trust-indigo" href="/trades">
         View all trades
       </a>
-    </ScreenColumn>
+    </div>
   );
 }
 
