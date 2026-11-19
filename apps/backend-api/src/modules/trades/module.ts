@@ -78,6 +78,12 @@ export interface TradesModuleOptions {
    * (wired by `createModules`). Absent in a process with no files wiring, where every avatar is null.
    */
   avatarUrls?: (userIds: string[]) => Promise<Map<string, string | null>>;
+  /**
+   * Is there an open dispute on this trade? Wired by `createModules` from the disputes module's
+   * barrel (T-080), which is what closes the `noDisputes` seam below. Absent in a process with no
+   * disputes wiring, where the answer is no and the trade's own status is the only guard.
+   */
+  hasOpenDispute?: InspectionDeps['disputes']['hasOpenDispute'];
 }
 
 export function buildTradeDeps({
@@ -127,9 +133,19 @@ export function buildFulfilmentDeps(deps: TradeDeps): FulfilmentDeps {
   };
 }
 
-/** Inspection's ports. The one seam is the dispute check (T-080), which answers no until that exists. */
-export function buildInspectionDeps(deps: TradeDeps): InspectionDeps {
-  return { db: deps.db, disputes: noDisputes, now: () => new Date() };
+/**
+ * Inspection's ports. T-080 closed the dispute seam: `createModules` passes the disputes module's
+ * own read, and a process wired without it still gets `noDisputes`, which answers no.
+ */
+export function buildInspectionDeps(
+  deps: TradeDeps,
+  hasOpenDispute?: InspectionDeps['disputes']['hasOpenDispute'],
+): InspectionDeps {
+  return {
+    db: deps.db,
+    disputes: hasOpenDispute ? { hasOpenDispute } : noDisputes,
+    now: () => new Date(),
+  };
 }
 
 /** Evidence's ports: the files module's upload progress and its case-grant. */
@@ -145,7 +161,7 @@ export function buildEvidenceDeps(deps: TradeDeps): EvidenceDeps {
 export function createTradesModule(options: TradesModuleOptions): KomtruModule {
   const deps = buildTradeDeps(options);
   const fulfilment = buildFulfilmentDeps(deps);
-  const inspection = buildInspectionDeps(deps);
+  const inspection = buildInspectionDeps(deps, options.hasOpenDispute);
   const evidence = buildEvidenceDeps(deps);
 
   return defineModule({
