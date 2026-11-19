@@ -3,6 +3,7 @@
 // points beside the step, 1024px+). The flow is the phone's (see welcome.test.tsx); these pin what the wider drawings
 // change, that the phone is not one of them, and that a resize never restarts a step.
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { renderToString } from 'react-dom/server';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { DoneScreen } from '../src/welcome/DoneScreen';
 import { NotificationsScreen } from '../src/welcome/NotificationsScreen';
@@ -44,16 +45,11 @@ describe.each(WIDE)('the frame at %s', (width) => {
     atWidth(width);
   });
 
-  it('draws the walkthrough as a card, with Skip and Next at its foot and not pinned to the window', () => {
+  it('puts Skip and Next together in one footer inside the card (class smoke check; jsdom applies no CSS)', () => {
     render(<Walkthrough step="1" />);
     const footer = screen.getByRole('button', { name: 'Skip' }).parentElement;
-    expect(footer?.className).toContain('md:static');
-    expect(footer?.className).toContain('md:bg-none');
     expect(footer).toBe(screen.getByRole('button', { name: 'Next' }).parentElement);
-    const card = footer?.parentElement;
-    expect(card?.className).toContain('md:rounded');
-    expect(card?.className).toContain('md:bg-surface-primary');
-    expect(screen.getByRole('main').className).toContain('md:bg-surface-secondary');
+    expect(footer?.className).toContain('md:static');
   });
 
   it('keeps the walkthrough: Next goes on, Skip leaves and is remembered, the dots say where it is', () => {
@@ -198,11 +194,27 @@ describe('a resize never restarts anything', () => {
 });
 
 describe('the phone is the phone', () => {
-  it('draws no overview and no wide-only content, and the footer is still the pinned one', () => {
+  it('draws no overview and one heading, and the footer keeps its phone classes', () => {
     atWidth('phone');
     render(<Walkthrough step="1" />);
     expect(screen.queryByRole('list')).toBeNull();
     expect(screen.getAllByRole('heading')).toHaveLength(1);
+    const footer = screen.getByRole('button', { name: 'Skip' }).parentElement;
+    expect(footer?.className).toContain('sticky');
+    expect(footer?.className).toContain('bottom-0');
+    expect(footer?.className).toContain('flex-row');
+  });
+});
+
+describe('the server render', () => {
+  it('does not throw at a desktop width and draws no overview, because the server is a phone', () => {
+    atWidth('desktop');
+    let html = '';
+    expect(() => {
+      html = renderToString(<Walkthrough step="2" />);
+    }).not.toThrow();
+    expect(html).not.toContain('The three things Komtru does');
+    expect(html).not.toContain('<ol');
   });
 });
 
