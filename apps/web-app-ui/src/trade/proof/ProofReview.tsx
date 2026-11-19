@@ -95,9 +95,14 @@ interface Mine {
   src: string | undefined;
 }
 
-/** PM-7: the seller's agreed proof beside the buyer's own photos, with the checks to make. */
-export function InspectCompare({ read, seller }: { read: Read; seller: string }): React.JSX.Element {
-  const [side, setSide] = useState<'seller' | 'mine'>('seller');
+interface MyPhotosState {
+  items: GridItem[];
+  choose: (files: File[]) => void;
+  remove: (id: string) => void;
+}
+
+/** The buyer's own photos for the compare: kept on this device, previewed by object URL, released when the screen goes. */
+function useMyPhotos(): MyPhotosState {
   const [mine, setMine] = useState<Mine[]>([]);
   // Ids come from a counter that only goes up, so two photos with the same name never share a key or a Remove.
   const next = useRef(0);
@@ -141,6 +146,47 @@ export function InspectCompare({ read, seller }: { read: Read; seller: string })
     if (gone?.src !== undefined && typeof URL.revokeObjectURL === 'function') URL.revokeObjectURL(gone.src);
     setMine((current) => current.filter((photo) => photo.id !== id));
   };
+  return { items, choose, remove };
+}
+
+function MyPhotosView({ items, choose, remove }: MyPhotosState): React.JSX.Element {
+  return (
+    <section aria-label="My photos">
+      <MediaGrid aria-label="My photos" items={items} slots={4} columns={4} onRemove={remove} />
+      <p className="mb-[10px] text-[11.5px] leading-[1.6] text-trust-gray">
+        Your photos go here. Include the IMEI screen. They stay on this device to compare with; they aren’t
+        sent to Komtru.
+      </p>
+      <label className="mb-[14px] inline-flex cursor-pointer rounded-md border-[1.5px] border-solid border-border-hairline bg-surface-primary px-[14px] py-[10px] text-[12.5px] font-semibold focus-within:outline-[2.5px] focus-within:outline-trust-indigo focus-within:outline-offset-[2px]">
+        Add my photos
+        <input
+          type="file"
+          multiple
+          accept="image/*"
+          className="sr-only"
+          onChange={(event) => {
+            choose([...(event.target.files ?? [])]);
+            event.target.value = '';
+          }}
+        />
+      </label>
+    </section>
+  );
+}
+
+/** DX-23: the buyer's own photos on their own, where the seller's proof is drawn beside them rather than behind a toggle. */
+export function MyPhotos(): React.JSX.Element {
+  return <MyPhotosView {...useMyPhotos()} />;
+}
+
+/**
+ * PM-7: the seller's agreed proof beside the buyer's own photos, with the checks to make. On a phone and a tablet a
+ * pair of pills swaps between them (TX-14: "instead of two cramped panes"); a desktop draws both side by side and
+ * uses `SellerProof` and `MyPhotos` itself.
+ */
+export function InspectCompare({ read, seller }: { read: Read; seller: string }): React.JSX.Element {
+  const [side, setSide] = useState<'seller' | 'mine'>('seller');
+  const photos = useMyPhotos();
 
   return (
     <div>
@@ -164,40 +210,18 @@ export function InspectCompare({ read, seller }: { read: Read; seller: string })
         ))}
       </div>
 
-      {side === 'seller' ? (
-        <SellerProof read={read} seller={seller} />
-      ) : (
-        <section aria-label="My photos">
-          <MediaGrid aria-label="My photos" items={items} slots={4} columns={4} onRemove={remove} />
-          <p className="mb-[10px] text-[11.5px] leading-[1.6] text-trust-gray">
-            Your photos go here. Include the IMEI screen. They stay on this device to compare with; they
-            aren’t sent to Komtru.
-          </p>
-          <label className="mb-[14px] inline-flex cursor-pointer rounded-md border-[1.5px] border-solid border-border-hairline bg-surface-primary px-[14px] py-[10px] text-[12.5px] font-semibold focus-within:outline-[2.5px] focus-within:outline-trust-indigo focus-within:outline-offset-[2px]">
-            Add my photos
-            <input
-              type="file"
-              multiple
-              accept="image/*"
-              className="sr-only"
-              onChange={(event) => {
-                choose([...(event.target.files ?? [])]);
-                event.target.value = '';
-              }}
-            />
-          </label>
-        </section>
-      )}
+      {side === 'seller' ? <SellerProof read={read} seller={seller} /> : <MyPhotosView {...photos} />}
     </div>
   );
 }
 
 /** "Does it match?": what to check the item against the proof for. A reminder; the platform does not read it. */
-export function MatchChecks(): React.JSX.Element {
+export function MatchChecks({ heading = true }: { heading?: boolean } = {}): React.JSX.Element {
   const [checked, setChecked] = useState<ReadonlySet<string>>(new Set());
   return (
     <div>
-      <SectionLabel>Does it match?</SectionLabel>
+      {/* A panel that names the checks itself (TX-14's "Checks") has no use for a second heading. */}
+      {heading && <SectionLabel>Does it match?</SectionLabel>}
       <fieldset className="mb-[14px] min-w-0 border-0 p-0">
         <legend className="sr-only">Does it match?</legend>
         {MATCH_CHECKS.map((check) => {
