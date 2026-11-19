@@ -2,6 +2,7 @@ import type { Db } from '../../../db/index.js';
 import { isUniqueViolation } from '../../../db/errors.js';
 import { ApiError } from '../../../platform/errors.js';
 import { readContact, type WaitlistIntent } from '../domain/contact.js';
+import type { WaitlistSource } from '../domain/source.js';
 import { waitlistSignups } from '../schema.js';
 
 export interface SignupInput {
@@ -9,6 +10,8 @@ export interface SignupInput {
   readonly contact: string;
   readonly intent: WaitlistIntent;
   readonly city: string;
+  /** Which site it came in from. Read from the request's `Origin`, never from the body. */
+  readonly source: WaitlistSource;
 }
 
 export interface SignupResult {
@@ -33,6 +36,9 @@ const CONTACT_INDEX = 'signups_contact_key';
  * races two taps of the same button, and the index is the thing that actually decides. The 409 it
  * answers is what the site treats as success — from the person's side, they are on the list either
  * way.
+ *
+ * The index is on (contact, source), so "already on the list" means already on *this* site's list.
+ * A number used to test the staging form is not thereby barred from the real one.
  */
 export async function addSignup(db: Db, input: SignupInput): Promise<SignupResult> {
   const read = readContact(input.contact);
@@ -63,6 +69,7 @@ export async function addSignup(db: Db, input: SignupInput): Promise<SignupResul
         channel: read.channel,
         intent: input.intent,
         city: input.city.trim(),
+        source: input.source,
       })
       .returning({ id: waitlistSignups.id, createdAt: waitlistSignups.createdAt });
 

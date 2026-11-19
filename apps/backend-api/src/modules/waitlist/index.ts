@@ -5,6 +5,7 @@ import { createWaitlistModule } from './module.js';
 
 export * from './schema.js';
 export { WAITLIST_CHANNELS, WAITLIST_INTENTS, readContact } from './domain/contact.js';
+export { WAITLIST_SOURCES, readSource, type WaitlistSource } from './domain/source.js';
 export { createWaitlistModule };
 
 export const waitlistModule = createWaitlistModule();

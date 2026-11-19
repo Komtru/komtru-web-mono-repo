@@ -1,5 +1,5 @@
 {
-  "id": "92183524-2f59-406c-a78a-e56fcd02aba6",
+  "id": "8a1c57b8-04e8-418b-8141-0e85326d6ca0",
   "prevId": "58475c9d-1855-4b9f-a9b1-5c4c63871038",
   "version": "7",
   "dialect": "postgresql",
@@ -344,6 +344,13 @@
           "primaryKey": false,
           "notNull": true
         },
+        "source": {
+          "name": "source",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'UNKNOWN'"
+        },
         "created_at": {
           "name": "created_at",
           "type": "timestamp with time zone",
@@ -361,6 +368,12 @@
               "isExpression": false,
               "asc": true,
               "nulls": "last"
+            },
+            {
+              "expression": "source",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
             }
           ],
           "isUnique": true,
@@ -371,6 +384,12 @@
         "signups_city_idx": {
           "name": "signups_city_idx",
           "columns": [
+            {
+              "expression": "source",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
             {
               "expression": "city",
               "isExpression": false,
@@ -402,6 +421,10 @@
         "signups_intent": {
           "name": "signups_intent",
           "value": "\"waitlist\".\"signups\".\"intent\" IN ('BUY', 'SELL', 'BOTH')"
+        },
+        "signups_source": {
+          "name": "signups_source",
+          "value": "\"waitlist\".\"signups\".\"source\" IN ('PROD', 'STAGING', 'PREVIEW', 'LOCAL', 'UNKNOWN')"
         }
       },
       "isRLSEnabled": false

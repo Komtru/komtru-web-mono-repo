@@ -757,6 +757,11 @@
       "table": "waitlist.signups",
       "name": "signups_intent",
       "definition": "CHECK ((intent = ANY (ARRAY['BUY'::text, 'SELL'::text, 'BOTH'::text])))"
+    },
+    {
+      "table": "waitlist.signups",
+      "name": "signups_source",
+      "definition": "CHECK ((source = ANY (ARRAY['PROD'::text, 'STAGING'::text, 'PREVIEW'::text, 'LOCAL'::text, 'UNKNOWN'::text])))"
     }
   ],
   "triggers": [

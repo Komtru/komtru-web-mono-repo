@@ -1,6 +1,7 @@
 // The one route the marketing site calls.
 import { defineRoute, type RouteDefinition } from '../../../platform/http/route.js';
 import type { Db } from '../../../db/index.js';
+import { readSource } from '../domain/source.js';
 import { addSignup } from '../services/signups.service.js';
 import { signupBody, signupResponse } from './validations.js';
 
@@ -32,7 +33,16 @@ export function waitlistRoutes(deps: { db: () => Db }): RouteDefinition[] {
       status: 201,
       rateLimit: SIGNUP_BUDGET,
       schema: { body: signupBody, response: signupResponse },
-      handler: (ctx) => addSignup(deps.db(), signupBody.parse(ctx.body)),
+      /*
+       * The source comes from the `Origin` header, not from the body: a field the caller fills in
+       * is a field the caller chooses, and the one question this column answers is which site the
+       * person was actually looking at.
+       */
+      handler: (ctx) =>
+        addSignup(deps.db(), {
+          ...signupBody.parse(ctx.body),
+          source: readSource(ctx.req.get('origin')),
+        }),
     }),
   ];
 }

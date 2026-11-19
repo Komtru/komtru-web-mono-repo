@@ -45,4 +45,13 @@ describe('the signup body', () => {
     const { [field]: _omitted, ...rest } = valid as Record<string, unknown>;
     expect(signupBody.safeParse(rest).success).toBe(false);
   });
+
+  /*
+   * The source is read from the `Origin` header, never from the body. A caller who could name
+   * their own source could file a test signup on the real launch list, or vice versa — and the
+   * strict schema is what stops the field being quietly accepted and then ignored.
+   */
+  it('refuses a caller-supplied source', () => {
+    expect(signupBody.safeParse({ ...valid, source: 'PROD' }).success).toBe(false);
+  });
 });

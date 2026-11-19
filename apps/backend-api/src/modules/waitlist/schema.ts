@@ -33,14 +33,29 @@ export const waitlistSignups = waitlist.table(
     intent: text('intent').notNull(),
     /** A free-text city, not a `geo.cities` reference: the list is five options and one is "Other". */
     city: text('city').notNull(),
+    /**
+     * Which site the signup came in from, read from the request's `Origin`. One backend serves
+     * both the marketing site and the app, so this is what separates the real launch list from
+     * test signups. See `domain/source.ts` for why it is a signal rather than a fact.
+     */
+    source: text('source').notNull().default('UNKNOWN'),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [
     check('signups_channel', sql`${table.channel} IN ('EMAIL', 'PHONE')`),
     check('signups_intent', sql`${table.intent} IN ('BUY', 'SELL', 'BOTH')`),
-    // Signing up twice is one person on the list, and the route answers the second one 409.
-    uniqueIndex('signups_contact_key').on(table.contactKey),
-    // How operations reads it: newest first, and "how many in Lagos".
-    index('signups_city_idx').on(table.city, table.createdAt),
+    check('signups_source', sql`${table.source} IN ('PROD', 'STAGING', 'PREVIEW', 'LOCAL', 'UNKNOWN')`),
+    /*
+     * Per source, not per contact.
+     *
+     * Signing up twice on the same site is one person on the list, and the route answers the
+     * second one 409. Across sites it must not be: the team tests the staging form with their own
+     * real phone numbers, and a single index on the contact would make every number they test
+     * with permanently unable to join the real list — a failure that would show up on launch day
+     * as a 409 nobody could explain.
+     */
+    uniqueIndex('signups_contact_key').on(table.contactKey, table.source),
+    // How operations reads it: the real list, newest first, and "how many in Lagos".
+    index('signups_city_idx').on(table.source, table.city, table.createdAt),
   ],
 );
