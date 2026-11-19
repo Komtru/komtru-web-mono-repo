@@ -4,7 +4,25 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 
 import { checkFixtures } from './contracts.ts';
-import { tradesFor, viewerFactsFor } from './fixtures.ts';
+import {
+  addressesFor,
+  disputeDetailFor,
+  disputeEvidenceFor,
+  disputesFor,
+  disputeTimelineFor,
+  evidenceComparisonFor,
+  inspectionFor,
+  meFor,
+  merchantApplicationFor,
+  paymentStatusFor,
+  payoutAccountsFor,
+  tradeDisputeFor,
+  tradeFor,
+  tradeStandardFor,
+  tradesFor,
+  verificationStatusFor,
+  viewerFactsFor,
+} from './fixtures.ts';
 import { accessTokenFor, readBearer, readRefreshToken, refreshTokenFor, type Identity } from './identity.ts';
 
 export const STANDIN_DEFAULT_PORT = 7913;
@@ -13,6 +31,9 @@ export interface Reply {
   status: number;
   body?: unknown;
 }
+
+/** The `:name` segments of a route's path, by name. */
+type Params = Readonly<Record<string, string>>;
 
 /** A route the apps call without a session: the refresh token in the body is its own proof. */
 type PublicRoute = {
@@ -27,7 +48,15 @@ type ConsumerRoute = {
   method: 'GET';
   path: string;
   kind: 'consumer';
-  handle: (identity: Identity) => Reply;
+  handle: (identity: Identity, params: Params) => Reply;
+};
+
+/** A public read, which the apps call with no session (a trade standard is published to everyone). */
+type AnonymousRoute = {
+  method: 'GET';
+  path: string;
+  kind: 'anonymous';
+  handle: (params: Params) => Reply;
 };
 
 const ACCESS_LIFETIME_MS = 15 * 60 * 1000;
@@ -37,7 +66,10 @@ const problem = (status: number, title: string, detail?: string): Reply => ({
   body: { type: 'about:blank', title, status, ...(detail === undefined ? {} : { detail }) },
 });
 
-const ROUTES: readonly (PublicRoute | ConsumerRoute)[] = [
+/** A list the app pages through. The fixtures fit on one page, so the cursor is always null. */
+const page = (items: unknown[]): Reply => ({ status: 200, body: { items, nextCursor: null } });
+
+const ROUTES: readonly (PublicRoute | ConsumerRoute | AnonymousRoute)[] = [
   {
     method: 'POST',
     path: '/auth/refresh',
@@ -63,19 +95,165 @@ const ROUTES: readonly (PublicRoute | ConsumerRoute)[] = [
     method: 'GET',
     path: '/me/viewer',
     kind: 'consumer',
-    handle: (identity) => ({ status: 200, body: viewerFactsFor(identity.persona.id) }),
+    handle: ({ persona }) => ({ status: 200, body: viewerFactsFor(persona.id) }),
+  },
+  {
+    method: 'GET',
+    path: '/me',
+    kind: 'consumer',
+    handle: ({ persona, scenario }) => ({ status: 200, body: meFor(persona.id, scenario) }),
+  },
+  {
+    method: 'GET',
+    path: '/merchant/applications/me',
+    kind: 'consumer',
+    handle: ({ persona, scenario }) => ({
+      status: 200,
+      body: merchantApplicationFor(persona.id, scenario),
+    }),
   },
   {
     method: 'GET',
     path: '/trades',
     kind: 'consumer',
-    handle: (identity) => ({
-      status: 200,
-      // The real list is cursor-paged. A fixture fits on one page, so the cursor is always null.
-      body: { items: tradesFor(identity.persona.id, identity.scenario), nextCursor: null },
-    }),
+    handle: ({ persona, scenario }) => page(tradesFor(persona.id, scenario)),
+  },
+  {
+    method: 'GET',
+    path: '/trades/:id',
+    kind: 'consumer',
+    handle: ({ persona, scenario }, { id }) => {
+      const trade = tradeFor(persona.id, scenario, id ?? '');
+      return trade === null ? problem(404, 'Trade not found', id) : { status: 200, body: trade };
+    },
+  },
+  {
+    method: 'GET',
+    path: '/trades/:id/dispute',
+    kind: 'consumer',
+    handle: ({ persona, scenario }, { id }) => {
+      const tradeId = id ?? '';
+      // The case is read from a trade the person can see; a trade that is not theirs is not found, not empty.
+      if (tradeFor(persona.id, scenario, tradeId) === null) return problem(404, 'Trade not found', tradeId);
+      return { status: 200, body: tradeDisputeFor(persona.id, scenario, tradeId) };
+    },
+  },
+  {
+    method: 'GET',
+    path: '/trades/:id/payment/status',
+    kind: 'consumer',
+    handle: ({ persona, scenario }, { id }) => {
+      const status = paymentStatusFor(persona.id, scenario, id ?? '');
+      return status === null ? problem(404, 'Trade not found', id) : { status: 200, body: status };
+    },
+  },
+  {
+    method: 'GET',
+    path: '/trades/:id/inspection',
+    kind: 'consumer',
+    handle: ({ persona, scenario }, { id }) => {
+      const inspection = inspectionFor(persona.id, scenario, id ?? '');
+      return inspection === null ? problem(404, 'Trade not found', id) : { status: 200, body: inspection };
+    },
+  },
+  {
+    method: 'GET',
+    path: '/verification/status',
+    kind: 'consumer',
+    handle: ({ persona }) => ({ status: 200, body: verificationStatusFor(persona.id) }),
+  },
+  {
+    method: 'GET',
+    path: '/me/payout-accounts',
+    kind: 'consumer',
+    handle: ({ persona }) => ({ status: 200, body: { accounts: payoutAccountsFor(persona.id) } }),
+  },
+  {
+    method: 'GET',
+    path: '/me/addresses',
+    kind: 'consumer',
+    handle: ({ persona }) => page(addressesFor(persona.id)),
+  },
+  {
+    method: 'GET',
+    path: '/config/trade-standards/versions/:id',
+    kind: 'anonymous',
+    handle: ({ id }) => {
+      const standard = tradeStandardFor(id ?? '');
+      return standard === null
+        ? problem(404, 'Trade standard version not found', id)
+        : { status: 200, body: standard };
+    },
+  },
+  {
+    method: 'GET',
+    path: '/disputes',
+    kind: 'consumer',
+    handle: ({ persona, scenario }) => page(disputesFor(persona.id, scenario)),
+  },
+  {
+    method: 'GET',
+    path: '/disputes/:id',
+    kind: 'consumer',
+    handle: ({ persona, scenario }, { id }) => {
+      const detail = disputeDetailFor(persona.id, scenario, id ?? '');
+      return detail === null ? problem(404, 'Dispute not found', id) : { status: 200, body: detail };
+    },
+  },
+  {
+    method: 'GET',
+    path: '/disputes/:id/timeline',
+    kind: 'consumer',
+    handle: ({ persona, scenario }, { id }) => {
+      const entries = disputeTimelineFor(persona.id, scenario, id ?? '');
+      return entries === null ? problem(404, 'Dispute not found', id) : page(entries);
+    },
+  },
+  {
+    method: 'GET',
+    path: '/disputes/:id/evidence',
+    kind: 'consumer',
+    handle: ({ persona, scenario }, { id }) => {
+      const evidence = disputeEvidenceFor(persona.id, scenario, id ?? '');
+      return evidence === null ? problem(404, 'Dispute not found', id) : page(evidence);
+    },
+  },
+  {
+    method: 'GET',
+    path: '/disputes/:id/evidence-comparison',
+    kind: 'consumer',
+    handle: ({ persona, scenario }, { id }) => {
+      const comparison = evidenceComparisonFor(persona.id, scenario, id ?? '');
+      return comparison === null ? problem(404, 'Dispute not found', id) : { status: 200, body: comparison };
+    },
   },
 ];
+
+/** Matches a request path against a route's path, where a `:name` segment matches any one segment. */
+function matchPath(template: string, actual: string): Params | null {
+  const wanted = template.split('/');
+  const got = actual.split('/');
+  if (wanted.length !== got.length) return null;
+  const params: Record<string, string> = {};
+  for (const [index, segment] of wanted.entries()) {
+    const value = got[index] ?? '';
+    if (segment.startsWith(':')) params[segment.slice(1)] = decodeURIComponent(value);
+    else if (segment !== value) return null;
+  }
+  return params;
+}
+
+function findRoute(
+  method: string,
+  path: string,
+): { route: PublicRoute | ConsumerRoute | AnonymousRoute; params: Params } | null {
+  for (const route of ROUTES) {
+    if (route.method !== method) continue;
+    const params = matchPath(route.path, path);
+    if (params !== null) return { route, params };
+  }
+  return null;
+}
 
 const readBody = (request: IncomingMessage): Promise<unknown> =>
   new Promise((resolve) => {
@@ -163,15 +341,22 @@ async function handle(
     return;
   }
   const path = url.pathname.slice('/v1'.length);
-  const route = ROUTES.find((candidate) => candidate.method === method && candidate.path === path);
-  if (route === undefined) {
+  const found = findRoute(method, path);
+  if (found === null) {
     log(`UNMATCHED ${label} — no fixture; add a route in tools/visual-check/src/standin/server.ts`);
     send(response, problem(404, 'Not in the visual-check stand-in', label));
     return;
   }
+  const { route, params } = found;
 
   if (route.kind === 'public') {
     const reply = route.handle(await readBody(request));
+    log(`${label} ${reply.status}`);
+    send(response, reply);
+    return;
+  }
+  if (route.kind === 'anonymous') {
+    const reply = route.handle(params);
     log(`${label} ${reply.status}`);
     send(response, reply);
     return;
@@ -188,7 +373,7 @@ async function handle(
     send(response, problem(403, 'Wrong scope for this route'));
     return;
   }
-  const reply = route.handle(identity);
+  const reply = route.handle(identity, params);
   log(`${label} ${reply.status} (${identity.persona.id}/${identity.scenario})`);
   send(response, reply);
 }

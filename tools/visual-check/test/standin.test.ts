@@ -6,7 +6,24 @@ import { tradeListResponseSchema, viewerFactsSchema } from '@komtru/shared-types
 import { describe, expect, it } from 'vitest';
 
 import { checkFixtures } from '../src/standin/contracts.ts';
-import { PERSONAS } from '../src/standin/personas.ts';
+import {
+  comparisonSchema,
+  disputeDetailSchema,
+  disputeSchema,
+  merchantApplicationSchema,
+  meSchema,
+  tradeViewSchema,
+} from '@komtru/api-client';
+import { disputesFor, merchantApplicationFor, paymentStatusFor, tradesFor } from '../src/standin/fixtures.ts';
+import {
+  getInspection,
+  paymentStatusSchema,
+  payoutAccountSchema,
+  tradeStandardSchema,
+  verificationStatusSchema,
+} from '@komtru/api-client';
+import { addressSchema } from '@komtru/shared-types';
+import { PERSONAS, type PersonaId, type ScenarioId } from '../src/standin/personas.ts';
 import { accessTokenFor, readBearer, readRefreshToken } from '../src/standin/identity.ts';
 import { startStandin } from '../src/standin/server.ts';
 import { sessionCookiesFor, STANDIN_NOW_MS, STANDIN_SESSION_SECRET } from '../src/standin/session.ts';
@@ -62,9 +79,13 @@ describe('the stand-in over HTTP', () => {
 
       const unsigned = await fetch(`${standin.apiUrl}/trades`);
       expect(unsigned.status).toBe(401);
-      const unknown = await fetch(`${standin.apiUrl}/trades/0190b0a0-0000-7000-8000-000000000999`);
+      const unknown = await fetch(`${standin.apiUrl}/trades/0190b0a0-0000-7000-8000-000000000999`, {
+        headers: auth,
+      });
       expect(unknown.status).toBe(404);
-      expect(logged.some((line) => line.startsWith('UNMATCHED GET /v1/trades/'))).toBe(true);
+      const unserved = await fetch(`${standin.apiUrl}/wallets/me`, { headers: auth });
+      expect(unserved.status).toBe(404);
+      expect(logged.some((line) => line.startsWith('UNMATCHED GET /v1/wallets/me'))).toBe(true);
     } finally {
       await standin.close();
     }
@@ -119,5 +140,231 @@ describe('the session seeder', () => {
       STANDIN_NOW_MS,
     );
     expect(forged).toBeNull();
+  });
+});
+
+/** Signs in as a persona in a scenario over HTTP, the way the app does with its refresh token. */
+async function signedIn(
+  apiUrl: string,
+  persona: PersonaId,
+  scenario: ScenarioId,
+): Promise<Record<string, string>> {
+  const refresh = await fetch(`${apiUrl}/auth/refresh`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ refreshToken: `vc.${persona}.${scenario}` }),
+  });
+  const { accessToken } = (await refresh.json()) as { accessToken: string };
+  return { authorization: `Bearer ${accessToken}` };
+}
+
+describe('the trade, account and dispute routes over HTTP', () => {
+  it('serves each trade the list shows, at its own id, parsed against the single-trade contract', async () => {
+    const standin = await startStandin({ port: 0, log: () => undefined });
+    try {
+      const auth = await signedIn(standin.apiUrl, 'buyer', 'with-trades');
+      for (const item of tradesFor('buyer', 'with-trades')) {
+        const response = await fetch(`${standin.apiUrl}/trades/${item.id}`, { headers: auth });
+        expect(response.status).toBe(200);
+        const trade = tradeViewSchema.parse(await response.json());
+        expect(trade.tradeCode).toBe(item.tradeCode);
+        expect(trade.status).toBe(item.status);
+      }
+    } finally {
+      await standin.close();
+    }
+  });
+
+  it('covers the statuses the trade screens differ by, across the two personas', () => {
+    const buyerStatuses = tradesFor('buyer', 'with-trades').map((trade) => trade.status);
+    const sellerStatuses = tradesFor('seller', 'with-trades').map((trade) => trade.status);
+    // A proposal awaiting an answer, an accepted trade awaiting funding, funded, delivered in inspection, disputed.
+    expect(sellerStatuses).toContain('AWAITING_ACCEPTANCE');
+    expect(buyerStatuses).toContain('PENDING_PAYMENT');
+    expect(buyerStatuses).toContain('FUNDED');
+    expect(buyerStatuses).toContain('INSPECTION');
+    expect(buyerStatuses).toContain('DISPUTED');
+  });
+
+  it('answers a trade the person cannot see as not found, and an empty account with no trades', async () => {
+    const standin = await startStandin({ port: 0, log: () => undefined });
+    try {
+      const buyerTrade = tradesFor('buyer', 'with-trades')[0];
+      const auth = await signedIn(standin.apiUrl, 'buyer', 'no-trades');
+      const gone = await fetch(`${standin.apiUrl}/trades/${buyerTrade?.id ?? ''}`, { headers: auth });
+      expect(gone.status).toBe(404);
+      const me = meSchema.parse(await (await fetch(`${standin.apiUrl}/me`, { headers: auth })).json());
+      expect(me.account.openTrades).toBe(false);
+      expect(me.account.canClose).toBe(true);
+    } finally {
+      await standin.close();
+    }
+  });
+
+  it('serves the open case on the disputed trade, its timeline, evidence and Y1 comparison', async () => {
+    const standin = await startStandin({ port: 0, log: () => undefined });
+    try {
+      const auth = await signedIn(standin.apiUrl, 'buyer', 'with-trades');
+      const disputed = tradesFor('buyer', 'with-trades').find((trade) => trade.status === 'DISPUTED');
+      const onTrade = await fetch(`${standin.apiUrl}/trades/${disputed?.id ?? ''}/dispute`, {
+        headers: auth,
+      });
+      const dispute = disputeSchema.parse(await onTrade.json());
+      expect(dispute.tradeId).toBe(disputed?.id);
+      const detail = disputeDetailSchema.parse(
+        await (await fetch(`${standin.apiUrl}/disputes/${dispute.id}`, { headers: auth })).json(),
+      );
+      expect(detail.yourRole).toBe('BUYER');
+      const comparison = comparisonSchema.parse(
+        await (
+          await fetch(`${standin.apiUrl}/disputes/${dispute.id}/evidence-comparison`, { headers: auth })
+        ).json(),
+      );
+      expect(comparison.seller.fromDispute.length).toBeGreaterThan(0);
+      expect(comparison.buyer.fromDispute.length).toBeGreaterThan(0);
+      const timeline = (await (
+        await fetch(`${standin.apiUrl}/disputes/${dispute.id}/timeline`, { headers: auth })
+      ).json()) as { items: unknown[] };
+      expect(timeline.items.length).toBeGreaterThan(0);
+    } finally {
+      await standin.close();
+    }
+  });
+
+  it('answers no case on a trade without one, and no dispute to a seller who is not a party to it', async () => {
+    const standin = await startStandin({ port: 0, log: () => undefined });
+    try {
+      const auth = await signedIn(standin.apiUrl, 'buyer', 'with-trades');
+      const funded = tradesFor('buyer', 'with-trades').find((trade) => trade.status === 'FUNDED');
+      const none = await fetch(`${standin.apiUrl}/trades/${funded?.id ?? ''}/dispute`, { headers: auth });
+      expect(none.status).toBe(200);
+      expect(await none.json()).toBeNull();
+      expect(disputesFor('seller', 'with-trades')).toEqual([]);
+    } finally {
+      await standin.close();
+    }
+  });
+
+  it('draws the merchant application in each state, and none for a person who has not started one', () => {
+    expect(merchantApplicationFor('buyer', 'with-trades')).toBeNull();
+    expect(merchantApplicationFor('seller', 'no-trades')).toBeNull();
+    // A certified merchant with no state named is approved.
+    expect(merchantApplicationFor('merchant', 'with-trades')?.status).toBe('APPROVED');
+    const states = [
+      ['application-draft', 'DRAFT'],
+      ['application-in-review', 'IN_REVIEW'],
+      ['application-changes-requested', 'CHANGES_REQUESTED'],
+      ['application-rejected', 'REJECTED'],
+      ['application-approved', 'APPROVED'],
+    ] as const;
+    for (const [scenario, status] of states) {
+      const application = merchantApplicationFor('seller', scenario);
+      expect(merchantApplicationSchema.parse(application).status).toBe(status);
+    }
+    expect(merchantApplicationFor('seller', 'application-changes-requested')?.changesRequested.length).toBe(
+      2,
+    );
+  });
+});
+
+describe('the funding, inspection, standard and account reads over HTTP', () => {
+  it('shows a trade awaiting funding with no attempt, and a funded trade with its confirmed attempt', async () => {
+    const standin = await startStandin({ port: 0, log: () => undefined });
+    try {
+      const auth = await signedIn(standin.apiUrl, 'buyer', 'with-trades');
+      const pending = tradesFor('buyer', 'with-trades').find((trade) => trade.status === 'PENDING_PAYMENT');
+      const awaiting = paymentStatusSchema.parse(
+        await (
+          await fetch(`${standin.apiUrl}/trades/${pending?.id ?? ''}/payment/status`, { headers: auth })
+        ).json(),
+      );
+      expect(awaiting.displayState).toBe('NONE');
+      expect(awaiting.attempt).toBeNull();
+      const funded = tradesFor('buyer', 'with-trades').find((trade) => trade.status === 'FUNDED');
+      expect(paymentStatusFor('buyer', 'with-trades', funded?.id ?? '')?.displayState).toBe('CONFIRMED');
+    } finally {
+      await standin.close();
+    }
+  });
+
+  it('opens the inspection window on the trade in inspection, and closes it elsewhere', async () => {
+    const standin = await startStandin({ port: 0, log: () => undefined });
+    try {
+      const auth = await signedIn(standin.apiUrl, 'buyer', 'with-trades');
+      const inspecting = tradesFor('buyer', 'with-trades').find((trade) => trade.status === 'INSPECTION');
+      const open = getInspection.schema.response.parse(
+        await (
+          await fetch(`${standin.apiUrl}/trades/${inspecting?.id ?? ''}/inspection`, { headers: auth })
+        ).json(),
+      );
+      expect(open.window.deadlineAt).not.toBeNull();
+      const funded = tradesFor('buyer', 'with-trades').find((trade) => trade.status === 'FUNDED');
+      const closed = getInspection.schema.response.parse(
+        await (
+          await fetch(`${standin.apiUrl}/trades/${funded?.id ?? ''}/inspection`, { headers: auth })
+        ).json(),
+      );
+      expect(closed.window.deadlineAt).toBeNull();
+    } finally {
+      await standin.close();
+    }
+  });
+
+  it('serves the trade standard a trade pinned, to anyone, and says so when it is not one of ours', async () => {
+    const standin = await startStandin({ port: 0, log: () => undefined });
+    try {
+      const auth = await signedIn(standin.apiUrl, 'buyer', 'with-trades');
+      const pinned = tradesFor('buyer', 'with-trades')[0];
+      const trade = (await (
+        await fetch(`${standin.apiUrl}/trades/${pinned?.id ?? ''}`, { headers: auth })
+      ).json()) as {
+        standardVersionId: string;
+      };
+      // No session: a published standard is public.
+      const standard = await fetch(
+        `${standin.apiUrl}/config/trade-standards/versions/${trade.standardVersionId}`,
+      );
+      expect(standard.status).toBe(200);
+      expect(tradeStandardSchema.parse(await standard.json()).versionId).toBe(trade.standardVersionId);
+      const unknown = await fetch(
+        `${standin.apiUrl}/config/trade-standards/versions/0190b0a0-0000-7000-8000-000000000999`,
+      );
+      expect(unknown.status).toBe(404);
+    } finally {
+      await standin.close();
+    }
+  });
+
+  it('answers the account reads a verified seller and merchant have, and a buyer with none', async () => {
+    const standin = await startStandin({ port: 0, log: () => undefined });
+    try {
+      const sellerAuth = await signedIn(standin.apiUrl, 'seller', 'with-trades');
+      const verification = verificationStatusSchema.parse(
+        await (await fetch(`${standin.apiUrl}/verification/status`, { headers: sellerAuth })).json(),
+      );
+      expect(verification.level).toBe('IDENTITY_VERIFIED');
+      const payouts = (await (
+        await fetch(`${standin.apiUrl}/me/payout-accounts`, { headers: sellerAuth })
+      ).json()) as {
+        accounts: unknown[];
+      };
+      expect(payoutAccountSchema.parse(payouts.accounts[0]).status).toBe('VERIFIED');
+      const addresses = (await (
+        await fetch(`${standin.apiUrl}/me/addresses`, { headers: sellerAuth })
+      ).json()) as {
+        items: unknown[];
+      };
+      expect(addressSchema.parse(addresses.items[0]).isDefault).toBe(true);
+
+      const buyerAuth = await signedIn(standin.apiUrl, 'buyer', 'with-trades');
+      const buyerPayouts = (await (
+        await fetch(`${standin.apiUrl}/me/payout-accounts`, { headers: buyerAuth })
+      ).json()) as {
+        accounts: unknown[];
+      };
+      expect(buyerPayouts.accounts).toEqual([]);
+    } finally {
+      await standin.close();
+    }
   });
 });

@@ -14,6 +14,7 @@
     "@fontsource-variable/space-grotesk": "5.3.0",
     "@fontsource/ibm-plex-mono": "5.3.0",
     "@fontsource/space-grotesk": "5.3.0",
+    "@komtru/api-client": "workspace:*",
     "@komtru/app-kit": "workspace:*",
     "@komtru/shared-types": "workspace:*",
     "@komtru/ui-kit": "workspace:*",
