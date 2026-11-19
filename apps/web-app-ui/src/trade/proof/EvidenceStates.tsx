@@ -7,7 +7,8 @@
 import type { TradeView } from '@komtru/api-client';
 import type { useInspection } from '@komtru/api-client/react';
 import { ActionStack, Button, NoteBanner } from '@komtru/ui-kit';
-import { useState } from 'react';
+import { useId, useState } from 'react';
+import { documentsHref } from '../documents/TradeDocuments';
 import { Panel } from '../workspace/layout';
 import type { Viewport } from '../workspace/viewport';
 import { AddedDuringTrade, KeptSummary, SellerProofSection } from './EvidenceTrail';
@@ -40,7 +41,7 @@ function Body({ id, trade, read }: { id: StateId; trade: TradeView; read: Read }
     case 'during':
       return (
         <>
-          <AddedDuringTrade trade={trade} read={read} />
+          <AddedDuringTrade trade={trade} read={read} as="h3" />
           <p className="m-0 text-[11.5px] leading-[1.6] text-trust-gray">
             Nothing can be edited or deleted. New items are added with who and when.
           </p>
@@ -52,7 +53,7 @@ function Body({ id, trade, read }: { id: StateId; trade: TradeView; read: Read }
           <KeptSummary trade={trade} read={read} heading={false} />
           <ActionStack>
             <Button asChild variant="secondary">
-              <a href={`/trade/${trade.id}/documents`}>Receipt &amp; documents</a>
+              <a href={documentsHref(trade.id)}>Receipt &amp; documents</a>
             </Button>
           </ActionStack>
         </>
@@ -75,6 +76,7 @@ export function EvidenceAcross({
   viewport: Exclude<Viewport, 'mobile'>;
 }): React.JSX.Element {
   const [shown, setShown] = useState<StateId>(COMPLETE.has(trade.status) ? 'after' : 'during');
+  const panel = useId();
   if (viewport === 'desktop') {
     return (
       <div className="grid grid-cols-3 items-start gap-[16px]">
@@ -99,6 +101,7 @@ export function EvidenceAcross({
             key={id}
             type="button"
             aria-pressed={shown === id}
+            aria-controls={panel}
             onClick={() => {
               setShown(id);
             }}
@@ -112,7 +115,7 @@ export function EvidenceAcross({
           </button>
         ))}
       </div>
-      <Panel title={current.label}>
+      <Panel id={panel} title={current.label}>
         <Body id={current.id} trade={trade} read={read} />
       </Panel>
     </>

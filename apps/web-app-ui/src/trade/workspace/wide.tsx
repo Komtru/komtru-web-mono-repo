@@ -5,21 +5,13 @@
 // never leaves the screen, and a context rail of the money and the evidence (F-069, F-073).
 import type { TradeView } from '@komtru/api-client';
 import { useInspection, useTradeList } from '@komtru/api-client/react';
-import {
-  Button,
-  Skeleton,
-  TermList,
-  TermRow,
-  TradeRow,
-  VersionTimeline,
-  type VersionStep,
-} from '@komtru/ui-kit';
-import { useState } from 'react';
+import { Button, Skeleton, TradeRow, VersionTimeline, type VersionStep } from '@komtru/ui-kit';
+import { useEffect, useId, useState } from 'react';
 import { describeTrade, initialsOf, nairaShort, partyName, whenLabel } from '../format';
 import { MediaGrid, type GridItem } from '../proof/MediaGrid';
-import { stateCopy } from '../workspace-copy';
 import { EVIDENCE_STATUSES, evidenceHref, workspaceStanding, type WorkspaceStatus } from '../workspace-state';
 import { Panel } from './layout';
+import { MoneyTerms } from './shared';
 
 type Filter = 'active' | 'action' | 'done';
 
@@ -44,8 +36,15 @@ export function TradePane({
   currentClosed: boolean;
 }): React.JSX.Element {
   const list = useTradeList('ALL');
+  const listId = useId();
   const [filter, setFilter] = useState<Filter>(currentClosed ? 'done' : 'active');
   const all = (list.data?.pages ?? []).flatMap((page) => page.items);
+  // The open trade must be in the list or the pane marks nothing: read on until it is, or the list ends.
+  const found = all.some((trade) => trade.id === currentId);
+  const { hasNextPage, isFetchingNextPage, isFetchNextPageError, fetchNextPage } = list;
+  useEffect(() => {
+    if (!found && hasNextPage && !isFetchingNextPage && !isFetchNextPageError) void fetchNextPage();
+  }, [found, hasNextPage, isFetchingNextPage, isFetchNextPageError, fetchNextPage]);
   const rows = all
     .map((trade) => ({ trade, state: describeTrade(trade) }))
     .filter(({ trade, state }) =>
@@ -63,6 +62,7 @@ export function TradePane({
             key={id}
             type="button"
             aria-pressed={filter === id}
+            aria-controls={listId}
             onClick={() => {
               setFilter(id);
             }}
@@ -76,42 +76,44 @@ export function TradePane({
           </button>
         ))}
       </div>
-      {list.isPending ? (
-        <div role="status" aria-label="Loading your trades" aria-busy="true">
-          <Skeleton width="full" lines={3} />
-        </div>
-      ) : list.isError && list.data === undefined ? (
-        <p role="alert" className="text-[12px] text-risk-on-soft">
-          We couldn&apos;t load your trades.{' '}
-          <button type="button" className="underline" onClick={() => void list.refetch()}>
-            Try again
-          </button>
-        </p>
-      ) : rows.length === 0 ? (
-        <p className="text-[12px] text-slate">No trades here.</p>
-      ) : (
-        <ul className="m-0 list-none p-0">
-          {rows.map(({ trade, state }) => (
-            <li key={trade.id} {...(trade.id === currentId ? { 'aria-current': 'true' as const } : {})}>
-              <TradeRow
-                amount={trade.itemAmountMinor === null ? '—' : nairaShort(trade.itemAmountMinor)}
-                status={{ tone: state.tone, label: state.label }}
-                {...(trade.counterparty === null
-                  ? {}
-                  : {
-                      counterparty: {
-                        name: partyName(trade.counterparty),
-                        initials: initialsOf(partyName(trade.counterparty).replace(/^@/, '')),
-                      },
-                    })}
-                sub={`${trade.item.title ?? trade.item.categoryName ?? 'Trade'} · ${trade.tradeCode}`}
-                href={`/trade/${trade.id}`}
-                className={trade.id === currentId ? 'border-[1.5px] border-trust-indigo' : ''}
-              />
-            </li>
-          ))}
-        </ul>
-      )}
+      <div id={listId}>
+        {list.isPending ? (
+          <div role="status" aria-label="Loading your trades" aria-busy="true">
+            <Skeleton width="full" lines={3} />
+          </div>
+        ) : list.isError && list.data === undefined ? (
+          <p role="alert" className="text-[12px] text-risk-on-soft">
+            We couldn&apos;t load your trades.{' '}
+            <button type="button" className="underline" onClick={() => void list.refetch()}>
+              Try again
+            </button>
+          </p>
+        ) : rows.length === 0 ? (
+          <p className="text-[12px] text-slate">No trades here.</p>
+        ) : (
+          <ul className="m-0 list-none p-0">
+            {rows.map(({ trade, state }) => (
+              <li key={trade.id} {...(trade.id === currentId ? { 'aria-current': 'true' as const } : {})}>
+                <TradeRow
+                  amount={trade.itemAmountMinor === null ? '—' : nairaShort(trade.itemAmountMinor)}
+                  status={{ tone: state.tone, label: state.label }}
+                  {...(trade.counterparty === null
+                    ? {}
+                    : {
+                        counterparty: {
+                          name: partyName(trade.counterparty),
+                          initials: initialsOf(partyName(trade.counterparty).replace(/^@/, '')),
+                        },
+                      })}
+                  sub={`${trade.item.title ?? trade.item.categoryName ?? 'Trade'} · ${trade.tradeCode}`}
+                  href={`/trade/${trade.id}`}
+                  className={trade.id === currentId ? 'border-[1.5px] border-trust-indigo' : ''}
+                />
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
       {list.hasNextPage && (
         <Button
           type="button"
@@ -119,7 +121,7 @@ export function TradePane({
           disabled={list.isFetchingNextPage}
           onClick={() => void list.fetchNextPage()}
         >
-          {list.isFetchingNextPage ? 'Loading…' : 'Show more'}
+          {list.isFetchingNextPage ? 'Loading…' : 'Load more'}
         </Button>
       )}
     </aside>
@@ -153,47 +155,52 @@ export function StageTimeline({ trade, status }: { trade: TradeView; status: Wor
   );
 }
 
-/** What the reader's money is doing: the figures the reference's rail draws, from the trade's own fee snapshot. */
-function MoneyPanel({
+/**
+ * What the platform holds for each side while the trade runs. Only these statuses have money in escrow that the
+ * reader is waiting on, so only these draw the panel: before funding nothing is held, a completed trade has its own
+ * "Financial outcome", and a decided or refunded one says what happened in its body, because the amount that went
+ * where is the ledger's and this screen does not work it out.
+ */
+const HELD: Partial<Record<WorkspaceStatus, string>> = {
+  FUNDED: 'held, not yet released',
+  SHIPPED: 'held, not yet released',
+  UNCONFIRMED_DELIVERY: 'held, not yet released',
+  INSPECTION: 'held, not yet released',
+  DISPUTED: 'held while the case is open',
+};
+
+/** The money panel's own text for a status: `undefined` where it draws nothing. */
+export const heldText = (status: WorkspaceStatus): string | undefined => HELD[status];
+
+/** What the reader's money is doing: the rows the phone draws in its own body, from the trade's fee snapshot. */
+export function MoneyPanel({
   trade,
   status,
+  className,
 }: {
   trade: TradeView;
   status: WorkspaceStatus;
+  className?: string;
 }): React.JSX.Element | null {
-  const { fees } = trade;
-  if (fees === null) return null;
-  const buyer = trade.yourRole === 'BUYER';
-  const copy = stateCopy(status, trade.yourRole);
-  const standing = workspaceStanding(status);
-  const paid = status !== 'PENDING_PAYMENT';
+  const held = heldText(status);
+  if (held === undefined || trade.fees === null) return null;
   return (
-    <Panel title="Money">
-      <TermList aria-label="Money">
-        {buyer ? (
-          <>
-            <TermRow label="Funds">{paid ? 'Protected' : 'Not paid yet'}</TermRow>
-            <TermRow label="Seller payout">
-              {standing.closed ? standing.chip.label : (copy.payoutHeld ?? 'Held')}
-            </TermRow>
-            <TermRow label="Total">{nairaShort(fees.buyerTotalMinor)}</TermRow>
-          </>
-        ) : (
-          <>
-            <TermRow label="Funds">{paid ? 'Protected' : 'Not paid yet'}</TermRow>
-            <TermRow label="Your payout">
-              {nairaShort(fees.sellerProceedsMinor)}
-              {standing.closed ? '' : ` · ${copy.payoutHeld ?? 'held'}`}
-            </TermRow>
-          </>
-        )}
-      </TermList>
+    <Panel title="Money" {...(className === undefined ? {} : { className })}>
+      <MoneyTerms trade={trade} role={trade.yourRole} held={held} />
     </Panel>
   );
 }
 
-/** The seller's proof as a three-up strip with a way to all of it: the rail's glance at the evidence. */
-function EvidencePanel({ trade, status }: { trade: TradeView; status: WorkspaceStatus }): React.JSX.Element {
+/** The seller's proof as a three-up strip with a way to all of the evidence. */
+export function EvidencePanel({
+  trade,
+  status,
+  className,
+}: {
+  trade: TradeView;
+  status: WorkspaceStatus;
+  className?: string;
+}): React.JSX.Element {
   const readable = (EVIDENCE_STATUSES as readonly string[]).includes(status);
   const inspection = useInspection(trade.id, readable);
   const items: GridItem[] = (inspection.data?.sellerProof?.media ?? []).slice(0, 3).map((file, index) => ({
@@ -203,18 +210,19 @@ function EvidencePanel({ trade, status }: { trade: TradeView; status: WorkspaceS
   }));
   return (
     <Panel
-      title="Evidence"
+      title="Seller’s proof"
+      {...(className === undefined ? {} : { className })}
       action={
         readable ? (
           <a href={evidenceHref(trade.id)} className="text-[11.5px] font-semibold text-trust-indigo">
-            View all
+            View all evidence
           </a>
         ) : undefined
       }
     >
       {!readable ? (
         <p className="m-0 text-[12px] leading-[1.6] text-slate">
-          Evidence appears here once the item has shipped.
+          The seller’s proof appears here once the item has shipped.
         </p>
       ) : inspection.isPending ? (
         <Skeleton width="full" lines={2} />
@@ -236,7 +244,7 @@ function EvidencePanel({ trade, status }: { trade: TradeView; status: WorkspaceS
   );
 }
 
-/** The panels beside a trade. `MoneyPanel` is the one place the money is drawn while this is on screen. */
+/** The desktop's rail beside a trade. */
 export function ContextRail({
   trade,
   status,
@@ -245,9 +253,9 @@ export function ContextRail({
   status: WorkspaceStatus;
 }): React.JSX.Element {
   return (
-    <aside aria-label="Trade context" className="flex min-w-0 flex-col gap-[16px]">
+    <div className="flex min-w-0 flex-col gap-[16px]">
       <MoneyPanel trade={trade} status={status} />
       <EvidencePanel trade={trade} status={status} />
-    </aside>
+    </div>
   );
 }

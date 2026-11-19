@@ -8,30 +8,36 @@ export function TradeColumn({ children }: { children: React.ReactNode }): React.
   return <div className="mx-auto w-full max-w-[480px] md:max-w-[760px] lg:max-w-none">{children}</div>;
 }
 
-/** The reference's `.dweb-panel`: a hairline card with a small heading, used for each block of a wide screen. */
+/**
+ * The reference's `.dweb-panel`: a hairline card with a small heading, used for each block of a wide screen. It is a
+ * plain group, not a landmark: a screen of five panels would be five regions, and the heading already names it.
+ * Anything with its own heading inside draws it one level down (`as="h3"`).
+ */
 export function Panel({
   title,
   action,
   children,
-  label,
+  id,
+  className = '',
 }: {
   title: string;
   /** Something at the heading's right edge, such as "View all". */
   action?: React.ReactNode;
   children: React.ReactNode;
-  /** Names the panel for assistive technology when the heading alone does not. */
-  label?: string;
+  /** Lets a control that shows this panel name it (`aria-controls`). */
+  id?: string;
+  className?: string;
 }): React.JSX.Element {
   return (
-    <section
-      aria-label={label ?? title}
-      className="min-w-0 rounded-md border border-solid border-border-hairline bg-surface-primary p-[16px]"
+    <div
+      {...(id === undefined ? {} : { id })}
+      className={`min-w-0 rounded-md border border-solid border-border-hairline bg-surface-primary p-[16px] ${className}`}
     >
       <div className="mb-[10px] flex items-baseline justify-between gap-[8px]">
         <h2 className="m-0 text-[13px] font-semibold text-midnight-text">{title}</h2>
         {action}
       </div>
       {children}
-    </section>
+    </div>
   );
 }

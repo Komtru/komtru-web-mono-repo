@@ -1249,7 +1249,14 @@ export function tradeEvidenceFor(
       attachedAt: '2026-11-18T11:10:00.000Z',
     },
   ];
-  return event === null ? all : all.filter((entry) => entry.event === event);
+  // What exists depends on how far the trade has got: nothing before it ships, the seller's dispatch photos once it
+  // has, and the buyer's inspection photos only from inspection on.
+  const reached = ['SHIPPED', 'UNCONFIRMED_DELIVERY', 'INSPECTION', 'DISPUTED', 'COMPLETED', 'SETTLED'];
+  const inspected = ['INSPECTION', 'DISPUTED', 'COMPLETED', 'SETTLED'];
+  const existing = all.filter((entry) =>
+    entry.event === 'INSPECTION' ? inspected.includes(item.status) : reached.includes(item.status),
+  );
+  return event === null ? existing : existing.filter((entry) => entry.event === event);
 }
 
 /**

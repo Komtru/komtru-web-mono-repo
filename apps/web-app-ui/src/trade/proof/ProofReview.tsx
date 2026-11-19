@@ -6,7 +6,7 @@
 // the buyer's own photos stay on this device, a compare aid and not evidence, and the screen says so.
 import type { useInspection } from '@komtru/api-client/react';
 import { NoteBanner, SectionLabel, TermList, TermRow } from '@komtru/ui-kit';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import { whenLabel } from '../format';
 import { SellerProof } from '../inspection/Proof';
 import { type GridItem, MediaGrid } from './MediaGrid';
@@ -95,14 +95,14 @@ interface Mine {
   src: string | undefined;
 }
 
-interface MyPhotosState {
+export interface MyPhotosState {
   items: GridItem[];
   choose: (files: File[]) => void;
   remove: (id: string) => void;
 }
 
 /** The buyer's own photos for the compare: kept on this device, previewed by object URL, released when the screen goes. */
-function useMyPhotos(): MyPhotosState {
+export function useMyPhotos(): MyPhotosState {
   const [mine, setMine] = useState<Mine[]>([]);
   // Ids come from a counter that only goes up, so two photos with the same name never share a key or a Remove.
   const next = useRef(0);
@@ -175,8 +175,8 @@ function MyPhotosView({ items, choose, remove }: MyPhotosState): React.JSX.Eleme
 }
 
 /** DX-23: the buyer's own photos on their own, where the seller's proof is drawn beside them rather than behind a toggle. */
-export function MyPhotos(): React.JSX.Element {
-  return <MyPhotosView {...useMyPhotos()} />;
+export function MyPhotos({ photos }: { photos: MyPhotosState }): React.JSX.Element {
+  return <MyPhotosView {...photos} />;
 }
 
 /**
@@ -184,9 +184,20 @@ export function MyPhotos(): React.JSX.Element {
  * pair of pills swaps between them (TX-14: "instead of two cramped panes"); a desktop draws both side by side and
  * uses `SellerProof` and `MyPhotos` itself.
  */
-export function InspectCompare({ read, seller }: { read: Read; seller: string }): React.JSX.Element {
+export function InspectCompare({
+  read,
+  seller,
+  photos,
+}: {
+  read: Read;
+  seller: string;
+  /** The buyer's photos, kept by the screen so they outlive a change of layout; the compare keeps its own if none. */
+  photos?: MyPhotosState;
+}): React.JSX.Element {
   const [side, setSide] = useState<'seller' | 'mine'>('seller');
-  const photos = useMyPhotos();
+  const own = useMyPhotos();
+  const mine = photos ?? own;
+  const panel = useId();
 
   return (
     <div>
@@ -196,6 +207,7 @@ export function InspectCompare({ read, seller }: { read: Read; seller: string })
             key={which}
             type="button"
             aria-pressed={side === which}
+            aria-controls={panel}
             onClick={() => {
               setSide(which);
             }}
@@ -210,18 +222,49 @@ export function InspectCompare({ read, seller }: { read: Read; seller: string })
         ))}
       </div>
 
-      {side === 'seller' ? <SellerProof read={read} seller={seller} /> : <MyPhotosView {...photos} />}
+      <div id={panel}>
+        {side === 'seller' ? <SellerProof read={read} seller={seller} /> : <MyPhotosView {...mine} />}
+      </div>
     </div>
   );
 }
 
-/** "Does it match?": what to check the item against the proof for. A reminder; the platform does not read it. */
-export function MatchChecks({ heading = true }: { heading?: boolean } = {}): React.JSX.Element {
+export interface MatchChecksState {
+  checked: ReadonlySet<string>;
+  toggle: (check: string) => void;
+}
+
+/** Which checks are ticked. Kept by the screen so a change of layout does not clear them. */
+export function useMatchChecks(): MatchChecksState {
   const [checked, setChecked] = useState<ReadonlySet<string>>(new Set());
+  const toggle = (check: string) => {
+    setChecked((current) => {
+      const next = new Set(current);
+      if (next.has(check)) next.delete(check);
+      else next.add(check);
+      return next;
+    });
+  };
+  return { checked, toggle };
+}
+
+/** "Does it match?": what to check the item against the proof for. A reminder; the platform does not read it. */
+export function MatchChecks({
+  heading = true,
+  as,
+  state,
+}: {
+  heading?: boolean;
+  /** The heading's level, one down from a panel's own. */
+  as?: 'h2' | 'h3';
+  state?: MatchChecksState;
+} = {}): React.JSX.Element {
+  const own = useMatchChecks();
+  const { checked, toggle } = state ?? own;
   return (
     <div>
       {/* A panel that names the checks itself (TX-14's "Checks") has no use for a second heading. */}
-      {heading && <SectionLabel>Does it match?</SectionLabel>}
+      {heading && <SectionLabel {...(as === undefined ? {} : { as })}>Does it match?</SectionLabel>}
       <fieldset className="mb-[14px] min-w-0 border-0 p-0">
         <legend className="sr-only">Does it match?</legend>
         {MATCH_CHECKS.map((check) => {
@@ -238,12 +281,7 @@ export function MatchChecks({ heading = true }: { heading?: boolean } = {}): Rea
                 checked={on}
                 className="h-[16px] w-[16px] shrink-0 accent-trust-indigo"
                 onChange={() => {
-                  setChecked((current) => {
-                    const next = new Set(current);
-                    if (on) next.delete(check);
-                    else next.add(check);
-                    return next;
-                  });
+                  toggle(check);
                 }}
               />
               <span>{check}</span>

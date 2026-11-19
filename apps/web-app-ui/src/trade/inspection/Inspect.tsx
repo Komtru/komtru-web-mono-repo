@@ -29,7 +29,7 @@ import {
 import { ItemSummary } from '../parts';
 import { extensionPending, releasePaused } from '../workspace-copy';
 import { Deadline } from '../workspace/shared';
-import { InspectCompare, MatchChecks, MyPhotos } from '../proof/ProofReview';
+import { InspectCompare, MatchChecks, MyPhotos, useMatchChecks, useMyPhotos } from '../proof/ProofReview';
 import { TradeColumn, Panel } from '../workspace/layout';
 import { useViewport } from '../workspace/viewport';
 import { DeliveryEvidence, SellerProof } from './Proof';
@@ -187,6 +187,9 @@ function BuyerInspect({ trade, read, query }: Parts): React.JSX.Element {
       ? undefined
       : addressLine(trade.terms.deliveryAddress);
   const viewport = useViewport();
+  // Kept here, above the per-width arrangement, so a rotated tablet keeps the photos and ticks the buyer made.
+  const photos = useMyPhotos();
+  const checks = useMatchChecks();
   const checksNote = (
     <p className="mb-[14px] text-[12.5px] leading-[1.5] text-slate">
       Check the item against the agreed terms before confirming. Confirming releases the payment and can’t be
@@ -195,7 +198,9 @@ function BuyerInspect({ trade, read, query }: Parts): React.JSX.Element {
   );
   const delivery = (
     <>
-      <SectionLabel>Delivery — what you received</SectionLabel>
+      <SectionLabel {...(viewport === 'mobile' ? {} : { as: 'h3' as const })}>
+        Delivery — what you received
+      </SectionLabel>
       <DeliveryEvidence read={read} deliveredTo={deliveredTo} />
     </>
   );
@@ -255,9 +260,9 @@ function BuyerInspect({ trade, read, query }: Parts): React.JSX.Element {
             <SellerProof read={read} seller={seller} />
           </Panel>
           <Panel title="What you received">
-            <MyPhotos />
+            <MyPhotos photos={photos} />
             {delivery}
-            <MatchChecks />
+            <MatchChecks as="h3" state={checks} />
             {checksNote}
           </Panel>
         </div>
@@ -267,12 +272,12 @@ function BuyerInspect({ trade, read, query }: Parts): React.JSX.Element {
           <div className="min-w-0">
             <ItemSummary trade={trade} />
             <Panel title="Photos">
-              <InspectCompare read={read} seller={seller} />
+              <InspectCompare read={read} seller={seller} photos={photos} />
             </Panel>
             {delivery}
           </div>
           <Panel title="Checks">
-            <MatchChecks heading={false} />
+            <MatchChecks heading={false} state={checks} />
             {checksNote}
           </Panel>
         </div>
@@ -280,9 +285,9 @@ function BuyerInspect({ trade, read, query }: Parts): React.JSX.Element {
         <>
           <ItemSummary trade={trade} />
           <SectionLabel>Seller’s proof — before shipping</SectionLabel>
-          <InspectCompare read={read} seller={seller} />
+          <InspectCompare read={read} seller={seller} photos={photos} />
           {delivery}
-          <MatchChecks />
+          <MatchChecks state={checks} />
           {checksNote}
         </>
       )}

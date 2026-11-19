@@ -20,7 +20,7 @@ const TITLE = 'Trade Evidence';
  */
 export function Evidence({ id }: { id: string }): React.JSX.Element {
   return (
-    <TradeGate id={id} title={TITLE}>
+    <TradeGate id={id} title={TITLE} wide>
       {(trade) => <Media trade={trade} />}
     </TradeGate>
   );
@@ -33,6 +33,7 @@ function Media({ trade }: { trade: TradeView }): React.JSX.Element {
   if (!readable) {
     return (
       <Refusal
+        wide
         id={trade.id}
         title={TITLE}
         why="Evidence appears here once the item has shipped. Nothing has been recorded yet."
@@ -48,7 +49,9 @@ function Media({ trade }: { trade: TradeView }): React.JSX.Element {
   }
   if (inspection.isError) {
     return (
-      <ReadFailed error={inspection.error} noun="the evidence" onRetry={() => void inspection.refetch()} />
+      <Frame title={TITLE} id={trade.id} wide>
+        <ReadFailed error={inspection.error} noun="the evidence" onRetry={() => void inspection.refetch()} />
+      </Frame>
     );
   }
   return (

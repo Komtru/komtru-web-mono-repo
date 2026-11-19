@@ -398,7 +398,7 @@ describe('the trade workspace and evidence reads', () => {
       };
       expect(dispatch.items.length).toBeGreaterThan(0);
       expect(dispatch.items.every((item) => item.event === 'DISPATCH')).toBe(true);
-      expect(all.items.length).toBeGreaterThan(dispatch.items.length);
+      expect(all.items.length).toBe(dispatch.items.length);
 
       const file = (await (
         await fetch(`${standin.apiUrl}/files/${dispatch.items[0]?.fileId ?? ''}`, { headers: auth })
@@ -409,6 +409,25 @@ describe('the trade workspace and evidence reads', () => {
         headers: auth,
       });
       expect(stranger.status).toBe(404);
+    } finally {
+      await standin.close();
+    }
+  });
+
+  it('only lists the evidence a trade has reached: no inspection photos before inspection, none before shipping', async () => {
+    const standin = await startStandin({ port: 0, log: () => undefined });
+    try {
+      const auth = await signedIn(standin.apiUrl, 'buyer', 'with-trades');
+      const events = async (status: string): Promise<string[]> => {
+        const trade = tradesFor('buyer', 'with-trades').find((candidate) => candidate.status === status);
+        const read = (await (
+          await fetch(`${standin.apiUrl}/trades/${trade?.id ?? ''}/evidence`, { headers: auth })
+        ).json()) as { items: { event: string }[] };
+        return [...new Set(read.items.map((item) => item.event))];
+      };
+      expect(await events('SHIPPED')).toEqual(['DISPATCH']);
+      expect(await events('INSPECTION')).toEqual(['DISPATCH', 'INSPECTION']);
+      expect(await events('FUNDED')).toEqual([]);
     } finally {
       await standin.close();
     }

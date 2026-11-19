@@ -65,29 +65,37 @@ export function NotInTheAppYet({ children }: { children: React.ReactNode }): Rea
   return <p className="mb-[14px] text-[11.5px] leading-[1.6] text-trust-gray">{children}</p>;
 }
 
-/** The money, in the reader's terms, straight from the trade's own fee snapshot. */
+/** The rows of the money, in the reader's terms, straight from the trade's own fee snapshot. */
+export function MoneyTerms({ trade, role, held }: BodyProps & { held: string }): React.JSX.Element | null {
+  const { fees } = trade;
+  if (fees === null) return null;
+  return (
+    <TermList aria-label="Money">
+      {role === 'BUYER' ? (
+        <>
+          <TermRow label="You paid">{nairaShort(fees.buyerTotalMinor)}</TermRow>
+          <TermRow label="Seller payout">{held}</TermRow>
+        </>
+      ) : (
+        <>
+          <TermRow label="Protected funds">Confirmed · {nairaShort(fees.itemAmountMinor)}</TermRow>
+          <TermRow label="Your payout">
+            {nairaShort(fees.sellerProceedsMinor)} · {held}
+          </TermRow>
+        </>
+      )}
+    </TermList>
+  );
+}
+
+/** The money, under its own heading, for the phone's bodies. The wide rail draws it instead (`RailShowsMoney`). */
 export function MoneyRows({ trade, role, held }: BodyProps & { held: string }): React.JSX.Element | null {
   const inRail = useContext(RailShowsMoney);
-  const { fees } = trade;
-  if (fees === null || inRail) return null;
+  if (trade.fees === null || inRail) return null;
   return (
     <>
       <SectionLabel>Money</SectionLabel>
-      <TermList aria-label="Money">
-        {role === 'BUYER' ? (
-          <>
-            <TermRow label="You paid">{nairaShort(fees.buyerTotalMinor)}</TermRow>
-            <TermRow label="Seller payout">{held}</TermRow>
-          </>
-        ) : (
-          <>
-            <TermRow label="Protected funds">Confirmed · {nairaShort(fees.itemAmountMinor)}</TermRow>
-            <TermRow label="Your payout">
-              {nairaShort(fees.sellerProceedsMinor)} · {held}
-            </TermRow>
-          </>
-        )}
-      </TermList>
+      <MoneyTerms trade={trade} role={role} held={held} />
     </>
   );
 }
