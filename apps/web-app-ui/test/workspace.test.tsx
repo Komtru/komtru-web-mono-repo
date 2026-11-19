@@ -354,7 +354,7 @@ describe('inspection (CWT-04)', () => {
     expect(await screen.findByText('Automatic release is paused')).toBeTruthy();
   });
 
-  it('leads the buyer to Inspect & confirm, and says reporting an issue is not here yet', async () => {
+  it('leads the buyer to Inspect & confirm, with no seam left on reporting an issue', async () => {
     serve(workspaceTrade('INSPECTION', 'BUYER'));
     show();
     await screen.findByText('Inspect the item');
@@ -363,7 +363,8 @@ describe('inspection (CWT-04)', () => {
     );
     // Nothing on the overview releases the payment: that is behind the acknowledgement on its own screen.
     expect(screen.queryByRole('button', { name: /release|confirm/i })).toBeNull();
-    expect(screen.getByText("Reporting an issue isn't in the app yet.")).toBeTruthy();
+    // F-032 built it, so the overview no longer says it is missing.
+    expect(screen.queryByText(/Reporting an issue isn.t in the app yet/)).toBeNull();
   });
 
   it('leads the seller to the request only when the platform says there is one to answer', async () => {
@@ -618,8 +619,10 @@ describe('the actions tab (CWT-09)', () => {
       'Release funds · Guarded',
     ]);
     expect(within(rows[1]!).queryByText(/Not in the app yet/)).toBeNull();
-    expect(within(rows[3]!).getByText(/Not in the app yet/)).toBeTruthy();
-    expect(within(list).getAllByRole('link')).toHaveLength(5);
+    // F-032: "Report an issue" is a real control now, and points at the dispute flow.
+    expect(within(rows[3]!).queryByText(/Not in the app yet/)).toBeNull();
+    expect(within(rows[3]!).getByRole('link').getAttribute('href')).toBe(`/trade/${id(1)}/dispute`);
+    expect(within(list).getAllByRole('link')).toHaveLength(6);
     expect(screen.queryByRole('button', { name: /accept|report|release|withdraw/i })).toBeNull();
     await expectNoAxeViolations(container, SHELL_RULES);
   });

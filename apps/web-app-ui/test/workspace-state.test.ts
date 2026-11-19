@@ -142,7 +142,8 @@ describe('what can be done', () => {
         'SHIPPED SELLER': ['view-terms', 'ask-more-time', 'report-delivered'],
         'SHIPPED BUYER': ['view-terms', 'confirm-delivery'],
         'UNCONFIRMED_DELIVERY BUYER': ['view-terms', 'confirm-delivery'],
-        'INSPECTION BUYER': ['view-terms', 'accept', 'more-time'],
+        // F-032 closed the seam: reporting an issue opens a case and is a real control now.
+        'INSPECTION BUYER': ['view-terms', 'accept', 'more-time', 'report-issue'],
         'INSPECTION SELLER': ['view-terms', 'answer-extension'],
         'PENDING_PAYMENT BUYER': ['view-terms', 'fund', 'cancel'],
         'PENDING_PAYMENT SELLER': ['view-terms', 'cancel'],
@@ -209,9 +210,26 @@ describe('what can be done', () => {
   });
 
   it('says plainly that a step is not in the app yet, instead of offering a control that does nothing', () => {
-    const later = tradeActions('INSPECTION', 'BUYER', ID).filter((row) => row.availability === 'later');
-    expect(later.length).toBeGreaterThan(0);
-    for (const row of later) expect(row.href).toBeUndefined();
+    // The rule holds wherever a `later` row appears. F-032 turned the last one on INSPECTION into
+    // a live control, so this walks every state rather than naming one that happens to have some.
+    for (const status of WORKSPACE_STATUSES) {
+      for (const role of ROLES) {
+        for (const row of tradeActions(status, role, ID)) {
+          if (row.availability !== 'later') continue;
+          expect(row.href, `${status} ${role} ${row.id}`).toBeUndefined();
+          expect(row.description.length).toBeGreaterThan(0);
+        }
+      }
+    }
+  });
+
+  it('F-032: sends the buyer’s "Report an issue" to the dispute flow', () => {
+    expect(tradeActions('INSPECTION', 'BUYER', ID).find((row) => row.id === 'report-issue')).toMatchObject({
+      availability: 'live',
+      href: `/trade/${ID}/dispute`,
+    });
+    // The seller does not report an issue with their own item.
+    expect(tradeActions('INSPECTION', 'SELLER', ID).some((row) => row.id === 'report-issue')).toBe(false);
   });
 
   it('does not offer a release by hand, only a note that it follows an outcome', () => {

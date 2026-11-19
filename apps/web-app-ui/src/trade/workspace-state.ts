@@ -123,6 +123,11 @@ export const EVIDENCE_STATUSES: readonly WorkspaceStatus[] = [
 ];
 export const addEvidenceHref = (tradeId: string): string => `/trade/${tradeId}/evidence/new`;
 /** Inspect & Confirm (Z4/Z5), and for the seller the answer to a request for more time (BEI2). */
+export const reportIssueHref = (tradeId: string): string => `/trade/${tradeId}/dispute`;
+
+/** F-032: where the DISPUTED body sends both parties. */
+export const disputeStatusHref = (tradeId: string): string => `/trade/${tradeId}/dispute/status`;
+
 export const inspectHref = (tradeId: string): string => `/trade/${tradeId}/inspect`;
 /** DE1: the seller asks the buyer for more time to deliver. */
 export const extendHref = (tradeId: string): string => `/trade/${tradeId}/extend`;
@@ -188,8 +193,9 @@ const confirmDeliveryRow = (tradeId: string, title: string): TradeActionRow => (
  *
  * Only what is real is `live`: reading the agreed terms and activity, withdrawing before payment (the
  * platform lets either party cancel an agreed trade nobody has paid for), the buyer's funding (F-024) and
- * cancelling after payment (F-030). Everything else names the feature that will own it. SEAM(F-032 disputes,
- * reporting an issue): turn a `later` row into a `live` one when the flow exists, and nothing else here changes.
+ * cancelling after payment (F-030), and reporting an issue (F-032). Everything else names the feature that
+ * will own it: add a row with `availability: 'later'` and a sentence saying so, and turn it `live` when the
+ * flow exists.
  */
 export function tradeActions(
   status: WorkspaceStatus,
@@ -212,9 +218,6 @@ export function tradeActions(
     },
   ];
   const buyer = role === 'BUYER';
-  const later = (id: string, title: string, description: string): void => {
-    rows.push({ id, title, description, availability: 'later' });
-  };
 
   switch (status) {
     case 'PENDING_PAYMENT':
@@ -291,7 +294,13 @@ export function tradeActions(
             href: inspectHref(tradeId),
           },
         );
-        later('report-issue', 'Report an issue · Buyer', "Reporting an issue isn't in the app yet.");
+        rows.push({
+          id: 'report-issue',
+          title: 'Report an issue · Buyer',
+          description: 'Open a case. The payment stays held until it is resolved.',
+          availability: 'live',
+          href: reportIssueHref(tradeId),
+        });
       } else {
         rows.push({
           id: 'answer-extension',

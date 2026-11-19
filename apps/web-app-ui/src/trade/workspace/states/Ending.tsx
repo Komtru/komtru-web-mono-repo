@@ -1,22 +1,50 @@
 'use client';
 
-import { SectionLabel, StatusHero, TermList, TermRow } from '@komtru/ui-kit';
+import { useTradeDispute } from '@komtru/api-client/react';
+import { ActionStack, Button, SectionLabel, Skeleton, StatusHero, TermList, TermRow } from '@komtru/ui-kit';
 import { AutoReleaseNotice } from '../../cancel/AutoReleaseNotice';
 import { nairaShort, partyName } from '../../format';
 import { ItemSummary } from '../../parts';
 import { stateCopy } from '../../workspace-copy';
 import type { WorkspaceStatus } from '../../workspace-state';
-import { BannerView, FurtherViews, MoneyRows, NotInTheAppYet, type BodyProps } from '../shared';
+import { SubReadFailed } from '../../delivery/parts';
+import { reasonLabel, stageLabel } from '../../dispute/words';
+import { disputeStatusHref } from '../../workspace-state';
+import { BannerView, FurtherViews, MoneyRows, type BodyProps } from '../shared';
 
-/** CWT-05: an issue was reported and the money stays where it is. */
+/**
+ * CWT-05: an issue was reported and the money stays where it is.
+ *
+ * F-032 closed the seam here. The case reference, its stage and the window it is waiting on are
+ * read from the dispute; a failed read leaves the rest of the body standing and says so in one
+ * line, because the banner above it is true whether or not the case details load.
+ */
 export function Disputed({ trade, role }: BodyProps): React.JSX.Element {
   const copy = stateCopy('DISPUTED', role);
+  const dispute = useTradeDispute(trade.id);
   return (
     <>
       {copy.banner && <BannerView banner={copy.banner} />}
       <MoneyRows trade={trade} role={role} held={copy.payoutHeld ?? ''} />
-      {/* SEAM(F-032): the case reference, its stage, the evidence deadline and "Submit evidence". */}
-      {copy.seam !== undefined && <NotInTheAppYet>{copy.seam}</NotInTheAppYet>}
+
+      {dispute.isPending && <Skeleton lines={3} />}
+      {dispute.isError && <SubReadFailed noun="the case" onRetry={() => void dispute.refetch()} />}
+      {dispute.data !== null && dispute.data !== undefined && (
+        <>
+          <SectionLabel>The case</SectionLabel>
+          <TermList aria-label="The case">
+            <TermRow label="Case">{dispute.data.code}</TermRow>
+            <TermRow label="Issue">{reasonLabel(dispute.data.category)}</TermRow>
+            <TermRow label="Stage">{stageLabel(dispute.data.status)}</TermRow>
+          </TermList>
+          <ActionStack>
+            <Button asChild>
+              <a href={disputeStatusHref(trade.id)}>Open the case</a>
+            </Button>
+          </ActionStack>
+        </>
+      )}
+
       <FurtherViews trade={trade} />
     </>
   );

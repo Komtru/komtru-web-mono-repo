@@ -46,6 +46,7 @@ const CLIENT_COMPONENTS = new Set([
   'OtpInput.tsx',
   'Select.tsx',
   'Sheet.tsx',
+  'TextArea.tsx',
   'TextField.tsx',
   'Toggle.tsx',
 ]);

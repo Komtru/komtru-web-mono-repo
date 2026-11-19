@@ -11,6 +11,7 @@ import type { Db } from '../db/index.js';
 import type { Logger } from '../platform/logger.js';
 import type { KomtruModule, SeedableModule } from '../platform/module.js';
 import { casesModule } from './cases/index.js';
+import { createDisputesModule, hasOpenDispute } from './disputes/index.js';
 import { configModule } from './config/index.js';
 import {
   filesModule,
@@ -154,9 +155,17 @@ export const createModules: ModuleBuilder = (deps) => {
           scope: 'CONSUMER',
           roles: [],
         })),
+      // T-080 closing the `noDisputes` seam: inspection and auto-release stop for an open case.
+      // Passed as a function rather than the module, so trades still depends on nothing of
+      // disputes but one read.
+      hasOpenDispute,
     }),
     // After identity, whose audit log and role grants every staff change to a case reads and writes.
     casesModule,
+    // After trades (it asks M7 to move the trade), ledger (whose split executes its decisions),
+    // files (the evidence grants) and cases (where it registers itself as staff work). Before
+    // notify, which subscribes to the events it publishes.
+    createDisputesModule(),
     // After identity (capability, audit), files (KYC documents), geo, config (categories), ledger (the payout
     // account), trust (the CAC lookup) and cases (the review case), all read through their barrels. Before
     // notify, which subscribes to the decisions it publishes.

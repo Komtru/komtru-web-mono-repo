@@ -269,6 +269,16 @@
       "tag": "0053_waitlist_signups",
       "when": 1795078029925,
       "sha256": "633c60bfe781763529e8e2ca93727a404343d0a616c0eda041d56a654483cbdb"
+    },
+    {
+      "tag": "0054_disputes_schema",
+      "when": 1795089815765,
+      "sha256": "500d6ad37e9e714da5bda6def79dd800843d037049089b770ad71b83590f3642"
+    },
+    {
+      "tag": "0055_disputes_triggers",
+      "when": 1795089841385,
+      "sha256": "66206bee6bf384cc6be3e76363d392df0ef563764be6a4e8da460cfcd8ef0e4e"
     }
   ]
 }

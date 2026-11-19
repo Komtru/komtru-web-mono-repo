@@ -125,9 +125,8 @@ export function stateCopy(status: WorkspaceStatus, role: TradeRole, ctx: CopyCon
               body: 'If the window passes with no issue reported, the payment is released to you automatically.',
             },
         deadlineLabel: 'Inspection ends',
-        // Accepting, asking for more time and answering a request are on Inspect & Confirm. Reporting an issue
-        // is a case (F-032), so the buyer is told it is not here yet.
-        ...(buyer ? { seam: notYet('Reporting an issue') } : {}),
+        // Accepting, asking for more time and answering a request are on Inspect & Confirm;
+        // reporting an issue opens a case (F-032) and is an Actions row of its own.
       };
     case 'DISPUTED':
       return {
@@ -139,7 +138,6 @@ export function stateCopy(status: WorkspaceStatus, role: TradeRole, ctx: CopyCon
             : 'The buyer reported an issue. The payment stays held until the case is decided against the agreed terms.',
         },
         payoutHeld: 'held while the case is open',
-        seam: 'The case, and sending evidence to it, aren’t in the app yet.',
       };
     case 'COMPLETED':
       return {
