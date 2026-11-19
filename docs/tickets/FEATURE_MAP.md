@@ -906,6 +906,7 @@ list a trade.
 - **Status:** Not started
 - **Depends on:** F-015, F-016
 - **MVP:** yes
+- **Progress note (2026-11-19), entry screens:** DX-01 Welcome — Log in is built and merged to `staging` (6.2% of pixels differ through the stand-in). By the owner's direction, every other entry screen (welcome, sign up, verify, terms, terms updated, reset and set password, session expired, service notice, update required, too many attempts) uses DX-01's two-column frame on desktop, and the onboarding walkthrough OB1–OB5 a centred card; none of those is drawn wide, so they are read by eye (`docs/ui-review/entry-wide.md`, `docs/ui-review/onboarding-wide.md`). Phone is pixel-identical to staging on all 24 captures. The Trade Code box needs a session (`/find` and `GET /trades/by-code` are authenticated), so a logged-out visitor goes through log in, or sign up, and lands on the trade. "Keep me signed in" is not built: the platform has no session-length option. **Not started:** DX-02 (identity verification, being rebuilt in the F-045 YouVerify work), DX-03–DX-09.
 
 #### F-068 — Desktop: propose, agree and fund
 
@@ -964,6 +965,7 @@ list a trade.
 - **Frontend scope:** Tablet · 01 Arrive (TX-01), · 02 Home (TX-02–TX-04), · 03 Discover (TX-05, TX-06), · 04 Propose & agree (TX-07, TX-07B, TX-08, TX-09) and · 05 Fund & protect (TX-10). _11 v2 screens._
 - **Status:** Not started
 - **Progress note (2026-11-19):** Merged to `staging` as part of the F-068 responsive pass — see that feature's note. **Not Done.**
+- **Progress note (2026-11-19), entry screens:** TX-01 Log in is built and merged to `staging` (3.4% of pixels differ at 820px; the harness's own 560px tablet frame measures the phone layout). Every other entry screen and the onboarding walkthrough use TX-01's centred card on tablet; see F-067's entry note. TX-02–TX-06 not started.
 - **Depends on:** F-015, F-018, F-019, F-023, F-024
 - **MVP:** yes
 
