@@ -7,8 +7,8 @@ behind it is [`BUILD_PLAN.md`](BUILD_PLAN.md). The unit of work is the feature, 
 thing in an app.
 
 ```
-MVP   █████████████████████·············  30/49   (61%)
-Total █████████████·····················  30/80   (38%)
+MVP   █████████████████████·············  31/50   (62%)
+Total █████████████·····················  31/81   (38%)
 ```
 
 19 MVP features left, 31 deferred past it.
@@ -41,7 +41,7 @@ The engine exists and only the UI is missing, so these are the highest-value wor
 | Park network                            | 0    | 5     | 0        | 0         |
 | Logistics partner                       | 0    | 2     | 0        | 0         |
 | Desktop & tablet journeys               | 0    | 8     | 0        | 6         |
-| Launch & assurance (not a user journey) | 0    | 6     | 0        | 4         |
+| Launch & assurance (not a user journey) | 1    | 7     | 1        | 5         |
 
 ## Ready features (every dependency done), MVP first
 
