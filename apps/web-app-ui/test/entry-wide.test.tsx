@@ -305,7 +305,7 @@ describe('the tablet card (TX-01)', () => {
     atWidth('tablet');
   });
 
-  it('puts the wordmark and the headline above the log-in card, and the actions side by side in it', async () => {
+  it('puts the wordmark and the headline above the log-in card, and the actions side by side in it', () => {
     show(<LoginForm next={undefined} notice={undefined} />);
     expect(screen.getByRole('img', { name: 'Komtru' })).toBeDefined();
     expect(screen.getByText(HEADLINE)).toBeDefined();
@@ -315,13 +315,13 @@ describe('the tablet card (TX-01)', () => {
     expect(screen.getByRole('link', { name: 'Create account' }).getAttribute('href')).toBe('/signup');
   });
 
-  it('puts the wordmark alone above the other cards', async () => {
+  it('puts the wordmark alone above the other cards', () => {
     show(<SignUpForm />);
     expect(screen.getByRole('img', { name: 'Komtru' })).toBeDefined();
     expect(screen.queryByText(HEADLINE)).toBeNull();
   });
 
-  it('keeps one Back link, in the card', async () => {
+  it('keeps one Back link, in the card', () => {
     show(<SignUpForm />);
     const back = within(wideBack()!).getByRole('link', { name: 'Back' });
     expect(back.getAttribute('href')).toBe('/');
@@ -425,11 +425,11 @@ describe('a resize while the person is typing', () => {
     }
   });
 
-  it('keeps a half-ticked terms form, in the same boxes', async () => {
+  it('keeps a half-ticked terms form, in the same boxes', () => {
     signUpDraft.write({ phone: '0802 341 5567', email: 'ada@example.com', fullName: 'Ada Obi' });
     atWidth('desktop');
     show(<TermsForm />);
-    const [first, second] = screen.getAllByRole('checkbox') as HTMLInputElement[];
+    const [first, second] = screen.getAllByRole<HTMLInputElement>('checkbox');
     fireEvent.click(first!);
     for (const width of WIDTHS) {
       resizeTo(width);

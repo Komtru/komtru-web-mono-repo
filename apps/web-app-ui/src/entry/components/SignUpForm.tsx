@@ -62,6 +62,7 @@ export function SignUpForm(): React.JSX.Element {
     <EntryFrame
       title="Create account"
       back={ENTRY.welcome}
+      tradeCode
       footer={
         <Button type="submit" form={FORM}>
           Continue

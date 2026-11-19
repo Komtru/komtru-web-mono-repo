@@ -2,6 +2,7 @@
 
 import { Banner, Button, OtpInput, TextField } from '@komtru/ui-kit';
 import { useState } from 'react';
+import { useViewport } from '../../trade/workspace/viewport';
 import { defaultFactor, ENTRY, factorLabel, failureMessage, needsSend, usableFactors } from '../flow';
 import {
   proveFactor,
@@ -65,6 +66,9 @@ export function LoginForm({
   notice: LoginNotice;
 }): React.JSX.Element {
   const openSession = useOpenSession(next);
+  // DX-01 and TX-01 write the identifier as "Phone number or email" and add the desktop's own title and Create account.
+  const viewport = useViewport();
+  const wide = viewport !== 'mobile';
   const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
   const [busy, setBusy] = useState(false);
@@ -139,19 +143,36 @@ export function LoginForm({
     <EntryFrame
       title="Log in"
       back={ENTRY.welcome}
+      tradeCode
+      intro="headline"
       footer={
         <>
           <Button type="submit" form={FORM} disabled={busy}>
             {busy ? 'Logging in…' : 'Log in'}
           </Button>
-          <p className="m-0 text-center text-[11.5px] text-slate">
-            New to Komtru? <InlineLink href={ENTRY.signUp}>Create an account</InlineLink>
-          </p>
+          {wide ? (
+            <Button asChild variant="secondary">
+              <a href={ENTRY.signUp}>Create account</a>
+            </Button>
+          ) : (
+            <p className="m-0 text-center text-[11.5px] text-slate">
+              New to Komtru? <InlineLink href={ENTRY.signUp}>Create an account</InlineLink>
+            </p>
+          )}
         </>
       }
     >
       <form id={FORM} onSubmit={(event) => void submit(event)} noValidate>
-        <h1 className="sr-only">Log in to Komtru</h1>
+        {viewport === 'desktop' ? (
+          <>
+            <h1 className="mb-[4px] font-[family-name:var(--font-display)] text-[24px] font-semibold">
+              Log in
+            </h1>
+            <Lede>Use the phone number or email you signed up with.</Lede>
+          </>
+        ) : (
+          <h1 className="sr-only">Log in to Komtru</h1>
+        )}
         {notice === 'reset-done' && (
           <Banner tone="success" title="Your password is updated">
             Log in with your new password.
@@ -163,13 +184,13 @@ export function LoginForm({
           </Banner>
         )}
         <TextField
-          label="Phone number"
+          label={wide ? 'Phone number or email' : 'Phone number'}
           type="text"
           // Text, not tel: the field takes an email or a username too, and a phone keypad has no @.
           inputMode="text"
           autoComplete="username"
           placeholder="080X XXX XXXX"
-          helper="Your email or username works too."
+          {...(wide ? {} : { helper: 'Your email or username works too.' })}
           value={identifier}
           onChange={(event) => {
             setIdentifier(event.target.value);
@@ -185,7 +206,7 @@ export function LoginForm({
           }}
         />
         {problem !== null && <ErrorText>{problem}</ErrorText>}
-        <Button asChild variant="ghost">
+        <Button asChild variant="ghost" className="lg:mb-[4px] lg:ml-auto lg:block lg:w-fit">
           <a href={ENTRY.forgot}>Forgot password?</a>
         </Button>
       </form>
