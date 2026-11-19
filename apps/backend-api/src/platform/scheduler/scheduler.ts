@@ -21,6 +21,8 @@ export interface SchedulerOptions {
   timezone: string;
   logger: Logger;
   queueName?: string;
+  /** BullMQ key namespace. Production uses the default; the integration suite passes a per-worker one. */
+  prefix?: string;
   /** Sweeps run one at a time: latency nobody waits on beats lock contention with live traffic. */
   concurrency?: number;
 }
@@ -48,6 +50,7 @@ export async function startScheduler({
   timezone,
   logger,
   queueName = SCHEDULER_QUEUE_NAME,
+  prefix = BULL_PREFIX,
   concurrency = 1,
 }: SchedulerOptions): Promise<RunningScheduler> {
   const connections: Redis[] = [];
@@ -58,7 +61,7 @@ export async function startScheduler({
   };
   const queue = new Queue<CronPayload>(queueName, {
     connection: connection(),
-    prefix: BULL_PREFIX,
+    prefix,
     defaultJobOptions: {
       // No retry: every job is a sweep over what is overdue, so the next occurrence is the retry.
       attempts: 1,
@@ -105,7 +108,7 @@ export async function startScheduler({
       else logger.debug({ job: job.name, durationMs }, 'scheduler: job ran, nothing to do');
       return result;
     },
-    { connection: connection(), prefix: BULL_PREFIX, concurrency },
+    { connection: connection(), prefix, concurrency },
   );
   worker.on('failed', (occurrence, error) => {
     logger.error(

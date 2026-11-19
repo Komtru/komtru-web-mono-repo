@@ -4,10 +4,10 @@ import { Queue } from 'bullmq';
 import { afterEach, describe, expect, it } from 'vitest';
 import { loadConfig } from '../../src/config/env.js';
 import { createLogger } from '../../src/platform/logger.js';
-import { BULL_PREFIX, createBullConnection } from '../../src/platform/redis/connections.js';
+import { createBullConnection } from '../../src/platform/redis/connections.js';
 import { createScheduleRegistry, type ScheduledJob } from '../../src/platform/scheduler/registry.js';
 import { startScheduler, type RunningScheduler } from '../../src/platform/scheduler/scheduler.js';
-import { infraEnabled, testRedisUrl } from '../support/db-urls.js';
+import { infraEnabled, testQueuePrefix, testRedisUrl } from '../support/db-urls.js';
 import { eventually } from '../support/eventually.js';
 
 const redisUrl = testRedisUrl();
@@ -27,7 +27,10 @@ describe.runIf(infraEnabled)('scheduler', () => {
     const queueName = `test.scheduler-${randomUUID().slice(0, 8)}`;
     const registry = createScheduleRegistry();
     for (const job of jobs) registry.register(job);
-    const queue = new Queue(queueName, { connection: createBullConnection(redisUrl), prefix: BULL_PREFIX });
+    const queue = new Queue(queueName, {
+      connection: createBullConnection(redisUrl),
+      prefix: testQueuePrefix(),
+    });
     opened.push(queue);
     const start = async () => {
       const scheduler = await startScheduler({
@@ -36,6 +39,7 @@ describe.runIf(infraEnabled)('scheduler', () => {
         timezone: 'Africa/Lagos',
         logger,
         queueName,
+        prefix: testQueuePrefix(),
       });
       running.push(scheduler);
       return scheduler;

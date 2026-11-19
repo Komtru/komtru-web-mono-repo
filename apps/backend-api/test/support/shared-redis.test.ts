@@ -55,6 +55,7 @@ describe('the shared test Redis database', () => {
       for (const [fn, option] of [
         ['createRedis', 'keyPrefix'],
         ['createQueueFactory', 'prefix'],
+        ['startScheduler', 'prefix'],
       ] as const)
         for (const call of callsTo(source, fn))
           if (!call.includes(`${option}:`)) offenders.push(`${path.slice(TEST_ROOT.length)}: ${fn}`);
