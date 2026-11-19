@@ -14,4 +14,5 @@
 - **Info banner rewritten.** The reference says the upload is optional; the build says all three are required.
 - **Upload areas use the ui-kit `FileDropzone`**, two-slot grid with thumbnails, not the reference's `.m-upload` strip.
 - **Uploading and failure states** shown per slot; a file that does not upload is said so and nothing is saved.
+- **Replace, not remove.** A document is replaced by uploading another; there is no remove control. The draft save upserts the types it is sent and never removes one left out, and the backend has no delete for an applicant's document, so a removal would come back on reload.
 - **Business type** is sent as registered business, because a CAC number is required.

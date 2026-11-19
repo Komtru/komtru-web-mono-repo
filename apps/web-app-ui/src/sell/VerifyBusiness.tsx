@@ -156,7 +156,6 @@ function VerifyForm({ application }: { application: MerchantApplication | null }
               slots={2}
               accept={ACCEPT}
               onAdd={(files) => void add(slot.docType, files)}
-              onRemove={() => setFileIds((current) => ({ ...current, [slot.docType]: null }))}
             />
           </section>
         );
