@@ -39,6 +39,7 @@ export function Walkthrough({ step }: { step: '1' | '2' | '3' }): React.JSX.Elem
             Skip
           </Button>
           <Button
+            className="md:w-auto md:min-w-[200px]"
             onClick={() => {
               if (next !== undefined) router.push(next);
             }}
