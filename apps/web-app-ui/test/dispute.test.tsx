@@ -8,7 +8,7 @@ import { cleanup, fireEvent, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { Appeal } from '../src/trade/dispute/Appeal';
 import { CaseStatus } from '../src/trade/dispute/CaseStatus';
-import { DisputeScreen } from '../src/trade/dispute/DisputeScreen';
+import { DisputeScreen, WithDispute } from '../src/trade/dispute/DisputeScreen';
 import { EvidenceComparison } from '../src/trade/dispute/EvidenceComparison';
 import { SellerNotice } from '../src/trade/dispute/SellerNotice';
 import { Withdraw } from '../src/trade/dispute/Withdraw';
@@ -382,5 +382,20 @@ describe('states every data-backed screen owes', () => {
     serve({ 'GET /trades/:id/dispute': null, 'GET /trades/:id': workspaceTrade('DISPUTED', 'SELLER') });
     renderWithApi(api.call, <DisputeScreen id={TRADE} />);
     await screen.findByText(/There is no issue open on this trade/);
+  });
+});
+
+describe('the case routes draw the screen they name', () => {
+  // A route names its screen by key, because a server page cannot pass a component into this client module.
+  it.each([
+    ['issue', /^Report an Issue$/],
+    ['status', /^Dispute$/],
+    ['evidence', /^Evidence · /],
+    ['withdraw', /^Withdraw$/],
+    ['appeal', /^File an Appeal$/],
+  ] as const)('%s draws its screen', async (screenKey, title) => {
+    serve();
+    renderWithApi(api.call, <WithDispute id={TRADE} screen={screenKey} />);
+    await screen.findAllByText(title);
   });
 });
