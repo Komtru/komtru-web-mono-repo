@@ -1,4 +1,4 @@
-// A repository-wide guard against the three Paystack primitives m8 §1/§9 forbids outright. The specs
+// A guard against the three Paystack primitives m8 §1/§9 forbids outright. The specs
 // name them and explain why: two of them settle to a linked bank account on Paystack's own schedule the
 // moment a charge is routed through them, with no documented way to hold the money and release it later,
 // which is a hard incompatibility with escrow; the third is a collection mechanism that routes into the
@@ -7,10 +7,16 @@
 // the main balance.
 //
 // The guard is strict on purpose: any occurrence in source is a finding, with no escape hatch and no
-// allowlist, because an allowlist is the first thing an "I just need this one" change would reach for.
-// That is also why the names are assembled from fragments here and in the test, and why the explanation
-// above points at the specs instead of spelling them — markdown is not scanned, source is, and a guard
-// that has to exempt itself is a guard that can be talked round.
+// per-line allowlist, because an allowlist is the first thing an "I just need this one" change would
+// reach for. That is also why the names are assembled from fragments here and in the test, and why the
+// explanation above points at the specs instead of spelling them — markdown is not scanned, source is,
+// and a guard that has to exempt itself is a guard that can be talked round.
+//
+// What it does not do any more is walk the whole repository. The endpoint pattern matches the second
+// primitive inside any pair of quotes or slashes, which is the right shape for a URL path and also
+// the exact shape of a CSS class in JSX — so the marketing site's two-column layout class read as a
+// finding and blocked staging. The scope is now the trees where a payment can actually be initiated —
+// see MONEY_TREES, which is the one knob and is a list of directories, not of permitted lines.
 import { readdir, readFile } from 'node:fs/promises';
 import path from 'node:path';
 
@@ -126,6 +132,10 @@ const SKIPPED_DIRECTORIES = new Set([
   '.vercel',
 ]);
 
+async function* walkAll(dirs: readonly string[]): AsyncGenerator<string> {
+  for (const dir of dirs) yield* walk(dir);
+}
+
 async function* walk(dir: string): AsyncGenerator<string> {
   const entries = await readdir(dir, { withFileTypes: true }).catch(() => []);
   for (const entry of entries) {
@@ -138,11 +148,49 @@ async function* walk(dir: string): AsyncGenerator<string> {
   }
 }
 
-/** Every mention of a forbidden Paystack primitive in the source under `root`. */
-export async function findForbiddenPaystackPrimitives(root: string): Promise<ForbiddenPrimitiveFinding[]> {
-  const findings: ForbiddenPrimitiveFinding[] = [];
+/**
+ * The trees a charge can be built or sent from, and so the trees this guard walks.
+ *
+ * Membership is "can this code reach Paystack", not "is this the backend". `web-app-ui` is here
+ * because it runs Paystack Inline in the browser (`src/trade/funding/checkout.ts`) — it is the one
+ * frontend that initiates a payment, and leaving it out would put the guard's blind spot exactly
+ * where a client-side charge would be written. The other four apps are TrustOps, courier, custody
+ * and marketing: no payment path, and markup full of words like the second primitive.
+ *
+ * Adding a payment path to a tree that is not listed here means adding it here in the same commit.
+ */
+export const MONEY_TREES = [
+  // The API that holds the money and talks to the provider.
+  'apps/backend-api',
+  // Paystack Inline, in the buyer's browser.
+  'apps/web-app-ui',
+  // The typed client both of the above speak through, including its Inline port.
+  'packages/api-client',
+  // Session and route wiring the payment screens are mounted on.
+  'packages/app-kit',
+  // The money shapes themselves.
+  'packages/shared-types',
+  // Fee schedule and the tools that read it.
+  'config',
+  'tools',
+] as const;
 
-  for await (const file of walk(root)) {
+/**
+ * Every mention of a forbidden Paystack primitive in the source under `root`.
+ *
+ * `trees` limits the walk to those subdirectories of `root`; omitting it walks everything, which is
+ * what the fixture tests do. A tree that does not exist is skipped silently — `walk` already treats
+ * an unreadable directory as empty — so the repository case guards against that separately by
+ * asserting the trees are there before it trusts an empty result.
+ */
+export async function findForbiddenPaystackPrimitives(
+  root: string,
+  trees?: readonly string[],
+): Promise<ForbiddenPrimitiveFinding[]> {
+  const findings: ForbiddenPrimitiveFinding[] = [];
+  const roots = trees?.length ? trees.map((tree) => path.join(root, tree)) : [root];
+
+  for await (const file of walkAll(roots)) {
     const source = await readFile(file, 'utf8');
     const relative = path.relative(root, file);
     source.split('\n').forEach((text, index) => {

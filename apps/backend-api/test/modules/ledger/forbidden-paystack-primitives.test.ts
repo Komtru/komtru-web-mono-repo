@@ -1,9 +1,15 @@
+import { execFile } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
+import { promisify } from 'node:util';
 import { afterEach, describe, expect, it } from 'vitest';
-import { FORBIDDEN, findForbiddenPaystackPrimitives } from '../../support/forbidden-primitives.js';
+import {
+  FORBIDDEN,
+  MONEY_TREES,
+  findForbiddenPaystackPrimitives,
+} from '../../support/forbidden-primitives.js';
 
 // Assembled, not written out, so this test is not itself a finding of the guard it exercises.
 const { sub: SUB, split: SPLIT, dedicated: DEDICATED } = FORBIDDEN;
@@ -136,12 +142,57 @@ describe('findForbiddenPaystackPrimitives', () => {
 });
 
 describe('the repository', () => {
-  it('uses none of the three primitives m8 §1 forbids', async () => {
-    const root = resolve(import.meta.dirname, '../../../../..');
-    // The scan is silent about a root that is not there, so prove it is scanning the real tree.
-    expect(existsSync(join(root, 'pnpm-workspace.yaml'))).toBe(true);
+  const root = resolve(import.meta.dirname, '../../../../..');
 
-    await expect(findForbiddenPaystackPrimitives(root)).resolves.toEqual([]);
+  /*
+   * The scan is silent about a directory that is not there, so a typo in MONEY_TREES would not fail
+   * — it would walk nothing and report a clean repository. That is the one way this guard can be
+   * switched off by accident now that it has a scope, so the scope is checked before it is trusted.
+   */
+  it('scopes itself to trees that are actually there', () => {
+    expect(existsSync(join(root, 'pnpm-workspace.yaml'))).toBe(true);
+    for (const tree of MONEY_TREES) {
+      expect(existsSync(join(root, tree)), `MONEY_TREES names ${tree}, which does not exist`).toBe(true);
+    }
+  });
+
+  /*
+   * Every tree that can initiate a charge has to be in scope, or the guard has a blind spot exactly
+   * where the next forbidden primitive would be written. `web-app-ui` is the case that matters: it
+   * is a frontend, and it opens Paystack Inline.
+   *
+   * The signal is the provider's API surface in this repository — the Inline port and the checkout
+   * that drives it — and deliberately not the word "Paystack", which also appears as a partner name
+   * in marketing copy, in the secret scanners' prose and in env fixtures. None of those can pay
+   * anyone, and scoping the guard to them would put back the whole-repository walk this replaced.
+   */
+  it('covers every tree that can reach the provider', async () => {
+    const covered = (file: string): boolean =>
+      MONEY_TREES.some((tree) => file === tree || file.startsWith(`${tree}/`));
+    const { stdout } = await promisify(execFile)(
+      'git',
+      [
+        'grep',
+        '-rlE',
+        'PaystackInline|paystackCheckout',
+        '--',
+        'apps',
+        'packages',
+        'config',
+        'tools',
+        'scripts',
+      ],
+      { cwd: root },
+    );
+
+    const matched = stdout.split('\n').filter(Boolean);
+    // An empty result would pass this vacuously, and the surface it looks for does exist.
+    expect(matched.length).toBeGreaterThan(0);
+    expect(matched.filter((file) => !covered(file))).toEqual([]);
+  }, 60_000);
+
+  it('uses none of the three primitives m8 §1 forbids', async () => {
+    await expect(findForbiddenPaystackPrimitives(root, MONEY_TREES)).resolves.toEqual([]);
     // The same explicit budget, and for a stronger version of the reason given above: this case
     // walks the REAL repository rather than a fixture, so it is the most expensive scan in the
     // suite, and it was the only one left on Vitest's 5s default. Alone it takes under a second;
