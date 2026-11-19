@@ -14,14 +14,10 @@ import {
 } from '@komtru/ui-kit';
 import { useEffect } from 'react';
 import { describeTrade, initialsOf, nairaShort, partyName } from './format';
+import { OrdersWide } from './orders/OrdersWide';
+import { STAGES, ordersOf } from './orders/model';
+import { useViewportTier } from './shipping/viewport';
 import { shipHref, tabHref } from './workspace-state';
-
-/** The custody stages of AC8, in the order an order moves through them. */
-const STAGES = [
-  { id: 'ready', title: 'Ready to ship', statuses: ['FUNDED'] },
-  { id: 'transit', title: 'In transit', statuses: ['SHIPPED', 'UNCONFIRMED_DELIVERY'] },
-  { id: 'inspection', title: 'Awaiting buyer inspection', statuses: ['INSPECTION'] },
-] as const;
 
 /**
  * AC8: the seller's orders grouped by where the item is, fuller than the shop's short attention list. The list is
@@ -31,6 +27,7 @@ const STAGES = [
  */
 export function ActiveOrders(): React.JSX.Element {
   const list = useTradeList('OPEN');
+  const tier = useViewportTier();
   const { hasNextPage, isFetchingNextPage, isFetchNextPageError, fetchNextPage } = list;
   useEffect(() => {
     if (hasNextPage && !isFetchingNextPage && !isFetchNextPageError) void fetchNextPage();
@@ -72,10 +69,17 @@ export function ActiveOrders(): React.JSX.Element {
     </RiskBanner>
   );
 
+  // A tablet and a desktop draw the same orders as a list with a pane, and a table (DX-18, TX-11).
+  if (tier !== 'base' && groups.length > 0) {
+    return <OrdersWide orders={ordersOf(selling)} tier={tier} notAllLoaded={notAllLoaded} />;
+  }
+
   if (groups.length === 0) {
     return (
       <ScreenColumn>
-        <h1 className="mb-[16px] text-[19px] font-semibold">Active Orders</h1>
+        <h1 className="mb-[16px] text-[19px] font-semibold">
+          {tier === 'base' ? 'Active Orders' : 'Orders'}
+        </h1>
         {notAllLoaded}
         <EmptyState
           title="No orders to fulfil"
