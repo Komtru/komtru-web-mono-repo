@@ -12,7 +12,7 @@ import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { LoadProblem, Loading } from '../account/states';
 import { SellFrame } from './Frame';
-import { STEP_HREF, startComplete, stepBody, valuesFrom, type SellValues } from './rules';
+import { STEP_HREF, VERIFICATION_HREF, startComplete, stepBody, valuesFrom, type SellValues } from './rules';
 
 const READY_MARK = (
   <svg viewBox="0 0 24 24" fill="none" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -21,9 +21,9 @@ const READY_MARK = (
 );
 
 /**
- * SO1 (T-121): "Tell Us About Your Business". The identity check the person passed as a buyer carries over, so the
- * screen says so and asks nothing about it again. The registered address, state and city are drawn here although the
- * reference does not draw them: submit needs them (see the plan).
+ * SO1 (T-121): "Tell Us About Your Business", the first step of merchant verification. The identity check the person
+ * passed as a buyer carries over, so the screen says so and asks nothing about it again. The registered address, state
+ * and city are drawn here although the reference does not draw them: submit needs them (see the plan).
  */
 export function SellStart(): React.JSX.Element {
   const application = useMyMerchantApplication();
@@ -32,14 +32,14 @@ export function SellStart(): React.JSX.Element {
 
   if (application.isPending || verification.isPending || states.isPending) {
     return (
-      <SellFrame title="Become a Seller" step={1} backHref="/account" action={null}>
+      <SellFrame title="Your business" step={1} backHref={VERIFICATION_HREF} action={null}>
         <Loading label="Loading your application" lines={4} />
       </SellFrame>
     );
   }
   if (application.data === undefined || verification.data === undefined || states.data === undefined) {
     return (
-      <SellFrame title="Become a Seller" step={1} backHref="/account" action={null}>
+      <SellFrame title="Your business" step={1} backHref={VERIFICATION_HREF} action={null}>
         <LoadProblem
           what="your application"
           onRetry={() => {
@@ -92,9 +92,9 @@ function SellForm({
 
   return (
     <SellFrame
-      title="Become a Seller"
+      title="Your business"
       step={1}
-      backHref="/account"
+      backHref={VERIFICATION_HREF}
       action={
         <>
           {problem !== undefined && <RiskBanner>{problem}</RiskBanner>}
@@ -109,11 +109,15 @@ function SellForm({
           You verified this as a buyer — no need to redo it here.
         </Banner>
       ) : (
-        <Banner tone="warning" title="Verify your ID before you apply">
+        <Banner tone="warning" title="Verify your ID first">
           Your ID and selfie check are what buyers and sellers trust.{' '}
           <a href="/account/verification">Verify them</a> first.
         </Banner>
       )}
+      <p className="mb-[16px] text-[12px] leading-[1.6] text-slate">
+        Merchant verification is how your business becomes a merchant. Until then you sell as a default
+        seller, and the amount you can transact is limited.
+      </p>
       <form onSubmit={(event) => event.preventDefault()} noValidate>
         <TextField
           label="Business or shop name"

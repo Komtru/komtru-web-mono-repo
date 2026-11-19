@@ -1,5 +1,5 @@
 import type { Metadata } from 'next';
-import { SellVerifyBusiness } from '../../../../src/sell/VerifyBusiness';
+import { SellVerifyBusiness } from '../../../../../../src/sell/VerifyBusiness';
 
 export const metadata: Metadata = { title: 'Business verification' };
 

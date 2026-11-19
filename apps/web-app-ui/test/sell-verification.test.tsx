@@ -47,11 +47,17 @@ describe('Business verification (M2)', () => {
     expect(screen.getByText('Storefront address')).toBeDefined();
     expect(screen.getAllByText('Verifying').length).toBe(2);
     expect(screen.getByText('GTBank •••• 5567')).toBeDefined();
-    expect(
-      screen.getByText(/Full business verification unlocks the “Verified Merchant” badge/),
-    ).toBeDefined();
+    expect(screen.getByText(/Merchant verification gives you the “Verified Merchant” badge/)).toBeDefined();
     expect(screen.queryByRole('button', { name: /Resubmit/ })).toBeNull();
     await expectNoAxeViolations(container, SHELL_RULES);
+  });
+
+  it('offers support and no edit while a person is reviewing the application', async () => {
+    answerWith(api.call, base(inReview, [payoutAccount()]));
+    renderWithApi(api.call, <SellVerification />);
+    expect(await screen.findByText('With our team')).toBeDefined();
+    expect(screen.getByRole('button', { name: 'Contact support' })).toBeDefined();
+    expect(screen.queryByRole('link', { name: /Continue|Fix|Resubmit/ })).toBeNull();
   });
 
   it('shows Verified on every check once the shop is approved, and links to the live shop', async () => {
@@ -62,7 +68,9 @@ describe('Business verification (M2)', () => {
     renderWithApi(api.call, <SellVerification />);
     expect(await screen.findByText('Storefront address')).toBeDefined();
     expect(screen.getAllByText('Verified').length).toBe(4);
-    expect(screen.getByRole('link', { name: 'Go to your shop' }).getAttribute('href')).toBe('/sell/live');
+    expect(screen.getByRole('link', { name: 'See your merchant status' }).getAttribute('href')).toBe(
+      '/account/verification/merchant/verified',
+    );
   });
 
   it('asks for the named changes, each linked to the step that holds it', async () => {
@@ -84,17 +92,19 @@ describe('Business verification (M2)', () => {
     expect(await screen.findByText('Changes requested')).toBeDefined();
     expect(screen.getByText('Check the RC number')).toBeDefined();
     const fix = screen.getByRole('link', { name: 'Fix CAC registration number' });
-    expect(fix.getAttribute('href')).toBe('/sell/verify-business');
+    expect(fix.getAttribute('href')).toBe('/account/verification/merchant/verify-business');
     expect(screen.getByRole('link', { name: 'Fix Proprietor or director ID' }).getAttribute('href')).toBe(
-      '/sell/verify-business',
+      '/account/verification/merchant/verify-business',
     );
   });
 
   it('starts the application for someone who has not applied', async () => {
     answerWith(api.call, base(null));
     renderWithApi(api.call, <SellVerification />);
-    expect(await screen.findByText('You haven’t applied to sell yet')).toBeDefined();
-    expect(screen.getByRole('link', { name: 'Become a seller' }).getAttribute('href')).toBe('/sell/start');
+    expect(await screen.findByText('Your business isn’t verified yet')).toBeDefined();
+    expect(screen.getByRole('link', { name: 'Start merchant verification' }).getAttribute('href')).toBe(
+      '/account/verification/merchant/start',
+    );
   });
 
   it('carries on a draft from the first step that is unfinished', async () => {
@@ -114,7 +124,7 @@ describe('Business verification (M2)', () => {
     renderWithApi(api.call, <SellVerification />);
     expect(await screen.findByRole('link', { name: 'Continue your application' })).toBeDefined();
     expect(screen.getByRole('link', { name: 'Continue your application' }).getAttribute('href')).toBe(
-      '/sell/category',
+      '/account/verification/merchant/category',
     );
   });
 
@@ -146,8 +156,8 @@ describe('Business verification rejected (BVR1)', () => {
     expect(
       screen.getByText('The CAC number submitted doesn’t match any active registration on file.'),
     ).toBeDefined();
-    expect(screen.getByText('Trade as an individual seller')).toBeDefined();
-    expect(screen.getByText('Unaffected')).toBeDefined();
+    expect(screen.getByText('Selling as a default seller')).toBeDefined();
+    expect(screen.getByText('Limited until you are a merchant')).toBeDefined();
     expect(screen.getByText('Not available yet')).toBeDefined();
     await expectNoAxeViolations(container, SHELL_RULES);
   });
@@ -156,7 +166,7 @@ describe('Business verification rejected (BVR1)', () => {
     answerWith(api.call, base(rejected));
     renderWithApi(api.call, <SellVerification />);
     expect((await screen.findByRole('link', { name: 'Resubmit CAC details' })).getAttribute('href')).toBe(
-      '/sell/verify-business',
+      '/account/verification/merchant/verify-business',
     );
     expect(screen.getByRole('button', { name: 'Contact support' })).toBeDefined();
   });

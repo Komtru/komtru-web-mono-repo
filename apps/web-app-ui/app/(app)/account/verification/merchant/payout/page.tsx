@@ -1,5 +1,5 @@
 import type { Metadata } from 'next';
-import { SellPayout } from '../../../../src/sell/Payout';
+import { SellPayout } from '../../../../../../src/sell/Payout';
 
 export const metadata: Metadata = { title: 'Payout account' };
 

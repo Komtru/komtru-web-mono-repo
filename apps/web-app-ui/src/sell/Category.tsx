@@ -50,14 +50,14 @@ export function SellCategory(): React.JSX.Element {
 
   if (application.isPending || standards.isPending) {
     return (
-      <SellFrame title="Category" step={2} backHref={STEP_HREF.start} action={null}>
+      <SellFrame title="What you sell" step={2} backHref={STEP_HREF.start} action={null}>
         <Loading label="Loading the categories" lines={3} />
       </SellFrame>
     );
   }
   if (application.data === undefined || standards.data === undefined) {
     return (
-      <SellFrame title="Category" step={2} backHref={STEP_HREF.start} action={null}>
+      <SellFrame title="What you sell" step={2} backHref={STEP_HREF.start} action={null}>
         <LoadProblem
           what="the categories"
           onRetry={() => {
@@ -70,7 +70,7 @@ export function SellCategory(): React.JSX.Element {
   }
   if (standards.data.length === 0) {
     return (
-      <SellFrame title="Category" step={2} backHref={STEP_HREF.start} action={null}>
+      <SellFrame title="What you sell" step={2} backHref={STEP_HREF.start} action={null}>
         <EmptyState
           title="No categories are open to sell yet"
           body="Komtru opens categories as their trade standards are published. Check back soon."
@@ -113,7 +113,7 @@ function SellPicker({
 
   return (
     <SellFrame
-      title="Category"
+      title="What you sell"
       step={2}
       backHref={STEP_HREF.start}
       action={

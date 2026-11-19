@@ -18,7 +18,16 @@ import {
 } from '@komtru/ui-kit';
 import { ContactSupport } from '../account/ContactSupport';
 import { LoadProblem, Loading } from '../account/states';
-import { STEP_HREF, changeLabel, changesByStep, LIVE_HREF, nextStep, phaseOf, valuesFrom } from './rules';
+import {
+  ACCOUNT_VERIFICATION_HREF,
+  LIVE_HREF,
+  STEP_HREF,
+  changeLabel,
+  changesByStep,
+  nextStep,
+  phaseOf,
+  valuesFrom,
+} from './rules';
 
 const INFO_MARK = (
   <svg viewBox="0 0 24 24" fill="none" strokeWidth="2" strokeLinecap="round">
@@ -35,9 +44,9 @@ const ALERT_MARK = (
 );
 
 /**
- * M2 (T-121): "Business Verification", the seller's tab under My Shop. One screen for every state the application can
- * be in, except a rejection, which has its own (BVR1). Each check says what the platform knows now; none of them is
- * decided here.
+ * M2 (T-121): "Business Verification", the Verification section of the account, for merchant status. One screen for
+ * every state the application can be in, except a rejection, which has its own (BVR1). It is the way into the
+ * verification flow. Each check says what the platform knows now; none of them is decided here.
  */
 export function SellVerification(): React.JSX.Element {
   const application = useMyMerchantApplication();
@@ -47,7 +56,11 @@ export function SellVerification(): React.JSX.Element {
   if (application.isPending || verification.isPending || accounts.isPending) {
     return (
       <ScreenColumn>
-        <ScreenHeader title="Verification" backHref="/shop" backLabel="Back to your shop" />
+        <ScreenHeader
+          title="Merchant verification"
+          backHref={ACCOUNT_VERIFICATION_HREF}
+          backLabel="Back to verification"
+        />
         <Loading label="Loading your verification" lines={4} />
       </ScreenColumn>
     );
@@ -55,7 +68,11 @@ export function SellVerification(): React.JSX.Element {
   if (application.data === undefined || verification.data === undefined || accounts.data === undefined) {
     return (
       <ScreenColumn>
-        <ScreenHeader title="Verification" backHref="/shop" backLabel="Back to your shop" />
+        <ScreenHeader
+          title="Merchant verification"
+          backHref={ACCOUNT_VERIFICATION_HREF}
+          backLabel="Back to verification"
+        />
         <LoadProblem
           what="your verification"
           onRetry={() => {
@@ -76,13 +93,17 @@ export function SellVerification(): React.JSX.Element {
   if (phase === 'NOT_STARTED') {
     return (
       <ScreenColumn>
-        <ScreenHeader title="Verification" backHref="/shop" backLabel="Back to your shop" />
+        <ScreenHeader
+          title="Merchant verification"
+          backHref={ACCOUNT_VERIFICATION_HREF}
+          backLabel="Back to verification"
+        />
         <EmptyState
-          title="You haven’t applied to sell yet"
-          body="Business verification is the step before your shop goes live."
+          title="Your business isn’t verified yet"
+          body="Until you are a merchant, the amount you can transact as a default seller is limited. Verifying your business lifts that limit."
           action={
             <Button asChild>
-              <a href={STEP_HREF.start}>Become a seller</a>
+              <a href={STEP_HREF.start}>Start merchant verification</a>
             </Button>
           }
         />
@@ -95,7 +116,11 @@ export function SellVerification(): React.JSX.Element {
 
   return (
     <ScreenColumn>
-      <ScreenHeader title="Verification" backHref="/shop" backLabel="Back to your shop" />
+      <ScreenHeader
+        title="Merchant verification"
+        backHref={ACCOUNT_VERIFICATION_HREF}
+        backLabel="Back to verification"
+      />
       {phase === 'CHANGES_REQUESTED' && <ChangesRequested application={app} />}
       <TermList>
         <Row
@@ -127,13 +152,23 @@ export function SellVerification(): React.JSX.Element {
           <a href={STEP_HREF[nextStep(valuesFrom(app), app)]}>Continue your application</a>
         </Button>
       )}
+      {phase === 'IN_REVIEW' && app !== null && (
+        <Banner tone="info" icon={INFO_MARK} title="With our team">
+          The application can’t be changed while it is being reviewed. If they need something, they will ask
+          here.
+          <div className="mt-[8px]">
+            <ContactSupport label="Contact support" reference={app.id} />
+          </div>
+        </Banner>
+      )}
       {phase === 'APPROVED' && (
         <Button asChild>
-          <a href={LIVE_HREF}>Go to your shop</a>
+          <a href={LIVE_HREF}>See your merchant status</a>
         </Button>
       )}
       <Banner tone="info" icon={INFO_MARK} className="mt-[16px]">
-        Full business verification unlocks the “Verified Merchant” badge buyers see on your Trust Passport.
+        Merchant verification gives you the “Verified Merchant” badge on your Trust Passport, and lifts the
+        limit on what you can transact as a default seller.
       </Banner>
     </ScreenColumn>
   );
@@ -222,7 +257,11 @@ function ChangesRequested({ application }: { application: MerchantApplication | 
 function Rejected({ application }: { application: MerchantApplication }): React.JSX.Element {
   return (
     <ScreenColumn>
-      <ScreenHeader title="Verification" backHref="/shop" backLabel="Back to your shop" />
+      <ScreenHeader
+        title="Merchant verification"
+        backHref={ACCOUNT_VERIFICATION_HREF}
+        backLabel="Back to verification"
+      />
       <TermList>
         <TermRow label="Business registration" checked={false}>
           <span className="flex flex-col items-end gap-[4px]">
@@ -236,8 +275,8 @@ function Rejected({ application }: { application: MerchantApplication }): React.
       </Banner>
       <SectionLabel>What you can still do</SectionLabel>
       <TermList>
-        <TermRow label="Trade as an individual seller" checked>
-          Unaffected
+        <TermRow label="Selling as a default seller" checked>
+          Limited until you are a merchant
         </TermRow>
         <TermRow label="“Verified Merchant” badge" checked={false}>
           Not available yet

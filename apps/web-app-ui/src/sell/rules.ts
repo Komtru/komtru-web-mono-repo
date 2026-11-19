@@ -14,16 +14,23 @@ import type {
 export const SELL_STEPS = ['start', 'category', 'verify-business', 'payout'] as const;
 export type SellStep = (typeof SELL_STEPS)[number];
 
+/**
+ * Merchant verification lives under the account's Verification section: the tab (M2/BVR1) is the entry point, and
+ * the flow's steps and the approved screen (SO5) are reached from it. Every account is a seller already; these
+ * screens are how a business gains merchant status.
+ */
+export const ACCOUNT_VERIFICATION_HREF = '/account/verification';
+export const VERIFICATION_HREF = '/account/verification/merchant';
+
 export const STEP_HREF: Record<SellStep, string> = {
-  start: '/sell/start',
-  category: '/sell/category',
-  'verify-business': '/sell/verify-business',
-  payout: '/sell/payout',
+  start: `${VERIFICATION_HREF}/start`,
+  category: `${VERIFICATION_HREF}/category`,
+  'verify-business': `${VERIFICATION_HREF}/verify-business`,
+  payout: `${VERIFICATION_HREF}/payout`,
 };
 
-export const LIVE_HREF = '/sell/live';
-export const VERIFICATION_HREF = '/shop/verification';
-/** Where "Your shop" goes until F-041 gives it a page. */
+export const LIVE_HREF = `${VERIFICATION_HREF}/verified`;
+/** Where "Go to your shop" goes until F-041 gives the shop a page of its listings. */
 export const SHOP_HREF = '/shop';
 
 /** Where the person stands, read from the application. `null` is someone who has not started one. */

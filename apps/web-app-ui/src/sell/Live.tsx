@@ -6,9 +6,9 @@ import { LoadProblem, Loading } from '../account/states';
 import { SHOP_HREF, VERIFICATION_HREF, phaseOf } from './rules';
 
 /**
- * SO5 (T-121): "Your Shop Is Live". Drawn only once operations have approved the application, so the copy can say
- * what the reference's pre-approval copy could not: that the shop is a Verified Merchant. Until then the screen says
- * the shop is not live and sends the person to their status.
+ * SO5 (T-121): the approved outcome of merchant verification. Nothing goes live: the account gains merchant status, and
+ * the screen says so. Drawn only once operations have approved the application; until then it says the business is not
+ * a merchant yet and points to the verification tab, where the status is.
  */
 export function SellLive(): React.JSX.Element {
   const application = useMyMerchantApplication();
@@ -17,7 +17,7 @@ export function SellLive(): React.JSX.Element {
   if (application.isPending || standards.isPending) {
     return (
       <ScreenColumn>
-        <Loading label="Loading your shop" lines={3} />
+        <Loading label="Loading your merchant status" lines={3} />
       </ScreenColumn>
     );
   }
@@ -25,7 +25,7 @@ export function SellLive(): React.JSX.Element {
     return (
       <ScreenColumn>
         <LoadProblem
-          what="your shop"
+          what="your merchant status"
           onRetry={() => {
             void application.refetch();
             void standards.refetch();
@@ -40,11 +40,11 @@ export function SellLive(): React.JSX.Element {
     return (
       <ScreenColumn>
         <EmptyState
-          title="Your shop isn’t live yet"
-          body="It goes live once a person has checked your business details. You’ll see the decision in your verification."
+          title="You’re not a merchant yet"
+          body="Merchant status is given once a person has checked your business details. You’ll see the decision on your verification tab."
           action={
             <Button asChild variant="secondary">
-              <a href={VERIFICATION_HREF}>See your application’s status</a>
+              <a href={VERIFICATION_HREF}>See your verification</a>
             </Button>
           }
         />
@@ -58,9 +58,9 @@ export function SellLive(): React.JSX.Element {
   const plural = names.length === 1 ? 'this category' : 'these categories';
   return (
     <ScreenColumn>
-      <StatusHero tone="success" title="Your shop is live">
-        {names.join(', ')} · Verified Merchant. Trade Standards for {plural} now apply automatically to
-        everything you list.
+      <StatusHero tone="success" title="You’re a verified merchant">
+        {names.join(', ')} · Verified Merchant. Trade Standards for {plural} apply automatically to everything
+        you list, and buyers see the badge on your Trust Passport.
       </StatusHero>
       <Button asChild>
         <a href={SHOP_HREF}>Go to your shop</a>

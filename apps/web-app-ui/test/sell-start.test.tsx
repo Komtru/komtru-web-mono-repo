@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-// T-121 (SO1): "Tell Us About Your Business", the first of the five Become a Seller screens.
+// T-121 (SO1): "Tell Us About Your Business", the first step of merchant verification.
 import { cleanup, fireEvent, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { SellStart } from '../src/sell/Start';
@@ -27,7 +27,7 @@ beforeEach(() => {
 });
 afterEach(cleanup);
 
-describe('Become a seller, step 1 (SO1)', () => {
+describe('Your business, step 1 (SO1)', () => {
   it('draws the reference: identity already verified, the business name, and the step count', async () => {
     answerWith(api.call, base);
     const { container } = renderWithApi(api.call, <SellStart />);
@@ -42,7 +42,7 @@ describe('Become a seller, step 1 (SO1)', () => {
   it('does not say the identity is verified when it is not, and points to the check', async () => {
     answerWith(api.call, { ...base, 'GET /verification/status': status() });
     renderWithApi(api.call, <SellStart />);
-    expect(await screen.findByText('Verify your ID before you apply')).toBeDefined();
+    expect(await screen.findByText('Verify your ID first')).toBeDefined();
     expect(screen.queryByText('Identity already verified')).toBeNull();
   });
 
@@ -72,7 +72,7 @@ describe('Become a seller, step 1 (SO1)', () => {
     await screen.findByRole('option', { name: 'Ikeja' });
     fireEvent.change(screen.getByLabelText('City'), { target: { value: IKEJA_ID } });
     fireEvent.click(screen.getByRole('button', { name: 'Continue to category' }));
-    await waitFor(() => expect(nav.push).toHaveBeenCalledWith('/sell/category'));
+    await waitFor(() => expect(nav.push).toHaveBeenCalledWith('/account/verification/merchant/category'));
     expect(callsTo(api.call, 'PUT', '/merchant/applications/me')[0]?.body).toEqual({
       businessName: 'TechEdge NG',
       addressLine: '12 Allen Avenue',

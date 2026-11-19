@@ -44,7 +44,8 @@ const SLOTS: { docType: MerchantDocumentType; region: string; upload: string }[]
 ];
 
 /**
- * SO3 (T-121): "Business Verification". Unlike the reference, the CAC number and the three documents are required:
+ * SO3 (T-121): "Business Verification", the step that makes a business a merchant. Unlike the reference, which offers
+ * this as an optional step to skip, the CAC number and the three documents are required:
  * submit is refused without them, so the person is not offered a skip. The three documents are a KYC file each, kept
  * private to the owner the way VF1's ID is.
  */
@@ -53,14 +54,14 @@ export function SellVerifyBusiness(): React.JSX.Element {
 
   if (application.isPending) {
     return (
-      <SellFrame title="Verification" step={3} backHref={STEP_HREF.category} action={null}>
+      <SellFrame title="Business verification" step={3} backHref={STEP_HREF.category} action={null}>
         <Loading label="Loading your application" lines={4} />
       </SellFrame>
     );
   }
   if (application.data === undefined) {
     return (
-      <SellFrame title="Verification" step={3} backHref={STEP_HREF.category} action={null}>
+      <SellFrame title="Business verification" step={3} backHref={STEP_HREF.category} action={null}>
         <LoadProblem what="your application" onRetry={() => void application.refetch()} />
       </SellFrame>
     );
@@ -121,7 +122,7 @@ function VerifyForm({ application }: { application: MerchantApplication | null }
 
   return (
     <SellFrame
-      title="Verification"
+      title="Business verification"
       step={3}
       backHref={STEP_HREF.category}
       action={
@@ -133,6 +134,10 @@ function VerifyForm({ application }: { application: MerchantApplication | null }
         </>
       }
     >
+      <p className="mb-[16px] text-[12px] leading-[1.6] text-slate">
+        Verifying your business makes you a merchant. Until then you sell as a default seller, and the amount
+        you can transact is limited.
+      </p>
       <TextField
         label="CAC registration number"
         placeholder="RC 1487XXX"

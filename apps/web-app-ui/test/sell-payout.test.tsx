@@ -87,7 +87,7 @@ describe('Where should we send payouts? (SO4)', () => {
     expect(radio.checked).toBe(true);
     expect(screen.queryByLabelText('Account number')).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: 'Confirm payout account' }));
-    await waitFor(() => expect(nav.push).toHaveBeenCalledWith('/shop/verification'));
+    await waitFor(() => expect(nav.push).toHaveBeenCalledWith('/account/verification/merchant'));
     expect(callsTo(api.call, 'PUT', '/merchant/applications/me')[0]?.body).toEqual({
       payoutAccountId: PAYOUT_ACCOUNT_ID,
     });
@@ -109,7 +109,7 @@ describe('Where should we send payouts? (SO4)', () => {
     });
     renderWithApi(api.call, <SellPayout />);
     fireEvent.click(await screen.findByRole('button', { name: 'Confirm payout account' }));
-    await waitFor(() => expect(nav.push).toHaveBeenCalledWith('/shop/verification'));
+    await waitFor(() => expect(nav.push).toHaveBeenCalledWith('/account/verification/merchant'));
     expect(callsTo(api.call, 'POST', '/merchant/applications/:id/resubmit')).toHaveLength(1);
     expect(callsTo(api.call, 'POST', '/merchant/applications/:id/submit')).toHaveLength(0);
   });

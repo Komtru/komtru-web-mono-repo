@@ -67,7 +67,9 @@ describe('What do you sell? (SO2)', () => {
     renderWithApi(api.call, <SellCategory />);
     fireEvent.click(await screen.findByRole('button', { name: /Electronics/ }));
     fireEvent.click(screen.getByRole('button', { name: 'Continue to verification' }));
-    await waitFor(() => expect(nav.push).toHaveBeenCalledWith('/sell/verify-business'));
+    await waitFor(() =>
+      expect(nav.push).toHaveBeenCalledWith('/account/verification/merchant/verify-business'),
+    );
     expect(callsTo(api.call, 'PUT', '/merchant/applications/me')[0]?.body).toEqual({
       categories: ['electronics'],
     });

@@ -86,7 +86,7 @@ describe('Business verification (SO3)', () => {
     attach(container, 'Proprietor or director ID');
     await waitFor(() => expect(api.upload).toHaveBeenCalledTimes(3));
     fireEvent.click(screen.getByRole('button', { name: 'Continue to payout account' }));
-    await waitFor(() => expect(nav.push).toHaveBeenCalledWith('/sell/payout'));
+    await waitFor(() => expect(nav.push).toHaveBeenCalledWith('/account/verification/merchant/payout'));
     expect(callsTo(api.call, 'PUT', '/merchant/applications/me')[0]?.body).toEqual({
       businessType: 'REGISTERED_BUSINESS',
       cacRcNumber: 'RC 1487XXX',
