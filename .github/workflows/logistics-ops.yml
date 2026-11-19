@@ -5,7 +5,11 @@ name: logistics-ops
 
 on:
   push:
-    branches: [main]
+    # `staging` as well as `main`: every ticket now branches off staging and merges back into it
+    # (MASTER_BUILD_PROMPT step 7), so that is where work actually lands. Without this the merge
+    # commit itself is never built — a pull request is checked, but the result of merging it is
+    # not, and a staging deploy would go out on a commit no workflow ever saw.
+    branches: [main, staging]
     paths:
       - 'apps/logistics-ops/**'
       - 'packages/api-client/**'
@@ -42,8 +46,10 @@ permissions:
 
 concurrency:
   group: logistics-ops-${{ github.ref }}
-  # Superseding a feature branch's run is fine; cancelling main's would kill a deploy half-way.
-  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+  # Superseding a feature branch's run is fine. Neither release branch may be cancelled:
+  # `staging` deploys now too, so cutting its run short kills a deploy half-way exactly as
+  # cancelling main's would.
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' && github.ref != 'refs/heads/staging' }}
 
 jobs:
   lint:

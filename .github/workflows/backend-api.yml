@@ -44,8 +44,10 @@ permissions:
 
 concurrency:
   group: backend-api-${{ github.ref }}
-  # Superseding a feature branch's run is fine; cancelling main's would kill a deploy half-way.
-  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+  # Superseding a feature branch's run is fine. Neither release branch may be cancelled:
+  # `staging` deploys now too, so cutting its run short kills a deploy half-way exactly as
+  # cancelling main's would.
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' && github.ref != 'refs/heads/staging' }}
 
 jobs:
   lint:
