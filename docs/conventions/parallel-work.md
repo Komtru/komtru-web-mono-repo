@@ -13,6 +13,29 @@ All of these must hold:
   `drizzle/meta/_journal.json` entry collide otherwise.
 - Neither is cross-cutting infrastructure work.
 
+## An agent runs its own tests, never the full suite
+
+**Standing rule, set by the owner on 2026-11-19. An implementer agent runs only the tests it
+created or changed.** Never `turbo run lint typecheck test` across the repo, with or without
+`--force`, and never `prettier --check .` over the whole tree.
+
+What an agent runs instead, scoped to the files it touched:
+
+- its own test files, by path: `pnpm --filter @komtru/<pkg> exec vitest run <paths>`;
+- lint and typecheck for the packages it changed only: `pnpm --filter @komtru/<pkg> exec tsc --noEmit`
+  and that package's lint script;
+- `prettier --write` on the changed files.
+
+**Why:** a whole-repo run is ~10 minutes on a quiet machine and ~17 under contention, it is
+mostly re-running tests the agent did not touch, and several agents doing it at once is what
+produces the phantom 5-second timeouts described below. It is the single largest cost in a
+build run, and it buys an agent almost nothing about its own change.
+
+**CI owns whole-repo verification.** Nobody runs the full suites on this machine — push to
+`staging` and read the workflow result. That is also the only place a cross-branch break (the
+`ProofTile` case below) is visible at all. `lint`, `typecheck`, `format:check` and a single
+targeted test file stay cheap and are still fine locally when something specific needs checking.
+
 ## Shared resources that force serialisation
 
 The local Docker Postgres and Redis are **one** instance shared by every agent on the machine.

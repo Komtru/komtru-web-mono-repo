@@ -24,6 +24,12 @@ don't read ahead.
 - **The unit of work is the feature** in [FEATURE_MAP.md](docs/tickets/FEATURE_MAP.md), not the
   T- ticket. A feature is **Done** only when a user can do the thing in an app. Backend alone
   never closes one, and neither does UI over stubs.
+- **Run your own tests, not the full suite.** An implementer runs only the tests it created or
+  changed, and lints and typechecks only the packages it touched. Never
+  `turbo run lint typecheck test` across the repo, never `prettier --check .` over the whole
+  tree — a whole-repo run costs 10–17 minutes, mostly re-running untouched code. **Nobody runs
+  the full suites on this machine**: push to `staging` and read the workflow. See
+  [parallel-work.md](docs/conventions/parallel-work.md).
 - **Never guess on a money rule.** Ship the documented default if there is one; otherwise park
   the question for the owner in `docs/manager/RUN_LOG.md`.
 - **Report progress at the end of a build run**: the two `pnpm progress` feature bars, MVP and
