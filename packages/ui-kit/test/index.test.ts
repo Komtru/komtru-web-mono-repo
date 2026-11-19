@@ -83,6 +83,7 @@ describe('@komtru/ui-kit', () => {
       'TabNav',
       'TermList',
       'TermRow',
+      'TextArea',
       'TextField',
       'Timeline',
       'Toast',

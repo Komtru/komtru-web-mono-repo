@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { WORKSPACE_STATUSES, type TradeRole } from '../src/trade/workspace-state';
-import { extensionPending, notYet, releasePaused, stateCopy } from '../src/trade/workspace-copy';
+import { extensionPending, releasePaused, stateCopy } from '../src/trade/workspace-copy';
 
 const ROLES: TradeRole[] = ['BUYER', 'SELLER'];
 const ctx = {

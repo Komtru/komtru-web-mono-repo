@@ -4,26 +4,71 @@
 // `apps/backend-api/src/modules/disputes/http/routes.ts`, and a mirror nobody checks is a mirror
 // that is wrong six weeks later — the symptom being a 404 in the app and a perfectly healthy
 // backend. So the test imports the real route array and compares, rather than restating the paths.
+import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { disputeRoutes } from '../../../apps/backend-api/src/modules/disputes/http/routes.js';
-import type { DisputePorts } from '../../../apps/backend-api/src/modules/disputes/services/ports.js';
 import * as client from '../src/disputes.js';
 import { DECISION_OUTCOMES, DISPUTE_STATUSES } from '../src/disputes.js';
 
-const backend = disputeRoutes({
-  db: () => {
-    throw new Error('the route table must be buildable without a database');
-  },
-  ports: () => ({}) as DisputePorts,
+/**
+ * The backend's route table, read as SOURCE rather than imported. Importing across the package
+ * boundary would pull `apps/backend-api` into this package's `rootDir` and break its typecheck —
+ * the precedent is `evidence.test.ts`, which reads the files module's policy the same way.
+ */
+const source = readFileSync(
+  new URL('../../../apps/backend-api/src/modules/disputes/http/routes.ts', import.meta.url),
+  'utf8',
+);
+
+/** Every `defineRoute({ method, path, scope, … })` in the backend, as the fields we compare on. */
+const backend = [...source.matchAll(/defineRoute\(\{([\s\S]*?)\n {4}\}\)/g)].map((match) => {
+  const block = match[1] ?? '';
+  const field = (name: string): string | undefined => new RegExp(`\\b${name}: '([^']+)'`).exec(block)?.[1];
+  return {
+    method: field('method') ?? '',
+    path: field('path') ?? '',
+    scope: field('scope') ?? '',
+    retryable: /\bretryable: true\b/.test(block),
+    paginated: field('paginated'),
+  };
 });
 
-/** Every `defineEndpoint` this module exports, by its own method and path. */
-const endpoints = Object.values(client).filter(
-  (
-    value,
-  ): value is { method: string; path: string; scope: string; retryable?: boolean; paginated?: string } =>
-    typeof value === 'object' && value !== null && 'method' in value && 'path' in value && 'schema' in value,
-);
+it('read the backend route table at all', () => {
+  // A regex that silently matched nothing would make every assertion below vacuously true.
+  expect(backend.length).toBeGreaterThanOrEqual(18);
+  for (const route of backend) {
+    expect(route.method, JSON.stringify(route)).not.toBe('');
+    expect(route.path, JSON.stringify(route)).not.toBe('');
+  }
+});
+
+interface RouteShape {
+  method: string;
+  path: string;
+  scope: string;
+  retryable?: boolean;
+  paginated?: string;
+}
+
+/**
+ * Every `defineEndpoint` this module exports, reduced to the fields compared below. The module
+ * also exports schemas and constant tuples, so endpoints are picked out by shape rather than from
+ * a hand-kept list: a new one is covered the moment it is added.
+ */
+const endpoints: RouteShape[] = Object.values(client as Record<string, unknown>).flatMap((value) => {
+  if (typeof value !== 'object' || value === null) return [];
+  const candidate = value as Partial<RouteShape> & { schema?: unknown };
+  if (typeof candidate.method !== 'string' || typeof candidate.path !== 'string') return [];
+  if (candidate.schema === undefined) return [];
+  return [
+    {
+      method: candidate.method,
+      path: candidate.path,
+      scope: candidate.scope ?? '',
+      ...(candidate.retryable === undefined ? {} : { retryable: candidate.retryable }),
+      ...(candidate.paginated === undefined ? {} : { paginated: candidate.paginated }),
+    },
+  ];
+});
 
 const key = (r: { method: string; path: string }) => `${r.method.toUpperCase()} ${r.path}`;
 

@@ -1,3 +1,5 @@
+'use client';
+
 import { useId } from 'react';
 import { CONTROL_CLASS, CONTROL_INVALID_CLASS, Field, type HelperTone } from './Field.js';
 import { cx } from './cx.js';
