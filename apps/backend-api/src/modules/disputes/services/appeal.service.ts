@@ -12,14 +12,22 @@ import { reviewerEligibility } from '../domain/assignment.js';
 import type { AppealOutcome, DecisionOutcome } from '../domain/types.js';
 import { disputeDecisionLog } from '../infrastructure/postgres/schema/decisions.js';
 import type { DisputePorts } from './ports.js';
-import { DISPUTE_AUDIT, lockDispute, moveCase, writeDisputeAudit, type DisputeActor } from './transition.js';
+import {
+  DISPUTE_AUDIT,
+  asParty,
+  lockDispute,
+  moveCase,
+  writeDisputeAudit,
+  type DisputeActor,
+  type RequestActor,
+} from './transition.js';
 import { toDecisionView, toDisputeView, type DecisionView, type DisputeView } from './views.js';
 
 export interface FileAppealInput {
   disputeId: string;
   userId: string;
   reason: string;
-  actor: DisputeActor;
+  actor: RequestActor;
 }
 
 export async function fileAppeal(ports: DisputePorts, tx: Tx, input: FileAppealInput): Promise<DisputeView> {
@@ -41,12 +49,12 @@ export async function fileAppeal(ports: DisputePorts, tx: Tx, input: FileAppealI
   const updated = await moveCase(tx, row, {
     action: 'APPEAL',
     to: 'APPEALED',
-    actor: input.actor,
+    actor: asParty(input.actor, row),
     reason: input.reason,
     set: { appealFiledAt: now },
   });
 
-  await writeDisputeAudit(tx, input.actor, DISPUTE_AUDIT.APPEALED, {
+  await writeDisputeAudit(tx, asParty(input.actor, row), DISPUTE_AUDIT.APPEALED, {
     disputeId: row.id,
     tradeId: row.tradeId,
   });
@@ -74,7 +82,7 @@ export interface DecideAppealInput {
   outcome?: DecisionOutcome;
   amounts?: DecisionAmounts;
   rationale: string;
-  actor: DisputeActor;
+  actor: RequestActor;
 }
 
 /**
@@ -144,12 +152,12 @@ export async function decideAppeal(
   const updated = await moveCase(tx, row, {
     action: 'DECIDE_APPEAL',
     to: 'CLOSED',
-    actor: input.actor,
+    actor: asParty(input.actor, row),
     reason: input.rationale,
     set: { closedAt: now },
   });
 
-  await writeDisputeAudit(tx, input.actor, DISPUTE_AUDIT.APPEAL_DECIDED, {
+  await writeDisputeAudit(tx, asParty(input.actor, row), DISPUTE_AUDIT.APPEAL_DECIDED, {
     disputeId: row.id,
     decisionId: String(decision.id),
     appealOutcome: input.appealOutcome,

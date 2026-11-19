@@ -16,16 +16,37 @@ import { disputeCases } from '../infrastructure/postgres/schema/disputes.js';
 import { disputeStatusChanges } from '../infrastructure/postgres/schema/statusChanges.js';
 import type { DisputeRow } from './views.js';
 
-/** Who is acting, carried from the HTTP layer so the audit row can say where it came from. */
-export interface DisputeActor {
+/**
+ * Who is acting, as the HTTP layer knows them: a user id and where the request came from. It does
+ * NOT carry which side of the dispute they are on, because at that point nobody has read the case
+ * yet and guessing would put the wrong word on the timeline.
+ */
+export interface RequestActor {
   userId: string | null;
-  actorType: DisputeActorType;
   sessionId?: string | undefined;
   ip?: string | null;
   userAgent?: string | null;
 }
 
+/** The same actor once the case has been read and their side is known. */
+export interface DisputeActor extends RequestActor {
+  actorType: DisputeActorType;
+}
+
 export const SYSTEM_ACTOR: DisputeActor = { userId: null, actorType: 'SYSTEM' };
+
+/**
+ * Resolve a request actor against the case. A party gets BUYER or SELLER; anyone else acting on a
+ * case is staff, and is recorded as REVIEWER.
+ */
+export const asParty = (
+  actor: RequestActor,
+  row: { buyerUserId: string; sellerUserId: string },
+): DisputeActor => ({
+  ...actor,
+  actorType:
+    actor.userId === row.buyerUserId ? 'BUYER' : actor.userId === row.sellerUserId ? 'SELLER' : 'REVIEWER',
+});
 
 export const DISPUTE_AUDIT = {
   OPENED: 'DISPUTE_OPENED',

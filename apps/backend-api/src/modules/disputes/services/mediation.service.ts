@@ -23,7 +23,14 @@ import { appealDeadline } from '../domain/windows.js';
 import { disputeDecisionLog } from '../infrastructure/postgres/schema/decisions.js';
 import { disputeMediationProposals } from '../infrastructure/postgres/schema/mediation.js';
 import type { DisputePorts } from './ports.js';
-import { DISPUTE_AUDIT, lockDispute, moveCase, writeDisputeAudit, type DisputeActor } from './transition.js';
+import {
+  DISPUTE_AUDIT,
+  asParty,
+  lockDispute,
+  moveCase,
+  writeDisputeAudit,
+  type RequestActor,
+} from './transition.js';
 import { partyRole, toProposalView, type DisputeView, type ProposalView } from './views.js';
 import { toDisputeView } from './views.js';
 
@@ -33,7 +40,7 @@ export interface ProposeInput {
   outcome: DecisionOutcome;
   amounts: DecisionAmounts;
   note?: string | null;
-  actor: DisputeActor;
+  actor: RequestActor;
 }
 
 /**
@@ -81,7 +88,7 @@ export async function proposeMediation(
     .returning();
   if (!proposal) throw new Error('disputes: the mediation proposal insert returned no row');
 
-  await writeDisputeAudit(tx, input.actor, DISPUTE_AUDIT.MEDIATION_PROPOSED, {
+  await writeDisputeAudit(tx, asParty(input.actor, row), DISPUTE_AUDIT.MEDIATION_PROPOSED, {
     disputeId: row.id,
     proposalId: proposal.id,
     outcome: input.outcome,
@@ -95,7 +102,7 @@ export interface RespondInput {
   proposalId: string;
   userId: string;
   accept: boolean;
-  actor: DisputeActor;
+  actor: RequestActor;
 }
 
 export interface MediationResult {
@@ -177,15 +184,16 @@ export async function respondToMediation(
   if (!decision) throw new Error('disputes: the mediated decision insert returned no row');
 
   const appealDays = await ports.appealWindowDays();
+  const acting = asParty(input.actor, row);
   const updated = await moveCase(tx, row, {
     action: 'AGREE',
     to: 'DECIDED',
-    actor: input.actor,
+    actor: acting,
     reason: 'Agreed in mediation',
     set: { decidedAt: now, appealDeadlineAt: appealDeadline(now, appealDays) },
   });
 
-  await writeDisputeAudit(tx, input.actor, DISPUTE_AUDIT.MEDIATION_AGREED, {
+  await writeDisputeAudit(tx, acting, DISPUTE_AUDIT.MEDIATION_AGREED, {
     disputeId: row.id,
     proposalId: proposal.id,
     outcome: proposal.outcome,

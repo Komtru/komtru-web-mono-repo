@@ -21,7 +21,15 @@ import {
 import { evidenceAcceptance, remaining, type Remaining } from '../domain/windows.js';
 import { disputeEvidence } from '../infrastructure/postgres/schema/evidence.js';
 import type { CustodyPhoto, DisputePorts, TimelineEntry, TradeMedia } from './ports.js';
-import { DISPUTE_AUDIT, lockDispute, moveCase, writeDisputeAudit, type DisputeActor } from './transition.js';
+import {
+  DISPUTE_AUDIT,
+  asParty,
+  lockDispute,
+  moveCase,
+  writeDisputeAudit,
+  type DisputeActor,
+  type RequestActor,
+} from './transition.js';
 import { partyRole, toEvidenceView, type EvidenceView, type PartyRole } from './views.js';
 
 export interface SubmitEvidenceInput {
@@ -29,7 +37,7 @@ export interface SubmitEvidenceInput {
   userId: string;
   fileRefId?: string | null;
   note?: string | null;
-  actor: DisputeActor;
+  actor: RequestActor;
 }
 
 /**
@@ -84,7 +92,7 @@ export async function submitEvidence(
     await ports.grantEvidenceAccess(tx, { fileRefId: evidence.fileRefId, userIds });
   }
 
-  await writeDisputeAudit(tx, input.actor, DISPUTE_AUDIT.EVIDENCE_SUBMITTED, {
+  await writeDisputeAudit(tx, asParty(input.actor, row), DISPUTE_AUDIT.EVIDENCE_SUBMITTED, {
     disputeId: row.id,
     evidenceId: evidence.id,
     late: evidence.submittedAfterDeadline,
@@ -143,20 +151,21 @@ export async function closeEvidenceWindow(
 export async function reopenEvidenceWindow(
   ports: DisputePorts,
   tx: Tx,
-  input: { disputeId: string; reason: string; actor: DisputeActor },
+  input: { disputeId: string; reason: string; actor: RequestActor },
 ): Promise<void> {
   const row = await lockDispute(tx, input.disputeId);
   if (!row) throw disputeNotFound();
 
+  const acting = asParty(input.actor, row);
   await moveCase(tx, row, {
     action: 'REOPEN_EVIDENCE',
     to: 'OPEN_EVIDENCE_COLLECTION',
-    actor: input.actor,
+    actor: acting,
     reason: input.reason,
     set: { evidenceReopenedAt: ports.now() },
   });
 
-  await writeDisputeAudit(tx, input.actor, DISPUTE_AUDIT.EVIDENCE_REOPENED, {
+  await writeDisputeAudit(tx, acting, DISPUTE_AUDIT.EVIDENCE_REOPENED, {
     disputeId: row.id,
     reason: input.reason,
   });

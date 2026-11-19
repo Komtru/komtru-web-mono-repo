@@ -22,7 +22,14 @@ import { evidenceDeadline, mediationDeadline } from '../domain/windows.js';
 import { disputeCases } from '../infrastructure/postgres/schema/disputes.js';
 import { disputeStatusChanges } from '../infrastructure/postgres/schema/statusChanges.js';
 import { DISPUTABLE_TRADE_STATUSES, type DisputePorts } from './ports.js';
-import { DISPUTE_AUDIT, lockDispute, moveCase, writeDisputeAudit, type DisputeActor } from './transition.js';
+import {
+  DISPUTE_AUDIT,
+  asParty,
+  lockDispute,
+  moveCase,
+  writeDisputeAudit,
+  type RequestActor,
+} from './transition.js';
 import { partyRole, toDisputeView, type DisputeView } from './views.js';
 
 export interface OpenDisputeInput {
@@ -33,7 +40,7 @@ export interface OpenDisputeInput {
   reason: string;
   creationPath: DisputeCreationPath;
   sourceTicketId?: string | null;
-  actor: DisputeActor;
+  actor: RequestActor;
 }
 
 /**
@@ -81,6 +88,10 @@ export async function openDispute(
     evidenceDeadlineAt: evidenceDeadline(now, evidenceDays),
   });
 
+  // The filer's side is known only now that the case row exists, so the actor is resolved here
+  // rather than guessed at in the HTTP layer.
+  const acting = asParty(input.actor, row);
+
   // The opening row of the timeline. `moveCase` writes one for every later transition; this is the
   // only one it cannot, because a case is created in MEDIATION rather than moved into it, so
   // `fromStatus` is null.
@@ -89,8 +100,8 @@ export async function openDispute(
     fromStatus: null,
     toStatus: row.status,
     action: 'OPEN',
-    actorType: input.actor.actorType,
-    actorId: input.actor.userId,
+    actorType: acting.actorType,
+    actorId: acting.userId,
     reason: row.openedReason,
   });
 
@@ -114,7 +125,7 @@ export async function openDispute(
   // Same transaction, so the two systems cannot disagree.
   await ports.moveTradeToDisputed(tx, { tradeId: trade.tradeId, actorUserId: input.openedByUserId });
 
-  await writeDisputeAudit(tx, input.actor, DISPUTE_AUDIT.OPENED, {
+  await writeDisputeAudit(tx, acting, DISPUTE_AUDIT.OPENED, {
     disputeId: row.id,
     tradeId: trade.tradeId,
     category: input.category,
@@ -167,7 +178,7 @@ export interface WithdrawInput {
   disputeId: string;
   userId: string;
   reason: string;
-  actor: DisputeActor;
+  actor: RequestActor;
 }
 
 /**
@@ -186,15 +197,16 @@ export async function withdrawDispute(
   if (row.openedByUserId !== input.userId) throw onlyOpenerMayWithdraw();
 
   const now = ports.now();
+  const acting = asParty(input.actor, row);
   const updated = await moveCase(tx, row, {
     action: 'WITHDRAW',
     to: 'CLOSED',
-    actor: input.actor,
+    actor: acting,
     reason: input.reason,
     set: { closedAt: now },
   });
 
-  await writeDisputeAudit(tx, input.actor, DISPUTE_AUDIT.WITHDRAWN, {
+  await writeDisputeAudit(tx, acting, DISPUTE_AUDIT.WITHDRAWN, {
     disputeId: row.id,
     tradeId: row.tradeId,
     reason: input.reason,

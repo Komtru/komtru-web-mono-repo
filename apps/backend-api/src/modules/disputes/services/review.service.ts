@@ -11,13 +11,20 @@ import { appealDeadline } from '../domain/windows.js';
 import { disputeDecisionLog } from '../infrastructure/postgres/schema/decisions.js';
 import { disputeCases } from '../infrastructure/postgres/schema/disputes.js';
 import type { DisputePorts } from './ports.js';
-import { DISPUTE_AUDIT, lockDispute, moveCase, writeDisputeAudit, type DisputeActor } from './transition.js';
+import {
+  DISPUTE_AUDIT,
+  asParty,
+  lockDispute,
+  moveCase,
+  writeDisputeAudit,
+  type RequestActor,
+} from './transition.js';
 import { toDecisionView, toDisputeView, type DecisionView, type DisputeView } from './views.js';
 
 export interface AssignInput {
   disputeId: string;
   reviewerId: string;
-  actor: DisputeActor;
+  actor: RequestActor;
 }
 
 /**
@@ -58,12 +65,12 @@ export async function assignReviewer(ports: DisputePorts, tx: Tx, input: AssignI
       ? await moveCase(tx, row, {
           action: 'ASSIGN_APPEAL',
           to: 'APPEAL_UNDER_REVIEW',
-          actor: input.actor,
+          actor: asParty(input.actor, row),
           set: { assignedAppealLeadId: input.reviewerId },
         })
       : await updateAssignment(tx, row.id, isAppeal ? 'appeal' : 'review', input.reviewerId);
 
-  await writeDisputeAudit(tx, input.actor, DISPUTE_AUDIT.ASSIGNED, {
+  await writeDisputeAudit(tx, asParty(input.actor, row), DISPUTE_AUDIT.ASSIGNED, {
     disputeId: row.id,
     reviewerId: input.reviewerId,
     isAppeal,
@@ -104,7 +111,7 @@ export interface DecideInput {
   outcome: DecisionOutcome;
   amounts: DecisionAmounts;
   rationale: string;
-  actor: DisputeActor;
+  actor: RequestActor;
 }
 
 export interface DecisionResult {
@@ -166,12 +173,12 @@ export async function decideDispute(
   const updated = await moveCase(tx, row, {
     action: 'DECIDE',
     to: 'DECIDED',
-    actor: input.actor,
+    actor: asParty(input.actor, row),
     reason: input.rationale,
     set: { decidedAt: now, appealDeadlineAt: appealDeadline(now, appealDays) },
   });
 
-  await writeDisputeAudit(tx, input.actor, DISPUTE_AUDIT.DECIDED, {
+  await writeDisputeAudit(tx, asParty(input.actor, row), DISPUTE_AUDIT.DECIDED, {
     disputeId: row.id,
     decisionId: String(decision.id),
     outcome: input.outcome,
