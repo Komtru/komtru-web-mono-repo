@@ -33,6 +33,7 @@ const submitDeps = (store = stubStore()) => ({
   hasher: testHasher(),
   encryption: testEncryption(),
   requestTtlMinutes: 60,
+  allowNameOverride: true,
   logger: silentLogger(),
 });
 

@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { HUB_APPLICATION_PATHS, PASSPORT_ROUTE_PREFIX, routeRequest, type HostRules } from '../src/hosts';
+import {
+  HUB_APPLICATION_PATHS,
+  PASSPORT_ROUTE_PREFIX,
+  isProductionHost,
+  routeRequest,
+  type HostRules,
+} from '../src/hosts';
 
 /** Production: three hosts. */
 const DEPLOYED: HostRules = {
@@ -124,5 +130,52 @@ describe('everything else', () => {
     for (const pathname of ['/', '/trades', '/account', '/browse/electronics']) {
       expect(routeRequest(at('app.komtru.com', pathname), DEPLOYED), pathname).toEqual({ kind: 'app' });
     }
+  });
+});
+
+/*
+  Which deployment a browser is looking at, decided from the host it asked for.
+
+  It exists for one caller: VF1 locks the name fields on a NIN/BVN claim in production, where a
+  person free to type any name beside any number can walk a stolen ID until the national record
+  agrees with them, and leaves them open everywhere else, because Youverify's sandbox IDs answer
+  to fixed names no tester's account carries.
+
+  The default runs toward locking. An unrecognised komtru.com host is production — a host added
+  next year is a production host until somebody says otherwise, and the failure that buys (a
+  tester who cannot type a name) is the one you find in a minute, not the one you find in a
+  breach report.
+*/
+describe('isProductionHost', () => {
+  it('is production for the app, the site and any komtru.com host nobody listed', () => {
+    expect(isProductionHost('app.komtru.com')).toBe(true);
+    expect(isProductionHost('komtru.com')).toBe(true);
+    expect(isProductionHost('www.komtru.com')).toBe(true);
+    expect(isProductionHost('passport.komtru.com')).toBe(true);
+    expect(isProductionHost('something-new.komtru.com')).toBe(true);
+  });
+
+  it('is not production for the staging hosts', () => {
+    expect(isProductionHost('staging.komtru.com')).toBe(false);
+    expect(isProductionHost('staging-ops.komtru.com')).toBe(false);
+    expect(isProductionHost('staging-api.komtru.com')).toBe(false);
+  });
+
+  it('is not production for a laptop or a preview build', () => {
+    expect(isProductionHost('localhost:3001')).toBe(false);
+    expect(isProductionHost('127.0.0.1:3001')).toBe(false);
+    expect(isProductionHost('komtru-web-application-git-abc.vercel.app')).toBe(false);
+  });
+
+  it('ignores the port and the case the host arrived in', () => {
+    expect(isProductionHost('App.Komtru.COM:443')).toBe(true);
+    expect(isProductionHost('STAGING.komtru.com')).toBe(false);
+  });
+
+  it('is not fooled by a lookalike domain that merely ends in the right letters', () => {
+    // `endsWith('komtru.com')` alone would call both of these production, and an attacker who can
+    // pick the host would rather the UI trusted them than not.
+    expect(isProductionHost('notkomtru.com')).toBe(false);
+    expect(isProductionHost('evil-komtru.com')).toBe(false);
   });
 });

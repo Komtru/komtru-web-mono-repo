@@ -21,6 +21,7 @@ const credentials: YouverifyCredentials = {
 const config = (overrides: Partial<TrustConfig> = {}): TrustConfig => ({
   provider: 'FAKE',
   requestTtlMinutes: 60,
+  allowNameOverride: true,
   ...overrides,
 });
 

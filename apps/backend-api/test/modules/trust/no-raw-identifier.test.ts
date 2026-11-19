@@ -43,7 +43,14 @@ const run = async (
 
   const submitStore = stubStore();
   const submitted = await submitIdentifierCheck(
-    { store: submitStore, hasher: testHasher(), encryption, requestTtlMinutes: 60, logger },
+    {
+      store: submitStore,
+      hasher: testHasher(),
+      encryption,
+      requestTtlMinutes: 60,
+      allowNameOverride: true,
+      logger,
+    },
     { userId, type: 'NIN', identifier, firstName: FIRST_NAME, lastName: LAST_NAME, dateOfBirth: DOB },
   );
 

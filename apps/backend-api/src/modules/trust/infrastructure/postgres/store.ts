@@ -25,6 +25,16 @@ export interface VerificationSubject {
   userId: string;
   status: string;
   verificationLevel: string;
+  /**
+   * The self-declared name on the account's profile, split from `fullName` at sign-up.
+   *
+   * Not a legal name — the legal name is whatever the national record returns, and establishing it
+   * is what this module does. It is here because it is the only name the platform can attribute to
+   * the account holder before any check has run, which makes it the one safe default to match
+   * against. Either half may be null: a one-word `fullName` leaves no surname.
+   */
+  firstName: string | null;
+  lastName: string | null;
 }
 
 /** The slice of an M20 file record this module checks before it trusts a selfie reference. */

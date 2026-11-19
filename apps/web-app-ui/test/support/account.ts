@@ -87,6 +87,9 @@ export const status = (over: Record<string, unknown> = {}) => ({
   requirements: { identifier: false, liveness: false, business: false, businessBankAccount: false },
   inFlight: [],
   rejections: [],
+  // The account's own declared name. VF1 fills the ID form with it, and locks the fields on the
+  // production host so the name matched against a number is the account holder's.
+  nameClaim: { firstName: 'Chidi', lastName: 'Okafor' },
   ...over,
 });
 

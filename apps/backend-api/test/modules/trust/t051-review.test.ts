@@ -35,7 +35,13 @@ import {
 import type { StubStoreOptions } from './support.js';
 
 const encryption = testEncryption();
-const level2 = { userId: randomUUID(), status: 'ACTIVE', verificationLevel: 'IDENTITY_VERIFIED' } as const;
+const level2 = {
+  userId: randomUUID(),
+  status: 'ACTIVE',
+  verificationLevel: 'IDENTITY_VERIFIED',
+  firstName: null,
+  lastName: null,
+} as const;
 const svc = (store: ReturnType<typeof stubStore>) => ({
   store,
   encryption,

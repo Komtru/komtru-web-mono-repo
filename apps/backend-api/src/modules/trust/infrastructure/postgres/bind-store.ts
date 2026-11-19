@@ -8,7 +8,7 @@ import { TransactionRollbackError } from 'drizzle-orm/errors';
 import type { Db } from '../../../../db/index.js';
 import { publish, type Tx } from '../../../../platform/events/publish.js';
 import { fileRecords } from '../../../files/index.js';
-import { applyVerificationLevel, users } from '../../../identity/index.js';
+import { applyVerificationLevel, userProfiles, users } from '../../../identity/index.js';
 import {
   verificationDuplicateIdentityDetected,
   verificationLevelAttained,
@@ -193,12 +193,28 @@ async function insertBusinessOutcome(
 export function bindStore(db: Db): TrustStore {
   return {
     findSubject: async (userId) => {
+      // LEFT join: the profile row is written at sign-up, but an account that predates it, or one
+      // an erasure has blanked, still has a status and a level worth answering with.
       const [row] = await db
-        .select({ status: users.status, verificationLevel: users.verificationLevel })
+        .select({
+          status: users.status,
+          verificationLevel: users.verificationLevel,
+          firstName: userProfiles.firstName,
+          lastName: userProfiles.lastName,
+        })
         .from(users)
+        .leftJoin(userProfiles, eq(userProfiles.userId, users.id))
         .where(eq(users.id, userId))
         .limit(1);
-      return row ? { userId, status: row.status, verificationLevel: row.verificationLevel } : undefined;
+      return row
+        ? {
+            userId,
+            status: row.status,
+            verificationLevel: row.verificationLevel,
+            firstName: row.firstName,
+            lastName: row.lastName,
+          }
+        : undefined;
     },
 
     createRequest: async (input) =>

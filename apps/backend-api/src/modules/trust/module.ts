@@ -145,6 +145,7 @@ export function createTrustModule(options: TrustModuleOptions): KomtruModule {
         hasher: () => need().hasher,
         encryption: () => need().encryption,
         requestTtlMinutes: () => need().config.requestTtlMinutes,
+        allowNameOverride: () => need().config.allowNameOverride,
         logger: () => need().logger,
         queues: () => need().queues,
         youverify: () => {

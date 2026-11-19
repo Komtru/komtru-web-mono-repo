@@ -104,7 +104,13 @@ describe('requestSocialProofCheck', () => {
     const claim = claimOf();
     const { deps: d } = deps({
       socialClaim: claim,
-      subject: { userId: claim.userId, status: 'ACTIVE', verificationLevel: 'CONTACT_VERIFIED' },
+      subject: {
+        userId: claim.userId,
+        status: 'ACTIVE',
+        verificationLevel: 'CONTACT_VERIFIED',
+        firstName: null,
+        lastName: null,
+      },
     });
     const result = await requestSocialProofCheck(d, { userId: claim.userId, claimId: claim.id });
     expect(result.job).toEqual({ claimId: claim.id });
