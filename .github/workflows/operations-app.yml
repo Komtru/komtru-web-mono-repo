@@ -77,6 +77,15 @@ jobs:
   build:
     needs: [test]
     runs-on: ubuntu-latest
+    # Same reason as web-app-ui's build job: `next build` evaluates the route modules to collect
+    # page data, and this app's config throws when NEXT_PUBLIC_KOMTRU_APP_URL or
+    # NEXT_PUBLIC_KOMTRU_API_URL is missing - so prerendering every console page fails before a
+    # line of it is written. The fallbacks keep the job honest before the repository variables
+    # exist; nothing is deployed from here.
+    env:
+      NEXT_PUBLIC_KOMTRU_APP_URL: ${{ vars.WEB_APP_URL || 'https://app.komtru.com' }}
+      NEXT_PUBLIC_KOMTRU_API_URL: ${{ vars.KOMTRU_API_URL || 'https://api.komtru.com/v1' }}
+      KOMTRU_SESSION_SECRET: ${{ secrets.KOMTRU_SESSION_SECRET || 'ci-build-only-placeholder-secret' }}
     steps:
       - uses: actions/checkout@v7
       - uses: ./.github/actions/setup

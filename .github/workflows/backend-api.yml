@@ -84,6 +84,23 @@ jobs:
   test:
     needs: [lint, typecheck]
     runs-on: ubuntu-latest
+    # Three shards. This suite is ~340 files and ten minutes on one runner, and almost all of that
+    # is module import rather than assertions - splitting the files across runners is the only
+    # thing that helps, because each shard imports only its own third.
+    #
+    # Safe to cache: turbo folds the arguments after `--` into the task hash, so shard 2 cannot be
+    # handed shard 1's cached result. Verified by running two shards back to back and watching
+    # both miss with different hashes.
+    #
+    # Each shard gets its own Postgres, PgBouncer and Redis - service containers are per-job, so
+    # the integration tests stay as isolated from each other as they were on one runner.
+    #
+    # `fail-fast: false` because the first red shard would otherwise cancel the other two and hide
+    # however many failures they were about to report.
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3]
     env:
       KOMTRU_INFRA_TESTS: '1'
       KOMTRU_TEST_DIRECT_URL: postgresql://komtru:komtru@localhost:55432
@@ -146,7 +163,7 @@ jobs:
       - uses: ./.github/actions/setup
         with:
           cache-key: backend-api
-      - run: pnpm exec turbo run test --filter=@komtru/backend-api
+      - run: pnpm exec turbo run test --filter=@komtru/backend-api -- --shard=${{ matrix.shard }}/3
 
   # T-022. The backend's own Vitest globalSetup already proves every migration applies to an empty
   # database on every infra run, so this job is the rest: journal and snapshot drift, a migration
