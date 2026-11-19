@@ -1,9 +1,9 @@
 # CWT-S03 — Payment — Funding Method (T-194)
 
 - **Reference:** `docs/design-reference/Komtru — UI Living Master v2.html` line 10901 — Trade Workspace — Supporting Screens
-- **Built:** http://localhost:3123/trade/0190b0a0-0000-7000-8000-000000000001/fund
+- **Built:** http://localhost:3916/trade/0190b0a0-0000-7000-8000-000000000502/fund
 - **Frame:** mobile, 340px reference frame; compared at 340 × 660
-- **Differing pixels:** 19,019 of 224,400 (8.48%)
+- **Differing pixels:** 22,366 of 224,400 (9.97%)
 - **Side by side:** `CWT-S03.png` (reference · built · heat map) — **heat map:** `CWT-S03.diff.png`
 
 ## Deviations
@@ -14,3 +14,5 @@
 
 - **Methods are Bank transfer and Debit card or USSD**, not "Debit card · •••• 4821", Bank transfer and Komtru Wallet: a saved card and a wallet do not exist on the platform (the card is entered in Paystack's checkout). Bank transfer is the first and default (F-024).
 - **Fee card** lists trade reference, item price, Buyer Protection Fee and total to pay from the fee snapshot, for the reference's "Trade amount / Delivery / Total to protect"; the seller's delivery charge is paid outside Komtru protection (F-024) and so is not a line of the protected total. The protected-funds note and the buttons ("Continue to payment", "Cancel") follow the reference.
+
+**Stand-in run, 2026-11-19.** The amounts are the stand-in's fixture for trade KMT-88230-NG (item ₦45,000.00, Buyer Protection Fee ₦1,800.00, total ₦46,800.00), so the fee lines differ from the drawing's figures for the reason given above. The "Cancel" button sits below the 660px frame in the shot.

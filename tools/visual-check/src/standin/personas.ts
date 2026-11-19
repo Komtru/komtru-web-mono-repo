@@ -20,8 +20,19 @@ export interface Persona {
 /**
  * What a token is answered with. `with-trades` is the person's normal account; `no-trades` is the same
  * person before their first trade, which is the state the empty-state screens (AC1, H-03) are drawn in.
+ *
+ * The `application-*` scenarios are the merchant application (F-040) in each state the verification
+ * screens draw. They keep the person's trades, and set the application the stand-in answers with.
  */
-export const SCENARIO_IDS = ['with-trades', 'no-trades'] as const;
+export const SCENARIO_IDS = [
+  'with-trades',
+  'no-trades',
+  'application-draft',
+  'application-in-review',
+  'application-changes-requested',
+  'application-rejected',
+  'application-approved',
+] as const;
 export type ScenarioId = (typeof SCENARIO_IDS)[number];
 
 export const PERSONAS: Readonly<Record<PersonaId, Persona>> = {

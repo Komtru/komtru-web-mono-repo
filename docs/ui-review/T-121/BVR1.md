@@ -1,10 +1,10 @@
-# BVR1 — Business verification rejected (T-121)
+# BVR1 — Business Verification Rejected (T-121)
 
-- **Reference:** line 5985 — Seller — Mandatory Proof, Counter-Proposal, Post-Acceptance — Mobile Web (new in v2)
-- **Built:** http://localhost:3001/account/verification/merchant (the rejected state of the same screen as M2)
-- **Code:** `apps/web-app-ui/src/sell/Verification.tsx` (`Rejected`)
-
-**Visual check not run.** `pnpm visual-check` needs a signed-in session and the platform API for this screen. The app has no harness for the gated routes yet, and the backend infrastructure was not available to this run. The list below is the deviation list from reading the reference against the build; the pixel comparison is still to do.
+- **Reference:** `docs/design-reference/Komtru — UI Living Master v2.html` line 5985 — Seller — Mandatory Proof, Counter-Proposal, Post-Acceptance — Mobile Web
+- **Built:** http://localhost:3916/account/verification/merchant
+- **Frame:** mobile, 340px reference frame; compared at 340 × 660
+- **Differing pixels:** 31,836 of 224,400 (14.19%)
+- **Side by side:** `BVR1.png` (reference · built · heat map) — **heat map:** `BVR1.diff.png`
 
 ## Deviations
 
@@ -15,3 +15,11 @@
 - **"Verified Merchant" badge row kept** ("Not available yet") and "Resubmit" ("Anytime, with corrected details").
 - **Uses the ui-kit `TermList`/`TermRow`** rather than `.verify-row`.
 - **Back goes to the account's Verification section.**
+
+**Stand-in run, 2026-11-19 (application rejected, seller persona).**
+
+- **"Why" copy comes from the stand-in's fixture**, which names a business-name mismatch. The drawing's reason names a CAC number that matches no registration. The difference is in the fixture's text, not the layout.
+- **Actions** ("Resubmit CAC details", "Contact support") sit directly under the list in the built page; the drawing pins them to the foot of the frame.
+- **Shell.** The bottom tab bar shows the buyer tabs, as on M2.
+
+**Code:** `apps/web-app-ui/src/sell/Verification.tsx` (`Rejected`).

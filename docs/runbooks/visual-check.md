@@ -44,16 +44,20 @@ on both sides (`KOMTRU_VISUAL_STANDIN_PORT`, and the three `NEXT_PUBLIC_*` value
    ```
 
 2. **Build the app against it, then serve it.** `NEXT_PUBLIC_*` is baked in at build time, so the build must see
-   the stand-in's URL. The session secret is read at run time and must match the seeder's.
+   the stand-in's URL. The session secret is read at run time and must match the seeder's. The app also reads its
+   passport and park URLs in its middleware, and its API URL in its instrumentation hook, at run time, so every
+   `NEXT_PUBLIC_*` below is needed at both steps. The passport and park hosts are not served here; any localhost
+   value does, because no walk reaches them.
 
    ```bash
-   NEXT_PUBLIC_KOMTRU_API_URL=http://localhost:7913/v1 \
-   NEXT_PUBLIC_KOMTRU_SOCKET_URL=http://localhost:7913 \
-   NEXT_PUBLIC_KOMTRU_APP_URL=http://localhost:3913 \
+   export NEXT_PUBLIC_KOMTRU_API_URL=http://localhost:7913/v1 \
+     NEXT_PUBLIC_KOMTRU_SOCKET_URL=http://localhost:7913 \
+     NEXT_PUBLIC_KOMTRU_APP_URL=http://localhost:3913 \
+     NEXT_PUBLIC_KOMTRU_PASSPORT_URL=http://localhost:3990 \
+     NEXT_PUBLIC_KOMTRU_PARK_URL=http://localhost:3991
    pnpm --filter @komtru/web-app-ui build
 
    KOMTRU_SESSION_SECRET=visual-check-standin-session-secret-0001 \
-   NEXT_PUBLIC_KOMTRU_APP_URL=http://localhost:3913 \
    pnpm --filter @komtru/web-app-ui exec next start --port 3913
    ```
 
@@ -101,9 +105,15 @@ The stand-in answers for four people. Each is a fixed identity with fixed facts 
 | `merchant` | CONSUMER | has sold, certified merchant | Sell-only account screens   |
 | `staff`    | STAFF    | none; no consumer routes     | Nothing yet (see limits)    |
 
-A **scenario** is the data the persona sees. `with-trades` is the normal account: a funded trade and a pending
-payment for the buyer, a shipped sale and a proposal for the seller. `no-trades` is the same person before a first
-trade, which is the state the empty-state screens are drawn in. Default: `with-trades`.
+A **scenario** is the data the persona sees. `with-trades` is the normal account: for the buyer, a trade awaiting
+funding, a funded trade, a trade in inspection and a disputed trade; for the seller, a shipped sale and a proposal
+awaiting an answer. `no-trades` is the same person before a first trade, which is the state the empty-state screens
+are drawn in. Default: `with-trades`.
+
+The `application-*` scenarios set the merchant application (F-040) the verification screens draw: `application-draft`,
+`application-in-review`, `application-changes-requested`, `application-rejected` and `application-approved`. They keep
+the person's trades. With no application scenario, a certified merchant is approved and everyone else has not started
+one.
 
 The session is the app's own: the seeder seals `komtru_session` with `@komtru/app-kit` and sets `komtru_rt`
 (`vc.<persona>.<scenario>`). Cookies ignore the port, so one seed serves every Komtru app on `localhost`. A session
@@ -131,25 +141,47 @@ Steps are Playwright selectors (`role=button[name="…"]`, `text=…`), run in o
 with its step number and the selector, so a screen reached by a different path than the one named is not shot. A
 walk may set `content` (the shell-cropping selector, as `--content`).
 
-Registered today: `AC1` (My Trades, empty). Add a row when a ticket needs a state the URL does not reach.
-`tools/visual-check/test/walkthroughs.test.ts` checks every entry names a row of the v2 screen index.
+Registered today: `AC1` (My Trades, empty), `CWT-01` and `CWT-S03` (a trade awaiting funding, and its funding step),
+`CWT-05` and `CWT-S15` (a disputed trade's workspace and case status), `Y1` (the evidence comparison), and `M2` and
+`BVR1` (the seller's business verification, in review and rejected). Add a row when a ticket needs a state the URL
+does not reach. `tools/visual-check/test/walkthroughs.test.ts` checks every entry names a row of the v2 screen index.
+
+A walk for a trade names a fixture trade by its id. The ids are constants in `fixtures.ts` (`TRADE_IDS`), so a
+walk imports the id rather than copying it.
 
 ## What the stand-in serves
 
 The stand-in serves the routes below. Everything else answers 404 and is logged as `UNMATCHED` on the stand-in's
 console. Read that log first when a screen looks wrong: it names the route the screen wanted.
 
-| Method | Path               | Answers                                                         |
-| ------ | ------------------ | --------------------------------------------------------------- |
-| POST   | `/v1/auth/refresh` | Mints an access token for a `vc.` refresh token, and rotates it |
-| GET    | `/v1/me/viewer`    | The persona's facts (`hasSold`, `certifiedMerchant`)            |
-| GET    | `/v1/trades`       | The persona's trade list in the scenario, on one page           |
+| Method | Path                                      | Answers                                                                        |
+| ------ | ----------------------------------------- | ------------------------------------------------------------------------------ |
+| POST   | `/v1/auth/refresh`                        | Mints an access token for a `vc.` refresh token, and rotates it                |
+| GET    | `/v1/me/viewer`                           | The persona's facts (`hasSold`, `certifiedMerchant`)                           |
+| GET    | `/v1/me`                                  | The account: contacts, status, and `openTrades` and `canClose` from the trades |
+| GET    | `/v1/me/addresses`                        | The saved address                                                              |
+| GET    | `/v1/me/payout-accounts`                  | The verified payout account of a seller or merchant; none for a buyer          |
+| GET    | `/v1/verification/status`                 | The verification level and its requirements                                    |
+| GET    | `/v1/trades`                              | The persona's trade list in the scenario, on one page                          |
+| GET    | `/v1/trades/:id`                          | One trade the list shows, with its terms, fees and accepted time               |
+| GET    | `/v1/trades/:id/payment/status`           | The funding attempt: none before funding, confirmed after                      |
+| GET    | `/v1/trades/:id/inspection`               | The inspection window, open only while the trade is in inspection              |
+| GET    | `/v1/trades/:id/dispute`                  | The case on the trade, or `null`                                               |
+| GET    | `/v1/disputes`                            | The cases on the persona's trades                                              |
+| GET    | `/v1/disputes/:id`                        | One case, with the reader's role                                               |
+| GET    | `/v1/disputes/:id/timeline`               | The case's steps, newest first                                                 |
+| GET    | `/v1/disputes/:id/evidence`               | What both parties submitted                                                    |
+| GET    | `/v1/disputes/:id/evidence-comparison`    | The Y1 comparison: both panels, custody and the timeline                       |
+| GET    | `/v1/merchant/applications/me`            | The merchant application in the scenario's state, or `null`                    |
+| GET    | `/v1/config/trade-standards/versions/:id` | A trade's pinned Trade Standard version (public, no session)                   |
 
 Socket.io is deliberately not served. The log marks it `NOT SERVED` rather than `UNMATCHED`.
 
-The fixtures are typed against `@komtru/shared-types`. `checkFixtures()` parses every one with the real schema when
-the stand-in starts, and a fixture that drifted from the contract stops the server with the field named. The apps
-enforce the same schemas on what they receive, so a drifted fixture is caught here rather than as a blank screen.
+The fixtures are typed against `@komtru/shared-types` (the lists) and `@komtru/api-client` (everything else: the
+trade, dispute, account and application contracts the apps parse). `checkFixtures()` parses every one with the real
+schema when the stand-in starts, and a fixture that drifted from the contract stops the server with the field named.
+The apps enforce the same schemas on what they receive, so a drifted fixture is caught here rather than as a blank
+screen.
 
 To add a route, add a fixture in `fixtures.ts`, a route in `server.ts` and a case in `contracts.ts`, then a test in
 `tools/visual-check/test/standin.test.ts`.
@@ -171,12 +203,20 @@ The shots are deterministic on one machine, not across machines (Chromium's text
 
 Be specific before you claim a screen. These were checked by loading the app against the stand-in:
 
-- **Trade detail and every flow inside a trade.** `GET /v1/trades/:id` is not served, so `/trade/<id>` shows the app's
-  error state. That covers the Trade Workspace (`CWT-*`), the cancellation, fulfilment, evidence and dispute screens,
-  and the trade-by-code page. This is the largest gap, and the next route to add.
-- **Account, payouts, verification, two-factor and privacy.** These call routes under `/me` and `/verification`,
-  none of which is served. Screen-by-screen, these are unchecked: a probe of `/account` drew an `UNMATCHED GET /v1/me`
-  in the log, and nothing else was tried.
+- **Writes.** Every route above is a read. A screen that submits (open a dispute, answer a proposal, pay, submit
+  evidence, apply for verification) can be drawn, but a submit answers 404 and the screen shows its failure.
+- **Trade states and dispute states not fixtured.** The fixtures cover the proposal awaiting an answer, the trade
+  awaiting funding, funded and shipped, in inspection, and disputed in evidence collection. A cancelled, expired,
+  delivered-and-released, settled or refunded trade has no fixture, and neither has a decided, mediated or appealed
+  dispute. A trade the persona cannot see answers 404, as the backend does.
+- **Dispute status and evidence screens do not render.** `/trade/<id>/dispute/status` (CWT-S15) and `/trade/<id>/dispute/evidence` (Y1) show the app's "This page didn't load" state in a production build, whatever the stand-in serves: the routes pass a function prop from a server page into a client component. Their ui-review records say so; the app is not changed by the harness.
+- **Trade creation and the trade-by-code page.** `POST /trades/preview` and `POST /trades` are writes, so the create
+  flow (`/trade/new`) cannot be driven past its first screen. `GET /trades/by-code/:code` is not served.
+- **Account security, payouts, two-factor and privacy.** `/me/factors`, `/me/devices`, `/me/sessions`, the payout
+  withdrawal and bank screens, and the privacy requests are not served, so those screens are unchecked. `/me`,
+  `/me/addresses`, `/me/payout-accounts` and `/verification/status` are.
+- **Merchant applications.** The `SUBMITTED` state has no fixture: the app draws it as `IN_REVIEW`, and the in-review
+  fixture covers both. The staff review console (`/admin/merchant/...`) is not served.
 - **Sign-in, sign-up, verification and the first-run walkthrough** (the entry screens `E1`–`E4`, and the terms and
   onboarding screens). The seeder skips login, and `POST /v1/auth/login` is not served. `E4` (Log In) can still be
   shot with no session, because it is a public page, and it scores 0.84%. A screen that submits a form cannot be
@@ -188,8 +228,8 @@ Be specific before you claim a screen. These were checked by loading the app aga
 - **Staff and logistics.** The `staff` persona exists, but the stand-in serves no staff routes, and web-app-ui refuses
   a `STAFF` session. The operations app, the logistics app and the Park Agent app have not been run against the
   stand-in at all.
-- **Seller and merchant data beyond the trade list.** The seller and merchant personas share one two-trade list,
-  from the seller's side. Any screen that reads more of a seller's data is unserved.
+- **Seller and merchant data beyond what is listed above.** The seller and merchant personas share one trade list, from
+  the seller's side. Any screen that reads more of a seller's data than the routes above is unserved.
 - **Desktop and tablet of a mobile screen that has a reference frame.** `pnpm visual-check` always uses the frame's
   width. `pnpm visual-capture` shoots any width, but it compares nothing.
 
