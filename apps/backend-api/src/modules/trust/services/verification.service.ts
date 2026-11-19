@@ -13,7 +13,7 @@ import { IDENTITY_VERIFIED_LEVEL, levelNumber } from '../domain/levels.js';
 import { describeRejection, type RejectionReason } from '../domain/rejection.js';
 import type { IdentityCheckJob, LivenessCheckJob } from '../domain/queues.js';
 import type { IdentifierType } from '../infrastructure/postgres/schema/enums.js';
-import type { TrustStore } from '../infrastructure/postgres/store.js';
+import type { TrustStore, VerificationSubject } from '../infrastructure/postgres/store.js';
 import { assertActive, assertContactVerified, inFlightConflict } from './submission.js';
 
 export interface VerificationDeps {
@@ -21,6 +21,8 @@ export interface VerificationDeps {
   hasher: HmacHasher;
   encryption: Encryption;
   requestTtlMinutes: number;
+  /** `TRUST_ALLOW_NAME_OVERRIDE`. False substitutes the account's own name onto an identifier claim. */
+  allowNameOverride: boolean;
   logger: Logger;
 }
 
@@ -50,11 +52,47 @@ export interface SubmitResult<J> {
 const assertEligible = (subject: Parameters<typeof assertActive>[0]) =>
   assertContactVerified(assertActive(subject));
 
+const filled = (value: string | null | undefined): value is string =>
+  value !== null && value !== undefined && value.trim() !== '';
+
+const trimmedOrNull = (value: string | null | undefined): string | null =>
+  filled(value) ? value.trim() : null;
+
+export interface ClaimName {
+  firstName: string;
+  lastName: string;
+}
+
+/**
+ * Which name the provider matches the number against.
+ *
+ * VF1 disables these fields on the production host, and that is worth doing — but it is a
+ * property of a browser, and the request behind it can be sent by anything with a session. The
+ * reason it matters: a person free to put any name beside any number can walk a stolen NIN
+ * through guesses until the national record agrees, and the check that was supposed to prove who
+ * they are instead tells them who the number belongs to.
+ *
+ * So when the operator has not allowed an override, the account's own profile name wins over
+ * whatever arrived in the body — silently, because there is nothing for the person to fix: the
+ * name being used IS theirs. The body is honoured only where there is no account name to stand
+ * in, which is the one-word-`fullName` case; substituting a blank surname there would fail a
+ * check the person could have passed.
+ */
+export function resolveClaimName(
+  allowNameOverride: boolean,
+  subject: Pick<VerificationSubject, 'firstName' | 'lastName'>,
+  body: ClaimName,
+): ClaimName {
+  if (allowNameOverride) return body;
+  if (!filled(subject.firstName) || !filled(subject.lastName)) return body;
+  return { firstName: subject.firstName.trim(), lastName: subject.lastName.trim() };
+}
+
 export async function submitIdentifierCheck(
   deps: VerificationDeps,
   input: SubmitIdentifierInput,
 ): Promise<SubmitResult<IdentityCheckJob>> {
-  assertEligible(await deps.store.findSubject(input.userId));
+  const subject = assertEligible(await deps.store.findSubject(input.userId));
 
   const identifier = normaliseIdentifier(input.identifier);
   if (!isValidIdentifier(input.type, identifier)) {
@@ -84,6 +122,11 @@ export async function submitIdentifierCheck(
     );
   }
 
+  const claimName = resolveClaimName(deps.allowNameOverride, subject, {
+    firstName: input.firstName,
+    lastName: input.lastName,
+  });
+
   const attemptCount = (await deps.store.countAttempts(input.userId, input.type)) + 1;
 
   const request = await createRequest(deps, {
@@ -105,8 +148,8 @@ export async function submitIdentifierCheck(
       sealed: deps.encryption.encrypt(
         JSON.stringify({
           identifier,
-          firstName: input.firstName,
-          lastName: input.lastName,
+          firstName: claimName.firstName,
+          lastName: claimName.lastName,
           ...(input.dateOfBirth === undefined ? {} : { dateOfBirth: input.dateOfBirth }),
         }),
       ),
@@ -195,6 +238,15 @@ export interface VerificationStatus {
     business: boolean;
     businessBankAccount: boolean;
   };
+  /**
+   * The account's own declared name, for the NIN/BVN form to fill itself with.
+   *
+   * Either half is null when the profile has nothing usable there — a one-word `fullName` at
+   * sign-up leaves no surname — and the screen reads that as "there is no name to lock to", which
+   * is the same condition `resolveClaimName` uses to let the body choose. One fact, read the same
+   * way on both sides, so the form cannot disable a field the server was never going to fill.
+   */
+  nameClaim: { firstName: string | null; lastName: string | null };
   inFlight: {
     requestId: string;
     type: string;
@@ -249,6 +301,7 @@ export async function readVerificationStatus(
       business: business.cacVerified,
       businessBankAccount: business.businessBankMatched,
     },
+    nameClaim: { firstName: trimmedOrNull(subject.firstName), lastName: trimmedOrNull(subject.lastName) },
     inFlight: open.map((request) => ({
       requestId: request.id,
       type: request.verificationType,

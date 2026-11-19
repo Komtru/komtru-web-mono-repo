@@ -42,6 +42,8 @@ export interface TrustHttpDeps {
   hasher: () => HmacHasher;
   encryption: () => Encryption;
   requestTtlMinutes: () => number;
+  /** `TRUST_ALLOW_NAME_OVERRIDE`: whether a request body may choose the name a NIN/BVN is matched against. */
+  allowNameOverride: () => boolean;
   logger: () => Logger;
   queues: () => QueueFactory;
   /** Absent unless a provider with a browser SDK is configured; the session route 503s without it. */
@@ -60,6 +62,7 @@ const serviceDeps = (deps: TrustHttpDeps): VerificationDeps => ({
   hasher: deps.hasher(),
   encryption: deps.encryption(),
   requestTtlMinutes: deps.requestTtlMinutes(),
+  allowNameOverride: deps.allowNameOverride(),
   logger: deps.logger(),
 });
 

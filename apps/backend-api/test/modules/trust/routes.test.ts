@@ -29,6 +29,7 @@ const deps = {
   hasher: () => testHasher(),
   encryption: () => testEncryption(),
   requestTtlMinutes: () => 60,
+  allowNameOverride: () => true,
   logger: () => silentLogger(),
   // Never reached: these tests read route declarations, they do not run handlers.
   queues: () => ({ producer: () => ({ add: () => Promise.resolve(undefined) }) }) as never,
@@ -180,7 +181,13 @@ describe('readVerificationStatus', () => {
     const userId = randomUUID();
     const open = requestRow({ userId, verificationType: 'NIN', status: 'PROVIDER_PENDING' });
     const store = stubStore({
-      subject: { userId, status: 'ACTIVE', verificationLevel: 'CONTACT_VERIFIED' },
+      subject: {
+        userId,
+        status: 'ACTIVE',
+        verificationLevel: 'CONTACT_VERIFIED',
+        firstName: null,
+        lastName: null,
+      },
       facts: { identifierVerified: true, latestVerifiedIdentifier: 'NIN', livenessPassed: false },
       openRequests: [open],
     });
@@ -264,7 +271,13 @@ describe('statusResponse', () => {
     const status = await readVerificationStatus(
       {
         store: stubStore({
-          subject: { userId, status: 'ACTIVE', verificationLevel: 'IDENTITY_VERIFIED' },
+          subject: {
+            userId,
+            status: 'ACTIVE',
+            verificationLevel: 'IDENTITY_VERIFIED',
+            firstName: null,
+            lastName: null,
+          },
           facts: { identifierVerified: true, livenessPassed: true },
           businessFacts: { currentLevel: 2, cacVerified: false, businessBankMatched: false },
           rejections: [

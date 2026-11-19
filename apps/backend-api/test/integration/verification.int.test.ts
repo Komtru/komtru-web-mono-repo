@@ -58,6 +58,7 @@ describe.runIf(infraEnabled)('trust against a real database', () => {
     hasher,
     encryption,
     requestTtlMinutes: 60,
+    allowNameOverride: true,
     logger,
   });
 

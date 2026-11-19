@@ -393,6 +393,16 @@ export const verificationStatusSchema = z.object({
     }),
   ),
   rejections: z.array(verificationRejectionSchema),
+  /**
+   * The account's own declared name, for the NIN/BVN form to fill itself with. Either half is
+   * null when the profile has nothing usable there — a one-word name at sign-up leaves no surname
+   * — and VF1 reads that as "there is nothing to lock to" and lets the person type.
+   *
+   * Optional only to survive a deploy where the app ships ahead of the API: an absent field reads
+   * the same as an empty one, which leaves the fields typeable rather than locking a person out
+   * of a form nothing can fill.
+   */
+  nameClaim: z.object({ firstName: z.string().nullable(), lastName: z.string().nullable() }).optional(),
 });
 export type VerificationStatus = z.infer<typeof verificationStatusSchema>;
 

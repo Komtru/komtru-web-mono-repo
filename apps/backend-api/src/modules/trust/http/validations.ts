@@ -55,6 +55,12 @@ export const statusResponse = z.object({
     business: z.boolean(),
     businessBankAccount: z.boolean(),
   }),
+  /**
+   * The account's own declared name, for VF1 to fill the NIN/BVN form with. Either half is null
+   * when the profile has nothing usable there, which is the same condition that lets the body
+   * choose the name on a claim — see `resolveClaimName`.
+   */
+  nameClaim: z.object({ firstName: z.string().nullable(), lastName: z.string().nullable() }),
   inFlight: z.array(
     z.object({
       requestId: z.uuid(),

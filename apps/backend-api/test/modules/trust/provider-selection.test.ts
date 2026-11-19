@@ -10,6 +10,7 @@ const logger = createLogger({ log: { level: 'silent', format: 'json' } } as neve
 const config = (overrides: Partial<TrustConfig> = {}): TrustConfig => ({
   provider: 'FAKE',
   requestTtlMinutes: 60,
+  allowNameOverride: true,
   ...overrides,
 });
 

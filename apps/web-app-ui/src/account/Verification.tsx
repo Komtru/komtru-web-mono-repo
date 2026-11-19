@@ -16,6 +16,7 @@ import {
   EmptyState,
   RiskBanner,
   ScreenHeader,
+  OptionCard,
   SectionLabel,
   SettingsGroup,
   SettingsRow,
@@ -24,6 +25,7 @@ import {
   TextField,
 } from '@komtru/ui-kit';
 import { useState } from 'react';
+import { isProductionHost } from '../hosts';
 import { VERIFICATION_HREF } from '../sell/rules';
 import { ContactSupport } from './ContactSupport';
 import { ContactChecks } from './VerifyContact';
@@ -153,6 +155,9 @@ function LoadedMain({
 }): React.JSX.Element {
   const failures = activeRejections(status);
   const waiting = status.inFlight;
+  // An API too old to send one reads the same as an account with nothing in it: no name to lock
+  // to, so the fields stay typeable rather than locking somebody out of a form nothing can fill.
+  const nameClaim = status.nameClaim ?? EMPTY_CLAIM;
 
   if (failures.length === 0 && waiting.length === 0) {
     const done = status.requirements.identifier && status.requirements.liveness;
@@ -176,7 +181,7 @@ function LoadedMain({
       §4's order decides which control appears: an identifier first, then the selfie it is matched
       against. Offering both at once would let a user into a camera flow the backend refuses.
     */
-    return <>{status.requirements.identifier ? <StartSelfie /> : <StartIdentity />}</>;
+    return <>{status.requirements.identifier ? <StartSelfie /> : <StartIdentity nameClaim={nameClaim} />}</>;
   }
 
   return (
@@ -192,6 +197,7 @@ function LoadedMain({
           key={rejection.requestId}
           rejection={rejection}
           reference={reference ?? rejection.requestId}
+          nameClaim={nameClaim}
         />
       ))}
     </>
@@ -217,9 +223,11 @@ function Requirements({ status }: { status: VerificationStatus }): React.JSX.Ele
 function Failure({
   rejection,
   reference,
+  nameClaim,
 }: {
   rejection: VerificationRejection;
   reference: string;
+  nameClaim: NameClaim;
 }): React.JSX.Element {
   const { reason } = rejection;
   const outcome = OUTCOME[reason.outcome];
@@ -257,7 +265,11 @@ function Failure({
             F-045 the verdict only ever arrives on a signed Youverify webhook, so an upload could
             produce no decision at all — the user would send a photo and wait forever.
           */}
-          {rejection.type === 'LIVENESS' ? <SelfieLauncher /> : <ResubmitId type={rejection.type} />}
+          {rejection.type === 'LIVENESS' ? (
+            <SelfieLauncher />
+          ) : (
+            <ResubmitId type={rejection.type} nameClaim={nameClaim} />
+          )}
         </>
       )}
       <div className="mt-[8px]">
@@ -267,17 +279,70 @@ function Failure({
   );
 }
 
-function ResubmitId({ type }: { type: string }): React.JSX.Element {
+/**
+ * Whether the person may choose the name their ID is checked against.
+ *
+ * Two conditions, and the API applies the same pair before it builds the claim: off the
+ * production host anybody may type (Youverify's sandbox IDs answer to fixed names that match no
+ * tester's account), and on it they may type only when the account has no complete name to stand
+ * in — a one-word name at sign-up leaves no surname, and locking an empty box would leave
+ * somebody with a form they can neither complete nor correct.
+ *
+ * `typeof window` guard: this file renders on the server too, where there is no host to read and
+ * nothing is interactive yet.
+ */
+function nameIsEditable(claim: NameClaim): boolean {
+  const onProduction = typeof window !== 'undefined' && isProductionHost(window.location.host);
+  if (!onProduction) return true;
+  return claim.firstName === null || claim.lastName === null;
+}
+
+type NameClaim = { firstName: string | null; lastName: string | null };
+
+const EMPTY_CLAIM: NameClaim = { firstName: null, lastName: null };
+
+/** NIN or BVN, in the person's words rather than the platform's. */
+const ID_CHOICES = [
+  {
+    type: 'NIN',
+    title: 'National Identity Number',
+    description: 'The 11 digits on your NIN slip or national ID card.',
+  },
+  {
+    type: 'BVN',
+    title: 'Bank Verification Number',
+    description: 'The 11 digits your bank issued you. Dial *565*0# to see yours.',
+  },
+] as const;
+
+function ResubmitId({ type, nameClaim }: { type: string; nameClaim: NameClaim }): React.JSX.Element {
   const nin = useSubmitNin();
   const bvn = useSubmitBvn();
+  /*
+    Which ID, as a choice rather than a fact about the last failure.
+
+    It opens on `type` — the check that failed, or NIN for somebody starting — and the person can
+    change it. Pinning it would make the second ID unreachable: a NIN that fails on a name
+    mismatch is exactly the case where the BVN is worth trying, and this screen is the only place
+    either one can be sent from.
+  */
+  const [idType, setIdType] = useState(type === 'BVN' ? 'BVN' : 'NIN');
   const [number, setNumber] = useState('');
-  const [firstName, setFirstName] = useState('');
-  const [lastName, setLastName] = useState('');
+  const [firstName, setFirstName] = useState(nameClaim.firstName ?? '');
+  const [lastName, setLastName] = useState(nameClaim.lastName ?? '');
   const [problem, setProblem] = useState<string | undefined>(undefined);
-  const isBvn = type === 'BVN';
+  const isBvn = idType === 'BVN';
+  const editable = nameIsEditable(nameClaim);
   const digits = number.replace(/\D/g, '');
   const pending = nin.isPending || bvn.isPending;
   const ready = digits.length === 11 && firstName.trim() !== '' && lastName.trim() !== '' && !pending;
+
+  /** Switching clears the number: eleven digits of a NIN re-sent as a BVN is a spent call and a failure nobody can explain. */
+  const chooseId = (next: string) => {
+    setIdType(next);
+    setNumber('');
+    setProblem(undefined);
+  };
 
   const submit = (event: React.FormEvent) => {
     event.preventDefault();
@@ -291,6 +356,21 @@ function ResubmitId({ type }: { type: string }): React.JSX.Element {
 
   return (
     <form onSubmit={submit} noValidate>
+      <fieldset className="mb-[4px] border-0 p-0">
+        <legend className="mb-[8px] block text-[12px] font-semibold">Which ID do you have?</legend>
+        {ID_CHOICES.map((choice) => (
+          <OptionCard
+            key={choice.type}
+            name="id-type"
+            value={choice.type}
+            checked={idType === choice.type}
+            description={choice.description}
+            onChange={(event) => chooseId(event.target.value)}
+          >
+            {choice.title}
+          </OptionCard>
+        ))}
+      </fieldset>
       <TextField
         label={isBvn ? 'BVN' : 'NIN'}
         inputMode="numeric"
@@ -305,13 +385,19 @@ function ResubmitId({ type }: { type: string }): React.JSX.Element {
         label="First name"
         autoComplete="given-name"
         value={firstName}
+        disabled={!editable}
         onChange={(event) => setFirstName(event.target.value)}
       />
       <TextField
         label="Last name"
         autoComplete="family-name"
         value={lastName}
-        helper="Exactly as it is on your ID."
+        disabled={!editable}
+        helper={
+          editable
+            ? 'Exactly as it is on your ID.'
+            : 'We check the name on your account against the ID. To change it, contact support.'
+        }
         onChange={(event) => setLastName(event.target.value)}
       />
       {problem !== undefined && <RiskBanner>{problem}</RiskBanner>}
@@ -328,7 +414,7 @@ function ResubmitId({ type }: { type: string }): React.JSX.Element {
  * It reuses `ResubmitId`, which until now only ever appeared under a rejection — the form is the
  * same form, and the only thing that differed was that nobody could reach it.
  */
-function StartIdentity(): React.JSX.Element {
+function StartIdentity({ nameClaim }: { nameClaim: NameClaim }): React.JSX.Element {
   const [started, setStarted] = useState(false);
 
   if (!started) {
@@ -348,7 +434,7 @@ function StartIdentity(): React.JSX.Element {
   return (
     <section aria-label="Verify your identity" className="mb-[14px]">
       <SectionLabel>Your ID</SectionLabel>
-      <ResubmitId type="NIN" />
+      <ResubmitId type="NIN" nameClaim={nameClaim} />
     </section>
   );
 }

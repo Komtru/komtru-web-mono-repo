@@ -12,6 +12,32 @@
 // Plain functions over `{ host, pathname, search }` rather than `NextRequest`: this is the part
 // worth testing, and nothing here needs the Edge runtime to say what it decides.
 
+/** The registrable domain every Komtru deployment is served under. */
+const KOMTRU_DOMAIN = 'komtru.com';
+
+/**
+ * Whether a browser on this host is looking at production.
+ *
+ * One caller: VF1 locks the name on a NIN or BVN claim in production and leaves it typeable
+ * everywhere else. It is read from the host rather than from a `NEXT_PUBLIC_*` flag because a
+ * build-time variable is inlined per deployment and is wrong the first time somebody promotes a
+ * staging build, whereas the host is whatever the person actually typed.
+ *
+ * The default runs toward locking: any `komtru.com` host that is not explicitly a staging one is
+ * production, so a host added next year is treated as real until somebody says otherwise. The
+ * suffix is matched on a label boundary, never with `endsWith` — `notkomtru.com` is somebody
+ * else's domain, and the whole point of the check is that it cannot be talked out of it.
+ *
+ * This disables an input; it does not enforce anything. `TRUST_ALLOW_NAME_OVERRIDE` on the API is
+ * what makes the name on a production claim actually the account holder's.
+ */
+export function isProductionHost(host: string): boolean {
+  const hostname = host.toLowerCase().split(':')[0] ?? '';
+  if (hostname !== KOMTRU_DOMAIN && !hostname.endsWith(`.${KOMTRU_DOMAIN}`)) return false;
+  const subdomain = hostname === KOMTRU_DOMAIN ? '' : hostname.slice(0, -(KOMTRU_DOMAIN.length + 1));
+  return !subdomain.split('.').pop()?.startsWith('staging');
+}
+
 /** The routes behind the passport host. A constant of this app, not of the environment. */
 export const PASSPORT_ROUTE_PREFIX = '/passport';
 

@@ -188,7 +188,13 @@ export function stubStore(options: StubStoreOptions = {}): RecordedStore {
       Promise.resolve(
         'subject' in options
           ? options.subject
-          : { userId, status: 'ACTIVE', verificationLevel: 'CONTACT_VERIFIED' },
+          : {
+              userId,
+              status: 'ACTIVE',
+              verificationLevel: 'CONTACT_VERIFIED',
+              firstName: null,
+              lastName: null,
+            },
       ),
 
     createRequest: (input) => {

@@ -15,12 +15,24 @@ import {
 
 const encryption = testEncryption();
 
-const deps = (store = stubStore()) => ({
+const deps = (store = stubStore(), allowNameOverride = true) => ({
   store,
   hasher: testHasher(),
   encryption,
   requestTtlMinutes: 60,
+  allowNameOverride,
   logger: silentLogger(),
+});
+
+const claimIn = (sealed: string): Record<string, unknown> =>
+  JSON.parse(encryption.decrypt(sealed)) as Record<string, unknown>;
+
+const namedSubject = (firstName: string | null, lastName: string | null) => ({
+  userId: 'u',
+  status: 'ACTIVE',
+  verificationLevel: 'CONTACT_VERIFIED',
+  firstName,
+  lastName,
 });
 
 const input = (overrides: Record<string, unknown> = {}) => ({
@@ -35,7 +47,13 @@ const input = (overrides: Record<string, unknown> = {}) => ({
 describe('submitIdentifierCheck', () => {
   it('refuses a user who has not verified their contact channels (M6 §2)', async () => {
     const store = stubStore({
-      subject: { userId: 'u', status: 'ACTIVE', verificationLevel: 'UNVERIFIED' },
+      subject: {
+        userId: 'u',
+        status: 'ACTIVE',
+        verificationLevel: 'UNVERIFIED',
+        firstName: null,
+        lastName: null,
+      },
     });
     await expect(submitIdentifierCheck(deps(store), input())).rejects.toMatchObject({
       status: 409,
@@ -45,7 +63,13 @@ describe('submitIdentifierCheck', () => {
 
   it('refuses a user who is not ACTIVE', async () => {
     const store = stubStore({
-      subject: { userId: 'u', status: 'SUSPENDED', verificationLevel: 'CONTACT_VERIFIED' },
+      subject: {
+        userId: 'u',
+        status: 'SUSPENDED',
+        verificationLevel: 'CONTACT_VERIFIED',
+        firstName: null,
+        lastName: null,
+      },
     });
     await expect(submitIdentifierCheck(deps(store), input())).rejects.toMatchObject({ status: 403 });
   });
@@ -54,6 +78,52 @@ describe('submitIdentifierCheck', () => {
     await expect(
       submitIdentifierCheck(deps(stubStore({ subject: undefined })), input()),
     ).rejects.toMatchObject({ status: 401 });
+  });
+
+  /*
+    The name on the claim decides whether the national record agrees with you, so who gets to
+    choose it is a security question, not a convenience one. VF1 disables the fields on the
+    production host — but a disabled input is a thing in a browser, and the request it would have
+    sent can be sent by anything. These four pin the server's half.
+  */
+  describe('whose name is matched', () => {
+    it("uses the account's own name, not the body's, when the body may not choose it", async () => {
+      const store = stubStore({ subject: namedSubject('Amaka', 'Balogun') });
+      const result = await submitIdentifierCheck(
+        deps(store, false),
+        input({ firstName: 'Sarah', lastName: 'Doe' }),
+      );
+      expect(claimIn(result.job.sealed)).toMatchObject({ firstName: 'Amaka', lastName: 'Balogun' });
+    });
+
+    it("honours the body's name where an operator has allowed it", async () => {
+      const store = stubStore({ subject: namedSubject('Amaka', 'Balogun') });
+      const result = await submitIdentifierCheck(
+        deps(store, true),
+        input({ firstName: 'Sarah', lastName: 'Doe' }),
+      );
+      expect(claimIn(result.job.sealed)).toMatchObject({ firstName: 'Sarah', lastName: 'Doe' });
+    });
+
+    it('falls back to the body when the account has no last name to lock to', async () => {
+      // A one-word `fullName` at sign-up leaves `lastName` null. Substituting it would send an
+      // empty surname to the provider and fail a check the person could have passed.
+      const store = stubStore({ subject: namedSubject('Amaka', null) });
+      const result = await submitIdentifierCheck(
+        deps(store, false),
+        input({ firstName: 'Sarah', lastName: 'Doe' }),
+      );
+      expect(claimIn(result.job.sealed)).toMatchObject({ firstName: 'Sarah', lastName: 'Doe' });
+    });
+
+    it('does not treat a profile name of only spaces as a name', async () => {
+      const store = stubStore({ subject: namedSubject('  ', 'Balogun') });
+      const result = await submitIdentifierCheck(
+        deps(store, false),
+        input({ firstName: 'Sarah', lastName: 'Doe' }),
+      );
+      expect(claimIn(result.job.sealed)).toMatchObject({ firstName: 'Sarah', lastName: 'Doe' });
+    });
   });
 
   it('refuses a malformed number before it costs a provider call', async () => {

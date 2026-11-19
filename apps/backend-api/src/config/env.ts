@@ -204,6 +204,19 @@ const VARIABLES = {
   /** How long an unanswered verification stays open before the sweep expires it (M6 §6.2). */
   TRUST_REQUEST_TTL_MINUTES: { schema: int(5, 10_080), required: false },
   /**
+   * Whether the request body may choose the name a NIN or BVN is matched against.
+   *
+   * VF1 locks those fields on the production host, but a disabled input stops nobody holding a
+   * terminal, and a person who can put any name next to any number can walk a stolen NIN until
+   * the national record agrees with them. Turned off, this substitutes the account's own profile
+   * name server-side whatever the body said, which is the only place that property is real.
+   *
+   * Absent means ON — the body is honoured, which is what every environment did before this
+   * existed. Staging and local need that, because Youverify's sandbox IDs answer to fixed names
+   * that match no tester's account. **Production sets it to false**; nowhere else does.
+   */
+  TRUST_ALLOW_NAME_OVERRIDE: { schema: bool, required: false },
+  /**
    * Optional, like every other provider credential here: both processes boot without Dojah, and
    * selecting it without all three fails at start naming the ones that are missing rather than at
    * the first verification.
@@ -339,6 +352,8 @@ export interface TrustConfig {
    */
   provider: KycProviderFlag;
   requestTtlMinutes: number;
+  /** See `TRUST_ALLOW_NAME_OVERRIDE`. False means the account's own profile name is used, not the body's. */
+  allowNameOverride: boolean;
   /** All three or none, for the reason `filesConfig` gives: two out of three is a 401 nobody can act on. */
   dojah?: DojahCredentials;
   /** All four or none, for the same reason. */
@@ -572,6 +587,7 @@ function trustConfig(v: Parsed): TrustConfig {
   return {
     provider: v.TRUST_KYC_PROVIDER ?? 'FAKE',
     requestTtlMinutes: v.TRUST_REQUEST_TTL_MINUTES ?? TRUST_REQUEST_TTL_MINUTES,
+    allowNameOverride: v.TRUST_ALLOW_NAME_OVERRIDE ?? true,
     ...(appId && secretKey && baseUrl ? { dojah: { appId, secretKey, baseUrl } } : {}),
     ...(secretToken && publicMerchantKey && webhookSecret && yvBaseUrl
       ? { youverify: { secretToken, publicMerchantKey, webhookSecret, baseUrl: yvBaseUrl } }

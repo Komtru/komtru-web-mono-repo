@@ -21,7 +21,13 @@ const deps = (store: ReturnType<typeof stubStore>, q: ReturnType<typeof queues>)
   queues: q.factory,
 });
 
-const identityVerified = { userId: 'u', status: 'ACTIVE', verificationLevel: 'IDENTITY_VERIFIED' } as const;
+const identityVerified = {
+  userId: 'u',
+  status: 'ACTIVE',
+  verificationLevel: 'IDENTITY_VERIFIED',
+  firstName: null,
+  lastName: null,
+} as const;
 
 describe('requestBusinessEvidence', () => {
   it('commits a CAC request and enqueues the sealed claim on the business-check queue', async () => {
@@ -84,7 +90,13 @@ describe('requestBusinessEvidence', () => {
 
   it('is blocked, not failed, while the applicant has not verified their own identity', async () => {
     const store = stubStore({
-      subject: { userId: 'u', status: 'ACTIVE', verificationLevel: 'CONTACT_VERIFIED' },
+      subject: {
+        userId: 'u',
+        status: 'ACTIVE',
+        verificationLevel: 'CONTACT_VERIFIED',
+        firstName: null,
+        lastName: null,
+      },
     });
     const q = queues();
     expect(await requestBusinessEvidence(deps(store, q), { userId: 'u', rcNumber: 'RC123456' })).toEqual({
@@ -104,7 +116,13 @@ describe('requestBusinessEvidence', () => {
 
   it('is blocked for an account that is not active', async () => {
     const store = stubStore({
-      subject: { userId: 'u', status: 'SUSPENDED', verificationLevel: 'IDENTITY_VERIFIED' },
+      subject: {
+        userId: 'u',
+        status: 'SUSPENDED',
+        verificationLevel: 'IDENTITY_VERIFIED',
+        firstName: null,
+        lastName: null,
+      },
     });
     expect(
       await requestBusinessEvidence(deps(store, queues()), { userId: 'u', rcNumber: 'RC123456' }),
