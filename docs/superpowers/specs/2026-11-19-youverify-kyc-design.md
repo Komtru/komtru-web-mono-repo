@@ -264,6 +264,14 @@ enough today that this is cheap).
 missed duplicate flag is reviewable where a surprise migration-time spend is not. Confirm
 before implementing.
 
+**Implemented 2026-11-19 (Task 2).** `normaliseRcNumber` now keeps the prefix. No backfill was
+run and no migration was needed — the change is to a pure function, not to a column. The
+consequence stands as described: a `business_verifications` row written before this date whose
+RC number carried a prefix lost it, so its `rcNumberHash` will not match the same business
+resubmitted today, and §7 would not flag that pair as a duplicate. Rows whose number was typed
+bare are unaffected. The remedy, if it ever matters, is to re-verify the affected rows against
+the provider rather than to guess a prefix back.
+
 ---
 
 ## 7. Configuration and secrets

@@ -93,9 +93,10 @@ export const statusResponse = z.object({
 // --- T-051: the four checks M6 §11 adds to the user surface -------------------------------------
 
 /**
- * Loose on length, like the identifier bodies: `normaliseRcNumber` strips the prefix and the
- * separators before `isValidRcNumber` runs, and CAC's own formats have changed more than once — a
- * strict pattern here refuses real businesses whose number predates whatever we guessed.
+ * Loose on length, like the identifier bodies: `normaliseRcNumber` strips the case and the
+ * separators — but not the entity prefix — before `isValidRcNumber` runs, and CAC's own formats
+ * have changed more than once; a strict pattern here refuses real businesses whose number predates
+ * whatever we guessed.
  */
 export const businessBody = z.strictObject({
   rcNumber: z.string().trim().min(2).max(30),

@@ -65,8 +65,6 @@ export function identifierHash(hasher: HmacHasher, type: IdentifierType, normali
   return hasher.hmac(HASH_DOMAIN[type], normalised);
 }
 
-/** The CAC's own prefixes, which users type inconsistently and which carry no information. */
-const RC_PREFIX = /^(RC|BN|IT|LP|LLP)/;
 const RC_MIN = 4;
 const RC_MAX = 20;
 
@@ -79,14 +77,24 @@ const RC_MAX = 20;
  * single normal form that check silently stops finding anything, which is a failure with no symptom
  * until a suspended merchant is trading again under a second account.
  *
- * The prefix is dropped rather than kept: CAC's own search accepts the number with or without it,
- * and keeping it would make `BN1487322` and `1487322` two different businesses to us.
+ * **The prefix is kept.** It was stripped until 2026-11-19, on the reasoning that CAC's own search
+ * accepts a number with or without it. Both halves of that reasoning turned out to be wrong.
+ *
+ * It is not noise: `RC`, `BN`, `IT`, `LP` and `LLP` name the kind of entity — a private company, a
+ * business name, incorporated trustees, a partnership — and the same digits can legitimately exist
+ * under more than one. Stripping it collapsed five distinct registrations onto one `rcNumberHash`,
+ * so §7's "is this already another merchant's verified business" check could flag two unrelated
+ * businesses as the same identity.
+ *
+ * And the provider refuses the stripped form outright: Youverify answers a bare number with
+ * `Invalid registration number. Valid format => RCxxxx, BNxxxxx, ITxxxxx, LPxxxxx or LLPxxxxx`
+ * (captured in `test/fixtures/youverify/company-bare-number-rejected.json`). A value normalised the
+ * old way could not have been sent to a real CAC check at all.
+ *
+ * A bare number is still accepted and left bare — the user may not know their prefix, and the
+ * provider is the authority on whether the registration exists.
  */
-export const normaliseRcNumber = (raw: string): string =>
-  raw
-    .toUpperCase()
-    .replace(/[^A-Z0-9]/g, '')
-    .replace(RC_PREFIX, '');
+export const normaliseRcNumber = (raw: string): string => raw.toUpperCase().replace(/[^A-Z0-9]/g, '');
 
 /**
  * Shape only, and loose on purpose — the same posture `isValidIdentifier` takes.
