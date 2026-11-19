@@ -25,6 +25,14 @@ export const verificationRequests = trust.table(
     attemptCount: integer('attempt_count').notNull().default(0),
     /** Soft reference to a files.file_records(id) for a liveness selfie (M20, D5). */
     selfieStorageRef: uuid('selfie_storage_ref'),
+    /**
+     * The opaque reference handed to the browser SDK and echoed back through the provider's webhook.
+     *
+     * Deliberately not the request id. It travels through the client, so a user could put any value
+     * they can guess into the delivery that resolves a check — and the request id is visible to its
+     * own owner. This is random, unguessable, and bound to one request at mint time.
+     */
+    providerSessionRef: text('provider_session_ref'),
     submittedAt: timestamp('submitted_at', { withTimezone: true }).notNull().defaultNow(),
     providerCalledAt: timestamp('provider_called_at', { withTimezone: true }),
     decidedAt: timestamp('decided_at', { withTimezone: true }),
@@ -52,6 +60,16 @@ export const verificationRequests = trust.table(
     uniqueIndex('verification_requests_one_in_flight')
       .on(table.userId, table.verificationType)
       .where(sql`${table.status} IN ('SUBMITTED', 'PROVIDER_PENDING', 'MANUAL_REVIEW')`),
+    /**
+     * One request per session reference, enforced by the database.
+     *
+     * The reference is what a webhook delivery names, so two requests sharing one would make
+     * "which check does this verdict belong to" ambiguous at exactly the moment a level is granted.
+     * Partial, because the column is null for every check that does not run through the browser.
+     */
+    uniqueIndex('verification_requests_session_ref')
+      .on(table.providerSessionRef)
+      .where(sql`${table.providerSessionRef} IS NOT NULL`),
     // M6 §4: this module owns levels 2 to 4 and nothing below. A request claiming to contribute to
     // level 1 is identity's business and should never have reached this table.
     check('verification_requests_target_level', sql`${table.targetLevel} BETWEEN 2 AND 4`),

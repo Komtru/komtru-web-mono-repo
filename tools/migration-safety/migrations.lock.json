@@ -279,6 +279,11 @@
       "tag": "0055_disputes_triggers",
       "when": 1795089841385,
       "sha256": "66206bee6bf384cc6be3e76363d392df0ef563764be6a4e8da460cfcd8ef0e4e"
+    },
+    {
+      "tag": "0056_trust_provider_webhooks",
+      "when": 1795104763797,
+      "sha256": "a4126cfd1febe0f8b7d1684bf57b3831735b252c3dedbd0bc57c149d01f9099b"
     }
   ]
 }
