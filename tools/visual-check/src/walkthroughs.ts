@@ -62,6 +62,57 @@ export const WALKTHROUGHS: Readonly<Record<string, Walkthrough>> = {
     path: '/account/verification/merchant',
     content: 'main',
   },
+  // F-069/F-073 fulfil & payouts: the seller's orders, dispatch workspace, completed trade and payouts, at the desktop
+  // (DX) and tablet (TX) widths. The width is the reference frame's; the same route serves both.
+  'DX-18': {
+    screen: 'DX-18',
+    persona: 'seller',
+    scenario: 'with-trades',
+    path: '/orders',
+    content: 'main',
+  },
+  'TX-11': {
+    screen: 'TX-11',
+    persona: 'seller',
+    scenario: 'with-trades',
+    path: '/orders',
+    content: 'main',
+  },
+  'DX-19': {
+    screen: 'DX-19',
+    persona: 'seller',
+    scenario: 'with-trades',
+    path: `/trade/${TRADE_IDS.sellerFunded}/dispatch`,
+    content: 'main',
+  },
+  'TX-12': {
+    screen: 'TX-12',
+    persona: 'seller',
+    scenario: 'with-trades',
+    path: `/trade/${TRADE_IDS.sellerFunded}/dispatch`,
+    content: 'main',
+  },
+  'DX-31': {
+    screen: 'DX-31',
+    persona: 'seller',
+    scenario: 'with-trades',
+    path: `/trade/${TRADE_IDS.sellerSettled}/completed`,
+    content: 'main',
+  },
+  'DX-32': {
+    screen: 'DX-32',
+    persona: 'seller',
+    scenario: 'with-trades',
+    path: '/account/payouts',
+    content: 'main',
+  },
+  'TX-19': {
+    screen: 'TX-19',
+    persona: 'seller',
+    scenario: 'with-trades',
+    path: '/account/payouts',
+    content: 'main',
+  },
 };
 
 /** The walk for a screen, or a message listing the ones that exist. */

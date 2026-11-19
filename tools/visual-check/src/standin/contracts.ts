@@ -6,7 +6,11 @@ import {
   disputeDetailSchema,
   disputeEvidenceSchema,
   disputeSchema,
+  getDeliveryDeadline,
   getInspection,
+  getPayoutSummary,
+  getShipOptions,
+  listPayouts,
   merchantApplicationSchema,
   meSchema,
   paymentStatusSchema,
@@ -29,7 +33,11 @@ import {
   meFor,
   merchantApplicationFor,
   paymentStatusFor,
+  deliveryDeadlineFor,
   payoutAccountsFor,
+  payoutSummaryFor,
+  payoutsFor,
+  shipOptionsFor,
   STANDARD_VERSION_IDS_LIST,
   tradeFor,
   tradeStandardFor,
@@ -134,5 +142,28 @@ function checkConsumerReads(
       comparisonSchema,
       evidenceComparisonFor(persona, scenario, dispute.id),
     );
+  }
+  // F-069/F-073 fulfil & payouts
+  check(failures, `payout summary for ${where}`, getPayoutSummary.schema.response, payoutSummaryFor(persona));
+  check(failures, `payouts for ${where}`, listPayouts.schema.response, {
+    items: payoutsFor(persona),
+    nextCursor: null,
+  });
+  for (const trade of tradesFor(persona, scenario)) {
+    check(
+      failures,
+      `delivery deadline for ${trade.tradeCode} in ${where}`,
+      getDeliveryDeadline.schema.response,
+      deliveryDeadlineFor(persona, scenario, trade.id),
+    );
+    const options = shipOptionsFor(persona, scenario, trade.id);
+    if (options !== null) {
+      check(
+        failures,
+        `ship options for ${trade.tradeCode} in ${where}`,
+        getShipOptions.schema.response,
+        options,
+      );
+    }
   }
 }
