@@ -42,8 +42,12 @@ export const LOCAL_TOPOLOGY = Object.freeze({
   apiPort: '7813',
   consumerApp: 'http://localhost:3001',
   staffApp: 'http://localhost:3002',
-  /** Every frontend origin, including the two whose apps are still placeholders. */
-  origins: [3001, 3002, 3003, 3004].map((port) => `http://localhost:${port}`).join(','),
+  /**
+   * Every frontend origin, including the two whose apps are still placeholders. 3005 is the
+   * marketing site, which calls exactly one route — POST /v1/waitlist — and is blocked by the
+   * browser without it.
+   */
+  origins: [3001, 3002, 3003, 3004, 3005].map((port) => `http://localhost:${port}`).join(','),
 });
 
 /** KEY -> the right-hand side exactly as written in the source (quotes, escapes, comments kept). */

@@ -372,6 +372,13 @@
       "when": 1794927132480,
       "tag": "0052_phone_change_state",
       "breakpoints": true
+    },
+    {
+      "idx": 53,
+      "version": "7",
+      "when": 1795049764068,
+      "tag": "0053_waitlist_signups",
+      "breakpoints": true
     }
   ]
 }

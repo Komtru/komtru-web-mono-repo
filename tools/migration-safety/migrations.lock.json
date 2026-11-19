@@ -264,6 +264,11 @@
       "tag": "0052_phone_change_state",
       "when": 1794927132480,
       "sha256": "47f11ad4f6bd20c3cdef09cedc72149ad9f5e3f523781886e5ace8aa3282f55c"
+    },
+    {
+      "tag": "0053_waitlist_signups",
+      "when": 1795049764068,
+      "sha256": "68f7c7f8d8b5a5b3ba4c7a408c1d74ea81d59a7c4c9b9fc00d9ff71ebe6d70d5"
     }
   ]
 }

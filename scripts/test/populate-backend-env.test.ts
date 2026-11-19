@@ -62,7 +62,8 @@ describe('buildBackendEnv — local target', () => {
   });
 
   it("allows the origins this monorepo's frontends actually run on", () => {
-    const origins = 'http://localhost:3001,http://localhost:3002,http://localhost:3003,http://localhost:3004';
+    const origins =
+      'http://localhost:3001,http://localhost:3002,http://localhost:3003,http://localhost:3004,http://localhost:3005';
     expect(valueOf(text, 'ALLOWED_ORIGINS')).toBe(origins);
     expect(valueOf(text, 'SOCKET_CORS_ORIGINS')).toBe(origins);
   });

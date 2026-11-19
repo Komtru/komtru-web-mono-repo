@@ -747,6 +747,16 @@
       "table": "trust.verification_requests",
       "name": "verification_requests_target_level",
       "definition": "CHECK (((target_level >= 2) AND (target_level <= 4)))"
+    },
+    {
+      "table": "waitlist.signups",
+      "name": "signups_channel",
+      "definition": "CHECK ((channel = ANY (ARRAY['EMAIL'::text, 'PHONE'::text])))"
+    },
+    {
+      "table": "waitlist.signups",
+      "name": "signups_intent",
+      "definition": "CHECK ((intent = ANY (ARRAY['BUY'::text, 'SELL'::text, 'BOTH'::text])))"
     }
   ],
   "triggers": [

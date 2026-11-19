@@ -35,6 +35,7 @@ import { notifyModule } from './notify/index.js';
 import { createSocketModule } from './socket/index.js';
 import { TERMINAL_STATUSES, createTradesModule, trades } from './trades/index.js';
 import { createTrustModule } from './trust/index.js';
+import { waitlistModule } from './waitlist/index.js';
 
 export interface ProcessDeps {
   db: Db;
@@ -161,6 +162,9 @@ export const createModules: ModuleBuilder = (deps) => {
     // notify, which subscribes to the decisions it publishes.
     merchantModule,
     notifyModule,
+    // Last of the domain modules, and dependent on none of them: one public route that appends to
+    // its own table. It is here so komtru.com has somewhere to post a signup before launch.
+    waitlistModule,
     socket,
   ];
 };
