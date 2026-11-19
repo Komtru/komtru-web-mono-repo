@@ -158,13 +158,17 @@ export const WALKTHROUGHS: Readonly<Record<string, Walkthrough>> = {
     content: 'main',
   },
   // onboarding desktop & tablet
-  // OB5 is only reached through OB4 (a deep link goes to the app), so the walk answers the notification ask first.
+  // OB5 is only reached through OB4 (a deep link goes to the app), so the walk gets past the notification ask first
+  // (a headless browser reports notifications as blocked, so the way on is Continue, otherwise Not now).
   OB5: {
     screen: 'OB5',
     persona: 'buyer',
     scenario: 'no-trades',
     path: '/welcome/notifications',
-    steps: [{ click: 'role=button[name="Not now"]' }, { waitFor: 'role=heading[name=/all set/i]' }],
+    steps: [
+      { click: 'role=button[name=/^(Continue|Not now)$/]' },
+      { waitFor: 'role=heading[name=/all set/i]' },
+    ],
     content: 'main',
   },
 };
