@@ -11,6 +11,23 @@ export const OTP_CODE_DIGITS = 6;
 export const OTP_TTL_SECONDS = 300;
 export const OTP_MAX_ATTEMPTS = 5;
 
+/**
+ * How long after it was created a challenge can still be RESENT from — as opposed to verified
+ * against, which is `OTP_TTL_SECONDS` and not a second more.
+ *
+ * The two are different questions. Verifying asks "is this code still good?"; resending asks "is
+ * this the sign-up the person is still looking at?", and the answer to that outlives the code by a
+ * long way. Tying them together is what made an expired sign-up unrecoverable: the only control on
+ * screen is "Send a new code", and the endpoint behind it refused the moment the code it was
+ * replacing went stale.
+ *
+ * A day rather than forever, because the id is the whole of what a resend needs. It is unguessable
+ * and it only ever sends to the account's own primary contact, so a leaked one buys an attacker
+ * nothing but noise on somebody else's phone — and §S4's 3-per-10-minutes still caps that. The
+ * bound is here so an id scraped out of a log months later is not still live.
+ */
+export const OTP_RESEND_WINDOW_SECONDS = 86_400;
+
 /** §S4: OTP send 3/10min/destination, 10/day. Counted against the challenge rows themselves. */
 export const OTP_SEND_BURST = { max: 3, windowSeconds: 600 } as const;
 export const OTP_SEND_DAILY = { max: 10, windowSeconds: 86_400 } as const;

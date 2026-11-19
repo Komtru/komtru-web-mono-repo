@@ -40,7 +40,7 @@ import { setPassword, validatePassword } from './credential.service.js';
 import { deviceLabel, signInLocation, upsertDevice } from './device.service.js';
 import {
   consumeOtp,
-  findLiveChallenge,
+  findResumableChallenge,
   issueOtp,
   issueProofToken,
   type OtpChannel,
@@ -565,6 +565,13 @@ export type ResendResult =
 /**
  * E3's "Didn't get a code?".
  *
+ * **An expired challenge is resent, not refused.** Expiry is the commonest reason to be here: the
+ * code is five minutes old, it never arrived, and this endpoint is behind the only button on the
+ * screen. Refusing drove the client to the 422 it reads as "this sign-up has expired, start again"
+ * — and starting again returns to a prefilled form whose submit is skipped while a code is
+ * remembered, so the sign-up could not be recovered at all. `findResumableChallenge` holds the
+ * line that does matter, a consumed challenge, and bounds how old a resumable one may be.
+ *
  * The destination is re-read from the user's primary contact rather than recovered from the
  * challenge: `destination_hash` is an HMAC and there is nothing to recover. That is a real
  * limitation — a challenge for a non-primary contact cannot be resent — and it is honest for this
@@ -587,7 +594,9 @@ export async function resendOtp(
   input: { challengeId: string; ip: string | null },
 ): Promise<ResendResult> {
   return db.transaction(async (tx): Promise<ResendResult> => {
-    const challenge = await findLiveChallenge(tx, input.challengeId);
+    // Resumable, not live: an EXPIRED challenge is the ordinary reason to be asking for a resend.
+    // See `findResumableChallenge` for what is still refused, and why the window exists at all.
+    const challenge = await findResumableChallenge(tx, input.challengeId);
     if (!challenge) return { outcome: 'UNKNOWN' };
 
     // The decoy: re-issue against the hash the original was made from, deliver nothing.

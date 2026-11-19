@@ -45,15 +45,19 @@ export function SignUpForm({ next }: { next?: string }): React.JSX.Element {
     event.preventDefault();
     setTried(true);
     if (phoneMissing || emailMissing || nameMissing) return;
-    // Different contact details are a different sign-up: the code already sent went to the old ones,
-    // and TOS1 must open a fresh account rather than send the person to verify details they changed.
-    if (
-      draft !== null &&
-      draft !== undefined &&
-      (draft.phone !== phone.trim() || draft.email !== email.trim())
-    ) {
-      signUpCode.clear();
-    }
+    // Submitting this screen is always the start of a sign-up, so the code any earlier one sent is
+    // forgotten here — whether or not the details changed.
+    //
+    // Changed details are the obvious case: the code went to the old ones. Unchanged details are the
+    // one that matters, because that is "Start again" after E3 said the sign-up expired, arriving
+    // back here on a draft that prefills every field. TOS1 skips `/auth/register` whenever a code is
+    // remembered (so that going BACK to it from E3 cannot open a second account), so leaving the
+    // dead challenge in place bounced the person straight to E3 holding the same expired id, where
+    // the only offer is a resend the platform answers 422 — a loop with no way out but to edit the
+    // number. Re-registering is safe: `register` refuses only a phone or email somebody has already
+    // VERIFIED, and the unverified account behind an abandoned sign-up is swept by
+    // `identity.abandoned-registrations-close`.
+    signUpCode.clear();
     signUpDraft.write({
       phone: phone.trim(),
       email: email.trim(),

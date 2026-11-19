@@ -18,6 +18,7 @@ import { randomNumericCode, randomToken } from '../../../platform/crypto/random.
 import {
   OTP_CODE_DIGITS,
   OTP_MAX_ATTEMPTS,
+  OTP_RESEND_WINDOW_SECONDS,
   OTP_SEND_BURST,
   OTP_SEND_DAILY,
   OTP_TTL_SECONDS,
@@ -351,7 +352,12 @@ export async function consumeProofToken(tx: Tx, deps: OtpDeps, token: string): P
   return consumeOtp(tx, deps, { challengeId: parts.challengeId, code: parts.secret });
 }
 
-/** The live challenge behind an id, for a resend. Null when there is nothing to resend. */
+/**
+ * The live challenge behind an id: unconsumed AND unexpired. For a caller about to act on the
+ * strength of the code still being good.
+ *
+ * A resend is NOT such a caller — see `findResumableChallenge`.
+ */
 export async function findLiveChallenge(tx: Tx, challengeId: string): Promise<OtpRow | null> {
   const row = (
     await tx
@@ -360,6 +366,32 @@ export async function findLiveChallenge(tx: Tx, challengeId: string): Promise<Ot
       .where(and(eq(otpChallenges.id, challengeId), isNull(otpChallenges.consumedAt)))
   )[0];
   return row && row.expiresAt.getTime() > Date.now() ? row : null;
+}
+
+/**
+ * The challenge a RESEND re-issues from: unconsumed, and created within `OTP_RESEND_WINDOW_SECONDS`.
+ * Expiry is deliberately not checked — an expired challenge is the normal reason to want a resend,
+ * and refusing one left screen E3 offering a button that could only fail.
+ *
+ * Consumed is still a miss, and that is the line that matters. A consumed row is one whose code was
+ * either spent or superseded by a newer challenge; re-issuing from it would resurrect a dead branch
+ * of the chain, and in the superseded case would hand back a second live code for one destination.
+ *
+ * Nothing here distinguishes a real challenge from `/auth/password/forgot`'s decoy, and nothing may:
+ * both are looked up by this one function on the same two conditions, so the widened window reaches
+ * them identically. A resend that resumed real challenges after expiry but not decoys would be the
+ * enumeration oracle the decoy exists to close, rebuilt out of a timestamp.
+ */
+export async function findResumableChallenge(tx: Tx, challengeId: string): Promise<OtpRow | null> {
+  const row = (
+    await tx
+      .select()
+      .from(otpChallenges)
+      .where(and(eq(otpChallenges.id, challengeId), isNull(otpChallenges.consumedAt)))
+  )[0];
+  if (!row) return null;
+  const resumableUntil = row.createdAt.getTime() + OTP_RESEND_WINDOW_SECONDS * 1000;
+  return Date.now() < resumableUntil ? row : null;
 }
 
 /**

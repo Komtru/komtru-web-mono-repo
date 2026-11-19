@@ -165,6 +165,27 @@ describe('E2 Sign up', () => {
     expect(network.sent).toEqual([]);
     await expectNoAxeViolations(container);
   });
+
+  it('forgets the code when the same details are sent again, so "Start again" can really start again', () => {
+    // E3 after the code expired: the draft is still here, and so is the dead challenge. The person
+    // takes "Start again" back to here and submits the details it prefilled, unchanged. Keeping the
+    // challenge would send them straight back to E3 holding the same dead id — the loop that made
+    // the expiry unescapable, because TOS1 skips `/auth/register` whenever a code is remembered.
+    signUpDraft.write({ phone: '0802 341 5567', email: 'ada@example.com', fullName: 'Ada Obi' });
+    signUpCode.write({ challengeId, destination: '+23480•••5567', delivered: true, sentAt: Date.now() });
+
+    show(<SignUpForm />);
+    expect(screen.getByLabelText('Phone number').getAttribute('value')).toBe('0802 341 5567');
+    fireEvent.click(screen.getByRole('button', { name: 'Continue' }));
+
+    expect(signUpCode.read()).toBeNull();
+    expect(signUpDraft.read()).toEqual({
+      phone: '0802 341 5567',
+      email: 'ada@example.com',
+      fullName: 'Ada Obi',
+    });
+    expect(router.push).toHaveBeenCalledWith('/signup/terms');
+  });
 });
 
 describe('TOS1 Terms', () => {

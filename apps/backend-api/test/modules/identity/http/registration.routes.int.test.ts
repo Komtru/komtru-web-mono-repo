@@ -274,6 +274,59 @@ describe.runIf(infraEnabled)('registration over HTTP', () => {
     expect((await verify(resent.challengeId, await codeFor(resent.challengeId))).status).toBe(200);
   });
 
+  it('resends once the code has EXPIRED, which is the moment a person asks for a new one', async () => {
+    const registered = bodyOf<Registered>(await registerPhone());
+    // Five minutes pass with no code in the inbox. E3 now offers exactly one thing, "Send a new
+    // code", and a resend that refused here left the sign-up with no way forward at all.
+    await t
+      .owner()
+      .query(`UPDATE identity.otp_challenges SET expires_at = now() - interval '1 minute' WHERE id = $1`, [
+        registered.challengeId,
+      ]);
+
+    const response = await request(app)
+      .post('/v1/auth/otp/resend')
+      .send({ challengeId: registered.challengeId });
+    const resent = bodyOf<Resent>(response);
+
+    expect(response.status).toBe(200);
+    expect(resent.challengeId).not.toBe(registered.challengeId);
+    expect(resent.expiresAt).toBeGreaterThan(Date.now());
+    // The new code is usable, so the person is actually unstuck rather than merely given a 200.
+    expect((await verify(resent.challengeId, await codeFor(resent.challengeId))).status).toBe(200);
+  });
+
+  it('refuses a resend for a challenge far too old to be the one on screen', async () => {
+    const registered = bodyOf<Registered>(await registerPhone());
+    // Beyond the resume window: an id this old reached the caller from somewhere other than the
+    // screen it was issued to, and re-sending on it is a code the account did not ask for.
+    await t.owner().query(
+      `UPDATE identity.otp_challenges
+          SET created_at = now() - interval '25 hours', expires_at = now() - interval '25 hours'
+        WHERE id = $1`,
+      [registered.challengeId],
+    );
+
+    const response = await request(app)
+      .post('/v1/auth/otp/resend')
+      .send({ challengeId: registered.challengeId });
+
+    expect(response.status).toBe(422);
+    expect(bodyOf<Problem>(response).code).toBe('OTP_INVALID');
+  });
+
+  it('still refuses a resend for a CONSUMED challenge, expired or not', async () => {
+    const registered = bodyOf<Registered>(await registerPhone());
+    await verify(registered.challengeId, await codeFor(registered.challengeId));
+
+    const response = await request(app)
+      .post('/v1/auth/otp/resend')
+      .send({ challengeId: registered.challengeId });
+
+    expect(response.status).toBe(422);
+    expect(bodyOf<Problem>(response).code).toBe('OTP_INVALID');
+  });
+
   it('answers 429 once the per-destination send budget is spent (S4)', async () => {
     const registered = bodyOf<Registered>(await registerPhone());
     let last = registered.challengeId;
