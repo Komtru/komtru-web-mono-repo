@@ -48,3 +48,26 @@ describe('readVerificationStatus and the account name', () => {
     expect(status.nameClaim.firstName).toBe('Amaka');
   });
 });
+
+/*
+  The response schema, separately from the service.
+
+  `statusResponse` is a `z.object`, so a field the service returns and the schema does not declare
+  is dropped on the way out with no error anywhere — the exact failure T-051 shipped and the
+  comment above `statusResponse` was written about. A test on the service alone cannot see it,
+  because the stripping happens in the route.
+*/
+describe('statusResponse', () => {
+  it('carries nameClaim through instead of quietly dropping it', async () => {
+    const { statusResponse } = await import('../../../src/modules/trust/http/validations.js');
+    const status = await readVerificationStatus(deps(subject()), 'u1');
+    const parsed = statusResponse.parse(status);
+    expect(parsed.nameClaim).toEqual({ firstName: 'Amaka', lastName: 'Balogun' });
+  });
+
+  it('accepts a null half rather than insisting on a string', async () => {
+    const { statusResponse } = await import('../../../src/modules/trust/http/validations.js');
+    const status = await readVerificationStatus(deps(subject({ lastName: null })), 'u1');
+    expect(statusResponse.parse(status).nameClaim).toEqual({ firstName: 'Amaka', lastName: null });
+  });
+});
