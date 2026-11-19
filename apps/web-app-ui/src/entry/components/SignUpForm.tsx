@@ -18,7 +18,7 @@ const FORM = 'signup-form';
  * opens the account and sends the code (M1 §10.1), and TOS1 must come before the account exists, so
  * this screen keeps the details and TOS1 makes the call.
  */
-export function SignUpForm(): React.JSX.Element {
+export function SignUpForm({ next }: { next?: string }): React.JSX.Element {
   const router = useRouter();
   // Coming back from the Terms keeps what was typed: the draft is the starting value, and what the
   // person types here replaces it.
@@ -54,7 +54,13 @@ export function SignUpForm(): React.JSX.Element {
     ) {
       signUpCode.clear();
     }
-    signUpDraft.write({ phone: phone.trim(), email: email.trim(), fullName: fullName.trim() });
+    signUpDraft.write({
+      phone: phone.trim(),
+      email: email.trim(),
+      fullName: fullName.trim(),
+      // Where the visitor was going when they chose to sign up (a Trade Code to look up): the verified account goes there.
+      ...(next === undefined ? {} : { next }),
+    });
     router.push(ENTRY.terms);
   };
 
@@ -62,6 +68,7 @@ export function SignUpForm(): React.JSX.Element {
     <EntryFrame
       title="Create account"
       back={ENTRY.welcome}
+      tradeCode
       footer={
         <Button type="submit" form={FORM}>
           Continue

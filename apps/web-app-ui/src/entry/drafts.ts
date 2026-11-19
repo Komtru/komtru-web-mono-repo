@@ -11,6 +11,8 @@ export interface SignUpDraft {
   phone: string;
   email: string;
   fullName: string;
+  /** A path that `safeNext` has passed, for the person to be sent to once the account is open. */
+  next?: string;
 }
 
 /** A code that went out: what to verify it against and where it was sent. */
