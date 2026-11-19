@@ -1,4 +1,4 @@
-import { appLink } from '../site/config';
+import Link from 'next/link';
 import { HeroBackdrop, HeroForeground, HeroNetwork } from '../art/Illustrations';
 import { PhoneFrame } from './PhoneFrame';
 import { FindATradeScreen } from './FindATradeScreen';
@@ -9,6 +9,9 @@ import { FindATradeScreen } from './FindATradeScreen';
  * "Enter trade code" is a link to `/trade-code` rather than a dialog. The reference opened a modal
  * holding the same form the Trade Code page already has; one URL for one thing is both less code
  * and a page someone can be sent to, which is exactly what a seller does with it.
+ *
+ * The reference's second button was "Start a trade", into the app. The app is not open, so it is
+ * the waitlist and says so — see the note in `src/site/config.ts`.
  */
 export function Hero(): React.JSX.Element {
   return (
@@ -25,12 +28,12 @@ export function Hero(): React.JSX.Element {
             Trades they honour. Both sides build a record that people can see and trust.
           </p>
           <div className="row">
-            <a className="btn bs" href="/trade-code">
+            <Link className="btn bs" href="/trade-code">
               Enter trade code
-            </a>
-            <a className="btn bp" href={appLink('/signup')}>
-              Start a trade
-            </a>
+            </Link>
+            <Link className="btn bp" href="/waitlist">
+              Join the waitlist
+            </Link>
           </div>
         </div>
         <div className="hz">

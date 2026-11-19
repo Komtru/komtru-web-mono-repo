@@ -4,7 +4,6 @@ import Image from 'next/image';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useEffect, useState } from 'react';
-import { appLink } from '../site/config';
 import { NAV_LINKS } from '../site/nav';
 
 /**
@@ -18,8 +17,8 @@ import { NAV_LINKS } from '../site/nav';
  * a link is the event that should close it, and watching `pathname` would leave the menu open for
  * whoever taps the link to the page they are already on.
  *
- * "Log in" and "Start a trade" leave for the app rather than route inside the site, so they are
- * plain anchors: `next/link` would prefetch an origin it does not own.
+ * There is no "Log in" and no "Start a trade". The app is not open, so the only thing the header
+ * can honestly offer is the waitlist — see the note in `src/site/config.ts`.
  */
 export function SiteNav(): React.JSX.Element {
   const pathname = usePathname();
@@ -47,12 +46,9 @@ export function SiteNav(): React.JSX.Element {
           ))}
         </div>
         <div className="na">
-          <a className="btn bs" href={appLink('/login')}>
-            Log in
-          </a>
-          <a className="btn bp" href={appLink('/signup')}>
-            Start a trade
-          </a>
+          <Link className="btn bp" href="/waitlist">
+            Join the waitlist
+          </Link>
           <button
             type="button"
             className="bur"
@@ -76,7 +72,9 @@ export function SiteNav(): React.JSX.Element {
             {label}
           </Link>
         ))}
-        <a href={appLink('/login')}>Log in</a>
+        <Link href="/waitlist" onClick={() => setMenuOpen(false)}>
+          Join the waitlist
+        </Link>
       </div>
     </nav>
   );

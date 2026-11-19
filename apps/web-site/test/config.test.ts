@@ -1,33 +1,17 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { appLink, appUrl, siteUrl } from '../src/site/config';
+import { apiUrl, siteUrl } from '../src/site/config';
 
 afterEach(() => vi.unstubAllEnvs());
 
-describe('appLink', () => {
-  it('points at the app when there is one', () => {
-    vi.stubEnv('NEXT_PUBLIC_KOMTRU_APP_URL', 'https://app.komtru.com');
-    expect(appLink('/login')).toBe('https://app.komtru.com/login');
-  });
-
+describe('apiUrl', () => {
   it('drops a trailing slash rather than producing a double one', () => {
-    vi.stubEnv('NEXT_PUBLIC_KOMTRU_APP_URL', 'https://app.komtru.com/');
-    expect(appLink('/signup')).toBe('https://app.komtru.com/signup');
+    vi.stubEnv('NEXT_PUBLIC_KOMTRU_API_URL', 'https://api.komtru.com/v1/');
+    expect(apiUrl()).toBe('https://api.komtru.com/v1');
   });
 
-  /*
-   * The case that matters before launch: komtru.com is live and the app is not. Sending someone to
-   * a host that does not resolve says "broken"; sending them to the waitlist says "not yet", which
-   * is both true and the thing we want them to do.
-   */
-  it('sends people to the waitlist when no app is configured', () => {
-    vi.stubEnv('NEXT_PUBLIC_KOMTRU_APP_URL', '');
-    expect(appLink('/login')).toBe('/waitlist');
-    expect(appLink('/signup')).toBe('/waitlist');
-  });
-
-  it('treats whitespace as absent', () => {
-    vi.stubEnv('NEXT_PUBLIC_KOMTRU_APP_URL', '   ');
-    expect(appUrl()).toBeUndefined();
+  it('treats whitespace as absent, so the waitlist form says so instead of posting to nowhere', () => {
+    vi.stubEnv('NEXT_PUBLIC_KOMTRU_API_URL', '   ');
+    expect(apiUrl()).toBeUndefined();
   });
 });
 

@@ -6,8 +6,8 @@ const CTA: CtaCopy = {
   heading: 'Complete your next trade with komtru',
   body: 'Join the waitlist and be first in when your city opens.',
   actions: [
-    { label: 'Join the waitlist', to: { site: '/waitlist' } },
-    { label: 'Back to the home page', to: { site: '/' } },
+    { label: 'Join the waitlist', to: '/waitlist' },
+    { label: 'Back to the home page', to: '/' },
   ],
 };
 

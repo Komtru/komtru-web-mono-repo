@@ -1,6 +1,5 @@
 import type { Metadata } from 'next';
 import { CtaBand, type CtaCopy } from '../../src/chrome/CtaBand';
-import { AppQrCard } from '../../src/home/AppQrCard';
 import { WaitlistForm } from '../../src/home/WaitlistForm';
 
 export const metadata: Metadata = {
@@ -9,21 +8,23 @@ export const metadata: Metadata = {
     'Join the Komtru waitlist and download the app on iOS and Android the day it launches in Lagos, Abuja, Port Harcourt and Jos.',
 };
 
+// No "Start a trade" here either; on the waitlist page itself the form above is the action, so
+// the band points at the two things someone might want to read instead.
 const CTA: CtaCopy = {
-  heading: 'Complete your next trade with komtru',
-  body: 'Join the waitlist and be first in when your city opens.',
+  heading: 'What you’re joining',
+  body: 'Komtru protects the payment until the item you agreed is delivered, on both sides of the trade.',
   actions: [
-    { label: 'Start a trade', to: { app: '/signup' } },
-    { label: 'How it works', to: { site: '/how-it-works' } },
+    { label: 'How it works', to: '/how-it-works' },
+    { label: 'Safety', to: '/safety' },
   ],
 };
 
 /**
  * The waitlist page.
  *
- * It exists in phase one because two things already point at it: the QR code in the home page's
- * signup band, and every call to action on the site while `NEXT_PUBLIC_KOMTRU_APP_URL` is unset.
- * Both would otherwise land on a 404.
+ * This is where the whole site points. The app is not open, so every call to action in the
+ * header, the hero and every closing band leads here rather than into the product — see the note
+ * in `src/site/config.ts`.
  */
 export default function Waitlist(): React.JSX.Element {
   return (
@@ -39,14 +40,10 @@ export default function Waitlist(): React.JSX.Element {
         </div>
       </header>
 
+      {/* One column: with the QR card gone the form is the whole point of the page. */}
       <section className="band es">
-        <div className="w split">
-          <div>
-            <AppQrCard />
-          </div>
-          <div style={{ display: 'flex', justifyContent: 'center' }}>
-            <WaitlistForm />
-          </div>
+        <div className="w" style={{ display: 'flex', justifyContent: 'center' }}>
+          <WaitlistForm />
         </div>
       </section>
 

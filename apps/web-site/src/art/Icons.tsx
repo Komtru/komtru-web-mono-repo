@@ -1,30 +1,13 @@
 /*
  * The reference's icons. Each keeps the reference's own stroke widths and fills; the social marks
- * are the footer's, drawn white on the midnight band, and the two store marks sit in the badges
- * beside the QR code.
+ * are the footer's, drawn white on the midnight band.
+ *
+ * The App Store and Google Play marks went with the QR card: there is no app to download, so a
+ * store badge is a link to nothing wearing a brand that is not ours to imply.
  *
  * None of them carries a label: every one sits inside a link or a badge that is already named, so
  * announcing the glyph as well would say everything twice.
  */
-
-export function AppleIcon(): React.JSX.Element {
-  return (
-    <svg viewBox="0 0 24 24" fill="#fff" aria-hidden="true">
-      <path d="M16.4 12.7c0-2.4 2-3.5 2-3.6-1.1-1.6-2.8-1.8-3.4-1.8-1.4-.2-2.8.9-3.5.9-.7 0-1.8-.9-3-.8-1.5 0-3 .9-3.8 2.3-1.6 2.8-.4 7 1.2 9.3.8 1.1 1.700 2.400 2.900 2.300 1.200 0 1.600-.7 3-.7s1.800.7 3 .7 2-1.100 2.800-2.200c.9-1.300 1.200-2.500 1.200-2.600-.100 0-2.400-.900-2.400-3.800zM14.100 5.600c.6-.8 1.100-1.800.9-2.900-1 0-2.100.6-2.800 1.400-.6.7-1.100 1.800-1 2.800 1.100.1 2.200-.5 2.900-1.300z" />
-    </svg>
-  );
-}
-
-export function GooglePlayIcon(): React.JSX.Element {
-  return (
-    <svg viewBox="0 0 24 24" aria-hidden="true">
-      <path d="M4 3l10 9-10 9z" fill="#4552D6" />
-      <path d="M4 3l12 6.500L14 12z" fill="#159768" />
-      <path d="M4 21l10-9 2 2.500z" fill="#F2C063" />
-      <path d="M16 9.500l4 2.500-4 2.500-2-2.500z" fill="#fff" />
-    </svg>
-  );
-}
 
 export function WhatsAppIcon(): React.JSX.Element {
   return (

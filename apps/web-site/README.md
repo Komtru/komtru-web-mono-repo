@@ -31,6 +31,21 @@ Everything is `NEXT_PUBLIC_*`; the site has no secrets because it holds no sessi
 The backend's `ALLOWED_ORIGINS` must name this site's origin, or the browser blocks the waitlist
 post before it is sent. Locally that is `http://localhost:3005`, which `pnpm env:backend` writes.
 
+## It does not link to the app, on purpose
+
+Komtru is not open. The app is deployed at app.komtru.com, but its backend still runs a stub KYC
+provider with notifications in dry-run, so anyone signing up there would wait forever for a code
+that is never sent.
+
+So there is no "Log in" and no "Start a trade", and no QR code or app-store badge either — every
+call to action is labelled "Join the waitlist" and goes there. The point is the label as much as
+the destination: a button reading "Start a trade" that lands on a signup form is a promise the
+product cannot keep.
+
+`test/no-app-links.test.ts` enforces this by scanning the sources, so it covers the pages that are
+still placeholders and the ones written after them. To open the app, delete that test in the same
+commit that restores the buttons.
+
 ## What is not here yet
 
 Thirteen of the seventeen routes render a placeholder: the header and footer link to every page

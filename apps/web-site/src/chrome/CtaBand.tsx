@@ -1,10 +1,13 @@
 import Link from 'next/link';
-import { appLink } from '../site/config';
 
 export interface CtaAction {
   readonly label: string;
-  /** An app screen, a site path, or an anchor on this page. */
-  readonly to: { app: '/login' | '/signup' } | { site: string };
+  /**
+   * A path on this site. There is no variant for an app screen, on purpose: while Komtru is
+   * closed nothing here may send a visitor into the product, and a type that cannot express it
+   * is a stronger guarantee than a rule someone has to remember. See `src/site/config.ts`.
+   */
+  readonly to: string;
 }
 
 export interface CtaCopy {
@@ -29,30 +32,29 @@ export function CtaBand({ copy }: { copy: CtaCopy }): React.JSX.Element {
           {copy.body}
         </p>
         <div className="row" style={{ justifyContent: 'center' }}>
-          {copy.actions.map((action, index) => {
-            const className = `btn ${index === 0 ? 'bw' : 'bsd'}`;
-            return 'app' in action.to ? (
-              <a key={action.label} className={className} href={appLink(action.to.app)}>
-                {action.label}
-              </a>
-            ) : (
-              <Link key={action.label} className={className} href={action.to.site}>
-                {action.label}
-              </Link>
-            );
-          })}
+          {copy.actions.map((action, index) => (
+            <Link key={action.label} className={`btn ${index === 0 ? 'bw' : 'bsd'}`} href={action.to}>
+              {action.label}
+            </Link>
+          ))}
         </div>
       </div>
     </div>
   );
 }
 
-/** Screen E1's own closing band. */
+/**
+ * Screen E1's own closing band.
+ *
+ * The reference's heading was "Complete your next trade with komtru" over a "Start a trade"
+ * button. Neither is true yet, and a closing band is the last thing someone reads — so it says
+ * what they can actually do today.
+ */
 export const HOME_CTA: CtaCopy = {
-  heading: 'Complete your next trade with komtru',
-  body: 'It takes a few minutes to set up. Nothing is charged until you accept an agreement.',
+  heading: 'Be first in when Komtru opens',
+  body: 'Komtru isn’t open yet. Join the waitlist and we’ll tell you the day your city goes live.',
   actions: [
-    { label: 'Start a trade', to: { app: '/signup' } },
-    { label: 'How it works', to: { site: '/how-it-works' } },
+    { label: 'Join the waitlist', to: '/waitlist' },
+    { label: 'How it works', to: '/how-it-works' },
   ],
 };

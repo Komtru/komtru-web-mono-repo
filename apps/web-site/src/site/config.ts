@@ -16,14 +16,6 @@ const clean = (value: string | undefined): string | undefined => {
 };
 
 /**
- * Where the consumer app lives. Every "Log in" and "Start a trade" button points here.
- *
- * Absent, the buttons fall back to `/waitlist`, which is the honest answer before launch: the app
- * is not open, and sending someone to a host that does not resolve says that far less clearly.
- */
-export const appUrl = (): string | undefined => clean(process.env.NEXT_PUBLIC_KOMTRU_APP_URL);
-
-/**
  * The backend, for the one call this site makes. Absent, the waitlist form keeps working and says
  * so — see `src/site/waitlist.ts`.
  */
@@ -33,12 +25,21 @@ export const apiUrl = (): string | undefined => clean(process.env.NEXT_PUBLIC_KO
 export const siteUrl = (): string => clean(process.env.NEXT_PUBLIC_KOMTRU_SITE_URL) ?? 'https://komtru.com';
 
 /**
- * Where a call to action goes.
+ * THIS SITE DOES NOT LINK INTO THE APP, AND THAT IS DELIBERATE.
  *
- * `login` and `signup` are the app's screens; before the app is open they are the waitlist, because
- * an account cannot be created yet and a dead link is worse than an honest one.
+ * Komtru is not open. The app is deployed at app.komtru.com, but its backend still runs with a
+ * stub KYC provider and notifications in dry-run, so anyone who signed up there would wait forever
+ * for a code that is never sent. Every call to action on this site goes to the waitlist instead,
+ * and — the part that matters — every one of them is LABELLED "join the waitlist". A button that
+ * says "Start a trade" and lands on a signup form is a promise the product cannot keep yet.
+ *
+ * This used to be implicit: `appLink()` read `NEXT_PUBLIC_KOMTRU_APP_URL` and fell back to
+ * `/waitlist` when it was unset. That made "is the app reachable from the marketing site" an
+ * accident of one environment variable — set it for any reason and the public site quietly starts
+ * sending people into a half-configured product. It is now a property of the code, which cannot
+ * change without review.
+ *
+ * TO OPEN THE APP: put the app's buttons back in `src/chrome/SiteNav.tsx`, `src/home/Hero.tsx` and
+ * the `CtaCopy` constants, pointing at `https://app.komtru.com`. The copy is what has to change,
+ * not a flag, because the words on the button are the thing that was wrong.
  */
-export function appLink(path: '/login' | '/signup'): string {
-  const base = appUrl();
-  return base === undefined ? '/waitlist' : `${base}${path}`;
-}

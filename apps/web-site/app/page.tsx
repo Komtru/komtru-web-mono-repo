@@ -10,7 +10,6 @@ import {
 } from '../src/art/Illustrations';
 import { CtaBand, HOME_CTA } from '../src/chrome/CtaBand';
 import { FaqBand } from '../src/chrome/FaqBand';
-import { AppQrCard } from '../src/home/AppQrCard';
 import { Hero } from '../src/home/Hero';
 import { TradeCodeLookup } from '../src/home/TradeCodeLookup';
 import { WaitlistForm } from '../src/home/WaitlistForm';
@@ -170,16 +169,19 @@ export default function Home(): React.JSX.Element {
         </div>
       </section>
 
+      {/*
+        The reference put a QR code and two "coming soon" store badges beside this form. There is
+        no app to download and no listing to link to, so a code to scan and a pair of store marks
+        promise something that does not exist. The words carry the band instead.
+      */}
       <section className="band es" id="waitlist">
         <div className="w split">
           <div>
-            <h2>Join the waitlist. Get the app first.</h2>
+            <h2>Join the waitlist.</h2>
             <p className="lede">
-              Komtru isn’t open yet. Add your name and we’ll tell you when your city goes live.
+              Komtru isn’t open yet. Add your name and we’ll tell you when your city goes live — and what to
+              do first when it does.
             </p>
-            <div style={{ marginTop: 24 }}>
-              <AppQrCard />
-            </div>
           </div>
           <div style={{ display: 'flex', justifyContent: 'center' }}>
             <WaitlistForm />
