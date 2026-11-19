@@ -326,6 +326,7 @@ const scannedFiles = [
   ...APPS.map((app) => [`.github/workflows/${app}.yml`, workflowText.get(app)!] as const),
   ['.github/actions/setup/action.yml', read('.github/actions/setup/action.yml')] as const,
   ['.github/workflows/repo.yml', read('.github/workflows/repo.yml')] as const,
+  ['.github/workflows/backend-infra-soak.yml', read('.github/workflows/backend-infra-soak.yml')] as const,
 ];
 
 /**
@@ -518,6 +519,38 @@ describe('fee schedule version check', () => {
     const paths = readYaml<Workflow>('.github/workflows/backend-api.yml').on.pull_request?.paths ?? [];
     expect(paths.some((path) => path.startsWith('config/'))).toBe(false);
     expect(readYaml<Workflow>('.github/workflows/repo.yml').on.pull_request?.paths).toBeUndefined();
+  });
+});
+
+/**
+ * T-029's criterion, measured in CI rather than on a laptop. It is dispatch-only and kept out of
+ * backend-api.yml, so no push can start a multi-hour streak and no dispatch of the backend pipeline
+ * can drag a deploy along. Its containers are a copy of the test job's, and this is what stops the
+ * copy drifting.
+ */
+describe('backend-infra-soak workflow', () => {
+  const soak = readYaml<Workflow>('.github/workflows/backend-infra-soak.yml');
+  const job = soak.jobs.soak!;
+  const runs = job.steps.map((step) => step.run ?? '').join('\n');
+
+  it('runs only when dispatched by hand, never on a push or a schedule', () => {
+    expect(Object.keys(soak.on)).toEqual(['workflow_dispatch']);
+    const runsInput = (soak.on.workflow_dispatch as { inputs?: Record<string, { default?: number }> }).inputs
+      ?.runs;
+    expect(runsInput?.default).toBe(20);
+  });
+
+  it('asks for no more than read access to the repository', () => {
+    expect(soak.permissions).toEqual({ contents: 'read' });
+  });
+
+  it('runs the backend infra suite exactly as the criterion names it', () => {
+    expect(runs).toContain('pnpm --filter @komtru/backend-api exec vitest run');
+  });
+
+  it('keeps the same service containers and environment as the test job, so the measured suite is the one CI runs', () => {
+    expect(job.services).toEqual(backendTest.services);
+    expect(job.env).toEqual(backendTest.env);
   });
 });
 

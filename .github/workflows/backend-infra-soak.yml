@@ -1,0 +1,188 @@
+# T-029's acceptance criterion: the backend's full infra suite passes N consecutive runs with no failure.
+# Dispatch only. It lives in its own file rather than as a job in backend-api.yml because dispatching
+# that file runs the whole pipeline, deploy included, and this measurement should not drag one along.
+#
+# The runs are sequential, in one job, against one set of service containers, so the count is a real
+# streak: it stops at the first failed run. A matrix would run N legs in parallel and measure N
+# independent runs, which is a different claim. The service containers are copied from backend-api.yml's
+# test job, and scripts/test/ci-workflows.test.ts holds the two identical.
+name: backend-infra-soak
+
+on:
+  workflow_dispatch:
+    inputs:
+      runs:
+        description: 'Consecutive runs to attempt. The streak stops at the first failed run.'
+        required: false
+        type: number
+        default: 20
+
+permissions:
+  contents: read
+
+concurrency:
+  # A second dispatch on the same ref supersedes the first: the new streak is the one being asked about.
+  group: backend-infra-soak-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  soak:
+    runs-on: ubuntu-latest
+    # About ten minutes a run on one runner (the test job's own estimate). 20 runs is about 200 minutes,
+    # and GitHub caps a job at 360. A larger count is cut off here; the per-run rows already written to
+    # the step summary still show how far it got.
+    timeout-minutes: 350
+    env:
+      KOMTRU_INFRA_TESTS: '1'
+      KOMTRU_TEST_DIRECT_URL: postgresql://komtru:komtru@localhost:55432
+      KOMTRU_TEST_POOLED_URL: postgresql://komtru_app:komtru_app@localhost:56432
+    # Identical to backend-api.yml's test job, on the same published ports, for the same reason:
+    # the backend's integration tests hard-code these. Throwaway container credentials only.
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: komtru
+          POSTGRES_PASSWORD: komtru
+          POSTGRES_DB: komtru_v2_dev
+        ports:
+          - '55432:5432'
+        options: >-
+          --health-cmd "pg_isready -U komtru -d komtru_v2_dev"
+          --health-interval 2s
+          --health-timeout 3s
+          --health-retries 30
+
+      pgbouncer:
+        image: edoburu/pgbouncer:latest
+        env:
+          DB_HOST: postgres
+          DB_PORT: '5432'
+          DB_USER: komtru
+          DB_PASSWORD: komtru
+          AUTH_TYPE: scram-sha-256
+          POOL_MODE: transaction
+          MAX_CLIENT_CONN: '200'
+          DEFAULT_POOL_SIZE: '10'
+          MAX_DB_CONNECTIONS: '15'
+          SERVER_LOGIN_RETRY: '0'
+          ADMIN_USERS: komtru
+          LISTEN_PORT: '5432'
+        ports:
+          - '56432:5432'
+        options: >-
+          --health-cmd "nc -z 127.0.0.1 5432"
+          --health-interval 2s
+          --health-timeout 3s
+          --health-retries 30
+
+      redis:
+        image: redis:7-alpine
+        ports:
+          - '56379:6379'
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 2s
+          --health-timeout 3s
+          --health-retries 30
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/setup
+        with:
+          cache-key: backend-api
+
+      - name: Run the infra suite until the first failed run
+        env:
+          RUNS: ${{ inputs.runs }}
+        run: |
+          # No `-e`: a failed run is a result to record, not a reason to stop writing the summary.
+          set -u
+
+          case "$RUNS" in
+            ''|*[!0-9]*) echo "runs must be a whole number, got '$RUNS'" >&2; exit 1 ;;
+          esac
+          if [ "$RUNS" -lt 1 ]; then echo "runs must be at least 1" >&2; exit 1; fi
+
+          mkdir -p soak-reports
+          {
+            echo "## Infra suite soak"
+            echo
+            echo "Requested: $RUNS run(s). This is a **streak**: the count stops at the first failed run."
+            echo
+            echo "| Run | Result | Seconds | Failing files (failing tests), or why none is named |"
+            echo "| --- | --- | --- | --- |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          # Names the failing files and tests from one run's JSON report. A run is only a pass when this
+          # prints nothing, so a missing report or a report with no test files counts as a failure.
+          failing_files() {
+            node -e '
+              const fs = require("node:fs");
+              const path = require("node:path");
+              let report;
+              try { report = JSON.parse(fs.readFileSync(process.argv[1], "utf8")); } catch (error) {
+                process.stdout.write("no readable JSON report"); process.exit(0);
+              }
+              const files = report.testResults || [];
+              if (files.length === 0) { process.stdout.write("no test file ran"); process.exit(0); }
+              const cell = (text) => String(text).split("\n")[0].replace(/\|/g, "\\|");
+              const lines = files.filter((file) => file.status !== "passed").map((file) => {
+                const name = path.relative(process.cwd(), file.name);
+                const tests = (file.assertionResults || []).filter((test) => test.status === "failed").map((test) => test.fullName);
+                const fileError = file.message ? " (file error: " + cell(file.message) + ")" : "";
+                const named = tests.length ? " (" + tests.slice(0, 3).map(cell).join("; ") + (tests.length > 3 ? "; …" : "") + ")" : "";
+                return "`" + cell(name) + "`" + fileError + named;
+              });
+              process.stdout.write(lines.join("<br>"));
+            ' "$1"
+          }
+
+          passed=0
+          for run in $(seq 1 "$RUNS"); do
+            report="$PWD/soak-reports/run-$run.json"
+            log="soak-reports/run-$run.log"
+            started=$SECONDS
+            pnpm --filter @komtru/backend-api exec vitest run \
+              --reporter=default --reporter=json --outputFile.json="$report" > "$log" 2>&1
+            code=$?
+            elapsed=$((SECONDS - started))
+
+            named=$(failing_files "$report")
+            if [ "$code" -eq 0 ] && [ -z "$named" ]; then
+              passed=$((passed + 1))
+              echo "| $run | passed | $elapsed | |" >> "$GITHUB_STEP_SUMMARY"
+              echo "run $run passed in ${elapsed}s"
+              continue
+            fi
+
+            # Reached here with nothing named: the run exited non-zero without a failed test file, such
+            # as a global setup that could not migrate. Say so rather than leave the cell blank.
+            if [ -z "$named" ]; then
+              named="exit $code, but no test file failed; see soak-reports/run-$run.log"
+            fi
+            echo "| $run | **FAILED** (exit $code) | $elapsed | $named |" >> "$GITHUB_STEP_SUMMARY"
+            echo "run $run FAILED (exit $code) after ${elapsed}s: $log"
+            break
+          done
+
+          {
+            echo
+            if [ "$passed" -eq "$RUNS" ]; then
+              echo "**$passed of $RUNS consecutive runs passed.**"
+            else
+              echo "**$passed consecutive run(s) passed before the first failure.**"
+            fi
+            echo
+            echo "Per-run JSON reports and logs are in the \`infra-soak-reports\` artifact."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          [ "$passed" -eq "$RUNS" ]
+
+      - name: Keep every run's report and log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: infra-soak-reports
+          path: soak-reports/
+          if-no-files-found: ignore
+          retention-days: 14
