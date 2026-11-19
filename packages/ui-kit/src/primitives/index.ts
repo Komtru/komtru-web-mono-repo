@@ -17,6 +17,7 @@ export * from './Sheet.js';
 export * from './Skeleton.js';
 export * from './Stepper.js';
 export * from './StickyFooter.js';
+export * from './TextArea.js';
 export * from './TextField.js';
 export * from './Toast.js';
 export * from './Toggle.js';

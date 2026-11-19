@@ -31,10 +31,21 @@ describe('what the workspace says, for each side', () => {
   it('keeps the seams to the side that would act: shipping is built, so neither side is told it is missing', () => {
     expect(stateCopy('FUNDED', 'SELLER').seam).toBeUndefined();
     expect(stateCopy('FUNDED', 'BUYER').seam).toBeUndefined();
-    // Confirming delivery and accepting are built (F-027); reporting an issue (F-032) is not.
+    // Confirming delivery and accepting are built (F-027), and so now is reporting an issue and
+    // the case behind it (F-032) — neither side is told anything is missing on these states.
     expect(stateCopy('UNCONFIRMED_DELIVERY', 'BUYER', ctx).seam).toBeUndefined();
-    expect(stateCopy('INSPECTION', 'BUYER', ctx).seam).toBe(notYet('Reporting an issue'));
+    expect(stateCopy('INSPECTION', 'BUYER', ctx).seam).toBeUndefined();
     expect(stateCopy('INSPECTION', 'SELLER', ctx).seam).toBeUndefined();
+    expect(stateCopy('DISPUTED', 'BUYER', ctx).seam).toBeUndefined();
+    expect(stateCopy('DISPUTED', 'SELLER', ctx).seam).toBeUndefined();
+  });
+
+  it('F-032: still tells both sides the money is held while a case is open', () => {
+    for (const role of ROLES) {
+      const copy = stateCopy('DISPUTED', role, ctx);
+      expect(copy.banner?.title).toContain('funds remain protected');
+      expect(copy.payoutHeld).toBe('held while the case is open');
+    }
   });
 
   it('never promises a control: no copy tells a person to press, tap or click anything', () => {
