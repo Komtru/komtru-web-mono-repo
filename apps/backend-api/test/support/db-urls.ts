@@ -9,7 +9,6 @@ const pooledBase = process.env.KOMTRU_TEST_POOLED_URL ?? 'postgresql://komtru_ap
 
 /** Every database this harness creates starts with this, so one run can be told from another. */
 export const TEST_DB_PREFIX = process.env.KOMTRU_TEST_DB_PREFIX ?? 'komtru_test';
-export const TEMPLATE_DATABASE = `${TEST_DB_PREFIX}_template`;
 
 /** Redis for the tests that need a real one. A logical database keeps concurrent runs apart. */
 export const testRedisUrl = (): string => process.env.KOMTRU_TEST_REDIS_URL ?? 'redis://localhost:56379';
@@ -30,7 +29,15 @@ const workerId = (): string => process.env.VITEST_POOL_ID ?? '1';
  */
 const runId = (): string => process.env.KOMTRU_TEST_RUN_ID ?? 'norun';
 
-const namespace = (): string => `${TEST_DB_PREFIX}_${runId()}_${workerId()}`;
+/** The run's name stem for every test resource (databases here, Redis namespaces below). */
+const runScope = (): string => `${TEST_DB_PREFIX}_${runId()}`;
+
+const namespace = (): string => `${runScope()}_${workerId()}`;
+
+/** The migrated template this run clones from. Run-scoped: a second run must not drop it. */
+export const templateDatabaseName = (): string => `${runScope()}_template`;
+/** The database this test worker owns. Run-scoped for the same reason as the template. */
+export const workerDatabaseName = (): string => namespace();
 
 /** ioredis `keyPrefix` for this worker: rate limits, idempotency leases, caches. */
 export const testKeyPrefix = (): string => `${namespace()}:`;
@@ -50,7 +57,7 @@ export const releaseRunKeyspace = async (): Promise<number> => {
   const redis = new Redis(testRedisUrl(), { maxRetriesPerRequest: 1 });
   let removed = 0;
   try {
-    const match = `${TEST_DB_PREFIX}_${runId()}_*`;
+    const match = `${runScope()}_*`;
     let cursor = '0';
     do {
       const [next, keys] = await redis.scan(cursor, 'MATCH', match, 'COUNT', 500);

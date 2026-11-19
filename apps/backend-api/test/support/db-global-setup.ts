@@ -4,11 +4,11 @@ import { randomBytes } from 'node:crypto';
 import pg from 'pg';
 import { runMigrations } from '../../src/db/migrator.js';
 import {
-  TEMPLATE_DATABASE,
   TEST_APP_PASSWORD,
   directUrl,
   infraEnabled,
   releaseRunKeyspace,
+  templateDatabaseName,
 } from './db-urls.js';
 
 export default async function setup(): Promise<() => Promise<void>> {
@@ -20,15 +20,16 @@ export default async function setup(): Promise<() => Promise<void>> {
   process.env.KOMTRU_TEST_RUN_ID ??= `${Date.now().toString(36)}${randomBytes(3).toString('hex')}`;
   if (!infraEnabled) return () => Promise.resolve();
 
+  const template = templateDatabaseName();
   const admin = new pg.Client({ connectionString: directUrl('postgres') });
   await admin.connect();
   try {
-    await admin.query(`DROP DATABASE IF EXISTS ${TEMPLATE_DATABASE} WITH (FORCE)`);
-    await admin.query(`CREATE DATABASE ${TEMPLATE_DATABASE}`);
+    await admin.query(`DROP DATABASE IF EXISTS ${template} WITH (FORCE)`);
+    await admin.query(`CREATE DATABASE ${template}`);
   } finally {
     await admin.end();
   }
-  await runMigrations({ directUrl: directUrl(TEMPLATE_DATABASE), appPassword: TEST_APP_PASSWORD });
+  await runMigrations({ directUrl: directUrl(template), appPassword: TEST_APP_PASSWORD });
 
   // A fresh namespace per run is only half of it: without this, every run leaves its whole keyspace
   // behind, and a day's work buries the instance in dead queues. Scoped to the id minted above, so
