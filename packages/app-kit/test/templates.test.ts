@@ -94,6 +94,12 @@ describe('the per-app templates', () => {
         for (const name of names) expect(available, `${specifier} has no ${name}`).toContain(name);
       }
     },
+    // An explicit budget, as the visual-check carve and the ledger's paystack scan have. The first
+    // case to reach a given subpath pays for importing this package's whole entry graph; the rest
+    // are served from the module cache. Alone that is fast, but in the repo workflow's unfiltered
+    // `turbo run test`, with every other package's suite on the same two-core runner, it passed 5s
+    // and failed as though a template imported a name that does not exist.
+    30_000,
   );
 
   it('actually imports something from this package in every template', () => {
