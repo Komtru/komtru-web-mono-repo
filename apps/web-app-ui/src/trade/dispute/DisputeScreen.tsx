@@ -15,9 +15,13 @@ import { useTrade } from '@komtru/api-client/react';
 import { LoadingScreen } from '@komtru/ui-kit';
 import { Frame, ReadFailed, Refusal } from '../delivery/parts';
 import { isProblem } from '../format';
+import { Appeal } from './Appeal';
 import { CaseStatus } from './CaseStatus';
+import { EvidenceComparison } from './EvidenceComparison';
+import { IssueReview } from './IssueReview';
 import { ReportIssue } from './ReportIssue';
 import { SellerNotice } from './SellerNotice';
+import { Withdraw } from './Withdraw';
 
 /**
  * `/trade/:id/dispute`. Before a case exists this is the buyer's report form and the seller has
@@ -73,18 +77,31 @@ export function DisputeScreen({ id }: { id: string }): React.JSX.Element {
 }
 
 /**
+ * The case screens a route can draw. The route names one by key: a server page cannot pass a component
+ * or a render function into this client module (React cannot serialise a function across that boundary),
+ * so the choice is made here, from a string.
+ */
+export type CaseScreen = 'issue' | 'status' | 'evidence' | 'withdraw' | 'appeal';
+
+type CaseScreenProps = { id: string; disputeId?: string };
+
+const CASE_SCREENS: Record<
+  CaseScreen,
+  { title: string; Screen: (props: CaseScreenProps) => React.JSX.Element }
+> = {
+  issue: { title: 'Report an Issue', Screen: IssueReview },
+  status: { title: 'Dispute', Screen: CaseStatus },
+  evidence: { title: 'Evidence', Screen: EvidenceComparison },
+  withdraw: { title: 'Withdraw', Screen: Withdraw },
+  appeal: { title: 'File an Appeal', Screen: Appeal },
+};
+
+/**
  * The shape every other dispute route shares: read the trade's case id, then draw. A route that
  * needs the case and finds none says so rather than rendering an empty screen.
  */
-export function WithDispute({
-  id,
-  title,
-  render,
-}: {
-  id: string;
-  title: string;
-  render: (disputeId: string) => React.JSX.Element;
-}): React.JSX.Element {
+export function WithDispute({ id, screen }: { id: string; screen: CaseScreen }): React.JSX.Element {
+  const { title, Screen } = CASE_SCREENS[screen];
   const dispute = useTradeDispute(id);
 
   if (dispute.isPending) {
@@ -104,5 +121,5 @@ export function WithDispute({
   if (dispute.data === null) {
     return <Refusal id={id} title={title} why="There is no issue open on this trade." />;
   }
-  return render(dispute.data.id);
+  return <Screen id={id} disputeId={dispute.data.id} />;
 }

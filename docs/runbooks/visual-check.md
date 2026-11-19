@@ -209,7 +209,10 @@ Be specific before you claim a screen. These were checked by loading the app aga
   awaiting funding, funded and shipped, in inspection, and disputed in evidence collection. A cancelled, expired,
   delivered-and-released, settled or refunded trade has no fixture, and neither has a decided, mediated or appealed
   dispute. A trade the persona cannot see answers 404, as the backend does.
-- **Dispute status and evidence screens do not render.** `/trade/<id>/dispute/status` (CWT-S15) and `/trade/<id>/dispute/evidence` (Y1) show the app's "This page didn't load" state in a production build, whatever the stand-in serves: the routes pass a function prop from a server page into a client component. Their ui-review records say so; the app is not changed by the harness.
+- **Dispute routes.** The case routes (`/trade/<id>/dispute/status`, `/dispute/evidence`, `/issue`, `/dispute/withdraw`,
+  `/appeal`) render in a production build since the F-032 wiring fix: each route names its screen by key rather than
+  passing a function. Their ui-review records (CWT-S15, Y1) carry the real comparisons. The fixtures cover the live
+  case in evidence collection; a decided or past-mediation case shows the screen's own gate, not the full screen.
 - **Trade creation and the trade-by-code page.** `POST /trades/preview` and `POST /trades` are writes, so the create
   flow (`/trade/new`) cannot be driven past its first screen. `GET /trades/by-code/:code` is not served.
 - **Account security, payouts, two-factor and privacy.** `/me/factors`, `/me/devices`, `/me/sessions`, the payout
