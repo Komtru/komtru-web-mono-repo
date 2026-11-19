@@ -11,6 +11,7 @@ import {
   getPayoutSummary,
   getShipOptions,
   listPayouts,
+  listTradeActivity,
   merchantApplicationSchema,
   meSchema,
   paymentStatusSchema,
@@ -38,6 +39,7 @@ import {
   payoutSummaryFor,
   payoutsFor,
   shipOptionsFor,
+  tradeActivityFor,
   STANDARD_VERSION_IDS_LIST,
   tradeFor,
   tradeStandardFor,
@@ -155,6 +157,12 @@ function checkConsumerReads(
       `delivery deadline for ${trade.tradeCode} in ${where}`,
       getDeliveryDeadline.schema.response,
       deliveryDeadlineFor(persona, scenario, trade.id),
+    );
+    check(
+      failures,
+      `activity for ${trade.tradeCode} in ${where}`,
+      listTradeActivity.schema.response,
+      tradeActivityFor(persona, scenario, trade.id),
     );
     const options = shipOptionsFor(persona, scenario, trade.id);
     if (options !== null) {

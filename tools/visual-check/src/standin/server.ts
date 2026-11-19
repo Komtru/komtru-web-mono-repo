@@ -20,6 +20,7 @@ import {
   payoutSummaryFor,
   payoutsFor,
   shipOptionsFor,
+  tradeActivityFor,
   tradeDisputeFor,
   tradeFor,
   tradeStandardFor,
@@ -262,6 +263,15 @@ const ROUTES: readonly (PublicRoute | ConsumerRoute | AnonymousRoute)[] = [
     handle: ({ persona, scenario }, { id }) => {
       const deadline = deliveryDeadlineFor(persona.id, scenario, id ?? '');
       return deadline === null ? problem(404, 'Trade not found', id) : { status: 200, body: deadline };
+    },
+  },
+  {
+    method: 'GET',
+    path: '/trades/:id/activity',
+    kind: 'consumer',
+    handle: ({ persona, scenario }, { id }) => {
+      const activity = tradeActivityFor(persona.id, scenario, id ?? '');
+      return activity === null ? problem(404, 'Trade not found', id) : { status: 200, body: activity };
     },
   },
 ];
