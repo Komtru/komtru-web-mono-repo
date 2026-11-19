@@ -40,20 +40,20 @@ export function StageHeader({
       ref={rail}
       tabIndex={-1}
       aria-label={`${heading}, step ${String(current + 1)} of ${String(stages.length)}`}
-      className="m-0 mb-[18px] flex list-none gap-[6px] p-0 outline-none"
+      className="m-0 mb-[18px] flex list-none gap-[6px] p-0 outline-none lg:mb-0 lg:flex-col lg:gap-[14px]"
     >
       {stages.map((stage, index) => (
         <li
           key={stage}
           {...(index === current ? { 'aria-current': 'step' as const } : {})}
-          className="min-w-0 flex-1"
+          className="min-w-0 flex-1 lg:flex lg:flex-none lg:gap-[10px]"
         >
           <span
             aria-hidden
-            className={`mb-[6px] block h-[4px] rounded-[2px] ${index === current ? 'bg-trust-indigo' : index < current ? 'bg-trust-emerald' : 'bg-border-hairline'}`}
+            className={`mb-[6px] block h-[4px] rounded-[2px] lg:mb-0 lg:h-auto lg:w-[4px] lg:shrink-0 ${index === current ? 'bg-trust-indigo' : index < current ? 'bg-trust-emerald' : 'bg-border-hairline'}`}
           />
           <span
-            className={`block truncate text-[9px] font-[650] ${index === current ? 'text-midnight-text' : 'text-slate'}`}
+            className={`block truncate text-[9px] font-[650] lg:text-[12.5px] lg:whitespace-normal ${index === current ? 'text-midnight-text' : 'text-slate'}`}
           >
             {stage}
           </span>
