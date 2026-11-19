@@ -24,12 +24,15 @@ import {
   ScreenColumn,
   ScreenHeader,
   SectionLabel,
+  SettingsGroup,
+  SettingsRow,
   TermList,
   TermRow,
   TextField,
   type MediaItem,
 } from '@komtru/ui-kit';
 import { useState } from 'react';
+import { VERIFICATION_HREF } from '../sell/rules';
 import { ContactSupport } from './ContactSupport';
 import { ContactChecks } from './VerifyContact';
 import { Loading, LoadProblem } from './states';
@@ -109,6 +112,13 @@ export function Verification(): React.JSX.Element {
       ) : (
         <Loaded status={status.data} reference={me.data?.account.supportReference} />
       )}
+      <SettingsGroup label="Merchant">
+        <SettingsRow
+          label="Merchant verification"
+          sub="Your business registration and payout account"
+          href={VERIFICATION_HREF}
+        />
+      </SettingsGroup>
     </ScreenColumn>
   );
 }
@@ -135,7 +145,7 @@ function Loaded({
           body={
             status.requirements.identifier && status.requirements.liveness
               ? 'Your ID and selfie check are done.'
-              : 'Nothing has failed. Verify your ID to start selling.'
+              : 'Nothing has failed. Your ID is the first step to merchant verification.'
           }
           className="mb-[14px]"
         />

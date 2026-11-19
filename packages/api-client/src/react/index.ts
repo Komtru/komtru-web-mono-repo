@@ -9,6 +9,7 @@ export * from './devices.js';
 export * from './disputes.js';
 export * from './evidence.js';
 export * from './geo.js';
+export * from './merchant.js';
 export * from './payments.js';
 export * from './payouts.js';
 export * from './query.js';
