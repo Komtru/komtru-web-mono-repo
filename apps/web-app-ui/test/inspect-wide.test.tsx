@@ -15,7 +15,7 @@ import {
   workspaceTrade,
   type CallFn,
 } from './support/workspace';
-import { atWidth, unwidth, type Width } from './support/viewport';
+import { atWidth, panelOf, resizeTo, unwidth, type Width } from './support/viewport';
 
 const api = vi.hoisted(() => ({ call: vi.fn<CallFn>() }));
 
@@ -41,14 +41,16 @@ const show = (width: Width, read: unknown = inspectionRead()) => {
 describe('DX-23: what the seller showed beside what you received', () => {
   it('draws both panels at once, with no pills to swap between them', async () => {
     show('desktop');
-    const seller = await screen.findByRole('region', { name: 'What the seller showed' });
-    const mine = screen.getByRole('region', { name: 'What you received' });
+    const seller = panelOf(await screen.findByRole('heading', { name: 'What the seller showed' }));
+    const mine = panelOf(screen.getByRole('heading', { name: 'What you received' }));
     expect(screen.queryByRole('group', { name: 'Which photos to look at' })).toBeNull();
     await waitFor(() => expect(within(seller).getAllByRole('img')).toHaveLength(2));
     // What you received: your own photos, the platform's record of the delivery, and the checks.
     expect(within(mine).getByRole('region', { name: 'My photos' })).toBeTruthy();
     expect(within(mine).getByLabelText('Delivery evidence')).toBeTruthy();
     expect(within(mine).getByRole('group', { name: 'Does it match?' })).toBeTruthy();
+    // The panels are headings, not landmarks, and the headings inside them sit one level down.
+    expect(within(mine).getByRole('heading', { level: 3, name: 'Does it match?' })).toBeTruthy();
   });
 
   it('keeps every action: confirm and release, ask for more time, back to the trade', async () => {
@@ -66,7 +68,7 @@ describe('DX-23: what the seller showed beside what you received', () => {
 
   it('has no accessibility violations', async () => {
     const { container } = show('desktop');
-    await screen.findByRole('region', { name: 'What the seller showed' });
+    await screen.findByRole('heading', { name: 'What the seller showed' });
     await waitFor(() => expect(container.querySelector('[aria-busy="true"]')).toBeNull());
     await expectNoAxeViolations(container, SHELL_RULES);
   });
@@ -75,14 +77,14 @@ describe('DX-23: what the seller showed beside what you received', () => {
 describe('TX-14: a segmented control instead of two cramped panes', () => {
   it('swaps the seller’s proof and your photos, with the checks beside them', async () => {
     show('tablet');
-    expect(await screen.findByRole('region', { name: 'Photos' })).toBeTruthy();
+    expect(await screen.findByRole('heading', { name: 'Photos' })).toBeTruthy();
     expect(await screen.findByRole('region', { name: "Seller's proof" })).toBeTruthy();
     expect(screen.queryByRole('region', { name: 'My photos' })).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: 'My photos' }));
     expect(screen.getByRole('region', { name: 'My photos' })).toBeTruthy();
     expect(screen.queryByRole('region', { name: "Seller's proof" })).toBeNull();
 
-    const checks = screen.getByRole('region', { name: 'Checks' });
+    const checks = panelOf(screen.getByRole('heading', { name: 'Checks' }));
     expect(within(checks).getAllByRole('checkbox')).toHaveLength(4);
   });
 
@@ -94,8 +96,41 @@ describe('TX-14: a segmented control instead of two cramped panes', () => {
 
   it('has no accessibility violations', async () => {
     const { container } = show('tablet');
-    await screen.findByRole('region', { name: 'Checks' });
+    await screen.findByRole('heading', { name: 'Checks' });
     await waitFor(() => expect(container.querySelector('[aria-busy="true"]')).toBeNull());
     await expectNoAxeViolations(container, SHELL_RULES);
+  });
+});
+
+describe('a change of width while the screen is open', () => {
+  it('keeps the photos the buyer chose and the checks they ticked', async () => {
+    show('desktop');
+    const mine = panelOf(await screen.findByRole('heading', { name: 'What you received' }));
+    const photo = new File(['x'], 'imei-screen.jpg', { type: 'image/jpeg' });
+    fireEvent.change(mine.querySelector('input[type="file"]') as HTMLInputElement, {
+      target: { files: [photo] },
+    });
+    expect(within(mine).getByRole('img', { name: 'imei-screen.jpg' })).toBeTruthy();
+    fireEvent.click(within(mine).getByRole('checkbox', { name: 'IMEI matches the label' }));
+
+    // The tablet is turned: the layout changes, the work does not.
+    resizeTo('tablet');
+    expect(await screen.findByRole('checkbox', { name: 'IMEI matches the label' })).toHaveProperty(
+      'checked',
+      true,
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'My photos' }));
+    expect(screen.getByRole('img', { name: 'imei-screen.jpg' })).toBeTruthy();
+
+    resizeTo('mobile');
+    expect(screen.getByRole('checkbox', { name: 'IMEI matches the label' })).toHaveProperty('checked', true);
+  });
+
+  it('ties the pills to the photos they show', async () => {
+    show('tablet');
+    const pill = await screen.findByRole('button', { name: 'My photos' });
+    const target = pill.getAttribute('aria-controls') ?? '';
+    expect(target).not.toBe('');
+    expect(document.getElementById(target)).not.toBeNull();
   });
 });

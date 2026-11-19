@@ -12,6 +12,20 @@ import { reasonLabel, stageLabel } from '../../dispute/words';
 import { disputeStatusHref } from '../../workspace-state';
 import { BannerView, FurtherViews, MoneyRows, type BodyProps } from '../shared';
 
+/** The result of a trade that has been decided and is being or has been paid: its own screen (DX-31), a sibling of `/complete`. */
+const completedHref = (tradeId: string): string => `/trade/${tradeId}/completed`;
+
+/** The way to the result, shown once the outcome is known (COMPLETED) and after it is paid (SETTLED). */
+function ViewTheResult({ id }: { id: string }): React.JSX.Element {
+  return (
+    <ActionStack>
+      <Button asChild>
+        <a href={completedHref(id)}>View the result</a>
+      </Button>
+    </ActionStack>
+  );
+}
+
 /**
  * CWT-05: an issue was reported and the money stays where it is.
  *
@@ -68,6 +82,7 @@ export function Settlement({ trade, role }: BodyProps): React.JSX.Element {
         <TermRow label="Trade outcome">Completed</TermRow>
         <TermRow label="Payment instruction">Release to seller</TermRow>
       </TermList>
+      <ViewTheResult id={trade.id} />
       <FurtherViews trade={trade} />
     </>
   );
@@ -94,6 +109,7 @@ export function TradeComplete({ trade, role }: BodyProps): React.JSX.Element {
       <AutoReleaseNotice trade={trade} />
       <ItemSummary trade={trade} />
       {/* SEAM(F-038): "Leave a review", and the count of trades on the Trust Profile (F-016). */}
+      <ViewTheResult id={trade.id} />
       <FurtherViews trade={trade} />
     </>
   );

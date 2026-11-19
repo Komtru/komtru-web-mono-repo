@@ -53,8 +53,9 @@ export function SellerProofSection({
   heading?: boolean;
 }): React.JSX.Element {
   const proof = proofItems(read);
+  // Inside a panel the panel's own heading names it; a second region of the same name would only repeat it.
   return (
-    <section aria-label="Seller’s proof">
+    <section {...(heading ? { 'aria-label': 'Seller’s proof' } : {})}>
       {heading && <SectionLabel>Seller’s proof</SectionLabel>}
       <div className="mb-[6px]">
         <Chip tone="verified">Shown when the Trade was agreed</Chip>
@@ -86,7 +87,16 @@ export function Trail({ trade, read }: { trade: TradeView; read: Read }): React.
 }
 
 /** What either side added once the Trade was running: dispatch, delivery, inspection and an issue, each its own group. */
-export function AddedDuringTrade({ trade, read }: { trade: TradeView; read: Read }): React.JSX.Element {
+export function AddedDuringTrade({
+  trade,
+  read,
+  as,
+}: {
+  trade: TradeView;
+  read: Read;
+  /** The groups' heading level: one down from a panel's own. */
+  as?: 'h2' | 'h3';
+}): React.JSX.Element {
   const shipment = read.deliveryEvidence.selfArranged;
   const signals = read.deliveryEvidence.signals ?? [];
   const seller = trade.yourRole === 'SELLER';
@@ -97,6 +107,7 @@ export function AddedDuringTrade({ trade, read }: { trade: TradeView; read: Read
       <EvidenceGroup
         trade={trade}
         event="DISPATCH"
+        {...(as === undefined ? {} : { as })}
         heading="Added by the seller · dispatch"
         always={shipment !== null}
       >
@@ -123,6 +134,7 @@ export function AddedDuringTrade({ trade, read }: { trade: TradeView; read: Read
       <EvidenceGroup
         trade={trade}
         event="DELIVERY"
+        {...(as === undefined ? {} : { as })}
         heading="Added at delivery"
         empty={signals.length > 0 ? undefined : 'Nothing has been added at delivery yet.'}
         always
@@ -142,6 +154,7 @@ export function AddedDuringTrade({ trade, read }: { trade: TradeView; read: Read
       <EvidenceGroup
         trade={trade}
         event="INSPECTION"
+        {...(as === undefined ? {} : { as })}
         heading="Added at inspection"
         empty={
           seller
@@ -151,7 +164,12 @@ export function AddedDuringTrade({ trade, read }: { trade: TradeView; read: Read
         always
       />
 
-      <EvidenceGroup trade={trade} event="ISSUE" heading="Added for an issue" />
+      <EvidenceGroup
+        trade={trade}
+        event="ISSUE"
+        heading="Added for an issue"
+        {...(as === undefined ? {} : { as })}
+      />
       <NoteBanner>
         Chat attachments can be linked to the trade, but case evidence should be submitted through the
         evidence flow.
