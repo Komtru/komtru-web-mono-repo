@@ -62,13 +62,13 @@ function Media({ trade }: { trade: TradeView }): React.JSX.Element {
       ) : (
         <EvidenceAcross trade={trade} read={inspection.data} viewport={viewport} />
       )}
-      <ActionStack className="mt-[16px]">
+      <ActionStack className="mt-[16px] md:flex-row md:justify-end">
         {(EVIDENCE_OPEN_STATUSES as readonly string[]).includes(trade.status) && (
-          <Button asChild>
+          <Button asChild className="md:w-auto! md:px-[22px]">
             <a href={addEvidenceHref(trade.id)}>Add evidence</a>
           </Button>
         )}
-        <Button asChild variant="secondary">
+        <Button asChild variant="secondary" className="md:w-auto! md:px-[22px]">
           <a href={tradeHref(trade.id)}>Back to trade</a>
         </Button>
       </ActionStack>

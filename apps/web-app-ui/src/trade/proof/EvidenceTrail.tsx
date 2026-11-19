@@ -64,7 +64,7 @@ export function SellerProofSection({
           No proof photos were attached to this trade.
         </p>
       ) : (
-        <MediaGrid aria-label="Seller’s proof files" items={proof} className="mt-[10px]" />
+        <MediaGrid aria-label="Seller’s proof files" items={proof} className="mt-[10px] md:max-w-[420px]" />
       )}
       {trade.acceptedAt !== null && (
         <p className={CAPTION}>

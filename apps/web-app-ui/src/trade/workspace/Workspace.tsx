@@ -82,7 +82,7 @@ export function Workspace({
       className={
         viewport === 'desktop'
           ? 'grid grid-cols-[260px_minmax(0,1fr)_300px] items-start gap-[20px]'
-          : 'grid grid-cols-[220px_minmax(0,1fr)] items-start gap-[16px]'
+          : 'grid grid-cols-[240px_minmax(0,1fr)] items-start gap-[16px]'
       }
     >
       <TradePane currentId={trade.id} currentClosed={standing.closed} />

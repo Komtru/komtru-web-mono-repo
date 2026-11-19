@@ -68,7 +68,11 @@ export function EvidenceGroup({
       {children}
       {items.length > 0 ? (
         <>
-          <MediaGrid aria-label={`${EVENT_LABEL[event]} files`} items={items} className="mt-[10px]" />
+          <MediaGrid
+            aria-label={`${EVENT_LABEL[event]} files`}
+            items={items}
+            className="mt-[10px] md:max-w-[420px]"
+          />
           <p className={CAPTION}>{count(items.length)} · shared with both sides of the trade</p>
         </>
       ) : (
