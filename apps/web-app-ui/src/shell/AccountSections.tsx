@@ -1,5 +1,6 @@
 import { SettingsGroup, SettingsRow } from '@komtru/ui-kit';
 import { accountItemsFor, type AccountLinks, type Viewer } from './nav';
+import { SignOutRow } from './SignOutRow';
 
 /**
  * D9's sections, as the grouped list the reference builds every account screen out of.
@@ -52,6 +53,13 @@ export function AccountSections({
             {...(item.external === true ? { external: true } : {})}
           />
         ))}
+      </SettingsGroup>
+      {/*
+        Last, and in a group of its own. Leaving the app is not one of the things the account holds
+        — it is the way out of it — and a person looking for it expects the bottom of this screen.
+      */}
+      <SettingsGroup>
+        <SignOutRow />
       </SettingsGroup>
     </div>
   );
