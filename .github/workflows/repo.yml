@@ -85,4 +85,14 @@ jobs:
           NEXT_PUBLIC_KOMTRU_PARK_URL: ${{ vars.KOMTRU_PARK_URL || 'https://park.komtru.com' }}
           NEXT_PUBLIC_KOMTRU_SITE_URL: ${{ vars.KOMTRU_SITE_URL || 'https://komtru.com' }}
           KOMTRU_SESSION_SECRET: ${{ secrets.KOMTRU_SESSION_SECRET || 'ci-build-only-placeholder-secret' }}
-        run: pnpm exec turbo run lint typecheck test build
+        # `--concurrency=2` to match the runner's two cores.
+        #
+        # Turbo defaults to 10 parallel tasks. On a two-core runner that means ten jobs timeslicing
+        # two cores, and the result is not slowness but WRONG ANSWERS: a Vitest hook or test that
+        # takes a second alone blows its timeout, and the suite reports a broken socket module or a
+        # broken carve. Four separate "failures" chased today were all this, and each one hid the
+        # next because the run stops reporting after the first.
+        #
+        # Capping it does not make the step slower in any way that matters — the work was always
+        # serialised by the two cores. It just stops the scheduler pretending otherwise.
+        run: pnpm exec turbo run lint typecheck test build --concurrency=2
