@@ -1,0 +1,82 @@
+{
+  "_probe": {
+    "path": "/v2/api/identity/ng/nin",
+    "status": 200,
+    "capturedAt": "2026-11-19",
+    "env": "sandbox"
+  },
+  "response": {
+    "success": true,
+    "statusCode": 200,
+    "message": "success",
+    "data": {
+      "id": "<id>",
+      "address": {
+        "town": "SULEJA",
+        "lga": "Suleja",
+        "state": "Niger",
+        "addressLine": "13B Fake Street, Ilupeju Niger State",
+        "city": null
+      },
+      "validations": {
+        "data": {
+          "lastName": {
+            "validated": true,
+            "value": "Doe"
+          },
+          "dateOfBirth": {
+            "validated": true,
+            "value": "1988-04-04"
+          },
+          "firstName": {
+            "validated": false,
+            "value": "John"
+          }
+        },
+        "validationMessages": "First name does not match"
+      },
+      "parentId": null,
+      "status": "found",
+      "reason": null,
+      "dataValidation": true,
+      "selfieValidation": false,
+      "firstName": "Sarah",
+      "middleName": "Jane",
+      "lastName": "Doe",
+      "image": "<base64 stripped>",
+      "signature": "<base64 stripped>",
+      "mobile": "08000000000",
+      "email": null,
+      "birthState": "Edo",
+      "nokState": "Lagos",
+      "religion": "christianity",
+      "birthLGA": "Esan West",
+      "birthCountry": "nigeria",
+      "dateOfBirth": "1988-04-04",
+      "isConsent": true,
+      "idNumber": "11111111111",
+      "businessId": "<businessId>",
+      "type": "nin",
+      "allValidationPassed": false,
+      "gender": "Female",
+      "requestedAt": "2026-11-19T15:57:45.190Z",
+      "requestedById": "<requestedById>",
+      "country": "NG",
+      "createdAt": "2026-11-19T15:57:45.218Z",
+      "lastModifiedAt": "2026-11-19T15:57:45.218Z",
+      "adverseMediaReport": null,
+      "amlReport": null,
+      "entityId": "<entityId>",
+      "apiKeyPrefix": "<redacted>",
+      "source": "api",
+      "metadata": {},
+      "requestedBy": {
+        "firstName": "API",
+        "lastName": "User",
+        "middleName": "",
+        "id": "<id>"
+      }
+    },
+    "links": []
+  }
+}

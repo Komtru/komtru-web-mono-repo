@@ -377,6 +377,47 @@ Per the repo rule, the implementer runs only these and lints only what it touche
 
 ## 10. Open questions
 
+> **Answered 2026-11-19 by probing the sandbox (Task 1).** Fixtures live in
+> `apps/backend-api/test/fixtures/youverify/`. The findings below supersede the
+> questions that follow where they disagree.
+>
+> **A. `premiumNin`, not `premiumNIN`.** The capitalised form is refused with a 400
+> `ValidationError: "premiumNIN" is not allowed`. Question 5 closed.
+>
+> **B. NIN and BVN both work**, at `/v2/api/identity/ng/nin` and `/v2/api/identity/ng/bvn`,
+> synchronous, verdict inline. The adapter seam fits as designed.
+>
+> **C. `allValidationPassed` is true when nothing was validated — a trap.** A NIN submitted
+> with no `validations.data` returns `status: "found"`, `dataValidation: false` and
+> **`allValidationPassed: true`**. And `dataValidation: true` means validation _ran_, not that
+> it _passed_: a submission whose first and last name both mismatch still returns
+> `dataValidation: true`, with `allValidationPassed: false` and the per-field booleans false.
+> **Consequence:** the adapter must always send `validations.data`, and must read the per-field
+> `validations.data.*.validated` booleans rather than either aggregate. Reading `dataValidation`
+> as a pass, or omitting the claim, would grant level 2 to anyone who types a stranger's valid
+> NIN. This supersedes the weaker framing in Review Focus item 5.
+>
+> **D. CAC is NOT available on this key.** Both `/v2/api/verifications/ng/company/basic` and
+> `/v2/api/verifications/global/company-advance-check` answer **403 Permission denied** with
+> well-formed requests. Question 2 closed, negatively: **D7 is void**, and merchant
+> certification cannot use Youverify until the account is entitled.
+>
+> **E. Youverify requires the entity prefix, confirmed by its own validator:**
+> `Invalid registration number. Valid format => RCxxxx, BNxxxxx, ITxxxxx, LPxxxxx or LLPxxxxx`.
+> So D6 is not merely a latent hash defect — today's `normaliseRcNumber` output would be
+> rejected on every CAC call. D6 is a hard prerequisite, not a cleanup.
+>
+> **F. Bank name-match endpoint not found.** Four plausible paths under
+> `/v2/api/identity/ng/` and `/v2/api/verifications/ng/` all return 404. The real path must come
+> from Youverify.
+>
+> **G. Per-ID rate limit, newly discovered.** Repeating a NIN within ten minutes returns
+> **429** `Too many requests for this ID number in a short time. Please try again after 10mins.`
+> A user who retries after a failure will hit this, and it must not render as a rejection.
+>
+> **H. Liveness entitlement still unconfirmed** — it is driven by `publicMerchantKey` through the
+> browser SDK, so the API key cannot be probed for it. Needs a dashboard check.
+
 1. **Is liveness entitled on this account at all?** The issued API key lists case
    management, NIN, BVN, bank account, company lookup and tax ID — **no liveness**. The
    web SDK authenticates with `publicMerchantKey` rather than the API token, so the key's

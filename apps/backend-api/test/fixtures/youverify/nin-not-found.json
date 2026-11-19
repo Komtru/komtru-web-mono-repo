@@ -1,0 +1,65 @@
+{
+  "_probe": {
+    "path": "/v2/api/identity/ng/nin",
+    "status": 200,
+    "capturedAt": "2026-11-19",
+    "env": "sandbox"
+  },
+  "response": {
+    "success": true,
+    "statusCode": 200,
+    "message": "success",
+    "data": {
+      "id": "<id>",
+      "address": {
+        "city": null,
+        "town": null,
+        "lga": null,
+        "state": null,
+        "addressLine": null
+      },
+      "parentId": null,
+      "status": "not_found",
+      "reason": "NIN details not found",
+      "dataValidation": false,
+      "selfieValidation": false,
+      "firstName": null,
+      "middleName": null,
+      "lastName": null,
+      "image": null,
+      "signature": null,
+      "mobile": null,
+      "email": null,
+      "birthState": null,
+      "nokState": null,
+      "religion": null,
+      "birthLGA": null,
+      "birthCountry": null,
+      "dateOfBirth": null,
+      "isConsent": true,
+      "idNumber": "00000000000",
+      "businessId": "<businessId>",
+      "type": "nin",
+      "allValidationPassed": false,
+      "gender": null,
+      "requestedAt": "2026-11-19T15:57:49.973Z",
+      "requestedById": "<requestedById>",
+      "country": "NG",
+      "createdAt": "2026-11-19T15:57:49.984Z",
+      "lastModifiedAt": "2026-11-19T15:57:49.984Z",
+      "adverseMediaReport": null,
+      "amlReport": null,
+      "entityId": "<entityId>",
+      "apiKeyPrefix": "<redacted>",
+      "source": "api",
+      "metadata": {},
+      "requestedBy": {
+        "firstName": "API",
+        "lastName": "User",
+        "middleName": "",
+        "id": "<id>"
+      }
+    },
+    "links": []
+  }
+}

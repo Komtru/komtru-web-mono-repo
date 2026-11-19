@@ -1,0 +1,15 @@
+{
+  "_probe": {
+    "path": "/v2/api/verifications/ng/company/basic",
+    "status": 403,
+    "capturedAt": "2026-11-19",
+    "env": "sandbox"
+  },
+  "response": {
+    "success": false,
+    "statusCode": 403,
+    "message": "Permission denied",
+    "name": "UnauthorizedError",
+    "data": {}
+  }
+}
