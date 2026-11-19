@@ -25,7 +25,7 @@ export function Panel({
   return (
     <section
       aria-label={label ?? title}
-      className="min-w-0 rounded-lg border border-solid border-border-hairline bg-surface-primary p-[16px]"
+      className="min-w-0 rounded-md border border-solid border-border-hairline bg-surface-primary p-[16px]"
     >
       <div className="mb-[10px] flex items-baseline justify-between gap-[8px]">
         <h2 className="m-0 text-[13px] font-semibold text-midnight-text">{title}</h2>

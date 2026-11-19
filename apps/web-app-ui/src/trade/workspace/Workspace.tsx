@@ -11,7 +11,10 @@ import {
   type WorkspaceStatus,
   type WorkspaceTab,
 } from '../workspace-state';
+import { RailShowsMoney } from './shared';
 import { TAB_CONTENT } from './tabs';
+import { useViewport } from './viewport';
+import { ContextRail, StageTimeline, TradePane } from './wide';
 
 /**
  * The trade, from the agreement onward: the one screen every later trade feature renders a tab or a sheet
@@ -37,8 +40,9 @@ export function Workspace({
   const overview = tab === 'overview';
   const item = trade.terms === null ? undefined : itemTitle(trade.terms.itemSpec);
 
-  return (
-    <ScreenColumn>
+  const viewport = useViewport();
+  const detail = (
+    <>
       {/* The overview is the trade itself, headed by its code; the other tabs are views of it with their own
           titles (as the reference draws them) and a way back to it. */}
       <ScreenHeader
@@ -64,6 +68,34 @@ export function Workspace({
       )}
       <TabNav aria-label="Trade views" items={tabItems(trade.id)} current={tab} />
       {TAB_CONTENT[tab]({ trade, status, role: trade.yourRole })}
-    </ScreenColumn>
+    </>
+  );
+
+  if (viewport === 'mobile') return <ScreenColumn>{detail}</ScreenColumn>;
+
+  // DX-21 and TX-13: the list of trades never leaves. On a tablet the money and evidence stack under the detail; on a
+  // desktop they are a rail of their own and the timeline joins the detail.
+  const rail = <ContextRail trade={trade} status={status} />;
+  return (
+    <div
+      data-workspace={viewport}
+      className={
+        viewport === 'desktop'
+          ? 'grid grid-cols-[260px_minmax(0,1fr)_300px] items-start gap-[20px]'
+          : 'grid grid-cols-[220px_minmax(0,1fr)] items-start gap-[16px]'
+      }
+    >
+      <TradePane currentId={trade.id} currentClosed={standing.closed} />
+      <div className="min-w-0">
+        <RailShowsMoney.Provider value>{detail}</RailShowsMoney.Provider>
+        {viewport === 'desktop' && overview && (
+          <div className="mt-[16px]">
+            <StageTimeline trade={trade} status={status} />
+          </div>
+        )}
+        {viewport === 'tablet' && <div className="mt-[16px]">{rail}</div>}
+      </div>
+      {viewport === 'desktop' && rail}
+    </div>
   );
 }
