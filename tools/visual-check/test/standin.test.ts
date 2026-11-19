@@ -368,3 +368,49 @@ describe('the funding, inspection, standard and account reads over HTTP', () => 
     }
   });
 });
+
+// F-069/F-073 deliver & inspect: the reads behind the workspace and the evidence screens.
+describe('the trade workspace and evidence reads', () => {
+  it('has a buyer trade in transit and a settled one, each with the single-trade view', () => {
+    const statuses = tradesFor('buyer', 'with-trades').map((trade) => trade.status);
+    expect(statuses).toContain('SHIPPED');
+    expect(statuses).toContain('SETTLED');
+  });
+
+  it('serves the delivery deadline, the activity, the evidence by event and a file', async () => {
+    const standin = await startStandin({ port: 0, log: () => undefined });
+    try {
+      const auth = await signedIn(standin.apiUrl, 'buyer', 'with-trades');
+      const shipped = tradesFor('buyer', 'with-trades').find((trade) => trade.status === 'SHIPPED');
+      const base = `${standin.apiUrl}/trades/${shipped?.id ?? ''}`;
+
+      const deadline = (await (await fetch(`${base}/delivery-deadline`, { headers: auth })).json()) as {
+        deadline: { status: string } | null;
+      };
+      expect(deadline.deadline?.status).toBe('PENDING');
+
+      const activity = await fetch(`${base}/activity`, { headers: auth });
+      expect(activity.status).toBe(200);
+
+      const all = (await (await fetch(`${base}/evidence`, { headers: auth })).json()) as { items: unknown[] };
+      const dispatch = (await (await fetch(`${base}/evidence?event=DISPATCH`, { headers: auth })).json()) as {
+        items: { event: string; fileId: string }[];
+      };
+      expect(dispatch.items.length).toBeGreaterThan(0);
+      expect(dispatch.items.every((item) => item.event === 'DISPATCH')).toBe(true);
+      expect(all.items.length).toBeGreaterThan(dispatch.items.length);
+
+      const file = (await (
+        await fetch(`${standin.apiUrl}/files/${dispatch.items[0]?.fileId ?? ''}`, { headers: auth })
+      ).json()) as { url: string };
+      expect(file.url.startsWith('data:image/')).toBe(true);
+
+      const stranger = await fetch(`${standin.apiUrl}/trades/0190b0a0-0000-7000-8000-000000000999/evidence`, {
+        headers: auth,
+      });
+      expect(stranger.status).toBe(404);
+    } finally {
+      await standin.close();
+    }
+  });
+});

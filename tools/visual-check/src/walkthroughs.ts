@@ -62,6 +62,50 @@ export const WALKTHROUGHS: Readonly<Record<string, Walkthrough>> = {
     path: '/account/verification/merchant',
     content: 'main',
   },
+  // F-069/F-073 deliver & inspect: the trade workspace (in transit), inspect and compare, and the trade's evidence,
+  // each drawn at a desktop (DX-) and a tablet (TX-) width. The width is the capture's, not the walk's.
+  'DX-21': {
+    screen: 'DX-21',
+    persona: 'buyer',
+    scenario: 'with-trades',
+    path: `/trade/${TRADE_IDS.buyerShipped}`,
+    content: 'main',
+  },
+  'TX-13': {
+    screen: 'TX-13',
+    persona: 'buyer',
+    scenario: 'with-trades',
+    path: `/trade/${TRADE_IDS.buyerShipped}`,
+    content: 'main',
+  },
+  'DX-23': {
+    screen: 'DX-23',
+    persona: 'buyer',
+    scenario: 'with-trades',
+    path: `/trade/${TRADE_IDS.buyerInspection}/inspect`,
+    content: 'main',
+  },
+  'TX-14': {
+    screen: 'TX-14',
+    persona: 'buyer',
+    scenario: 'with-trades',
+    path: `/trade/${TRADE_IDS.buyerInspection}/inspect`,
+    content: 'main',
+  },
+  'DX-38': {
+    screen: 'DX-38',
+    persona: 'buyer',
+    scenario: 'with-trades',
+    path: `/trade/${TRADE_IDS.buyerInspection}/evidence`,
+    content: 'main',
+  },
+  'TX-22': {
+    screen: 'TX-22',
+    persona: 'buyer',
+    scenario: 'with-trades',
+    path: `/trade/${TRADE_IDS.buyerInspection}/evidence`,
+    content: 'main',
+  },
 };
 
 /** The walk for a screen, or a message listing the ones that exist. */

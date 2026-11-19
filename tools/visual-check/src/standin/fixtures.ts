@@ -31,6 +31,9 @@ export const TRADE_IDS = {
   buyerDisputed: '0190b0a0-0000-7000-8000-000000000504',
   sellerShipped: '0190b0a0-0000-7000-8000-000000000511',
   sellerProposal: '0190b0a0-0000-7000-8000-000000000512',
+  // F-069/F-073 deliver & inspect
+  buyerShipped: '0190b0a0-0000-7000-8000-000000000505',
+  buyerSettled: '0190b0a0-0000-7000-8000-000000000506',
 } as const;
 
 /** The one dispute in the fixtures: the buyer's, on `buyerDisputed`. */
@@ -60,6 +63,9 @@ const PAYMENT_ATTEMPT_IDS: Readonly<Record<string, string>> = {
   [TRADE_IDS.buyerInspection]: '0190b0a0-0000-7000-8000-000000000803',
   [TRADE_IDS.buyerDisputed]: '0190b0a0-0000-7000-8000-000000000804',
   [TRADE_IDS.sellerShipped]: '0190b0a0-0000-7000-8000-000000000811',
+  // F-069/F-073 deliver & inspect
+  [TRADE_IDS.buyerShipped]: '0190b0a0-0000-7000-8000-000000000805',
+  [TRADE_IDS.buyerSettled]: '0190b0a0-0000-7000-8000-000000000806',
 };
 
 const SELLER_CARD = {
@@ -147,6 +153,43 @@ const BUYER_TRADES: TradeListItem[] = [
     sentAt: '2026-11-10T10:00:00.000Z',
     createdAt: '2026-11-10T09:40:00.000Z',
     updatedAt: '2026-11-17T09:00:00.000Z',
+  },
+  // F-069/F-073 deliver & inspect: the trade the workspace reference draws (in transit), and one that is complete.
+  {
+    id: TRADE_IDS.buyerShipped,
+    tradeCode: 'KMT-90428-NG',
+    status: 'SHIPPED',
+    statusRevision: 5,
+    yourRole: 'BUYER',
+    initiatorRole: 'SELLER',
+    awaiting: null,
+    attention: null,
+    counterparty: SELLER_CARD,
+    item: { title: 'iPhone 13 Pro, 256GB', categoryCode: 'PHONES', categoryName: 'Phones' },
+    currency: 'NGN',
+    itemAmountMinor: '46000000',
+    buyerTotalMinor: '46350000',
+    sentAt: '2026-11-16T09:00:00.000Z',
+    createdAt: '2026-11-16T08:40:00.000Z',
+    updatedAt: '2026-11-18T13:24:00.000Z',
+  },
+  {
+    id: TRADE_IDS.buyerSettled,
+    tradeCode: 'KMT-87904-NG',
+    status: 'SETTLED',
+    statusRevision: 9,
+    yourRole: 'BUYER',
+    initiatorRole: 'SELLER',
+    awaiting: null,
+    attention: null,
+    counterparty: SELLER_CARD,
+    item: { title: 'iPad 9th gen, 64GB', categoryCode: 'ELECTRONICS', categoryName: 'Electronics' },
+    currency: 'NGN',
+    itemAmountMinor: '28500000',
+    buyerTotalMinor: '29640000',
+    sentAt: '2026-11-02T09:00:00.000Z',
+    createdAt: '2026-11-02T08:40:00.000Z',
+    updatedAt: '2026-11-09T11:00:00.000Z',
   },
 ];
 
@@ -242,6 +285,17 @@ const TRADE_FACTS: Readonly<Record<string, TradeFacts>> = {
     acceptedAt: null,
     proofMediaCount: 0,
     itemSpec: { model: 'Standing desk', top: 'Oak' },
+  },
+  // F-069/F-073 deliver & inspect
+  [TRADE_IDS.buyerShipped]: {
+    acceptedAt: '2026-11-16T09:41:00.000Z',
+    proofMediaCount: 2,
+    itemSpec: { brand: 'Apple', model: 'iPhone 13 Pro', storage: '256GB', colour: 'Sierra Blue' },
+  },
+  [TRADE_IDS.buyerSettled]: {
+    acceptedAt: '2026-11-02T09:30:00.000Z',
+    proofMediaCount: 2,
+    itemSpec: { brand: 'Apple', model: 'iPad 9th gen', storage: '64GB' },
   },
 };
 
@@ -989,4 +1043,90 @@ export function addressesFor(persona: PersonaId): Address[] {
     ];
   }
   return [];
+}
+
+// --- F-069/F-073 deliver & inspect: the reads behind the trade workspace and the evidence screens --------------------
+
+const DEADLINE_ID = '0190b0a0-0000-7000-8000-000000000861';
+
+/** `GET /trades/:id/delivery-deadline`: a pending deadline for a trade that has not been delivered, none after. */
+export function deliveryDeadlineFor(
+  persona: PersonaId,
+  scenario: ScenarioId,
+  tradeId: string,
+): {
+  deadline: { id: string; status: string; dueAt: string; extensionCount: number } | null;
+  extensionRequest: null;
+} | null {
+  const item = tradesFor(persona, scenario).find((candidate) => candidate.id === tradeId);
+  if (item === undefined) return null;
+  const waiting = item.status === 'FUNDED' || item.status === 'SHIPPED';
+  return {
+    deadline: waiting
+      ? { id: DEADLINE_ID, status: 'PENDING', dueAt: '2026-11-20T18:00:00.000Z', extensionCount: 0 }
+      : null,
+    extensionRequest: null,
+  };
+}
+
+/** `GET /trades/:id/activity`: the trade's history, newest first. */
+export function tradeActivityFor(
+  persona: PersonaId,
+  scenario: ScenarioId,
+  tradeId: string,
+): unknown[] | null {
+  const item = tradesFor(persona, scenario).find((candidate) => candidate.id === tradeId);
+  return item === undefined ? null : [];
+}
+
+/** The media either side added under each event of a trade: the seller's dispatch photos and the buyer's inspection photos. */
+export function tradeEvidenceFor(
+  persona: PersonaId,
+  scenario: ScenarioId,
+  tradeId: string,
+  event: string | null,
+):
+  | { id: string; fileId: string; event: string; attachedByRole: 'BUYER' | 'SELLER'; attachedAt: string }[]
+  | null {
+  const item = tradesFor(persona, scenario).find((candidate) => candidate.id === tradeId);
+  if (item === undefined) return null;
+  const all = [
+    {
+      id: '0190b0a0-0000-7000-8000-000000000871',
+      fileId: '0190b0a0-0000-7000-8000-000000000823',
+      event: 'DISPATCH',
+      attachedByRole: 'SELLER' as const,
+      attachedAt: '2026-11-14T07:35:00.000Z',
+    },
+    {
+      id: '0190b0a0-0000-7000-8000-000000000872',
+      fileId: '0190b0a0-0000-7000-8000-000000000824',
+      event: 'DISPATCH',
+      attachedByRole: 'SELLER' as const,
+      attachedAt: '2026-11-14T07:36:00.000Z',
+    },
+    {
+      id: '0190b0a0-0000-7000-8000-000000000873',
+      fileId: '0190b0a0-0000-7000-8000-000000000825',
+      event: 'INSPECTION',
+      attachedByRole: 'BUYER' as const,
+      attachedAt: '2026-11-18T11:10:00.000Z',
+    },
+  ];
+  return event === null ? all : all.filter((entry) => entry.event === event);
+}
+
+/**
+ * `GET /files/:id`: a signed URL for a file the person may see. The stand-in has no storage, so every file is the
+ * same flat tile, as a data URL the browser needs no network for.
+ */
+export function fileFor(fileId: string): {
+  fileId: string;
+  url: string;
+  expiresAt: string | null;
+  contentType: string;
+} {
+  const svg =
+    "<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><defs><linearGradient id='g' x1='0' y1='0' x2='1' y2='1'><stop offset='0' stop-color='%232A3455'/><stop offset='1' stop-color='%2317203A'/></linearGradient></defs><rect width='160' height='160' fill='url(%23g)'/></svg>";
+  return { fileId, url: `data:image/svg+xml,${svg}`, expiresAt: null, contentType: 'image/svg+xml' };
 }

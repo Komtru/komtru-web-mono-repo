@@ -3,6 +3,9 @@
 // reject.
 import {
   comparisonSchema,
+  evidenceItemSchema,
+  getDeliveryDeadline,
+  getFile,
   disputeDetailSchema,
   disputeEvidenceSchema,
   disputeSchema,
@@ -20,17 +23,20 @@ import { addressSchema, tradeListItemSchema, viewerFactsSchema } from '@komtru/s
 
 import {
   addressesFor,
+  deliveryDeadlineFor,
   disputeDetailFor,
   disputeEvidenceFor,
   disputesFor,
   disputeTimelineFor,
   evidenceComparisonFor,
+  fileFor,
   inspectionFor,
   meFor,
   merchantApplicationFor,
   paymentStatusFor,
   payoutAccountsFor,
   STANDARD_VERSION_IDS_LIST,
+  tradeEvidenceFor,
   tradeFor,
   tradeStandardFor,
   tradesFor,
@@ -117,7 +123,18 @@ function checkConsumerReads(
       getInspection.schema.response,
       inspectionFor(persona, scenario, trade.id),
     );
+    // F-069/F-073 deliver & inspect
+    check(
+      failures,
+      `delivery deadline for ${trade.tradeCode} in ${where}`,
+      getDeliveryDeadline.schema.response,
+      deliveryDeadlineFor(persona, scenario, trade.id),
+    );
+    for (const item of tradeEvidenceFor(persona, scenario, trade.id, null) ?? []) {
+      check(failures, `trade evidence for ${trade.tradeCode} in ${where}`, evidenceItemSchema, item);
+    }
   }
+  check(failures, 'a file', getFile.schema.response, fileFor('0190b0a0-0000-7000-8000-000000000821'));
   for (const dispute of disputesFor(persona, scenario)) {
     const label = `dispute ${dispute.code} for ${where}`;
     check(failures, label, disputeSchema, dispute);
