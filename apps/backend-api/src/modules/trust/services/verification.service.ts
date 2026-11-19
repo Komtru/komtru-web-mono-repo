@@ -320,7 +320,7 @@ export async function startLivenessSession(
   // Already done. `submitIdentifierCheck` refuses a verified type for the same reason — before a
   // provider call is spent — and without this an API caller could mint a billable session and put
   // a "Not approved" banner on the VF1 of somebody who is already verified.
-  if (facts.livenessVerified) {
+  if (facts.livenessPassed) {
     throw new ApiError(409, 'CONFLICT', 'Your selfie check is already done');
   }
 

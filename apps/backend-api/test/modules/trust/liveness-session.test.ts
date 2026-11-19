@@ -20,7 +20,7 @@ const deps = (all: Record<string, unknown> = {}) => {
   const store = {
     findSubject: () =>
       Promise.resolve({ userId: 'u1', status: 'ACTIVE', verificationLevel: 'CONTACT_VERIFIED' }),
-    identityFacts: () => Promise.resolve({ identifierVerified: true, livenessVerified: false }),
+    identityFacts: () => Promise.resolve({ identifierVerified: true, livenessPassed: false }),
     countAttempts: () => Promise.resolve(0),
     createRequest: (input: Record<string, unknown>) => {
       created.push(input);
@@ -88,7 +88,7 @@ describe('startLivenessSession', () => {
 
   it('refuses before minting anything when no identifier is verified (M6 §4)', async () => {
     const { deps: d, created } = deps({
-      store: { identityFacts: () => Promise.resolve({ identifierVerified: false, livenessVerified: false }) },
+      store: { identityFacts: () => Promise.resolve({ identifierVerified: false, livenessPassed: false }) },
     });
     await expect(startLivenessSession(d, { userId: 'u1' })).rejects.toBeInstanceOf(ApiError);
     // Nothing was created: a user must not be sent into a camera flow whose result is discardable.
@@ -106,7 +106,7 @@ describe('startLivenessSession', () => {
   it('refuses a user whose selfie check is already done', async () => {
     const { deps: d, created } = deps({
       store: {
-        identityFacts: () => Promise.resolve({ identifierVerified: true, livenessVerified: true }),
+        identityFacts: () => Promise.resolve({ identifierVerified: true, livenessPassed: true }),
       },
     });
     await expect(startLivenessSession(d, { userId: 'u1' })).rejects.toMatchObject({ status: 409 });
