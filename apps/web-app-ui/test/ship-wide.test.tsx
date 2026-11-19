@@ -88,6 +88,7 @@ describe.each([['tablet'], ['desktop']] as [Width][])('The dispatch workspace at
     // Park and couriers are out of the MVP: no option is drawn for them.
     expect(screen.queryByText(/Park/)).toBeNull();
     expect(screen.getByRole('link', { name: 'Back to orders' }).getAttribute('href')).toBe('/orders');
+    expect(screen.getByRole('link', { name: '‹ Back to the trade' })).toBeTruthy();
     await expectNoAxeViolations(container, SHELL_RULES);
   });
 
@@ -130,6 +131,51 @@ describe.each([['tablet'], ['desktop']] as [Width][])('The dispatch workspace at
     expect(await screen.findByText(/Dispatch Locked/)).toBeTruthy();
     expect(screen.queryByLabelText('Waybill number')).toBeNull();
     expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Dispatch locked' }).disabled).toBe(true);
+  });
+});
+
+describe('The dispatch workspace, beyond the form', () => {
+  beforeEach(() => setWidth('desktop'));
+
+  it('says an item in a dispute was already handed over, and goes on to track it', async () => {
+    serve(workspaceTrade('DISPUTED', 'SELLER'));
+    renderWithApi(api.call, <DispatchRoute id={id(1)} />);
+    expect(await screen.findByText('This item has already been handed over.')).toBeTruthy();
+    expect(screen.getByRole('link', { name: 'Track the delivery' }).getAttribute('href')).toBe(
+      `/trade/${id(1)}/track`,
+    );
+    expect(screen.queryByLabelText('Waybill number')).toBeNull();
+  });
+
+  it('offers the step-by-step handover from the workspace, and keeps the way back to the trade', async () => {
+    serve(workspaceTrade('FUNDED', 'SELLER'));
+    renderWithApi(api.call, <ShipOrder id={id(1)} />);
+    await screen.findByLabelText('Waybill number');
+    expect(screen.getByRole('link', { name: 'Hand over step by step' }).getAttribute('href')).toBe(
+      `/trade/${id(1)}/dispatch/waybill`,
+    );
+    expect(screen.getByRole('link', { name: '‹ Back to the trade' }).getAttribute('href')).toBe(
+      `/trade/${id(1)}`,
+    );
+  });
+
+  it('keeps the checklist ticks and what was typed when the window is resized across a breakpoint', async () => {
+    setWidth('tablet');
+    serve(workspaceTrade('FUNDED', 'SELLER'));
+    renderWithApi(api.call, <ShipOrder id={id(1)} />);
+    await screen.findByLabelText('Waybill number');
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Package sealed and labelled' }));
+    fireEvent.change(screen.getByLabelText('Waybill number'), { target: { value: 'KT-883192' } });
+
+    setWidth('phone');
+    expect(screen.queryByRole('group', { name: 'Handover checklist' })).toBeNull();
+    expect(screen.getByLabelText<HTMLInputElement>('Waybill number').value).toBe('KT-883192');
+
+    setWidth('desktop');
+    expect(
+      screen.getByRole<HTMLInputElement>('checkbox', { name: 'Package sealed and labelled' }).checked,
+    ).toBe(true);
+    expect(screen.getByLabelText<HTMLInputElement>('Waybill number').value).toBe('KT-883192');
   });
 });
 

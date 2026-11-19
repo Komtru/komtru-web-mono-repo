@@ -230,7 +230,7 @@ const SELLER_TRADES: TradeListItem[] = [
     awaiting: null,
     attention: 'SHIP',
     counterparty: { ...BUYER_CARD, publicId: 'KMT-PUB-0003', username: 'bola.o', displayName: 'Bola Okoro' },
-    item: { title: 'Ankara set', categoryCode: 'FURNITURE', categoryName: 'Fashion' },
+    item: { title: 'Ankara print armchair', categoryCode: 'FURNITURE', categoryName: 'Furniture' },
     currency: 'NGN',
     itemAmountMinor: '8950000',
     buyerTotalMinor: '9310000',
@@ -338,7 +338,7 @@ const TRADE_FACTS: Readonly<Record<string, TradeFacts>> = {
   [TRADE_IDS.sellerFundedTwo]: {
     acceptedAt: '2026-11-17T10:30:00.000Z',
     proofMediaCount: 2,
-    itemSpec: { model: 'Ankara set', size: 'M' },
+    itemSpec: { model: 'Ankara print armchair', colour: 'Orange' },
   },
   [TRADE_IDS.sellerInspection]: {
     acceptedAt: '2026-11-13T09:40:00.000Z',
