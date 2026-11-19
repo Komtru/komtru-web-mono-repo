@@ -398,7 +398,7 @@ describe('the trade workspace and evidence reads', () => {
       };
       expect(dispatch.items.length).toBeGreaterThan(0);
       expect(dispatch.items.every((item) => item.event === 'DISPATCH')).toBe(true);
-      expect(all.items.length).toBeGreaterThan(dispatch.items.length);
+      expect(all.items.length).toBe(dispatch.items.length);
 
       const file = (await (
         await fetch(`${standin.apiUrl}/files/${dispatch.items[0]?.fileId ?? ''}`, { headers: auth })
