@@ -22,7 +22,14 @@ jobs:
   checks:
     runs-on: ubuntu-latest
     steps:
+      # Full history. `scripts/test/migration-safety.test.ts` resolves a commit from before the
+      # drizzle folder existed, to prove the tool explains itself rather than throwing when the
+      # baseline predates every migration. actions/checkout defaults to a depth of 1, so that
+      # commit is simply absent and the test fails on `unknown revision` — which it did on every
+      # run of this workflow, for a reason that had nothing to do with the code being tested.
       - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
       - uses: ./.github/actions/setup
         with:
           cache-key: repo

@@ -195,8 +195,24 @@ describe('baseMigrations', () => {
 
   it('gives a reason when the baseline predates the migration folder', () => {
     // A branch cut before T-021 has a merge base with no apps/backend-api/drizzle at all.
-    const beforeDrizzle = execFileSync('git', ['rev-parse', '453ddc5^'], { cwd: repoRoot, encoding: 'utf8' });
-    const base = baseMigrations(beforeDrizzle.trim());
+    //
+    // This needs real history: 453ddc5 is the commit that added the folder and the test wants its
+    // parent. A shallow clone does not have it, and the bare git error that produces says nothing
+    // about why — so say it here. CI checks this repository out with fetch-depth: 0 for this test.
+    let beforeDrizzle: string;
+    try {
+      beforeDrizzle = execFileSync('git', ['rev-parse', '453ddc5^'], {
+        cwd: repoRoot,
+        encoding: 'utf8',
+      }).trim();
+    } catch (error) {
+      throw new Error(
+        'cannot resolve 453ddc5^ — this checkout is shallow. Run `git fetch --unshallow`, or ' +
+          'give the workflow `fetch-depth: 0`.',
+        { cause: error },
+      );
+    }
+    const base = baseMigrations(beforeDrizzle);
     expect(base.ref).toBeNull();
     expect(base.reason).toContain('apps/backend-api/drizzle');
   });
