@@ -1,9 +1,12 @@
 // The one stage that needs a browser. Both sides go through the same Chromium, at the same device
 // scale, with the same stylesheet injected, so the only thing left to differ is the design.
-import { chromium, type Browser, type Page } from '@playwright/test';
+import { chromium, type Browser, type BrowserContext, type Page } from '@playwright/test';
 
 import { fontStylesheet } from './fonts.ts';
 import { REFERENCE_VIEWPORT, type CarvedScreen } from './reference.ts';
+
+/** A cookie in the shape `BrowserContext.addCookies` takes. */
+export type Cookie = Parameters<BrowserContext['addCookies']>[0][number];
 
 export { chromium };
 
@@ -95,6 +98,21 @@ export interface ShootOptions {
    * map into offset noise. The size is still the reference frame's.
    */
   contentSelector?: string;
+  /**
+   * Cookies the built app needs before its first request: a sealed session for a persona, from
+   * `sessionCookiesFor`. Only the built side takes them. The reference is a static file with no session.
+   */
+  cookies?: readonly Cookie[];
+  /**
+   * Pins `Date.now()` and `new Date()` to this epoch millisecond, so a relative time on the screen ("2 days
+   * ago") reads the same on every run. The browser's timers keep running; only the clock's reading is fixed.
+   */
+  clock?: number;
+  /**
+   * Runs after the app has loaded and before it is measured: clicks through a flow to reach a screen that
+   * is not a URL of its own. See `walk.ts`.
+   */
+  arrange?: (page: Page) => Promise<void>;
 }
 
 /**
@@ -146,12 +164,18 @@ export async function shootBuilt(
   size: Size,
   options: ShootOptions = {},
 ): Promise<Shot> {
-  const page = await browser.newPage({
+  // A context, not a page: cookies belong to the context, and a session must not leak into a later shot.
+  const context = await browser.newContext({
     viewport: { ...size },
     deviceScaleFactor: 1,
     reducedMotion: 'reduce',
   });
   try {
+    if (options.cookies !== undefined && options.cookies.length > 0) {
+      await context.addCookies([...options.cookies]);
+    }
+    const page = await context.newPage();
+    if (options.clock !== undefined) await page.clock.setFixedTime(options.clock);
     try {
       await page.goto(url, { waitUntil: 'load' });
     } catch (cause) {
@@ -163,11 +187,16 @@ export async function shootBuilt(
     // Best effort only. An app holding a socket open — which every Komtru frontend does — never
     // reaches network idle, and waiting for it would report a working app as unreachable.
     await page.waitForLoadState('networkidle', { timeout: 5_000 }).catch(() => undefined);
+    if (options.arrange !== undefined) {
+      await options.arrange(page);
+      await page.waitForLoadState('networkidle', { timeout: 5_000 }).catch(() => undefined);
+    }
     await settle(page, options.injectFonts ?? true);
     if (options.contentSelector === undefined) return { png: await page.screenshot(), ...size };
     const locator = page.locator(options.contentSelector).first();
     const box = await locator.boundingBox();
-    if (box === null) throw new Error(`Nothing on ${url} matches --content ${options.contentSelector}`);
+    if (box === null)
+      throw new Error(`Nothing on ${page.url()} matches --content ${options.contentSelector}`);
     // A shot that starts below the top needs that much more page under it. A short screen would leave
     // the clip hanging off the bottom of the document, so the viewport grows to hold it.
     const needed = Math.ceil(box.y) + size.height;
@@ -187,6 +216,6 @@ export async function shootBuilt(
     });
     return { png, ...size };
   } finally {
-    await page.close();
+    await context.close();
   }
 }

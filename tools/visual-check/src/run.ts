@@ -8,6 +8,9 @@ import { carveScreen } from './reference.ts';
 import { mergeStub, renderStub } from './report.ts';
 import { shootBuilt, shootReference, withBrowser } from './render.ts';
 import { findScreen, loadScreens, REFERENCE_HTML_PATH, ticketId } from './screen-index.ts';
+import { sessionCookiesFor, STANDIN_NOW_MS } from './standin/session.ts';
+import type { PersonaId, ScenarioId } from './standin/personas.ts';
+import type { Page } from '@playwright/test';
 
 /** Where the ticket says the artefacts live. */
 export const UI_REVIEW_DIR = fileURLToPath(new URL('../../../docs/ui-review/', import.meta.url));
@@ -21,6 +24,13 @@ export interface VisualCheckOptions {
   threshold?: number;
   /** Starts the built shot at this element's top edge; see `ShootOptions.contentSelector`. */
   content?: string;
+  /**
+   * Sign the built app in as this persona before it is shot, against the stand-in. Pins the browser clock
+   * to the stand-in's fixed instant. The reference is never signed in: it is a static file.
+   */
+  session?: { persona: PersonaId; scenario: ScenarioId };
+  /** Clicks through to the screen after the URL loads; see `walk.ts`. */
+  arrange?: (page: Page) => Promise<void>;
 }
 
 export interface VisualCheckResult {
@@ -40,6 +50,15 @@ export async function visualCheck(options: VisualCheckOptions): Promise<VisualCh
   const row = findScreen(loadScreens(), options.screen, options.line);
   const carved = carveScreen(html, row);
 
+  const cookies =
+    options.session === undefined
+      ? undefined
+      : await sessionCookiesFor(
+          options.session.persona,
+          options.session.scenario,
+          new URL(options.url).hostname,
+        );
+
   const { reference, built } = await withBrowser(async (browser) => {
     const shot = await shootReference(browser, carved);
     return {
@@ -48,7 +67,11 @@ export async function visualCheck(options: VisualCheckOptions): Promise<VisualCh
         browser,
         options.url,
         { width: shot.width, height: shot.height },
-        options.content === undefined ? {} : { contentSelector: options.content },
+        {
+          ...(options.content === undefined ? {} : { contentSelector: options.content }),
+          ...(cookies === undefined ? {} : { cookies, clock: STANDIN_NOW_MS }),
+          ...(options.arrange === undefined ? {} : { arrange: options.arrange }),
+        },
       ),
     };
   });
