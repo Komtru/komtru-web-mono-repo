@@ -5,7 +5,9 @@ name: backend-api
 
 on:
   push:
-    branches: [main]
+    # Two release branches, two hosts: `main` is production (api.komtru.com) and `staging` is
+    # staging (staging-api.komtru.com). The deploy job below picks the host from the branch.
+    branches: [main, staging]
     paths:
       - 'apps/backend-api/**'
       - 'packages/config/**'
@@ -215,24 +217,27 @@ jobs:
   # T-005 replaces the placeholder with the real API and worker deploys.
   deploy:
     needs: [test, build, migration-safety]
-    if: github.ref == 'refs/heads/main'
+    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/staging'
     runs-on: ubuntu-latest
-    # Named so the repository can require a reviewer, or restrict which branches reach it, from
-    # Settings -> Environments without touching this file.
-    environment: backend-production
-    # One deploy at a time. Two overlapping runs would race on the same checkout, the same
-    # migration and the same PM2 reload.
+    # Which host this is, decided from the branch. The environment carries the address, the key
+    # and the host key, so the two deploys differ by one word here and nothing else — and the
+    # repository can require a reviewer on production alone, from Settings -> Environments.
+    environment: ${{ github.ref == 'refs/heads/main' && 'backend-production' || 'backend-staging' }}
+    # One deploy at a time PER HOST. Grouping both under one name would make a staging push wait
+    # on a production deploy that shares nothing with it; grouping neither would let two runs race
+    # on the same checkout, the same migration and the same PM2 reload.
     concurrency:
-      group: deploy-backend-api
+      group: deploy-backend-api-${{ github.ref_name }}
       cancel-in-progress: false
     steps:
       # No checkout: nothing from the workspace is sent to the host. The instance clones the
-      # public repository itself, so this job only needs to say "deploy main".
+      # public repository itself, so this job only needs to name a branch.
       - name: Open an SSH session that can do exactly one thing
         env:
           SSH_KEY: ${{ secrets.EC2_SSH_PRIVATE_KEY }}
           KNOWN_HOSTS: ${{ secrets.EC2_SSH_KNOWN_HOSTS }}
           EC2_HOST: ${{ secrets.EC2_HOST }}
+          REF: ${{ github.ref_name }}
         run: |
           set -euo pipefail
           install -d -m 700 ~/.ssh
@@ -242,25 +247,30 @@ jobs:
           # anything that can answer on that address collect a deploy session.
           printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
           chmod 644 ~/.ssh/known_hosts
-          # `main` is the argument to the forced command in the host's authorized_keys, not a
-          # shell command: sshd runs /srv/komtru/bin/ci-deploy and hands it this string, which
-          # ci-deploy matches against an allowlist before using. A session opened with this key
-          # cannot reach a shell.
+          # The branch name is the argument to the forced command in the host's authorized_keys,
+          # not a shell command: sshd runs /srv/komtru/bin/ci-deploy and hands it this string,
+          # which ci-deploy matches against an allowlist (main, staging, or a full sha) before
+          # using it. A session opened with this key cannot reach a shell.
           ssh -i ~/.ssh/deploy_key \
               -o BatchMode=yes \
               -o UserKnownHostsFile=~/.ssh/known_hosts \
               -o StrictHostKeyChecking=yes \
               -o ConnectTimeout=20 \
-              "komtru@${EC2_HOST}" main
+              "komtru@${EC2_HOST}" "${REF}"
 
+      # The host this run just deployed, not a hardcoded one: pointed at the wrong host this step
+      # would report the OTHER environment's health and pass a broken deploy.
       - name: Confirm the API is serving the new build
+        env:
+          API_BASE_URL: ${{ vars.API_BASE_URL }}
         run: |
           set -euo pipefail
+          test -n "${API_BASE_URL}" || { echo "API_BASE_URL is not set on this environment" >&2; exit 1; }
           for attempt in $(seq 1 10); do
-            if curl -fsS --max-time 10 https://staging-api.komtru.com/health/ready; then
+            if curl -fsS --max-time 10 "${API_BASE_URL}/health/ready"; then
               echo; echo "healthy after ${attempt} attempt(s)"; exit 0
             fi
             sleep 10
           done
-          echo "API did not report ready after the deploy" >&2
+          echo "${API_BASE_URL} did not report ready after the deploy" >&2
           exit 1

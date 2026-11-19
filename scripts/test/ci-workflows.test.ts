@@ -87,6 +87,8 @@ type Job = {
   env?: Record<string, string>;
   /** Only a job that really deploys sets one, to serialise itself against another run. */
   concurrency?: { group: string; 'cancel-in-progress': boolean | string };
+  /** The GitHub environment a deploy runs in; carries that host's secrets and variables. */
+  environment?: string;
   services?: Record<
     string,
     { image: string; env?: Record<string, string>; ports?: string[]; options?: string }
@@ -191,8 +193,17 @@ describe.each(APPS)('%s workflow', (app) => {
     expect(workflow.on).toHaveProperty('workflow_dispatch');
   });
 
-  it('pushes only from main, so deploy cannot fire from a feature branch', () => {
-    expect(workflow.on.push?.branches).toEqual(['main']);
+  /*
+   * The rule is not "only main" — the backend deploys `main` to production and `staging` to the
+   * staging host, so it has to build on both. The rule is that NOTHING ELSE may: a run on a
+   * feature branch must never reach a deploy job.
+   */
+  const RELEASE_BRANCHES = ['main', 'staging'];
+
+  it('pushes only from a release branch, so deploy cannot fire from a feature branch', () => {
+    const branches = workflow.on.push?.branches ?? [];
+    expect(branches.length).toBeGreaterThan(0);
+    for (const branch of branches) expect(RELEASE_BRANCHES).toContain(branch);
   });
 
   it('runs lint, typecheck, test, build and deploy in that order', () => {
@@ -233,10 +244,28 @@ describe.each(APPS)('%s workflow', (app) => {
   const REALLY_DEPLOYS = new Set(['backend-api']);
   const DEPLOYS_ELSEWHERE = new Set(['web-site']);
 
-  it('deploys only from main and only after the tests', () => {
+  it('deploys only from a release branch and only after the tests', () => {
     expect(asArray(jobs.deploy?.needs)).toContain('test');
     if (app === 'backend-api') expect(asArray(jobs.deploy?.needs)).toContain('migration-safety');
-    expect(jobs.deploy?.if).toBe("github.ref == 'refs/heads/main'");
+
+    // Every branch the condition names must be a release branch, and it must name at least one —
+    // an empty or absent condition would let any branch that reached this job deploy from it.
+    const condition = jobs.deploy?.if ?? '';
+    const named = [...condition.matchAll(/refs\/heads\/([\w.-]+)/g)].map((m) => m[1]);
+    expect(named.length).toBeGreaterThan(0);
+    for (const branch of named) expect(RELEASE_BRANCHES).toContain(branch);
+  });
+
+  /*
+   * A deploy that hardcodes its target deploys the wrong thing the first time there are two of
+   * them. The backend has two hosts now, so the address, the key, the host key and the URL the
+   * health check polls all have to come from the environment rather than from this file.
+   */
+  it('takes its target from the environment rather than hardcoding a host', () => {
+    if (!REALLY_DEPLOYS.has(app)) return;
+    const steps = JSON.stringify(jobs.deploy?.steps ?? []);
+    expect(steps).not.toMatch(/https:\/\/[a-z-]*api\.komtru\.com/);
+    expect(jobs.deploy?.environment ?? '').toContain('github.ref');
   });
 
   it('either deploys for real or says plainly that it does not', () => {
@@ -250,12 +279,19 @@ describe.each(APPS)('%s workflow', (app) => {
     expect(DEPLOYS_ELSEWHERE.has(app) ? step : `${step} T-005`).toContain('T-005');
   });
 
-  /* A deploy job must never carry a literal credential; real ones arrive as `secrets.*`. */
+  /*
+   * A deploy job must never carry a literal credential. Only the credential-shaped variables are
+   * required to come from `secrets.*`: the deploy step also passes the branch name, which is
+   * public and comes from the event.
+   */
   it('takes any deploy credential from secrets rather than from this file', () => {
     const steps = JSON.stringify(jobs.deploy?.steps ?? []);
     expect(/-----BEGIN [A-Z ]*PRIVATE KEY-----/.test(steps)).toBe(false);
-    for (const value of Object.values(jobs.deploy?.steps?.[0]?.env ?? {})) {
-      expect(String(value)).toMatch(/\$\{\{\s*secrets\./);
+    for (const step of jobs.deploy?.steps ?? []) {
+      for (const [key, value] of Object.entries(step.env ?? {})) {
+        if (!/KEY|SECRET|TOKEN|PASSWORD|HOST/i.test(key)) continue;
+        expect(String(value), key).toMatch(/\$\{\{\s*secrets\./);
+      }
     }
   });
 
