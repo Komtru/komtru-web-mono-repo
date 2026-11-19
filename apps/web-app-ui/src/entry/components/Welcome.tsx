@@ -1,9 +1,8 @@
 'use client';
 
 import { Button, KomtruLogo } from '@komtru/ui-kit';
-import { useViewport } from '../../trade/workspace/viewport';
 import { ENTRY } from '../flow';
-import { EntryFrame } from './EntryFrame';
+import { drawn, EntryFrame, useSeen } from './EntryFrame';
 
 /**
  * Screen E1 — the first screen, ever.
@@ -13,7 +12,7 @@ import { EntryFrame } from './EntryFrame';
  * what is drawn.
  */
 export function Welcome(): React.JSX.Element {
-  const desktop = useViewport() === 'desktop';
+  const seen = useSeen();
   return (
     <EntryFrame
       tradeCode
@@ -31,8 +30,8 @@ export function Welcome(): React.JSX.Element {
       }
     >
       <div className="px-[20px] pt-[40px] pb-[24px] text-center md:p-0">
-        {!desktop && (
-          <div className="mb-[28px] flex items-center justify-center">
+        {drawn(seen, 'phone', 'tablet') && (
+          <div className="mb-[28px] flex items-center justify-center lg:hidden">
             {/* `.welcome-hero .w-logo`: the lockup at 18px with an 8px gap, larger than the app bar's. */}
             <KomtruLogo size={20} style={{ fontSize: '18px', gap: '8px' }} />
           </div>
@@ -57,8 +56,8 @@ export function Welcome(): React.JSX.Element {
             strokeWidth="1.4"
           />
         </svg>
-        {!desktop && (
-          <h1 className="mb-[10px] text-[22px] leading-[1.3] font-semibold">
+        {drawn(seen, 'phone', 'tablet') && (
+          <h1 className="mb-[10px] text-[22px] lg:hidden leading-[1.3] font-semibold">
             Trade with strangers, protected.
           </h1>
         )}

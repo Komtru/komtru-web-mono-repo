@@ -2,7 +2,6 @@
 
 import { Banner, Button, OtpInput, TextField } from '@komtru/ui-kit';
 import { useState } from 'react';
-import { useViewport } from '../../trade/workspace/viewport';
 import { defaultFactor, ENTRY, factorLabel, failureMessage, needsSend, usableFactors } from '../flow';
 import {
   proveFactor,
@@ -15,7 +14,7 @@ import {
   type SignInOutcome,
 } from '../session-calls';
 import { TooManyAttempts } from '../../system/TooManyAttempts';
-import { EntryFrame, EntryHeading, ErrorText, InlineLink, Lede } from './EntryFrame';
+import { drawn, EntryFrame, EntryHeading, ErrorText, InlineLink, Lede, useSeen } from './EntryFrame';
 import { useOpenSession } from './useOpenSession';
 
 const FORM = 'login-form';
@@ -67,8 +66,10 @@ export function LoginForm({
 }): React.JSX.Element {
   const openSession = useOpenSession(next);
   // DX-01 and TX-01 write the identifier as "Phone number or email" and add the desktop's own title and Create account.
-  const viewport = useViewport();
-  const wide = viewport !== 'mobile';
+  const seen = useSeen();
+  const wide = seen === 'tablet' || seen === 'desktop';
+  // Someone who came for a Trade Code and has no account yet still ends at the lookup.
+  const signUpHref = next === undefined ? ENTRY.signUp : `${ENTRY.signUp}?next=${encodeURIComponent(next)}`;
   const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
   const [busy, setBusy] = useState(false);
@@ -151,29 +152,29 @@ export function LoginForm({
           <Button type="submit" form={FORM} disabled={busy}>
             {busy ? 'Logging in…' : 'Log in'}
           </Button>
-          {wide ? (
-            <Button asChild variant="secondary">
-              <a href={ENTRY.signUp}>Create account</a>
-            </Button>
-          ) : (
-            <p className="m-0 text-center text-[11.5px] text-slate">
-              New to Komtru? <InlineLink href={ENTRY.signUp}>Create an account</InlineLink>
+          {drawn(seen, 'phone') && (
+            <p className="m-0 text-center text-[11.5px] text-slate md:hidden">
+              New to Komtru? <InlineLink href={signUpHref}>Create an account</InlineLink>
             </p>
+          )}
+          {drawn(seen, 'tablet', 'desktop') && (
+            <Button asChild variant="secondary" className="hidden md:block">
+              <a href={signUpHref}>Create account</a>
+            </Button>
           )}
         </>
       }
     >
       <form id={FORM} onSubmit={(event) => void submit(event)} noValidate>
-        {viewport === 'desktop' ? (
-          <>
+        {drawn(seen, 'desktop') && (
+          <div className="hidden lg:block">
             <h1 className="mb-[4px] font-[family-name:var(--font-display)] text-[24px] font-semibold">
               Log in
             </h1>
             <Lede>Use the phone number or email you signed up with.</Lede>
-          </>
-        ) : (
-          <h1 className="sr-only">Log in to Komtru</h1>
+          </div>
         )}
+        {drawn(seen, 'phone', 'tablet') && <h1 className="sr-only lg:hidden">Log in to Komtru</h1>}
         {notice === 'reset-done' && (
           <Banner tone="success" title="Your password is updated">
             Log in with your new password.
@@ -191,7 +192,11 @@ export function LoginForm({
           inputMode="text"
           autoComplete="username"
           placeholder="080X XXX XXXX"
-          {...(wide ? {} : { helper: 'Your email or username works too.' })}
+          {...(seen === 'phone'
+            ? { helper: 'Your email or username works too.' }
+            : seen === 'unknown'
+              ? { helper: <span className="md:hidden">Your email or username works too.</span> }
+              : {})}
           value={identifier}
           onChange={(event) => {
             setIdentifier(event.target.value);

@@ -6,7 +6,7 @@ import { Banner, Button, OtpInput } from '@komtru/ui-kit';
 import { useRouter } from 'next/navigation';
 import { useEffect, useRef, useState } from 'react';
 import { signUpCode, signUpDraft, type SentCode } from '../drafts';
-import { ENTRY, failureMessage, UNAVAILABLE } from '../flow';
+import { ENTRY, failureMessage, safeNext, UNAVAILABLE } from '../flow';
 import { proveCode, type CodeOutcome } from '../session-calls';
 import {
   EntryFrame,
@@ -52,7 +52,9 @@ function resendFailure(error: unknown): Shown {
 export function VerifyForm(): React.JSX.Element {
   const client = useApiClient();
   const router = useRouter();
-  const openSession = useOpenSession(WELCOME_ENTRY);
+  // A visitor who came for something (a Trade Code) goes there; everyone else starts the first-time walkthrough.
+  const draft = useDraft(signUpDraft);
+  const openSession = useOpenSession(safeNext(draft?.next) ?? WELCOME_ENTRY);
   const sent = useDraft(signUpCode);
   const [code, setCode] = useState('');
   const [shown, setShown] = useState<Shown>({ kind: 'none' });

@@ -3,9 +3,8 @@
 import { KomtruLogo, StickyFooter, TopBar } from '@komtru/ui-kit';
 import { TRADE_CODE_EXAMPLE } from '@komtru/shared-types';
 import { useRouter } from 'next/navigation';
-import { useEffect, useId, useState } from 'react';
+import { useEffect, useId, useState, useSyncExternalStore } from 'react';
 import { tradeCodeOf } from '../../home/classify';
-import { useViewport } from '../../trade/workspace/viewport';
 import { countdown, RESEND_AFTER_SECONDS } from '../flow';
 
 /** The line the reference sets over every wide entry screen's brand story. */
@@ -16,6 +15,47 @@ const POINTS = [
   ['Payment stays protected', 'Funds are released only when the agreed terms are met.'],
   ['Every trade builds your record', 'Completed trades become evidence others can see.'],
 ] as const;
+
+/** Which drawing this window gets, or `unknown` on the server and in the hydration pass, which cannot tell. */
+export type Seen = 'phone' | 'tablet' | 'desktop' | 'unknown';
+
+const TABLET = '(min-width: 768px)';
+const DESKTOP = '(min-width: 1024px)';
+const canAsk = (): boolean => typeof window !== 'undefined' && typeof window.matchMedia === 'function';
+
+function readSeen(): Seen {
+  if (!canAsk()) return 'phone';
+  if (window.matchMedia(DESKTOP).matches) return 'desktop';
+  return window.matchMedia(TABLET).matches ? 'tablet' : 'phone';
+}
+
+function subscribeSeen(notify: () => void): () => void {
+  if (!canAsk()) return () => undefined;
+  const lists = [window.matchMedia(TABLET), window.matchMedia(DESKTOP)];
+  lists.forEach((list) => {
+    list.addEventListener('change', notify);
+  });
+  return () => {
+    lists.forEach((list) => {
+      list.removeEventListener('change', notify);
+    });
+  };
+}
+
+/**
+ * The window, for what a width adds beside a form. Unlike `useViewport` it does not pretend the server is a phone: the
+ * server and the hydration pass answer `unknown`, and a screen then draws every variant and lets its classes (`hidden
+ * lg:block`, `md:hidden`) pick, so the first paint is right at every width. Once the browser has said, only the variant
+ * for this width stays in the DOM, so a hidden duplicate never reaches assistive technology or a test. A window with no
+ * `matchMedia` (jsdom) is a phone.
+ */
+export function useSeen(): Seen {
+  return useSyncExternalStore(subscribeSeen, readSeen, () => 'unknown');
+}
+
+/** Whether a variant meant for these widths is drawn: all of them while the width is unknown, one afterwards. */
+export const drawn = (seen: Seen, ...widths: Exclude<Seen, 'unknown'>[]): boolean =>
+  seen === 'unknown' || widths.includes(seen);
 
 const DISPLAY = 'font-[family-name:var(--font-display)]';
 
@@ -65,19 +105,18 @@ export function EntryFrame({
   /** Whether a wide window draws the Back link. DX-01 and TX-01 draw none on log in, the way in. */
   wideBack?: boolean;
 }): React.JSX.Element {
-  const viewport = useViewport();
-  const wide = viewport !== 'mobile';
+  const seen = useSeen();
 
   return (
     <div className="mx-auto w-full max-w-[480px] md:max-w-none">
       <div className="relative flex min-h-dvh flex-col bg-surface-secondary lg:flex-row lg:bg-surface-primary">
         {/* DX-01's left column. The gradient is always here, so a desktop window is the right shape before the story arrives. */}
         <div className="hidden bg-[linear-gradient(150deg,var(--komtru-midnight),color-mix(in_srgb,var(--komtru-midnight),var(--trust-indigo)_10%))] text-pure-white lg:flex lg:flex-[1.1] lg:flex-col lg:p-[44px]">
-          {viewport === 'desktop' && <BrandStory heading={brandHeading} />}
+          {drawn(seen, 'desktop') && <BrandStory heading={brandHeading} tradeCode={tradeCode} />}
         </div>
         <div className="flex flex-1 flex-col md:items-center md:justify-center md:px-[48px] md:py-[48px] lg:flex-[0.9] lg:bg-surface-primary lg:px-[56px]">
           {/* `contents`, so the sticky bar still sticks to the page; a wide window draws a Back link in the card instead. */}
-          {title !== undefined && viewport === 'mobile' && (
+          {title !== undefined && drawn(seen, 'phone') && (
             <div className="contents md:hidden">
               <TopBar
                 title={title}
@@ -85,14 +124,15 @@ export function EntryFrame({
               />
             </div>
           )}
-          {viewport === 'tablet' && intro !== 'none' && <TabletIntro headline={intro === 'headline'} />}
+          {intro !== 'none' && drawn(seen, 'tablet') && <TabletIntro headline={intro === 'headline'} />}
           <div className="flex flex-1 flex-col md:w-full md:max-w-[600px] md:flex-none md:rounded-[var(--r-lg)] md:border md:border-solid md:border-border-hairline md:bg-surface-primary md:p-[26px] lg:max-w-[440px] lg:rounded-none lg:border-0 lg:bg-transparent lg:p-0">
-            {wide && wideBack && back !== undefined && (
-              <nav aria-label="Back" className="mb-[16px]">
-                <a href={back} className="text-[12.5px] font-semibold text-trust-indigo">
-                  Back
-                </a>
-              </nav>
+            {wideBack && back !== undefined && drawn(seen, 'tablet', 'desktop') && (
+              <a
+                href={back}
+                className="mb-[16px] hidden self-start text-[12.5px] font-semibold text-trust-indigo md:block"
+              >
+                Back
+              </a>
             )}
             {/* `.scr-body`: 90px under the last card keeps it clear of the footer on a phone, which a card has no use for. */}
             <main className="flex-1 pt-[16px] pr-[16px] pb-[90px] pl-[16px] md:flex-none md:p-0">
@@ -104,7 +144,7 @@ export function EntryFrame({
               </StickyFooter>
             )}
           </div>
-          {viewport === 'tablet' && tradeCode && (
+          {tradeCode && drawn(seen, 'tablet') && (
             <section
               aria-label="Trade Code"
               className="mt-[16px] w-full max-w-[600px] px-[4px] text-[12.5px] text-slate"
@@ -124,7 +164,7 @@ export function EntryFrame({
 /** TX-01's head: the wordmark, and on log in the headline under it. */
 function TabletIntro({ headline }: { headline: boolean }): React.JSX.Element {
   return (
-    <header className="mb-[22px] text-center">
+    <header className="mb-[22px] hidden text-center md:block lg:hidden">
       <KomtruLogo size={20} style={{ fontSize: '18px', gap: '8px', justifyContent: 'center' }} />
       {headline && (
         <p className={`${DISPLAY} mt-[14px] mb-0 text-[26px] font-semibold text-midnight-text`}>{HEADLINE}</p>
@@ -134,7 +174,7 @@ function TabletIntro({ headline }: { headline: boolean }): React.JSX.Element {
 }
 
 /** DX-01's left column: the story in three points, and the Trade Code entry at the foot. */
-function BrandStory({ heading }: { heading: boolean }): React.JSX.Element {
+function BrandStory({ heading, tradeCode }: { heading: boolean; tradeCode: boolean }): React.JSX.Element {
   const Headline = heading ? 'h1' : 'p';
   return (
     <aside aria-label="Why Komtru" className="flex flex-1 flex-col gap-[22px]">
@@ -158,7 +198,7 @@ function BrandStory({ heading }: { heading: boolean }): React.JSX.Element {
           </li>
         ))}
       </ol>
-      <TradeCodeEntry />
+      {tradeCode && <TradeCodeEntry />}
     </aside>
   );
 }
@@ -203,6 +243,7 @@ function TradeCodeEntry(): React.JSX.Element {
           autoCapitalize="characters"
           spellCheck={false}
           aria-invalid={invalid ? true : undefined}
+          aria-describedby={invalid ? `${id}-problem` : undefined}
           onChange={(event) => {
             setTyped(event.target.value);
             setInvalid(false);
@@ -217,13 +258,11 @@ function TradeCodeEntry(): React.JSX.Element {
         </button>
       </div>
       {invalid && (
-        <p role="alert" className="mt-[8px] mb-0 text-[12px] font-semibold">
+        <p id={`${id}-problem`} role="alert" className="mt-[8px] mb-0 text-[12px] font-semibold">
           {INVALID}
         </p>
       )}
-      <p className="mt-[8px] mb-0 text-[11.5px] opacity-70">
-        You&apos;ll log in first, then we&apos;ll show the trade.
-      </p>
+      <p className="mt-[8px] mb-0 text-[11.5px] opacity-70">Log in and we&apos;ll show you the trade.</p>
     </form>
   );
 }

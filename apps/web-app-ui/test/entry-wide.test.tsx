@@ -4,7 +4,9 @@
 // phone only). The phone is held by the suites that already exist and is only spot-checked here: nothing wide is drawn,
 // and nothing wide is read for, until a window says it is wide.
 import { KomtruProviders } from '@komtru/app-kit/react';
-import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { hydrateRoot } from 'react-dom/client';
+import { renderToString } from 'react-dom/server';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { LoginForm } from '../src/entry/components/LoginForm';
 import {
@@ -93,8 +95,8 @@ interface Case {
   heading: RegExp;
   /** The screen's real action, in the footer on a phone and under the form on a wide window. */
   action: { role: 'button' | 'link'; name: string | RegExp };
-  /** TX-01's "Have a Trade Code? Enter it here": log in, welcome and sign up only. */
-  tabletTradeCode: boolean;
+  /** The Trade Code entry (the desktop box, TX-01's tablet line): log in, welcome and sign up only. */
+  tradeCode: boolean;
 }
 
 const entry = (node: React.ReactNode) => () => Promise.resolve(show(node));
@@ -105,21 +107,21 @@ const CASES: Case[] = [
     open: entry(<Welcome />),
     heading: /Trade with strangers, protected\./,
     action: { role: 'link', name: 'Create account' },
-    tabletTradeCode: true,
+    tradeCode: true,
   },
   {
     name: 'E4 Log in',
     open: entry(<LoginForm next={undefined} notice={undefined} />),
     heading: /^Log in( to Komtru)?$/,
     action: { role: 'button', name: 'Log in' },
-    tabletTradeCode: true,
+    tradeCode: true,
   },
   {
     name: 'E2 Sign up',
     open: entry(<SignUpForm />),
     heading: /What.s your number\?/,
     action: { role: 'button', name: 'Continue' },
-    tabletTradeCode: true,
+    tradeCode: true,
   },
   {
     name: 'TOS1 Terms',
@@ -133,7 +135,7 @@ const CASES: Case[] = [
     },
     heading: /Review the Terms of Service and Privacy Policy/,
     action: { role: 'button', name: 'Agree & create account' },
-    tabletTradeCode: false,
+    tradeCode: false,
   },
   {
     name: 'E3 Verify',
@@ -143,14 +145,14 @@ const CASES: Case[] = [
     },
     heading: /Enter the 6-digit code/,
     action: { role: 'button', name: 'Verify & continue' },
-    tabletTradeCode: false,
+    tradeCode: false,
   },
   {
     name: 'AC2 Forgot password',
     open: entry(<ForgotPasswordForm />),
     heading: /What.s your number\?/,
     action: { role: 'button', name: 'Send reset code' },
-    tabletTradeCode: false,
+    tradeCode: false,
   },
   {
     name: 'AC3 Set new password',
@@ -160,14 +162,14 @@ const CASES: Case[] = [
     },
     heading: /./,
     action: { role: 'button', name: 'Save new password' },
-    tabletTradeCode: false,
+    tradeCode: false,
   },
   {
     name: 'First password after sign-up',
     open: entry(<SetPasswordForm next={undefined} />),
     heading: /./,
     action: { role: 'button', name: /password/i },
-    tabletTradeCode: false,
+    tradeCode: false,
   },
   {
     name: 'TOS2 Terms updated',
@@ -178,14 +180,14 @@ const CASES: Case[] = [
     },
     heading: /We.ve updated our Terms/,
     action: { role: 'button', name: 'Agree & continue' },
-    tabletTradeCode: false,
+    tradeCode: false,
   },
   {
     name: 'The Terms in full',
     open: entry(<FullTerms />),
     heading: /Terms of Service and Privacy Policy/,
     action: { role: 'link', name: 'Back' },
-    tabletTradeCode: false,
+    tradeCode: false,
   },
   {
     name: 'SP-M14 Service notice',
@@ -197,35 +199,35 @@ const CASES: Case[] = [
     },
     heading: /Komtru is working/,
     action: { role: 'link', name: 'Back to Trades' },
-    tabletTradeCode: false,
+    tradeCode: false,
   },
   {
     name: 'SP-M15 Update required',
     open: entry(<UpdateRequired />),
     heading: /Please update Komtru/,
     action: { role: 'button', name: 'Update now' },
-    tabletTradeCode: false,
+    tradeCode: false,
   },
   {
     name: 'SP-M16 Session expired',
     open: entry(<SessionExpired next="/trades" />),
     heading: /Please sign in again/,
     action: { role: 'link', name: 'Log in' },
-    tabletTradeCode: false,
+    tradeCode: false,
   },
   {
     name: 'SP-M17 Too many attempts',
     open: entry(<TooManyAttempts waitSeconds={undefined} onRetry={() => undefined} />),
     heading: /Too many tries/,
     action: { role: 'link', name: 'Recover my account' },
-    tabletTradeCode: false,
+    tradeCode: false,
   },
 ];
 
 const brand = () => screen.queryByRole('complementary', { name: 'Why Komtru' });
 const tradeCodeBox = () => screen.queryByRole('search', { name: 'Find a trade by its code' });
 const tabletTradeLine = () => screen.queryByRole('region', { name: 'Trade Code' });
-const wideBack = () => screen.queryByRole('navigation', { name: 'Back' });
+const backLinks = () => screen.queryAllByRole('link', { name: 'Back' });
 
 describe('a phone', () => {
   it.each(CASES)('$name draws no brand panel, Trade Code entry or wide Back link', async (screenCase) => {
@@ -233,7 +235,7 @@ describe('a phone', () => {
     expect(brand()).toBeNull();
     expect(tradeCodeBox()).toBeNull();
     expect(tabletTradeLine()).toBeNull();
-    expect(wideBack()).toBeNull();
+    expect(backLinks()).toHaveLength(screenCase.name === 'E1 Welcome' ? 0 : backLinks().length);
   });
 });
 
@@ -251,8 +253,19 @@ describe.each<{ width: Width }>([{ width: 'tablet' }, { width: 'desktop' }])(
         expect(
           screen.getAllByRole(screenCase.action.role, { name: screenCase.action.name }).length,
         ).toBeGreaterThan(0);
-        // The phone's top bar is replaced by one plain Back link inside the card or column, never both.
-        expect(screen.queryAllByRole('link', { name: 'Back' }).length).toBeLessThanOrEqual(1);
+      });
+
+      it('draws the Back link the phone draws, once, in the card or column, and none on log in', async () => {
+        cleanup();
+        atWidth('phone');
+        await screenCase.open();
+        const onAPhone = backLinks().length;
+        cleanup();
+        atWidth(width);
+        await screenCase.open();
+        // Log in is the way in: DX-01 and TX-01 draw it with no Back.
+        expect(backLinks()).toHaveLength(screenCase.name === 'E4 Log in' ? 0 : onAPhone);
+        expect(onAPhone).toBeLessThanOrEqual(1);
       });
 
       it('has no accessibility violations', async () => {
@@ -262,14 +275,14 @@ describe.each<{ width: Width }>([{ width: 'tablet' }, { width: 'desktop' }])(
 
       if (width === 'tablet') {
         it(
-          screenCase.tabletTradeCode
+          screenCase.tradeCode
             ? 'draws the card, with the Trade Code one tap away'
             : 'draws the card, without the Trade Code line',
           async () => {
             await screenCase.open();
             expect(brand()).toBeNull();
             expect(tradeCodeBox()).toBeNull();
-            if (screenCase.tabletTradeCode) {
+            if (screenCase.tradeCode) {
               const line = within(tabletTradeLine()!);
               expect(line.getByText(/Have a Trade Code\?/)).toBeDefined();
               expect(line.getByRole('link', { name: 'Enter it here' }).getAttribute('href')).toBe('/find');
@@ -279,22 +292,31 @@ describe.each<{ width: Width }>([{ width: 'tablet' }, { width: 'desktop' }])(
           },
         );
       } else {
-        it('draws the brand story and the Trade Code entry beside it', async () => {
-          await screenCase.open();
-          const panel = within(brand()!);
-          expect(panel.getByText(HEADLINE)).toBeDefined();
-          for (const point of [
-            'Agree before you pay',
-            'Payment stays protected',
-            'Every trade builds your record',
-          ]) {
-            expect(panel.getByText(point)).toBeDefined();
-          }
-          const search = within(tradeCodeBox()!);
-          expect(search.getByLabelText('Have a Trade Code?')).toBeDefined();
-          expect(search.getByRole('button', { name: 'Find' })).toBeDefined();
-          expect(tabletTradeLine()).toBeNull();
-        });
+        it(
+          screenCase.tradeCode
+            ? 'draws the brand story and the Trade Code entry beside it'
+            : 'draws the brand story, and no Trade Code entry on a step the person is in the middle of',
+          async () => {
+            await screenCase.open();
+            const panel = within(brand()!);
+            expect(panel.getByText(HEADLINE)).toBeDefined();
+            for (const point of [
+              'Agree before you pay',
+              'Payment stays protected',
+              'Every trade builds your record',
+            ]) {
+              expect(panel.getByText(point)).toBeDefined();
+            }
+            if (screenCase.tradeCode) {
+              const search = within(tradeCodeBox()!);
+              expect(search.getByLabelText('Have a Trade Code?')).toBeDefined();
+              expect(search.getByRole('button', { name: 'Find' })).toBeDefined();
+            } else {
+              expect(tradeCodeBox()).toBeNull();
+            }
+            expect(tabletTradeLine()).toBeNull();
+          },
+        );
       }
     });
   },
@@ -314,7 +336,7 @@ describe('the tablet card (TX-01)', () => {
     expect(screen.getByRole('button', { name: 'Log in' })).toBeDefined();
     expect(screen.getByRole('link', { name: 'Create account' }).getAttribute('href')).toBe('/signup');
     // TX-01 draws no Back on log in.
-    expect(wideBack()).toBeNull();
+    expect(backLinks()).toHaveLength(0);
   });
 
   it('puts the wordmark alone above the other cards', () => {
@@ -325,9 +347,8 @@ describe('the tablet card (TX-01)', () => {
 
   it('keeps one Back link, in the card', () => {
     show(<SignUpForm />);
-    const back = within(wideBack()!).getByRole('link', { name: 'Back' });
-    expect(back.getAttribute('href')).toBe('/');
-    expect(screen.getAllByRole('link', { name: 'Back' })).toHaveLength(1);
+    expect(backLinks()).toHaveLength(1);
+    expect(backLinks()[0]!.getAttribute('href')).toBe('/');
   });
 
   it('draws the welcome card with the logo, the graphic, the copy and both ways in', () => {
@@ -366,25 +387,54 @@ describe('the desktop frame (DX-01)', () => {
   });
 
   it('takes a Trade Code to the existing find-a-trade screen, which looks it up on arrival', () => {
-    show(<SessionExpired next={undefined} />);
+    show(<LoginForm next={undefined} notice={undefined} />);
     const search = within(tradeCodeBox()!);
     fireEvent.change(search.getByLabelText('Have a Trade Code?'), { target: { value: 'KMT-482731' } });
     fireEvent.click(search.getByRole('button', { name: 'Find' }));
     expect(router.push).toHaveBeenCalledWith('/find?code=KMT-482731-NG');
   });
 
-  it('says what a Trade Code looks like instead of going anywhere when it is not one', () => {
-    show(<SessionExpired next={undefined} />);
+  it('says what a Trade Code looks like instead of going anywhere when it is not one, and links the message to the field', () => {
+    show(<LoginForm next={undefined} notice={undefined} />);
     const search = within(tradeCodeBox()!);
-    fireEvent.change(search.getByLabelText('Have a Trade Code?'), { target: { value: 'hello' } });
+    const field = search.getByLabelText('Have a Trade Code?');
+    fireEvent.change(field, { target: { value: 'hello' } });
     fireEvent.click(search.getByRole('button', { name: 'Find' }));
     expect(router.push).not.toHaveBeenCalled();
-    expect(search.getByRole('alert').textContent).toMatch(/isn.t a Trade Code/);
+    const alert = search.getByRole('alert');
+    expect(alert.textContent).toMatch(/isn.t a Trade Code/);
+    expect(field.getAttribute('aria-describedby')?.split(' ')).toContain(alert.id);
   });
 
   it('says that a logged-out visitor logs in before the trade is shown', () => {
-    show(<SessionExpired next={undefined} />);
-    expect(within(tradeCodeBox()!).getByText(/log in first/i)).toBeDefined();
+    show(<LoginForm next={undefined} notice={undefined} />);
+    expect(within(tradeCodeBox()!).getByText(/log in/i)).toBeDefined();
+  });
+
+  it('is on log in, welcome and sign up, and nowhere a person is in the middle of something', async () => {
+    for (const present of [
+      <LoginForm key="l" next={undefined} notice={undefined} />,
+      <Welcome key="w" />,
+      <SignUpForm key="s" />,
+    ]) {
+      const { unmount } = show(present);
+      expect(tradeCodeBox()).not.toBeNull();
+      unmount();
+    }
+    signUpCode.write({ challengeId, destination: '+23480•••5567', delivered: true, sentAt: Date.now() });
+    resetCode.write({ challengeId, destination: '+23480•••5567', delivered: true, sentAt: Date.now() });
+    for (const absent of [
+      <TermsUpdated key="t" next="/trades" />,
+      <SetPasswordForm key="p" next={undefined} />,
+      <SessionExpired key="e" next={undefined} />,
+      <VerifyForm key="v" />,
+      <ResetPasswordForm key="r" />,
+    ]) {
+      const { unmount } = show(absent);
+      await screen.findByRole('complementary', { name: 'Why Komtru' });
+      expect(tradeCodeBox()).toBeNull();
+      unmount();
+    }
   });
 });
 
@@ -398,6 +448,15 @@ describe('a resize while the person is typing', () => {
     const secret = screen.getByLabelText('Password');
     fireEvent.change(who, { target: { value: '0802 341 5567' } });
     fireEvent.change(secret, { target: { value: 'a long passphrase' } });
+    expect(brand()).toBeNull();
+    resizeTo('tablet');
+    expect(tabletTradeLine()).not.toBeNull();
+    resizeTo('desktop');
+    expect(brand()).not.toBeNull();
+    expect(tradeCodeBox()).not.toBeNull();
+    expect(tabletTradeLine()).toBeNull();
+    resizeTo('phone');
+    expect(brand()).toBeNull();
     for (const width of WIDTHS) {
       resizeTo(width);
       expect(who.isConnected).toBe(true);
@@ -453,5 +512,54 @@ describe('a resize while the person is typing', () => {
       expect(now[0]!.isConnected).toBe(true);
       expect(now.map((cell) => (cell as HTMLInputElement).value).join('')).toBe('729401');
     }
+  });
+});
+
+describe('the first paint', () => {
+  const html = (node: React.ReactNode) =>
+    renderToString(
+      <KomtruProviders config={{ apiUrl: API, socketUrl: 'https://api.komtru.com' }} session={null}>
+        {node}
+      </KomtruProviders>,
+    );
+
+  it('is already right at every width, because the server HTML carries every variant and CSS chooses', () => {
+    const login = html(<LoginForm next={undefined} notice={undefined} />);
+    expect(login).toContain('Why Komtru');
+    expect(login).toContain('Enter it here');
+    expect(login).toContain('New to Komtru?');
+    expect(login).toContain('Create account');
+    // Each wide-only piece is hidden by CSS below its width, which also hides it from assistive technology.
+    expect(login).toMatch(/class="[^"]*\bhidden\b[^"]*lg:flex/);
+    expect(login).toMatch(/Log in to Komtru/);
+  });
+
+  it('has exactly one h1 per width on welcome', () => {
+    const welcome = html(<Welcome />);
+    expect([...welcome.matchAll(/<h1[^>]*>/g)].map((m) => m[0])).toHaveLength(2);
+    // The card's own headline is the one CSS hides at desktop, where the brand panel's takes over.
+    expect(welcome).toMatch(/<h1 class="[^"]*lg:hidden/);
+  });
+
+  it('hydrates at a desktop width without a mismatch and settles on the desktop DOM', async () => {
+    const error = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    atWidth('desktop');
+    const container = document.createElement('div');
+    document.body.append(container);
+    container.innerHTML = html(<Welcome />);
+    await act(async () => {
+      hydrateRoot(
+        container,
+        <KomtruProviders config={{ apiUrl: API, socketUrl: 'https://api.komtru.com' }} session={null}>
+          <Welcome />
+        </KomtruProviders>,
+      );
+      await Promise.resolve();
+    });
+    expect(error).not.toHaveBeenCalled();
+    expect(within(container).getAllByRole('heading', { level: 1 })).toHaveLength(1);
+    expect(within(container).queryAllByText('New to Komtru?')).toHaveLength(0);
+    error.mockRestore();
+    container.remove();
   });
 });
