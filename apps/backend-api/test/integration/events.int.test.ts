@@ -78,7 +78,11 @@ describe.runIf(infraEnabled)('domain events end to end', () => {
       const response = await fetch(`http://127.0.0.1:${port}/v1/probes/${probeId}`, { method: 'POST' });
       expect(response.status).toBe(202);
 
-      await eventually(() => handled.length > 0, 10_000);
+      await eventually(
+        () => handled.length > 0,
+        10_000,
+        () => `handled=${JSON.stringify(handled)}`,
+      );
       await new Promise((resolve) => setTimeout(resolve, 300)); // no duplicate trickles in
       expect(handled).toEqual([`worker:${probeId}`]);
 
@@ -130,12 +134,21 @@ describe.runIf(infraEnabled)('domain events end to end', () => {
       }),
     ]);
     try {
-      await eventually(async () => {
-        const { rows } = await t
-          .app()
-          .query<{ event_type: string }>('SELECT event_type FROM platform.outbox');
-        return rows.some((row) => row.event_type === queueDeadLetteredEvent.eventType);
-      }, 15_000);
+      await eventually(
+        async () => {
+          const { rows } = await t
+            .app()
+            .query<{ event_type: string }>('SELECT event_type FROM platform.outbox');
+          return rows.some((row) => row.event_type === queueDeadLetteredEvent.eventType);
+        },
+        15_000,
+        async () => {
+          const { rows } = await t
+            .app()
+            .query<{ event_type: string }>('SELECT event_type FROM platform.outbox ORDER BY seq');
+          return `outbox=${JSON.stringify(rows.map((r) => r.event_type))}`;
+        },
+      );
 
       const { rows } = await t
         .app()

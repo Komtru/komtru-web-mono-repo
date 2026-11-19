@@ -4,10 +4,10 @@ import { Queue } from 'bullmq';
 import { afterEach, describe, expect, it } from 'vitest';
 import { loadConfig } from '../../src/config/env.js';
 import { createLogger } from '../../src/platform/logger.js';
-import { BULL_PREFIX, createBullConnection } from '../../src/platform/redis/connections.js';
+import { createBullConnection } from '../../src/platform/redis/connections.js';
 import { createScheduleRegistry, type ScheduledJob } from '../../src/platform/scheduler/registry.js';
 import { startScheduler, type RunningScheduler } from '../../src/platform/scheduler/scheduler.js';
-import { infraEnabled, testRedisUrl } from '../support/db-urls.js';
+import { infraEnabled, testQueuePrefix, testRedisUrl } from '../support/db-urls.js';
 import { eventually } from '../support/eventually.js';
 
 const redisUrl = testRedisUrl();
@@ -27,7 +27,10 @@ describe.runIf(infraEnabled)('scheduler', () => {
     const queueName = `test.scheduler-${randomUUID().slice(0, 8)}`;
     const registry = createScheduleRegistry();
     for (const job of jobs) registry.register(job);
-    const queue = new Queue(queueName, { connection: createBullConnection(redisUrl), prefix: BULL_PREFIX });
+    const queue = new Queue(queueName, {
+      connection: createBullConnection(redisUrl),
+      prefix: testQueuePrefix(),
+    });
     opened.push(queue);
     const start = async () => {
       const scheduler = await startScheduler({
@@ -36,6 +39,7 @@ describe.runIf(infraEnabled)('scheduler', () => {
         timezone: 'Africa/Lagos',
         logger,
         queueName,
+        prefix: testQueuePrefix(),
       });
       running.push(scheduler);
       return scheduler;
@@ -78,7 +82,11 @@ describe.runIf(infraEnabled)('scheduler', () => {
     const { queue, start } = setup([job('trades.nightly')]);
     await start();
     const occurrence = await queue.add('run', { job: 'trades.gone' });
-    await eventually(async () => (await occurrence.getState()) === 'completed');
+    await eventually(
+      async () => (await occurrence.getState()) === 'completed',
+      5000,
+      async () => `occurrence=${String(occurrence.id)} state=${String(await occurrence.getState())}`,
+    );
     expect((await queue.getJob(occurrence.id ?? ''))?.returnvalue).toEqual({ skipped: true });
   });
 
@@ -88,7 +96,11 @@ describe.runIf(infraEnabled)('scheduler', () => {
     await start();
     const scheduledFor = Date.UTC(2026, 9, 5, 1, 0, 0);
     await queue.add('run', { job: 'trades.nightly' }, { prevMillis: scheduledFor });
-    await eventually(() => fired.length === 1);
+    await eventually(
+      () => fired.length === 1,
+      5000,
+      () => `fired=${JSON.stringify(fired)}`,
+    );
     expect(fired[0]?.toISOString()).toBe(new Date(scheduledFor).toISOString());
   });
 });

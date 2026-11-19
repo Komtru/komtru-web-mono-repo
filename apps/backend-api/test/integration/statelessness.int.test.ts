@@ -72,7 +72,11 @@ describe.runIf(infraEnabled)('stateless processes', () => {
           fetch(`http://127.0.0.1:${ports[id % 2]}/v1/echo/${id}`, { method: 'POST' }),
         ),
       );
-      await eventually(() => processed.length >= 20);
+      await eventually(
+        () => processed.length >= 20,
+        5000,
+        () => `processed=${JSON.stringify(processed.map((p) => p.id))}`,
+      );
       await new Promise((r) => setTimeout(r, 200)); // no duplicates trickle in
       expect(processed.map((p) => p.id).sort((a, b) => a - b)).toEqual(
         Array.from({ length: 20 }, (_, i) => i),

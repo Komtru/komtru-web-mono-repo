@@ -93,7 +93,11 @@ describe.runIf(infraEnabled)('queue factory', () => {
     factory.consume<{ n: number }>({ name, process: ({ n }) => Promise.resolve(void seen.push(n)) });
     factory.run();
     await factory.producer<{ n: number }>(name).add('run', { n: 7 });
-    await eventually(() => seen.length === 1);
+    await eventually(
+      () => seen.length === 1,
+      5000,
+      () => `seen=${JSON.stringify(seen)}`,
+    );
     expect(seen).toEqual([7]);
     const raw = await ready(createRedis(redisUrl, { keyPrefix: false }));
     try {
@@ -122,7 +126,11 @@ describe.runIf(infraEnabled)('queue factory', () => {
     await factory.producer(name).add('run', { order: 'A1' });
 
     const dead = factory.producer(`${name}.dead`);
-    await eventually(async () => (await dead.getJobCounts('waiting')).waiting === 1);
+    await eventually(
+      async () => (await dead.getJobCounts('waiting')).waiting === 1,
+      5000,
+      async () => `attempts=${String(attempts)} dead=${JSON.stringify(await dead.getJobCounts())}`,
+    );
     await new Promise((r) => setTimeout(r, 200)); // nothing more arrives
     expect(attempts).toBe(3);
     expect((await dead.getJobCounts('waiting')).waiting).toBe(1);
@@ -153,7 +161,11 @@ describe.runIf(infraEnabled)('queue factory', () => {
     });
     factory.run();
     await factory.producer(name).add('run', {});
-    await eventually(() => attempts === 2);
+    await eventually(
+      () => attempts === 2,
+      5000,
+      () => `attempts=${String(attempts)}`,
+    );
     await new Promise((r) => setTimeout(r, 200));
     expect((await factory.producer(`${name}.dead`).getJobCounts('waiting')).waiting).toBe(0);
     expect(onDeadLetter).not.toHaveBeenCalled();
@@ -171,7 +183,12 @@ describe.runIf(infraEnabled)('queue factory', () => {
     });
     factory.run();
     await factory.producer(name).add('run', {});
-    await eventually(() => onDeadLetter.mock.calls.length === 1);
+    await eventually(
+      () => onDeadLetter.mock.calls.length === 1,
+      5000,
+      async () =>
+        `hookCalls=${String(onDeadLetter.mock.calls.length)} dead=${JSON.stringify(await factory?.producer(`${name}.dead`).getJobCounts())}`,
+    );
     expect(onDeadLetter.mock.calls[0]?.[0]).toMatchObject({ error: 'bad payload', attempts: 1 });
   });
 
@@ -187,7 +204,12 @@ describe.runIf(infraEnabled)('queue factory', () => {
       factory.consume({ name, attempts: 1, process: () => Promise.reject(new Error('x')) });
       factory.run();
       await factory.producer(name).add('run', {});
-      await eventually(() => onDeadLetter.mock.calls.length === 1);
+      await eventually(
+        () => onDeadLetter.mock.calls.length === 1,
+        5000,
+        async () =>
+          `hookCalls=${String(onDeadLetter.mock.calls.length)} dead=${JSON.stringify(await factory?.producer(`${name}.dead`).getJobCounts())}`,
+      );
       await new Promise((r) => setTimeout(r, 100));
       expect(unhandled).not.toHaveBeenCalled();
     } finally {

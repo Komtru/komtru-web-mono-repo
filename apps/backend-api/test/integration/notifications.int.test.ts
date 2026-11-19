@@ -182,6 +182,10 @@ describe.runIf(infraEnabled)('notifications end to end', () => {
     }
   };
 
+  // What a timed-out SMS wait gave up on: the user's status rows, the provider's hits and the queue.
+  const smsState = (userId: string) => async () =>
+    `statuses=${JSON.stringify(await statusOf(userId))} providerHits=${String(stub?.hits.length ?? 0)} queue=${await smsQueueState()}`;
+
   const outboxTypes = async () => {
     const { rows } = await t
       .app()
@@ -205,7 +209,7 @@ describe.runIf(infraEnabled)('notifications end to end', () => {
       const url = `http://127.0.0.1:${String(port)}/v1/notices/${userId}?eventId=${eventId}`;
       expect((await fetch(url, { method: 'POST' })).status).toBe(202);
 
-      await eventually(async () => (await statusOf(userId)).includes('SENT'), 20_000);
+      await eventually(async () => (await statusOf(userId)).includes('SENT'), 20_000, smsState(userId));
       expect(stub.hits).toHaveLength(1);
       expect(JSON.parse(stub.hits[0]?.body ?? '{}')).toMatchObject({
         to: '+2348012345678',
@@ -222,12 +226,19 @@ describe.runIf(infraEnabled)('notifications end to end', () => {
       await t.app().query(`DELETE FROM platform.processed_events`);
       await redeliver(eventId, userId);
 
-      await eventually(async () => {
-        const { rows } = await t
-          .app()
-          .query(`SELECT 1 FROM platform.processed_events WHERE subscriber = 'notify.on-notice-raised'`);
-        return rows.length > 0;
-      }, 20_000);
+      await eventually(
+        async () => {
+          const { rows } = await t
+            .app()
+            .query(`SELECT 1 FROM platform.processed_events WHERE subscriber = 'notify.on-notice-raised'`);
+          return rows.length > 0;
+        },
+        20_000,
+        async () =>
+          `statuses=${JSON.stringify(await statusOf(userId))} processed=${String(
+            (await t.app().query(`SELECT subscriber FROM platform.processed_events`)).rows.length,
+          )}`,
+      );
       await new Promise((resolve) => setTimeout(resolve, 1_000));
 
       expect(stub.hits).toHaveLength(1);
@@ -286,7 +297,7 @@ describe.runIf(infraEnabled)('notifications end to end', () => {
       const { port } = api.server.address() as AddressInfo;
       await fetch(`http://127.0.0.1:${String(port)}/v1/notices/${userId}`, { method: 'POST' });
 
-      await eventually(async () => (await statusOf(userId)).includes('SUPPRESSED'), 20_000);
+      await eventually(async () => (await statusOf(userId)).includes('SUPPRESSED'), 20_000, smsState(userId));
       expect(stub.hits).toEqual([]);
     } finally {
       await Promise.all([api.stop(), worker.stop()]);
@@ -308,7 +319,7 @@ describe.runIf(infraEnabled)('notifications end to end', () => {
       const { port } = api.server.address() as AddressInfo;
       await fetch(`http://127.0.0.1:${String(port)}/v1/notices/${userId}`, { method: 'POST' });
 
-      await eventually(async () => (await statusOf(userId)).includes('SENT'), 20_000);
+      await eventually(async () => (await statusOf(userId)).includes('SENT'), 20_000, smsState(userId));
       // Rendered, recorded, logged with the recipient masked — and never sent.
       expect(stub.hits).toEqual([]);
       const { rows } = await t

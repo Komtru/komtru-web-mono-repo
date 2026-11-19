@@ -4,9 +4,9 @@ import { afterAll, beforeAll, beforeEach } from 'vitest';
 import pg from 'pg';
 import { createDb, type Db } from '../../src/db/index.js';
 import { MIGRATIONS_SCHEMA, grantRuntimeAccess } from '../../src/db/roles.js';
-import { TEMPLATE_DATABASE, TEST_DB_PREFIX, directUrl, pooledUrl } from './db-urls.js';
+import { directUrl, pooledUrl, templateDatabaseName, workerDatabaseName } from './db-urls.js';
 
-export const workerDatabase = () => `${TEST_DB_PREFIX}_${process.env.VITEST_POOL_ID ?? '1'}`;
+export const workerDatabase = (): string => workerDatabaseName();
 
 /** Empties every table outside system schemas and the migration journal. */
 export async function truncateAll(owner: pg.Pool): Promise<void> {
@@ -45,7 +45,7 @@ export function useTestDatabase(): TestDatabase {
     await admin.connect();
     try {
       await admin.query(`DROP DATABASE IF EXISTS ${name} WITH (FORCE)`);
-      await admin.query(`CREATE DATABASE ${name} TEMPLATE ${TEMPLATE_DATABASE}`);
+      await admin.query(`CREATE DATABASE ${name} TEMPLATE ${templateDatabaseName()}`);
     } finally {
       await admin.end();
     }
@@ -64,6 +64,14 @@ export function useTestDatabase(): TestDatabase {
 
   afterAll(async () => {
     await Promise.all([app?.end(), owner?.end()]);
+    // Each run mints new names, so a database left behind is never reused; drop it here.
+    const admin = new pg.Client({ connectionString: directUrl('postgres') });
+    await admin.connect();
+    try {
+      await admin.query(`DROP DATABASE IF EXISTS ${workerDatabase()} WITH (FORCE)`);
+    } finally {
+      await admin.end();
+    }
   });
 
   return { app: () => need(app), owner: () => need(owner), db: () => createDb(need(app)) };

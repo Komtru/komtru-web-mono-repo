@@ -307,7 +307,12 @@ describe.runIf(infraEnabled)('outbox relay', () => {
     }
 
     const running = relay;
-    await eventually(async () => (await running.tick()) > 0, 15_000);
+    await eventually(
+      async () => (await running.tick()) > 0,
+      15_000,
+      async () =>
+        `enqueued=${JSON.stringify(queues.enqueued.map((e) => e.envelope.payload.step))} unpublished=${String(await unpublished())}`,
+    );
     expect(queues.enqueued.map((e) => e.envelope.payload.step)).toEqual([1, 2]);
     expect(await unpublished()).toBe(0);
   }, 30_000);
