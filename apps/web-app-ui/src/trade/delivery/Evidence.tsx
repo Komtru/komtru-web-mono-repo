@@ -4,6 +4,8 @@ import type { TradeView } from '@komtru/api-client';
 import { useInspection } from '@komtru/api-client/react';
 import { ActionStack, Button, Skeleton } from '@komtru/ui-kit';
 import { Trail } from '../proof/EvidenceTrail';
+import { EvidenceAcross } from '../proof/EvidenceStates';
+import { useViewport } from '../workspace/viewport';
 import { EVIDENCE_OPEN_STATUSES } from '@komtru/api-client';
 import { EVIDENCE_STATUSES, addEvidenceHref } from '../workspace-state';
 import { ReadFailed, Frame, Refusal, TradeGate, tradeHref } from './parts';
@@ -27,6 +29,7 @@ export function Evidence({ id }: { id: string }): React.JSX.Element {
 function Media({ trade }: { trade: TradeView }): React.JSX.Element {
   const readable = (EVIDENCE_STATUSES as readonly string[]).includes(trade.status);
   const inspection = useInspection(trade.id, readable);
+  const viewport = useViewport();
   if (!readable) {
     return (
       <Refusal
@@ -38,7 +41,7 @@ function Media({ trade }: { trade: TradeView }): React.JSX.Element {
   }
   if (inspection.isPending) {
     return (
-      <Frame title={TITLE} id={trade.id}>
+      <Frame title={TITLE} id={trade.id} wide>
         <Skeleton width="full" lines={4} />
       </Frame>
     );
@@ -49,12 +52,16 @@ function Media({ trade }: { trade: TradeView }): React.JSX.Element {
     );
   }
   return (
-    <Frame title={TITLE} id={trade.id}>
+    <Frame title={TITLE} id={trade.id} wide>
       <p className="mb-[14px] text-[12.5px] leading-[1.6] text-slate">
         What was shown, what was added and by whom. Evidence stays associated with the trade and, where
         relevant, the linked case.
       </p>
-      <Trail trade={trade} read={inspection.data} />
+      {viewport === 'mobile' ? (
+        <Trail trade={trade} read={inspection.data} />
+      ) : (
+        <EvidenceAcross trade={trade} read={inspection.data} viewport={viewport} />
+      )}
       <ActionStack className="mt-[16px]">
         {(EVIDENCE_OPEN_STATUSES as readonly string[]).includes(trade.status) && (
           <Button asChild>

@@ -6,6 +6,7 @@
 import type { TradeView } from '@komtru/api-client';
 import { useTrade } from '@komtru/api-client/react';
 import { ActionStack, Button, LoadFailed, LoadingScreen, ScreenColumn, ScreenHeader } from '@komtru/ui-kit';
+import { TradeColumn } from '../workspace/layout';
 import { useOnline } from '../../shell/OfflineStatus';
 import { LinkNotFound } from '../../system/LinkNotFound';
 import { isProblem, problemMessage } from '../format';
@@ -16,17 +17,21 @@ export const tradeHref = (id: string): string => `/trade/${id}`;
 export function Frame({
   title,
   id,
+  wide = false,
   children,
 }: {
   title: string;
   id: string;
+  /** Lets the screen use a tablet's and a desktop's width. The sheets are drawn for a phone and stay in its column. */
+  wide?: boolean;
   children: React.ReactNode;
 }): React.JSX.Element {
+  const Column = wide ? TradeColumn : ScreenColumn;
   return (
-    <ScreenColumn>
+    <Column>
       <ScreenHeader title={title} backHref={tradeHref(id)} backLabel="Back to the trade" />
       {children}
-    </ScreenColumn>
+    </Column>
   );
 }
 
