@@ -1,14 +1,17 @@
-# SO3 — Business Verification (T-121)
+# SO3 — Business verification (T-121)
 
 - **Reference:** line 5456 — Become a Seller — Mobile Web · Complete Flow
-- **Built:** http://localhost:3001/sell/verify-business
+- **Built:** http://localhost:3001/account/verification/merchant/verify-business
 - **Code:** `apps/web-app-ui/src/sell/VerifyBusiness.tsx`
 
 **Visual check not run.** `pnpm visual-check` needs a signed-in session and the platform API for this screen. The app has no harness for the gated routes yet, and the backend infrastructure was not available to this run. The list below is the deviation list from reading the reference against the build; the pixel comparison is still to do.
 
 ## Deviations
 
-- **CAC certificate is mandatory.** The reference's upload is optional with a skip. Per T-121, Submit needs the CAC documents, so the skip is removed.
+- **Reference wording overridden: "optional", "skip" and "you can list and trade today".** The reference's headline says the step is optional, its upload says "Optional — skip and sell as an individual seller for now", and its info line says "You can list and trade today without this". Owner correction (2026-11-19): an unverified default seller is capped on how much it can transact until it is a merchant. Those lines would contradict the cap, so none are drawn. The step is merchant verification, and the lead paragraph says that verifying makes the business a merchant and that until then the amount transacted is limited.
+- **Lead paragraph added** (the copy above). The reference has no such line.
+- **Frame title "Verification" becomes "Business verification"**, the reference's step name.
+- **CAC number and CAC certificate are mandatory.** Per T-121, Submit needs the CAC documents, so the skip is removed.
 - **Two more documents required.** A status report or memorandum and the proprietor or director ID are drawn as upload slots; the backend requires both before submit.
 - **Primary action renamed.** "Submit for verification" becomes "Continue to payout account", because the application is sent on the payout step (submit needs the payout account).
 - **Info banner rewritten.** The reference says the upload is optional; the build says all three are required.
