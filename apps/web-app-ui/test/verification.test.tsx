@@ -231,11 +231,19 @@ describe('Verification failed (VF1)', () => {
     expect(screen.getByText(/Government-issued ID — we’ll tell you the moment/)).toBeDefined();
   });
 
-  it('has an empty state when nothing has failed', async () => {
+  /**
+   * This used to assert an empty state reading "Nothing to fix".
+   *
+   * It was true and useless: nothing HAD failed, because the person had never started — and the
+   * screen gave them no way to. The empty state is now the start of the flow. See
+   * `verification-start.test.tsx` for the three states it offers.
+   */
+  it('offers a way to begin when nothing has failed and nothing is verified', async () => {
     answerWith(api.call, { ...base, 'GET /verification/status': status() });
     renderWithApi(api.call, <Verification />);
-    expect(await screen.findByText('Nothing to fix')).toBeDefined();
+    expect(await screen.findByRole('button', { name: /verify your id/i })).toBeDefined();
     expect(screen.getByText('What’s needed')).toBeDefined();
+    expect(screen.queryByText('Nothing to fix')).toBeNull();
   });
 
   it('shows loading, then an error with a retry, then offline', async () => {

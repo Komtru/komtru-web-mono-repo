@@ -211,6 +211,7 @@ export function bindStore(db: Db): TrustStore {
             targetLevel: input.targetLevel,
             attemptCount: input.attemptCount,
             selfieStorageRef: input.selfieStorageRef ?? null,
+            providerSessionRef: input.providerSessionRef ?? null,
             // The database clock, so a TTL cannot be shortened or extended by a drifting instance.
             expiresAt: sql`now() + make_interval(mins => ${input.ttlMinutes})`,
           })

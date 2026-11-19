@@ -1,5 +1,6 @@
 // The HTTP layer's own job: turn a request into a submission, and enqueue the work AFTER the row
 // that work depends on is committed.
+import { randomBytes } from 'node:crypto';
 import type { Paged } from '@komtru/shared-types';
 import type { QueueFactory } from '../../../platform/queue/factory.js';
 import type { Encryption } from '../../../platform/crypto/encryption.js';
@@ -18,7 +19,9 @@ import type { TrustStore } from '../infrastructure/postgres/store.js';
 import {
   readVerificationStatus,
   submitIdentifierCheck,
+  startLivenessSession,
   submitLivenessCheck,
+  type LivenessSession,
   type VerificationDeps,
   type VerificationStatus,
 } from '../services/verification.service.js';
@@ -40,7 +43,16 @@ export interface TrustHttpDeps {
   requestTtlMinutes: () => number;
   logger: () => Logger;
   queues: () => QueueFactory;
+  /** Absent unless a provider with a browser SDK is configured; the session route 503s without it. */
+  youverify: () => { publicMerchantKey: string; baseUrl: string } | undefined;
 }
+
+/**
+ * 32 bytes of base64url. Unguessable is the whole requirement: this value travels through the
+ * browser and comes back inside a webhook, so anything derivable from a request the caller can see
+ * would let them name a check that is not theirs.
+ */
+const newSessionReference = (): string => randomBytes(32).toString('base64url');
 
 const serviceDeps = (deps: TrustHttpDeps): VerificationDeps => ({
   store: deps.store(),
@@ -100,6 +112,20 @@ async function enqueueIdentity(
   const submitted = await submitIdentifierCheck(serviceDeps(deps), input);
   await enqueue(deps, TRUST_QUEUES.IDENTITY_CHECK, submitted.requestId, submitted.job);
   return { requestId: submitted.requestId, status: submitted.status };
+}
+
+/**
+ * Opens a browser liveness session. Returns what the SDK needs and nothing the caller did not
+ * already know about themselves — the reference is minted here, never supplied by the client.
+ */
+export async function startLiveness(
+  deps: TrustHttpDeps,
+  input: { userId: string },
+): Promise<LivenessSession> {
+  return startLivenessSession(
+    { ...serviceDeps(deps), youverify: deps.youverify(), mintReference: newSessionReference },
+    input,
+  );
 }
 
 export async function submitLiveness(

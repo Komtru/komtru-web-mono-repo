@@ -17,9 +17,11 @@ import {
   ninRequest,
 } from '../../../src/modules/trust/infrastructure/providers/youverify.requests.js';
 
-const fixture = (name: string): YouverifyIdentityResponse =>
-  JSON.parse(readFileSync(new URL(`../../fixtures/youverify/${name}.json`, import.meta.url), 'utf8'))
-    .response as YouverifyIdentityResponse;
+const fixture = (name: string): YouverifyIdentityResponse => {
+  const file = readFileSync(new URL(`../../fixtures/youverify/${name}.json`, import.meta.url), 'utf8');
+  const parsed = JSON.parse(file) as { response: YouverifyIdentityResponse };
+  return parsed.response;
+};
 
 const claim = { identifier: '11111111111', firstName: 'Sarah', lastName: 'Doe' };
 

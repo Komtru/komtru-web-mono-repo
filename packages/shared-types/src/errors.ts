@@ -53,6 +53,11 @@ export const PROBLEM_CODES = [
   // "verify your contact details first" and links to that screen, which it cannot do from a bare
   // CONFLICT — and the user's next action is a different one from every other 409 on this surface.
   'CONTACT_VERIFICATION_REQUIRED',
+  // The KYC provider is not configured on this environment, or its liveness surface is unreachable.
+  // Capacity and configuration, not a bug — the same reason PAYMENT_PROVIDER_UNAVAILABLE is not
+  // INTERNAL. The client shows "we can't verify you right now, try later" rather than an error
+  // that invites the user to re-enter a correct number.
+  'VERIFICATION_PROVIDER_UNAVAILABLE',
   /**
    * T-051. M6 §4's level-3 ladder, as the two refusals a client can act on.
    *

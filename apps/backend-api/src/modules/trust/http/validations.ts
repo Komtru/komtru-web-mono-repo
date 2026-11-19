@@ -150,3 +150,17 @@ export const socialProofCheckResponse = z.object({ claimId: z.uuid() });
 
 /** The webhook acknowledgement. Deliberately says nothing about what happened to the delivery. */
 export const webhookAckSchema = z.strictObject({ received: z.literal(true) });
+
+/**
+ * What the browser gets to run the liveness SDK.
+ *
+ * Note what is NOT here: anything about the verdict. The SDK's own callbacks report that its modal
+ * finished, not that the person passed, so this response deliberately gives the client nothing it
+ * could mistake for an outcome. The outcome arrives over the socket, after a signed webhook.
+ */
+export const livenessSessionResponse = z.strictObject({
+  publicMerchantKey: z.string(),
+  sandbox: z.boolean(),
+  reference: z.string(),
+  requestId: z.string(),
+});

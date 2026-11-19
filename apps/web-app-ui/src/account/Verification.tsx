@@ -10,6 +10,7 @@ import {
   useApiClient,
   useMe,
   useSubmitBvn,
+  useStartLivenessSession,
   useSubmitLiveness,
   useSubmitNin,
   useVerificationStatus,
@@ -134,21 +135,31 @@ function Loaded({
   const waiting = status.inFlight;
 
   if (failures.length === 0 && waiting.length === 0) {
+    const done = status.requirements.identifier && status.requirements.liveness;
+    if (done) {
+      return (
+        <>
+          <EmptyState
+            title="You’re verified"
+            body="Your ID and selfie check are done."
+            className="mb-[14px]"
+          />
+          <Requirements status={status} />
+        </>
+      );
+    }
+
+    /*
+      The screen's start path, and the reason this branch is no longer an empty state.
+
+      It used to read "Nothing to fix" over a checklist of things that were not done — true in the
+      narrow sense that nothing had failed, and useless, because the person arrived here to begin.
+      §4's order decides which control appears: an identifier first, then the selfie it is matched
+      against. Offering both at once would let a user into a camera flow the backend refuses.
+    */
     return (
       <>
-        <EmptyState
-          title={
-            status.requirements.identifier && status.requirements.liveness
-              ? 'You’re verified'
-              : 'Nothing to fix'
-          }
-          body={
-            status.requirements.identifier && status.requirements.liveness
-              ? 'Your ID and selfie check are done.'
-              : 'Nothing has failed. Your ID is the first step to merchant verification.'
-          }
-          className="mb-[14px]"
-        />
+        {status.requirements.identifier ? <StartSelfie /> : <StartIdentity />}
         <Requirements status={status} />
       </>
     );
@@ -343,4 +354,125 @@ function ResubmitId({ type }: { type: string }): React.JSX.Element {
       </Button>
     </form>
   );
+}
+
+/**
+ * The first step: a NIN or a BVN.
+ *
+ * It reuses `ResubmitId`, which until now only ever appeared under a rejection — the form is the
+ * same form, and the only thing that differed was that nobody could reach it.
+ */
+function StartIdentity(): React.JSX.Element {
+  const [started, setStarted] = useState(false);
+
+  if (!started) {
+    return (
+      <section aria-label="Verify your identity" className="mb-[14px]">
+        <Banner tone="info" title="Verify your identity">
+          We’ll check your NIN or BVN against the national record, then ask for a selfie. It usually takes
+          under a minute.
+        </Banner>
+        <Button type="button" onClick={() => setStarted(true)}>
+          Verify your ID
+        </Button>
+      </section>
+    );
+  }
+
+  return (
+    <section aria-label="Verify your identity" className="mb-[14px]">
+      <SectionLabel>Your ID</SectionLabel>
+      <ResubmitId type="NIN" />
+    </section>
+  );
+}
+
+/**
+ * The second step, and the one that leaves this codebase.
+ *
+ * Youverify's SDK is a browser global loaded from a CDN, so it is imported on the press rather than
+ * bundled: nobody who never verifies should download it. Its callbacks move the UI and NOTHING
+ * else — `onSuccess` takes no payload and anyone can call it from a console, so the verdict comes
+ * from the signed webhook and reaches this screen over the socket that already updates it.
+ */
+function StartSelfie(): React.JSX.Element {
+  const start = useStartLivenessSession();
+  const [problem, setProblem] = useState<string | undefined>(undefined);
+  const [running, setRunning] = useState(false);
+
+  const open = async () => {
+    setProblem(undefined);
+    setRunning(true);
+    try {
+      const session = await start.mutateAsync();
+      const sdk = await loadYouverifySdk();
+      const liveness = new sdk.liveness({
+        publicMerchantKey: session.publicMerchantKey,
+        sandboxEnvironment: session.sandbox,
+        metadata: { reference: session.reference },
+        // Deliberately inert. The platform decides on the webhook; these only move the screen.
+        onSuccess: () => setRunning(true),
+        onFailure: () => setRunning(false),
+        onClose: () => setRunning(false),
+      });
+      liveness.initialize();
+      liveness.start();
+    } catch (error) {
+      setRunning(false);
+      setProblem(accountProblem(error, 'verify-id'));
+    }
+  };
+
+  return (
+    <section aria-label="Selfie check" className="mb-[14px]">
+      <Banner tone="info" title="One more step">
+        Your ID is verified. Now a quick selfie so we know it’s you — it opens your camera and takes about ten
+        seconds.
+      </Banner>
+      {problem !== undefined && <RiskBanner>{problem}</RiskBanner>}
+      <Button type="button" disabled={running || start.isPending} onClick={() => void open()}>
+        {running || start.isPending ? 'Opening…' : 'Take a selfie check'}
+      </Button>
+    </section>
+  );
+}
+
+interface YouverifyLiveness {
+  initialize: () => void;
+  start: () => void;
+}
+interface YouverifySdk {
+  liveness: new (options: Record<string, unknown>) => YouverifyLiveness;
+}
+
+/**
+ * Loads the SDK from the CDN once, on first press.
+ *
+ * `youverify-web-sdk` publishes a browser global rather than a module this build can import, and
+ * it is dead weight for every user who never reaches this screen — so it is a script tag appended
+ * on demand, and a second press reuses whatever the first one loaded.
+ */
+const SDK_SRC = 'https://cdn.jsdelivr.net/npm/youverify-web-sdk@2.2.1/dist/index.min.js';
+let sdkLoading: Promise<YouverifySdk> | undefined;
+
+function loadYouverifySdk(): Promise<YouverifySdk> {
+  const existing = (globalThis as { YouverifySDK?: YouverifySdk }).YouverifySDK;
+  if (existing) return Promise.resolve(existing);
+  sdkLoading ??= new Promise<YouverifySdk>((resolve, reject) => {
+    const script = document.createElement('script');
+    script.src = SDK_SRC;
+    script.async = true;
+    script.onload = () => {
+      const sdk = (globalThis as { YouverifySDK?: YouverifySdk }).YouverifySDK;
+      if (sdk) resolve(sdk);
+      else reject(new Error('the verification SDK loaded but did not register'));
+    };
+    script.onerror = () => {
+      // Let a later press try again rather than caching the failure for the session.
+      sdkLoading = undefined;
+      reject(new Error('the verification SDK could not be loaded'));
+    };
+    document.head.appendChild(script);
+  });
+  return sdkLoading;
 }

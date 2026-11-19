@@ -123,6 +123,12 @@ export function createTrustModule(options: TrustModuleOptions): KomtruModule {
         requestTtlMinutes: () => need().config.requestTtlMinutes,
         logger: () => need().logger,
         queues: () => need().queues,
+        youverify: () => {
+          const yv = need().config.youverify;
+          // Only the two fields the browser may see. The secret token and the webhook secret are
+          // deliberately not reachable from anything on the request path.
+          return yv ? { publicMerchantKey: yv.publicMerchantKey, baseUrl: yv.baseUrl } : undefined;
+        },
       }),
       // M6 §11's admin half (T-052): the KYC queue, the duplicate flags and the override.
       ...trustAdminRoutes({ db: () => need().db }),

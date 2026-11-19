@@ -32,6 +32,7 @@ const deps = {
   logger: () => silentLogger(),
   // Never reached: these tests read route declarations, they do not run handlers.
   queues: () => ({ producer: () => ({ add: () => Promise.resolve(undefined) }) }) as never,
+  youverify: () => undefined,
 };
 
 const routes: RouteDefinition[] = trustRoutes(deps);
@@ -48,6 +49,9 @@ describe('trustRoutes', () => {
       'POST /verification/nin',
       'POST /verification/bvn',
       'POST /verification/liveness',
+      // Not in §11's original table: the browser-SDK session, added when liveness stopped being a
+      // call this backend makes and became one the user's browser makes on our behalf.
+      'POST /verification/liveness/session',
       'POST /verification/business',
       'POST /verification/bank-account',
       'POST /verification/address',
@@ -74,11 +78,15 @@ describe('trustRoutes', () => {
   });
 
   it('answers 202 on every check, because the provider is never called on the request path', () => {
-    // The handle claim is the exception, and a deliberate one: unlike every other route here it
-    // really has created the thing it returns, so it answers 201.
-    const checks = labels.filter((l) => l.startsWith('POST') && l !== 'POST /verification/social-proof');
+    // Two deliberate exceptions. The handle claim really has created the thing it returns, so it
+    // answers 201. The liveness session answers 200 because it is not a check at all: it hands the
+    // caller the merchant key and reference its browser needs NOW, and 202 would promise a result
+    // that is never coming on this response — the verdict arrives over a webhook.
+    const synchronous = new Set(['POST /verification/social-proof', 'POST /verification/liveness/session']);
+    const checks = labels.filter((l) => l.startsWith('POST') && !synchronous.has(l));
     for (const label of checks) expect(routeFor(label).status).toBe(202);
     expect(routeFor('POST /verification/social-proof').status).toBe(201);
+    expect(routeFor('POST /verification/liveness/session').status).toBeUndefined();
   });
 
   /**

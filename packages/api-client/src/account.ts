@@ -438,6 +438,28 @@ export const submitLiveness = defineEndpoint({
   schema: { body: z.strictObject({ selfieFileId: z.uuid() }), response: submitted },
 });
 
+/**
+ * Opens a browser liveness session.
+ *
+ * The response carries no verdict and deliberately cannot: the provider SDK's own callbacks report
+ * that its modal closed, not that the person passed, so the outcome arrives over the socket after a
+ * signed webhook. A client that branched on anything here would be trusting the browser.
+ */
+export const startLivenessSession = defineEndpoint({
+  method: 'post',
+  path: '/verification/liveness/session',
+  scope: 'CONSUMER',
+  retryable: false,
+  schema: {
+    response: z.strictObject({
+      publicMerchantKey: z.string(),
+      sandbox: z.boolean(),
+      reference: z.string(),
+      requestId: z.string(),
+    }),
+  },
+});
+
 // --- recovery (SP-M05's "I can't get the code") -------------------------------------------------------------
 
 export const RECOVERY_METHODS = [

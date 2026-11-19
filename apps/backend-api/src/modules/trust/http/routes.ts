@@ -13,6 +13,7 @@ import type { TrustHttpDeps } from './controllers.js';
 import {
   addressBody,
   bankAccountBody,
+  livenessSessionResponse,
   businessBody,
   bvnBody,
   claimIdParam,
@@ -85,6 +86,19 @@ export function trustRoutes(deps: TrustHttpDeps): RouteDefinition[] {
       schema: { body: livenessBody, response: submissionResponse },
       handler: ({ actor, body }) =>
         controllers.submitLiveness(deps, { userId: requireUserId(actor, VERIFY_YOURSELF), body }),
+    }),
+
+    defineRoute({
+      method: 'post',
+      path: '/verification/liveness/session',
+      scope: 'CONSUMER',
+      summary: 'Open a browser liveness session and get what the provider SDK needs',
+      // Each session is a billable provider interaction and holds the user's one in-flight slot.
+      retryable: false,
+      rateLimit: { ...SUBMISSION_LIMIT, by: [...SUBMISSION_LIMIT.by] },
+      schema: { response: livenessSessionResponse },
+      handler: ({ actor }) =>
+        controllers.startLiveness(deps, { userId: requireUserId(actor, VERIFY_YOURSELF) }),
     }),
 
     defineRoute({

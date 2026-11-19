@@ -45,6 +45,11 @@ export interface CreateRequestInput {
   targetLevel: number;
   ttlMinutes: number;
   selfieStorageRef?: string;
+  /**
+   * The browser-SDK session reference (see `startLivenessSession`). Set only for a check whose
+   * verdict arrives over a webhook rather than from a call this process made.
+   */
+  providerSessionRef?: string;
   attemptCount: number;
 }
 
