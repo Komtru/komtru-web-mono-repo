@@ -3,6 +3,7 @@
 // The owner's flow is upload first (`/files/upload-url`, then `/files/:id/finalize`), then attach by id, so this never
 // sees bytes. The party door is `loadTrade` + `requireParty`, the same one every other trade route goes through, so a
 // stranger, a missing trade and a trade the counterparty may not see yet all answer 404.
+import type { FileCategory } from '@komtru/shared-types';
 import type { Paginated } from '@komtru/shared-types';
 import { and, eq, inArray, sql } from 'drizzle-orm';
 import type { CursorKey } from '../../../platform/http/paginate.js';
@@ -86,7 +87,7 @@ export async function attachEvidence(
               file.uploaderUserId === input.userId &&
               file.visibility === 'PRIVATE_CASE' &&
               file.category !== undefined &&
-              EVIDENCE_FILE_CATEGORIES.includes(file.category) &&
+              EVIDENCE_FILE_CATEGORIES.includes(file.category as FileCategory) &&
               EVIDENCE_CONTENT_TYPES.includes(file.contentType.toLowerCase()) &&
               file.grantedUserIds.length === 0 &&
               !taken.has(file.id),

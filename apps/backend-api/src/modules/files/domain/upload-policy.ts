@@ -1,6 +1,6 @@
 // Adapted from kumtru/backend-apis/src/modules/files/domain/uploadPolicy.ts (T-001, not on the
 // approved-lift list but the same shape): CUSTODY_EVIDENCE added, scope type from @komtru/shared-types.
-import type { SessionScope } from '@komtru/shared-types';
+import { FILE_VISIBILITY_BY_CATEGORY, type SessionScope } from '@komtru/shared-types';
 import type { FileCategory, FileVisibility } from '../infrastructure/postgres/schema/enums.js';
 
 /**
@@ -11,31 +11,13 @@ import type { FileCategory, FileVisibility } from '../infrastructure/postgres/sc
  * `{ category: 'KYC_DOCUMENT', visibility: 'PUBLIC' }` would be publishing their own identity
  * document to anyone with the file id — legal under D2 as literally written, and obviously wrong.
  *
- * This is the table to edit when a new category arrives, alongside `POOL_BY_CATEGORY`.
+ * The table itself lives in `@komtru/shared-types`, so the browser compiles against the same rule
+ * this enforces. It used to be declared here alone, and four upload screens shipped asking for
+ * `OTHER` + `PRIVATE_CASE` — a pair no release has ever accepted — because nothing they compiled
+ * against knew the rule. Edit it there when a new category arrives, and `POOL_BY_CATEGORY` here.
  */
-/** Preserves the literal tuple type through `Object.freeze`, so the record stays `FileVisibility[]`. */
-const visibilities = <T extends readonly FileVisibility[]>(...values: T): T => Object.freeze(values);
-
-export const ALLOWED_VISIBILITY: Readonly<Record<FileCategory, readonly FileVisibility[]>> = Object.freeze({
-  /** Shown to counterparties on a party card, so public is the point. */
-  PROFILE_PHOTO: visibilities('PUBLIC'),
-  /** A listing nobody can see the photos of is not a listing. */
-  LISTING_IMAGE: visibilities('PUBLIC'),
-
-  /** Never anything but the uploader's own, ever. This is the NIN/BVN-adjacent one. */
-  KYC_DOCUMENT: visibilities('PRIVATE_OWNER'),
-
-  /** The multi-party case classes — buyer, seller, assigned reviewer, resolved through grants. */
-  DISPUTE_EVIDENCE: visibilities('PRIVATE_CASE'),
-  PROOF_OF_DELIVERY: visibilities('PRIVATE_CASE'),
-  /** Buyer, seller and TrustOps see a custody photo; nobody else, and never the public web. */
-  CUSTODY_EVIDENCE: visibilities('PRIVATE_CASE'),
-  TICKET_ATTACHMENT: visibilities('PRIVATE_CASE'),
-  CHAT_ATTACHMENT: visibilities('PRIVATE_CASE'),
-
-  /** The escape hatch stays narrow: owner-private, or staff-internal. */
-  OTHER: visibilities('PRIVATE_OWNER', 'INTERNAL_ONLY'),
-});
+export const ALLOWED_VISIBILITY: Readonly<Record<FileCategory, readonly FileVisibility[]>> =
+  FILE_VISIBILITY_BY_CATEGORY;
 
 /**
  * `INTERNAL_ONLY` is a staff-origination class, whatever the category allows.
@@ -43,7 +25,7 @@ export const ALLOWED_VISIBILITY: Readonly<Record<FileCategory, readonly FileVisi
  * A consumer uploading a file only staff can read is not a use case — it is a way to put bytes into
  * the internal-evidence namespace from outside, which is the shape of an attack rather than a feature.
  */
-export const STAFF_ONLY_VISIBILITY: readonly FileVisibility[] = visibilities('INTERNAL_ONLY');
+export const STAFF_ONLY_VISIBILITY: readonly FileVisibility[] = Object.freeze(['INTERNAL_ONLY']);
 
 /**
  * Which module owns each category, derived rather than client-supplied.

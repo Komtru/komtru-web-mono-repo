@@ -1,5 +1,6 @@
 'use client';
 
+import type { UploadTarget } from '@komtru/shared-types';
 import { ProblemError, UploadError, uploadFile, type TradeView } from '@komtru/api-client';
 import {
   tradeKeys,
@@ -45,7 +46,9 @@ const BEFORE_FUNDING = [
 const SHIPPED_ONWARD = ['SHIPPED', 'UNCONFIRMED_DELIVERY', 'INSPECTION', 'COMPLETED', 'SETTLED'];
 
 /** The waybill receipt is the seller's own private evidence for this trade, never public. */
-const RECEIPT = { category: 'OTHER', visibility: 'PRIVATE_CASE' } as const;
+// The dispatch receipt is delivery proof, so it files as PROOF_OF_DELIVERY. See UploadTarget:
+// `OTHER` + `PRIVATE_CASE` does not type-check any more, because it never worked.
+const RECEIPT: UploadTarget = { category: 'PROOF_OF_DELIVERY', visibility: 'PRIVATE_CASE' };
 
 const tradeHref = (id: string) => `/trade/${id}`;
 

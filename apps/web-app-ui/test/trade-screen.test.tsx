@@ -150,8 +150,12 @@ describe('a proposal waiting on the seller (R1)', () => {
         false,
       );
     });
+    // PROOF_OF_DELIVERY, not OTHER. This assertion used to require the pair the platform refuses:
+    // `OTHER` may only be PRIVATE_OWNER or INTERNAL_ONLY, so the upload it described returned 403
+    // every time and the test still passed, because it checked what was sent rather than what came
+    // back. `UploadTarget` in @komtru/shared-types makes the old pair a compile error.
     expect(callsTo(api.call, 'POST', '/files/upload-url')[0]?.body).toEqual({
-      category: 'OTHER',
+      category: 'PROOF_OF_DELIVERY',
       visibility: 'PRIVATE_CASE',
       contentType: 'image/jpeg',
     });

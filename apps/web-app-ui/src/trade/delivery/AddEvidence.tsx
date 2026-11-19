@@ -1,5 +1,6 @@
 'use client';
 
+import type { UploadTarget } from '@komtru/shared-types';
 import {
   EVIDENCE_CONTENT_TYPES,
   EVIDENCE_OPEN_STATUSES,
@@ -33,7 +34,9 @@ import { Frame, Refusal, TradeGate, tradeHref } from './parts';
 
 const TITLE = 'Add Evidence';
 /** Evidence is private to the trade: the files are the person's own, shared with the other side only by the platform. */
-const EVIDENCE = { category: 'OTHER', visibility: 'PRIVATE_CASE' } as const;
+// Evidence attached to a reported problem is DISPUTE_EVIDENCE — the category the resolution
+// flow reads. `OTHER` was both the wrong name for it and a pair the platform refuses.
+const EVIDENCE: UploadTarget = { category: 'DISPUTE_EVIDENCE', visibility: 'PRIVATE_CASE' };
 const PROSE = 'Choose the event and attach the media that supports your trade record or case.';
 /** A file the platform is still checking is asked for again, a few times, before the person is told to wait. */
 const PROCESSING_TRIES = 6;

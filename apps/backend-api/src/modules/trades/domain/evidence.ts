@@ -1,4 +1,5 @@
 // F-028 (CWT-S13): the rules for evidence the parties add to a live trade. Pure; the service reads and writes.
+import type { FileCategory } from '@komtru/shared-types';
 import { ApiError } from '../../../platform/errors.js';
 import type { CursorKey } from '../../../platform/http/paginate.js';
 import { TRADE_EVIDENCE_EVENTS } from '../infrastructure/postgres/schema/enums.js';
@@ -32,7 +33,15 @@ export const EVENT_ROLES: Record<TradeEvidenceEvent, readonly PartyRole[]> = {
  * Other categories (a support-ticket attachment, a chat attachment) were made for another job and may already be
  * shared under that job's rules.
  */
-export const EVIDENCE_FILE_CATEGORIES: readonly string[] = ['OTHER', 'DISPUTE_EVIDENCE'];
+/**
+ * The categories a trade's evidence may be filed under.
+ *
+ * `OTHER` is gone and `PROOF_OF_DELIVERY` is here. Evidence on a trade is always `PRIVATE_CASE` —
+ * buyer, seller and an assigned reviewer — and `OTHER` may only be `PRIVATE_OWNER` or
+ * `INTERNAL_ONLY`, so an `OTHER` upload on this path was refused by the files module every time.
+ * Listing it as acceptable here is what let four screens ship asking for it.
+ */
+export const EVIDENCE_FILE_CATEGORIES: readonly FileCategory[] = ['DISPUTE_EVIDENCE', 'PROOF_OF_DELIVERY'];
 export const EVIDENCE_CONTENT_TYPES: readonly string[] = [
   'image/jpeg',
   'image/png',

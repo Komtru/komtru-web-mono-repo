@@ -4,6 +4,7 @@
 // needs another look is said plainly with one way forward, and once the requirement is met the screen says what happens
 // to the media next. Each file goes straight to storage through a signed ticket and is attached by id, so what the
 // platform holds is a reference to a private file, never bytes it relayed.
+import type { UploadTarget } from '@komtru/shared-types';
 import { UploadError, uploadFile } from '@komtru/api-client';
 import { useApiClient } from '@komtru/api-client/react';
 import {
@@ -26,7 +27,9 @@ import { useOnline } from '../../shell/OfflineStatus';
 import { checkMedia, fingerprint, ofLabel, proofProgress, readDimensions, type Needs } from './rules';
 
 /** The file the platform stores the seller's proof under: private to the trade, never public. */
-const PROOF = { category: 'OTHER', visibility: 'PRIVATE_CASE' } as const;
+// Proof the seller shipped what was agreed. PROOF_OF_DELIVERY, not OTHER: `OTHER` may only be
+// PRIVATE_OWNER or INTERNAL_ONLY, so this pair was refused on every attempt.
+const PROOF: UploadTarget = { category: 'PROOF_OF_DELIVERY', visibility: 'PRIVATE_CASE' };
 
 export interface Attached {
   id: string;

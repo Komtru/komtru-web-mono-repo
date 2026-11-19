@@ -1,5 +1,6 @@
 'use client';
 
+import type { UploadTarget } from '@komtru/shared-types';
 import { ProblemError, UploadError, uploadFile, type TradeView } from '@komtru/api-client';
 import { tradeKeys, useApiClient, useShipSelfArranged } from '@komtru/api-client/react';
 import {
@@ -24,7 +25,9 @@ import { ReportDelivery } from './ReportDelivery';
 
 const TITLE = 'Hand Over';
 /** The waybill receipt is the seller's own private evidence for this trade, never public. */
-const RECEIPT = { category: 'OTHER', visibility: 'PRIVATE_CASE' } as const;
+// Handover is the moment delivery is proved, so the photo is PROOF_OF_DELIVERY rather than the
+// `OTHER` escape hatch, which cannot be PRIVATE_CASE.
+const RECEIPT: UploadTarget = { category: 'PROOF_OF_DELIVERY', visibility: 'PRIVATE_CASE' };
 const PROSE = 'Generate or review the waybill and confirm the courier handover.';
 
 /**

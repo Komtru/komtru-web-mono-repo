@@ -1,30 +1,17 @@
-// M20 §3.1, declared inline rather than built from @komtru/shared-types: nothing in this ticket puts
-// a file category on the wire as a shared contract, and the two values below that the spec does not
-// have are this build's.
+// M20 §3.1. The category and visibility lists moved to @komtru/shared-types: they ARE a shared
+// contract, whatever the original note here said. Four upload screens in web-app-ui choose a pair
+// and post it, and because the lists lived only here nothing stopped all four choosing a pair the
+// platform refuses — `OTHER` + `PRIVATE_CASE`, which can never be accepted. See `files.ts` there.
+//
+// Re-exported rather than redeclared, so the Postgres enum and the type the browser compiles
+// against cannot drift: a value added in one place is in both or in neither.
+import { FILE_CATEGORIES, FILE_VISIBILITIES } from '@komtru/shared-types';
 import { files } from './columns.js';
 
-/** D2: set explicitly by the uploading module, never inferred from context afterwards. */
-export const FILE_VISIBILITIES = ['PUBLIC', 'PRIVATE_OWNER', 'PRIVATE_CASE', 'INTERNAL_ONLY'] as const;
+export { FILE_CATEGORIES, FILE_VISIBILITIES };
 
 /** D4: deletion is a tombstone, so a soft ref resolves to "this existed and was removed". */
 export const FILE_STATUSES = ['ACTIVE', 'TOMBSTONED'] as const;
-
-export const FILE_CATEGORIES = [
-  'LISTING_IMAGE',
-  'KYC_DOCUMENT',
-  'DISPUTE_EVIDENCE',
-  /**
-   * T-040's addition: a Park hub agent's custody photo (design §7.2, `park_custody_events`). It sits
-   * in the trade-asset pool like every other trade-related asset, and it is audited like KYC and
-   * dispute evidence because it is the evidence a parcel was intact when it changed hands.
-   */
-  'CUSTODY_EVIDENCE',
-  'PROOF_OF_DELIVERY',
-  'TICKET_ATTACHMENT',
-  'PROFILE_PHOTO',
-  'CHAT_ATTACHMENT',
-  'OTHER',
-] as const;
 
 /**
  * T-040's addition, forced by the ticket's "reconciles size and type via a job".

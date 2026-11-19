@@ -3,6 +3,7 @@ export * from './addresses.js';
 export * from './avatar.js';
 export * from './enums.js';
 export * from './errors.js';
+export * from './files.js';
 export * from './events.js';
 export * from './fees/calculator.js';
 export * from './fees/schema.js';
