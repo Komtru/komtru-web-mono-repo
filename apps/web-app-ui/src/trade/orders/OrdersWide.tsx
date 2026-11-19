@@ -1,7 +1,7 @@
 'use client';
 
 import { Button, Chip, EmptyState, type ChipTone } from '@komtru/ui-kit';
-import { useState } from 'react';
+import { useEffect, useRef } from 'react';
 import { describeTrade, initialsOf, nairaShort, partyName } from '../format';
 import { shipHref, tabHref } from '../workspace-state';
 import type { ViewportTier } from '../shipping/viewport';
@@ -29,12 +29,20 @@ export function OrdersWide({
   orders,
   tier,
   notAllLoaded,
+  filter,
+  onFilter,
+  chosen,
+  onChoose,
 }: {
   orders: readonly Order[];
   tier: Exclude<ViewportTier, 'base'>;
   notAllLoaded: React.ReactNode;
+  /** The filter and the chosen order belong to the screen above, which stays mounted across a resize. */
+  filter: FilterId;
+  onFilter: (filter: FilterId) => void;
+  chosen: string | undefined;
+  onChoose: (id: string) => void;
 }): React.JSX.Element {
-  const [filter, setFilter] = useState<FilterId>('all');
   const shown = orders.filter((order) => matches(order, filter));
   return (
     <div className="mx-auto w-full md:max-w-[760px] lg:max-w-none">
@@ -51,7 +59,7 @@ export function OrdersWide({
             key={chip.id}
             type="button"
             aria-pressed={filter === chip.id}
-            onClick={() => setFilter(chip.id)}
+            onClick={() => onFilter(chip.id)}
             className={[
               'cursor-pointer rounded-full border border-solid px-[12px] py-[6px] text-[12px] font-semibold',
               'focus-visible:outline-[2.5px] focus-visible:outline-offset-[2px] focus-visible:outline-trust-indigo',
@@ -69,7 +77,7 @@ export function OrdersWide({
       ) : tier === 'lg' ? (
         <OrdersTable orders={shown} />
       ) : (
-        <OrdersAndDetail orders={shown} />
+        <OrdersAndDetail orders={shown} chosen={chosen} onChoose={onChoose} />
       )}
       <p className="mb-0 mt-[10px] text-[11px] text-slate">
         {`Showing ${String(shown.length)} of ${String(orders.length)} · newest activity first`}
@@ -137,10 +145,25 @@ function OrdersTable({ orders }: { orders: readonly Order[] }): React.JSX.Elemen
   );
 }
 
-function OrdersAndDetail({ orders }: { orders: readonly Order[] }): React.JSX.Element {
-  const [chosen, setChosen] = useState<string | undefined>(undefined);
+function OrdersAndDetail({
+  orders,
+  chosen,
+  onChoose,
+}: {
+  orders: readonly Order[];
+  chosen: string | undefined;
+  onChoose: (id: string) => void;
+}): React.JSX.Element {
   // The chosen order can leave the list (a filter, a stage change): the pane then follows the first one left.
   const current = orders.find((order) => order.trade.id === chosen) ?? orders[0];
+  // Choosing an order moves focus to the pane's heading, so a keyboard or screen-reader user lands on what changed.
+  // Only a choice the person made does: the pane following a filter, or the first draw, leaves focus alone.
+  const picked = useRef(false);
+  const heading = useRef<HTMLHeadingElement>(null);
+  useEffect(() => {
+    if (picked.current) heading.current?.focus();
+    picked.current = false;
+  }, [chosen]);
   return (
     <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)] gap-[16px]">
       <ul aria-label="Orders" className="m-0 list-none p-0">
@@ -150,8 +173,11 @@ function OrdersAndDetail({ orders }: { orders: readonly Order[] }): React.JSX.El
             <li key={order.trade.id}>
               <button
                 type="button"
-                aria-current={selected ? 'true' : undefined}
-                onClick={() => setChosen(order.trade.id)}
+                aria-pressed={selected}
+                onClick={() => {
+                  picked.current = true;
+                  onChoose(order.trade.id);
+                }}
                 className={[
                   'mb-[10px] block w-full cursor-pointer rounded-md border-[1.5px] border-solid bg-surface-primary p-[12px] text-left',
                   'focus-visible:outline-[2.5px] focus-visible:outline-offset-[2px] focus-visible:outline-trust-indigo',
@@ -170,13 +196,19 @@ function OrdersAndDetail({ orders }: { orders: readonly Order[] }): React.JSX.El
           );
         })}
       </ul>
-      {current !== undefined && <OrderDetail order={current} />}
+      {current !== undefined && <OrderDetail order={current} headingRef={heading} />}
     </div>
   );
 }
 
 /** TX-11's detail pane: the order, what is protected, what is next and the one action. */
-function OrderDetail({ order }: { order: Order }): React.JSX.Element {
+function OrderDetail({
+  order,
+  headingRef,
+}: {
+  order: Order;
+  headingRef: React.RefObject<HTMLHeadingElement | null>;
+}): React.JSX.Element {
   const buyer = buyerOf(order);
   return (
     <section
@@ -193,7 +225,9 @@ function OrderDetail({ order }: { order: Order }): React.JSX.Element {
           </span>
         )}
         <div className="min-w-0">
-          <h2 className="m-0 text-[14px] font-semibold">{itemOf(order)}</h2>
+          <h2 ref={headingRef} tabIndex={-1} className="m-0 text-[14px] font-semibold outline-none">
+            {itemOf(order)}
+          </h2>
           <p className="m-0 text-[11.5px] text-slate">{order.trade.tradeCode}</p>
         </div>
       </div>

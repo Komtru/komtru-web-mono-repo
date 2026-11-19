@@ -12,10 +12,10 @@ import {
   Skeleton,
   TradeRow,
 } from '@komtru/ui-kit';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { describeTrade, initialsOf, nairaShort, partyName } from './format';
 import { OrdersWide } from './orders/OrdersWide';
-import { STAGES, ordersOf } from './orders/model';
+import { STAGES, ordersOf, type FilterId } from './orders/model';
 import { useViewportTier } from './shipping/viewport';
 import { shipHref, tabHref } from './workspace-state';
 
@@ -28,6 +28,9 @@ import { shipHref, tabHref } from './workspace-state';
 export function ActiveOrders(): React.JSX.Element {
   const list = useTradeList('OPEN');
   const tier = useViewportTier();
+  // Held here, above every layout, so a window resized across a breakpoint keeps the filter and the chosen order.
+  const [filter, setFilter] = useState<FilterId>('all');
+  const [chosen, setChosen] = useState<string | undefined>(undefined);
   const { hasNextPage, isFetchingNextPage, isFetchNextPageError, fetchNextPage } = list;
   useEffect(() => {
     if (hasNextPage && !isFetchingNextPage && !isFetchNextPageError) void fetchNextPage();
@@ -71,7 +74,17 @@ export function ActiveOrders(): React.JSX.Element {
 
   // A tablet and a desktop draw the same orders as a list with a pane, and a table (DX-18, TX-11).
   if (tier !== 'base' && groups.length > 0) {
-    return <OrdersWide orders={ordersOf(selling)} tier={tier} notAllLoaded={notAllLoaded} />;
+    return (
+      <OrdersWide
+        orders={ordersOf(selling)}
+        tier={tier}
+        notAllLoaded={notAllLoaded}
+        filter={filter}
+        onFilter={setFilter}
+        chosen={chosen}
+        onChoose={setChosen}
+      />
+    );
   }
 
   if (groups.length === 0) {
