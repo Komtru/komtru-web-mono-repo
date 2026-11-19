@@ -19,6 +19,8 @@
     "test:infra": "KOMTRU_INFRA_TESTS=1 vitest run --config scripts/vitest.config.ts test/local-infra.test.ts",
     "browsers:install": "playwright install chromium",
     "visual-check": "node --experimental-strip-types tools/visual-check/src/cli.ts",
+    "visual-standin": "node --experimental-strip-types tools/visual-check/src/standin/cli.ts",
+    "visual-capture": "node --experimental-strip-types tools/visual-check/src/capture-cli.ts",
     "test:browser": "KOMTRU_BROWSER_TESTS=1 vitest run --config scripts/vitest.config.ts test/playwright-browser.test.ts",
     "env:backend": "node scripts/env/populate-backend-env.mjs",
     "env:apps": "node scripts/env/populate-frontend-env.mjs",

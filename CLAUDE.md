@@ -62,6 +62,7 @@ prefix with `pnpm -w exec` — otherwise `turbo` and `prettier` silently cover o
 | deploying, or a deploy job failed                | [deploy-backend.md](docs/runbooks/deploy-backend.md)                                                                                             |
 | touching fees or any money constant              | [config/fees.yaml](config/fees.yaml), [fees.md](docs/runbooks/fees.md)                                                                           |
 | building or changing a screen                    | [SCREEN_INDEX.md](docs/design-reference/SCREEN_INDEX.md) and `docs/design-reference/Komtru — UI Living Master v2.html`, then `pnpm visual-check` |
+| running a visual check with no backend           | [visual-check.md](docs/runbooks/visual-check.md) — the platform stand-in, a signed-in persona, and walks to a screen several steps in            |
 | chasing a test that only fails in the full suite | [Testing](docs/conventions/testing.md) — it is almost always cross-file interference, not slowness                                               |
 | removing evidence from a trade                   | [trade-evidence-removal.md](docs/runbooks/trade-evidence-removal.md)                                                                             |
 | asking why the plan is shaped this way           | [BUILD_PLAN.md](docs/BUILD_PLAN.md), [platform design](docs/superpowers/specs/2026-10-05-komtru-platform-design.md)                              |
