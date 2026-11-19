@@ -111,7 +111,8 @@ One app for every consumer with no buyer or seller views (design C22, §6.3), pl
 
 - **Screens (v2):** SO1, SO2, SO3, SO4, SO5, BVR1, M2
 - **Depends on:** T-055, T-051, T-073, T-110, T-190
-- **Notes:** SO3 changes from optional to mandatory CAC upload, and Submit stays disabled until the CAC documents are attached. SO5 "Your shop is live" appears only after operations approval; until then the applicant sees a submitted, in-review state, and a changes-requested state that reopens the named fields. Both deviate from the reference and are listed in the visual check.
+- **Notes:** SO3 changes from optional to mandatory CAC upload, and Submit stays disabled until the CAC documents are attached. Until operations approves, the applicant sees a submitted, in-review state, and a changes-requested state that reopens the named fields. Both deviate from the reference and are listed in the visual check.
+- **Reframed 2026-11-19 by the owner, and this supersedes the reference's wording.** There is no "become a seller" step: every account is already both buyer and seller. These screens are the **merchant verification** flow, and merchant status is what they earn. The entry point is Account › Verification › "Merchant verification". Routes are `/account/verification/merchant{,/start,/category,/verify-business,/payout,/verified}`; the earlier `/sell/*` and `/shop/verification` paths never shipped. SO5 is "You're a verified merchant", not "your shop is live" — nothing goes live, and listing for discovery is F-041, which merchant status gates. Overrides of the reference are recorded in `docs/ui-review/T-121/`.
 
 ### T-122 — Shop and listings
 

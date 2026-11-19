@@ -131,6 +131,7 @@ list a trade.
 - **Backend scope:** Give the integration suite its own Redis database and queue prefixes so parallel runs stop colliding (T-029).
 - **Frontend scope:** None. Infrastructure.
 - **Status:** Not started
+- **Progress note (2026-11-19):** Code merged to `staging`: T-029's cause 3 is fixed (the run id now appears in worker **and template** database names), with run-scoped teardown, a per-worker BullMQ prefix for `startScheduler`, and `eventually()` diagnostics. **Not Done:** the 20-run criterion moved to CI (`.github/workflows/backend-infra-soak.yml`, dispatch-only) and **has never been run**. Locally it reached 6 consecutive green runs before an external SIGTERM under load average 68 — not a test failure. Two caveats in the ticket: a `workflow_dispatch` workflow is only dispatchable once it reaches the default branch `main`, and CI's Postgres runs at the image default of 100 connections because a service container cannot take compose's `command`.
 - **Depends on:** none
 - **MVP:** yes
 - **Note:** No screen, and never will have one. It is on the MVP list because a flaky suite blocks every other feature's verification.
@@ -466,6 +467,7 @@ list a trade.
 - **Backend scope:** Disputes core — opening, evidence windows, outcomes — and evidence comparison read models (T-080, T-081).
 - **Frontend scope:** Buyer and seller dispute screens (Customer-7, Customer-8, Seller-7, Seller-8, H1, H2, AC6), evidence comparison (Y1), plus the workspace resolution and issue-reporting sheets (DI-01, CWT-S14–CWT-S18, SP-M23). _15 v2 screens._
 - **Status:** Not started
+- **Progress note (2026-11-19):** Merged to `staging`, both layers in one cycle. Backend complete (migrations `0054`/`0055`, `migration:safety` clean; three invariants enforced in Postgres — one active case per trade, one open mediation offer per party, and a trigger refusing decisions that do not sum to escrow) and 12 of 15 screens. **Not Done:** no visual check, and CWT-S16/S17/S18 ship as honest placeholders because they are per-item views of a one-item trade and the orders module does not exist. 19 integration tests written and deliberately unexecuted. The commission question is **answered** — commission comes from the seller — so F-033 and F-034 are unblocked.
 - **Depends on:** F-022, F-030
 - **MVP:** yes
 - **Note:** Largest issues feature at 15 screens; roughly two cycles. Resolution _execution_ is split out into F-033/F-034 because it is a different flow with its own tracks.
@@ -564,9 +566,9 @@ list a trade.
 - **Actor:** merchant, staff/TrustOps
 - **Absorbs:** T-055 (todo), T-051 (done), T-121 (todo), T-154 (done)
 - **Backend scope:** Merchant applications and certification; business verification with bank name-match, address and social proof. Business verification already built (T-051); certification outstanding (T-055).
-- **Frontend scope:** Become a Seller (SO1–SO5), business verification result (BVR1), the seller's verification tab (M2), and the TrustOps review screen OP-61. _8 v2 screens._
+- **Frontend scope:** Merchant verification (SO1–SO5), business verification result (BVR1), the account's merchant verification tab (M2), and the TrustOps review screen OP-61. _8 v2 screens._
 - **Status:** Backend done, UI outstanding
-- **Progress note (2026-11-15):** T-055 (backend, migration `0050_merchant_applications`) and T-154 (OP-61 review queue and case in operations-app) are built on branch `f-040-merchant-cert`, not yet merged. T-121 (SO1-SO5, BVR1, M2 in `apps/web-app-ui`) was deliberately not built in this run because another agent held that app. Owner questions: OP-61 in the v2 master is Seller 360, not an application review, so T-154 followed its acceptance criteria (Seller 360 wants its own post-certification ticket); **T-055's bank name-match criterion is unmet** (blocking reason in `docs/tickets/06-merchant-search.md`, T-055 status note) and needs the owner's sign-off; `endCertification` has no production caller (a seam for risk or trust). Resume with T-121, then mark Done.
+- **Progress note (2026-11-19):** Merged to `staging`. T-055 and T-154 landed earlier; **T-121 is now built and merged** — all 7 screens, reframed as merchant verification per the owner (see T-121). The no-entry-point blocker is closed: Account › Verification reaches the flow in every state. **Not Done:** `pnpm visual-check` has never passed on these screens, so the epic 13 bar is unmet. Still open: the T-055 bank name-match criterion (unsigned off since 2026-11-15, SO4 shows the reference banner while enforcing nothing), no read-only view of an application in review, and the per-trade cap the copy alludes to is answered but unbuilt. See `docs/manager/RUN_LOG.md`.
 - **Depends on:** F-037
 - **MVP:** yes
 - **Note:** Applicant and reviewer in one feature on purpose: a certification no one can approve is not a feature.
@@ -912,6 +914,7 @@ list a trade.
 - **Backend scope:** Served by F-017, F-023 and F-024.
 - **Frontend scope:** Desktop · 04 · Propose & agree (DX-10, DX-10B, DX-11–DX-14) and · 05 · Fund & protect (DX-15–DX-17). _9 v2 screens._
 - **Status:** Not started
+- **Progress note (2026-11-19):** Merged to `staging`. Built together with F-072 as one responsive pass, because `SCREEN_INDEX.md` pairs DX-10/TX-07, DX-10B/TX-07B and DX-15/TX-10 as the same screen at two widths. 8 of the pair's 20 screens built. **Not Done:** no visual check; DX-13 is blocked on the missing superseded-terms-versions route (logged as O2, now hit by two features); DX-14/TX-09 was left to F-032, which owned the workspace.
 - **Depends on:** F-018, F-019, F-023, F-024
 - **MVP:** yes
 
@@ -958,6 +961,7 @@ list a trade.
 - **Backend scope:** Served by F-015, F-017, F-023 and F-024.
 - **Frontend scope:** Tablet · 01 Arrive (TX-01), · 02 Home (TX-02–TX-04), · 03 Discover (TX-05, TX-06), · 04 Propose & agree (TX-07, TX-07B, TX-08, TX-09) and · 05 Fund & protect (TX-10). _11 v2 screens._
 - **Status:** Not started
+- **Progress note (2026-11-19):** Merged to `staging` as part of the F-068 responsive pass — see that feature's note. **Not Done.**
 - **Depends on:** F-015, F-018, F-019, F-023, F-024
 - **MVP:** yes
 
