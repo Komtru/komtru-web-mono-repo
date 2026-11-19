@@ -20,10 +20,14 @@ import {
   type BusinessCheckJob,
   type IdentityCheckJob,
   type LivenessCheckJob,
+  type ResolveLivenessJob,
   type SocialProofCheckJob,
 } from './domain/queues.js';
 import { trustAdminRoutes } from './http/admin.routes.js';
 import { trustRoutes } from './http/routes.js';
+import { youverifyWebhookRoutes } from './http/webhook.routes.js';
+import { resolveLiveness } from './jobs/resolve-liveness.job.js';
+import { reapStaleDeliveries } from './infrastructure/postgres/webhooks.js';
 import { bindStore } from './infrastructure/postgres/bind-store.js';
 import { scrubErasedAccountFlags } from './infrastructure/postgres/erasure.js';
 import type { TrustStore } from './infrastructure/postgres/store.js';
@@ -43,6 +47,18 @@ import { runSocialProofCheck, type SocialProofJobDeps } from './jobs/run-social-
  * (a day by default) — a request an hour past its deadline is already a request nobody is waiting on.
  */
 export const EXPIRE_STALE_CRON = '31 * * * *';
+/**
+ * Off the hour from the expiry sweep, so the two never contend for the same rows.
+ *
+ * Ten minutes is chosen against the thing it protects: a delivery claimed by a worker that then
+ * died is invisible to every other worker until this runs, and a user is watching a screen that
+ * says "we're checking".
+ */
+export const REAP_WEBHOOKS_CRON = '*/10 * * * *';
+/** A delivery in PROCESSING longer than this had its worker die; nothing legitimately takes it. */
+const WEBHOOK_STALE_SECONDS = 300;
+/** After this many claims a delivery is left FAILED and visible rather than queued forever. */
+const WEBHOOK_MAX_ATTEMPTS = 5;
 
 /**
  * Two at a time. The provider is the bottleneck, not the database, and a check that queues behind
@@ -110,6 +126,27 @@ export function createTrustModule(options: TrustModuleOptions): KomtruModule {
       }),
       // M6 §11's admin half (T-052): the KYC queue, the duplicate flags and the override.
       ...trustAdminRoutes({ db: () => need().db }),
+      // The provider's own channel. PUBLIC scope, signature-authenticated, mounted under the
+      // raw-body prefix so the bytes it signs are the bytes we check.
+      ...youverifyWebhookRoutes(() => ({
+        db: need().db,
+        webhookSecret: need().config.youverify?.webhookSecret ?? '',
+        enqueueDelivery: async (webhookId) => {
+          const id = String(webhookId);
+          await need().queues.producer<ResolveLivenessJob>(TRUST_QUEUES.RESOLVE_LIVENESS).add(
+            'resolve',
+            { webhookId: id },
+            {
+              // The delivery row is the record; the job is only a pointer to it, so dropping it on
+              // completion loses nothing. The id is safe as a BullMQ job id — it is digits, and
+              // BullMQ rejects a custom id containing its ':' key separator.
+              jobId: id,
+              removeOnComplete: true,
+            },
+          );
+        },
+        logger: need().logger,
+      })),
     ],
 
     queues: [
@@ -144,6 +181,14 @@ export function createTrustModule(options: TrustModuleOptions): KomtruModule {
         process: async (data: BankMatchJob) => await runBankMatchCheck(need().jobs, data),
       },
       {
+        name: TRUST_QUEUES.RESOLVE_LIVENESS,
+        concurrency: JOB_CONCURRENCY,
+        attempts: JOB_ATTEMPTS,
+        backoffMs: JOB_BACKOFF_MS,
+        process: async (data: ResolveLivenessJob) =>
+          await resolveLiveness({ ...need().jobs, db: need().db }, data),
+      },
+      {
         name: TRUST_QUEUES.SOCIAL_PROOF_CHECK,
         concurrency: JOB_CONCURRENCY,
         attempts: JOB_ATTEMPTS,
@@ -158,6 +203,17 @@ export function createTrustModule(options: TrustModuleOptions): KomtruModule {
         cron: EXPIRE_STALE_CRON,
         description: 'Expires verification requests a provider never answered',
         handler: async (firedAt) => void (await runExpireStale(need().jobs, firedAt)),
+      },
+      {
+        name: TRUST_SCHEDULES.REAP_WEBHOOKS,
+        cron: REAP_WEBHOOKS_CRON,
+        description: 'Returns webhook deliveries whose worker died mid-job',
+        handler: async () => {
+          const reaped = await reapStaleDeliveries(need().db, WEBHOOK_STALE_SECONDS, WEBHOOK_MAX_ATTEMPTS);
+          if (reaped > 0) {
+            need().logger.warn({ reaped }, 'trust: returned stalled webhook deliveries for retry');
+          }
+        },
       },
     ],
 

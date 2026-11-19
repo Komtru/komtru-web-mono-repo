@@ -147,3 +147,6 @@ const socialProofClaimResponse = z.object({
 export const socialProofResponse = socialProofClaimResponse;
 export const socialProofListResponse = pagedSchema(socialProofClaimResponse);
 export const socialProofCheckResponse = z.object({ claimId: z.uuid() });
+
+/** The webhook acknowledgement. Deliberately says nothing about what happened to the delivery. */
+export const webhookAckSchema = z.strictObject({ received: z.literal(true) });

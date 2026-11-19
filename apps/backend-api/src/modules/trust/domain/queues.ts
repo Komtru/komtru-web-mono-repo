@@ -10,10 +10,14 @@ export const TRUST_QUEUES = {
   BUSINESS_CHECK: 'trust.business-check',
   BANK_MATCH: 'trust.bank-match',
   SOCIAL_PROOF_CHECK: 'trust.social-proof-check',
+  /** One stored webhook delivery, processed off the request path (see `webhookIngest.service.ts`). */
+  RESOLVE_LIVENESS: 'trust.resolve-liveness',
 } as const;
 
 export const TRUST_SCHEDULES = {
   EXPIRE_STALE: 'trust.expire-stale',
+  /** Returns deliveries whose worker died mid-job; without it a crash loses a verdict silently. */
+  REAP_WEBHOOKS: 'trust.reap-webhooks',
 } as const;
 
 /**
@@ -37,6 +41,19 @@ export interface IdentityCheckJob {
  */
 export interface LivenessCheckJob {
   requestId: string;
+}
+
+/**
+ * One stored webhook delivery.
+ *
+ * The id and nothing else: the payload is already in `trust.provider_webhooks` by the time this is
+ * queued, so putting it in the job data too would be a second copy of a body we do not control, in
+ * Redis, outliving the job — the thing `IdentityCheckJob` seals its claim to avoid.
+ *
+ * A string because the column is `bigserial` and BullMQ job data must be JSON, which has no bigint.
+ */
+export interface ResolveLivenessJob {
+  webhookId: string;
 }
 
 /**

@@ -5,6 +5,8 @@ import { describe, expect, it } from 'vitest';
 import type { RouteDefinition } from '../../../src/platform/http/route.js';
 import { routeLabel } from '../../../src/platform/http/route.js';
 import { trustRoutes } from '../../../src/modules/trust/http/routes.js';
+import { WEBHOOK_PATH_PREFIX } from '../../../src/platform/http/raw-body.js';
+import { youverifyWebhookRoutes } from '../../../src/modules/trust/http/webhook.routes.js';
 import { trustAdminRoutes } from '../../../src/modules/trust/http/admin.routes.js';
 import { decideBody } from '../../../src/modules/trust/http/admin.validations.js';
 import { isKnownPermission } from '../../../src/modules/identity/index.js';
@@ -106,7 +108,20 @@ describe('trustRoutes', () => {
 
   it('is what the registry mounts', () => {
     const admin = trustAdminRoutes({ db: () => ({}) as never }).map(routeLabel);
-    expect((testModule('trust').routes ?? []).map(routeLabel)).toEqual([...labels, ...admin]);
+    const webhooks = youverifyWebhookRoutes(() => ({}) as never).map(routeLabel);
+    expect((testModule('trust').routes ?? []).map(routeLabel)).toEqual([...labels, ...admin, ...webhooks]);
+  });
+
+  /**
+   * The webhook is the one route here with no session behind it, so its two properties are asserted
+   * rather than assumed: PUBLIC scope is what lets Youverify reach it at all, and the path has to
+   * sit under the raw-body prefix or the signature check has no bytes to verify.
+   */
+  it('mounts the youverify webhook public and under the raw-body prefix', () => {
+    const [route] = youverifyWebhookRoutes(() => ({}) as never);
+    expect(route?.scope).toBe('PUBLIC');
+    expect(`/v1${route?.path ?? ''}/`.startsWith(WEBHOOK_PATH_PREFIX)).toBe(true);
+    expect(route?.rateLimit?.by).toEqual(['ip']);
   });
 });
 
