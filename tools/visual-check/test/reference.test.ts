@@ -85,5 +85,9 @@ describe('carveScreen', () => {
       // The carve is parsed back with the same scanner: nothing it replayed may be left open.
       expect(openElements(document, document.length), `${row.id}`).toEqual([]);
     }
-  });
+    // An explicit budget, as the ledger's repository-wide paystack scan has: this case parses the
+    // whole design reference 210 times. Alone it takes under a second; under `turbo run test` on a
+    // CI runner, with every other package's suite beside it, it took 13s and failed on Vitest's 5s
+    // default, which read as a broken carve rather than a busy machine.
+  }, 60_000);
 });
