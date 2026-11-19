@@ -22,7 +22,7 @@ import {
   Skeleton,
   WarnBanner,
 } from '@komtru/ui-kit';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { isProblem, nairaShort, whenLabel } from '../trade/format';
 import { OverTabBar } from '../trade/parts';
 import { useViewportTier } from '../trade/shipping/viewport';
@@ -315,17 +315,28 @@ function PayoutTable({ payouts }: { payouts: readonly Payout[] }): React.JSX.Ele
 function PerformanceTiles(): React.JSX.Element {
   const trades = useTradeList('OPEN');
   const disputes = useMyDisputes();
+  const { hasNextPage, isFetchingNextPage, isFetchNextPageError, fetchNextPage } = trades;
+  // Read to the last page, as Orders does: a count of the first twenty would be a plausible wrong number.
+  useEffect(() => {
+    if (hasNextPage && !isFetchingNextPage && !isFetchNextPageError) void fetchNextPage();
+  }, [hasNextPage, isFetchingNextPage, isFetchNextPageError, fetchNextPage]);
+  const allRead = trades.data !== undefined && !hasNextPage;
   const selling = (trades.data?.pages ?? [])
     .flatMap((page) => page.items)
     .filter((trade) => trade.yourRole === 'SELLER');
   const count = (statuses: readonly string[]): string =>
-    trades.data === undefined
-      ? '—'
-      : String(selling.filter((trade) => statuses.includes(trade.status)).length);
+    allRead ? String(selling.filter((trade) => statuses.includes(trade.status)).length) : '—';
+  // Open means neither decided nor closed: a decided case has its answer, and only an appeal reopens it (APPEALED).
+  // The list is one page of twenty, so when there are more the count is a floor and is written as one.
+  const openCases = (disputes.data?.items ?? []).filter(
+    (item) => item.status !== 'DECIDED' && item.status !== 'CLOSED',
+  ).length;
   const open =
     disputes.data === undefined
       ? '—'
-      : String(disputes.data.items.filter((item) => item.status !== 'CLOSED').length);
+      : disputes.data.nextCursor === null
+        ? String(openCases)
+        : `${String(openCases)}+`;
   const tiles = [
     { label: 'To ship', value: count(['FUNDED']), note: 'Payment protected' },
     { label: 'In transit', value: count(['SHIPPED', 'UNCONFIRMED_DELIVERY']), note: 'On the way to buyers' },

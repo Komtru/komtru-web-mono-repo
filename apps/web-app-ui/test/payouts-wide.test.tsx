@@ -1,11 +1,11 @@
 // @vitest-environment jsdom
 // F-069 / F-073 (DX-32, TX-19): payouts and performance. The data and the actions are the phone's (`payouts.test.tsx`);
 // what is tested here is the arrangement: the tiles, the balance beside the history, and the history as a table.
-import { cleanup, fireEvent, screen, within } from '@testing-library/react';
+import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { Payouts } from '../src/payouts/Payouts';
 import { expectNoAxeViolations } from './axe';
-import { SHELL_RULES, answerWith, id, listItem, renderWithApi, type CallFn } from './support/trade';
+import { SHELL_RULES, answerWith, callsTo, id, listItem, renderWithApi, type CallFn } from './support/trade';
 import { PAYOUT_ID, payout, summary } from './support/payouts';
 import { setWidth, type Width } from './support/viewport';
 
@@ -131,6 +131,55 @@ describe.each([['tablet'], ['desktop']] as [Width][])('Payouts & performance at 
     renderWithApi(api.call, <Payouts />);
     expect(await screen.findByText('No payouts yet')).toBeTruthy();
     expect(screen.queryByRole('table')).toBeNull();
+  });
+
+  it('counts every page of the open trades, not the first twenty', async () => {
+    const many = Array.from({ length: 25 }, (_, n) => order(100 + n, n < 21 ? 'FUNDED' : 'SHIPPED'));
+    serve({
+      'GET /trades': ({ query }: { query?: Record<string, unknown> }) =>
+        query?.cursor === undefined ? list(many.slice(0, 20), 'c2') : list(many.slice(20)),
+    });
+    renderWithApi(api.call, <Payouts />);
+    const tiles = await screen.findByRole('list', { name: 'How you are doing' });
+    const tile = (name: string) => within(tiles).getByText(name).closest('li') as HTMLElement;
+    expect(await within(tile('To ship')).findByText('21')).toBeTruthy();
+    expect(within(tile('In transit')).getByText('4')).toBeTruthy();
+  });
+
+  it('shows a dash, never a partial count, when a later page of the open trades fails', async () => {
+    const many = Array.from({ length: 20 }, (_, n) => order(100 + n, 'FUNDED'));
+    serve({
+      'GET /trades': ({ query }: { query?: Record<string, unknown> }) => {
+        if (query?.cursor === undefined) return list(many, 'c2');
+        throw new Error('offline');
+      },
+    });
+    renderWithApi(api.call, <Payouts />);
+    const tiles = await screen.findByRole('list', { name: 'How you are doing' });
+    await within(tiles).findByText('Open disputes');
+    await waitFor(() => expect(callsTo(api.call, 'GET', '/trades')).toHaveLength(2));
+    const ship = within(tiles).getByText('To ship').closest('li') as HTMLElement;
+    expect(within(ship).getByText('—')).toBeTruthy();
+    expect(within(ship).queryByText('20')).toBeNull();
+  });
+
+  it('counts a case as open until it is decided or closed, and says when there are more than one page', async () => {
+    serve({
+      'GET /disputes': {
+        items: [
+          dispute(4, 'MEDIATION'),
+          dispute(5, 'OPEN_EVIDENCE_COLLECTION'),
+          dispute(6, 'DECIDED'),
+          dispute(7, 'CLOSED'),
+          dispute(8, 'APPEALED'),
+        ],
+        nextCursor: 'more',
+      },
+    });
+    renderWithApi(api.call, <Payouts />);
+    const tiles = await screen.findByRole('list', { name: 'How you are doing' });
+    const open = within(tiles).getByText('Open disputes').closest('li') as HTMLElement;
+    expect(await within(open).findByText('3+')).toBeTruthy();
   });
 
   it('keeps a tile quiet rather than wrong when its figure cannot be read', async () => {
