@@ -19,7 +19,6 @@ import {
   NoteBanner,
   ReadyBanner,
   RiskBanner,
-  ScreenColumn,
   ScreenHeader,
   SectionLabel,
   StatusHero,
@@ -28,12 +27,13 @@ import {
   WarnBanner,
 } from '@komtru/ui-kit';
 import { useQueryClient } from '@tanstack/react-query';
-import { useEffect, useState } from 'react';
+import { createContext, useContext, useEffect, useState } from 'react';
 import { isProblem, partyName, platformWords, problemMessage, whenLabel } from '../format';
 import { ItemSummary } from '../parts';
+import { waybillHref, trackHref } from '../workspace-state';
 import { Deadline } from '../workspace/shared';
 import { checkPhone, checkPlate, checkWaybill, normalisePlate } from './evidence';
-import { useViewportTier } from './viewport';
+import { useViewportTier, type ViewportTier } from './viewport';
 
 /** Before the escrow is funded the seller is told to wait (X1); the platform's dispatch guard says the same. */
 const BEFORE_FUNDING = [
@@ -44,7 +44,10 @@ const BEFORE_FUNDING = [
   'PENDING_PAYMENT',
 ];
 /** The trade has left the seller's hands: shipped, or on from there towards settlement. */
-const SHIPPED_ONWARD = ['SHIPPED', 'UNCONFIRMED_DELIVERY', 'INSPECTION', 'COMPLETED', 'SETTLED'];
+const SHIPPED_ONWARD = ['SHIPPED', 'UNCONFIRMED_DELIVERY', 'INSPECTION', 'COMPLETED', 'SETTLED', 'DISPUTED'];
+
+/** The layout, read once by the screen and shared with its frame and form so each need not ask the window again. */
+const Tier = createContext<ViewportTier>('base');
 
 /** The waybill receipt is the seller's own private evidence for this trade, never public. */
 // The dispatch receipt is delivery proof, so it files as PROOF_OF_DELIVERY. See UploadTarget:
@@ -65,6 +68,15 @@ const Alert = ({ children }: { children: React.ReactNode }): React.JSX.Element =
  * the MVP, so no option for them is drawn even if the platform lists one.
  */
 export function ShipOrder({ id }: { id: string }): React.JSX.Element {
+  const tier = useViewportTier();
+  return (
+    <Tier.Provider value={tier}>
+      <ShipOrderByStatus id={id} />
+    </Tier.Provider>
+  );
+}
+
+function ShipOrderByStatus({ id }: { id: string }): React.JSX.Element {
   const trade = useTrade(id);
 
   if (trade.isPending) {
@@ -161,6 +173,7 @@ function Shipped({ trade }: { trade: TradeView }): React.JSX.Element {
   const report = useReportDelivered();
   const [problem, setProblem] = useState<string | undefined>(undefined);
   const reported = trade.status === 'UNCONFIRMED_DELIVERY';
+  const wide = useContext(Tier) !== 'base';
   const onReport = () => {
     setProblem(undefined);
     report.mutate(trade.id, {
@@ -171,7 +184,11 @@ function Shipped({ trade }: { trade: TradeView }): React.JSX.Element {
   };
   return (
     <Frame title={`Ship ${trade.tradeCode}`} id={trade.id}>
-      {reported ? (
+      {trade.status === 'DISPUTED' ? (
+        <p role="status" className="mb-[14px] text-[12.5px] leading-[1.5] text-slate">
+          This item has already been handed over.
+        </p>
+      ) : reported ? (
         <StatusHero tone="success" as="h2" title="Delivery reported">
           The buyer has been asked to confirm it arrived.
         </StatusHero>
@@ -188,7 +205,12 @@ function Shipped({ trade }: { trade: TradeView }): React.JSX.Element {
             {report.isPending ? 'Reporting…' : 'Report delivery'}
           </Button>
         )}
-        <Button asChild variant={trade.status === 'SHIPPED' ? 'secondary' : 'primary'}>
+        {wide && (
+          <Button asChild>
+            <a href={trackHref(trade.id)}>Track the delivery</a>
+          </Button>
+        )}
+        <Button asChild variant={trade.status === 'SHIPPED' || wide ? 'secondary' : 'primary'}>
           <a href={tradeHref(trade.id)}>Back to the trade</a>
         </Button>
       </ActionStack>
@@ -211,7 +233,9 @@ function ShipForm({ trade }: { trade: TradeView }): React.JSX.Element {
   const [uploading, setUploading] = useState(false);
   const [failure, setFailure] = useState<string | undefined>(undefined);
   const [problem, setProblem] = useState<string | undefined>(undefined);
-  const tier = useViewportTier();
+  const tier = useContext(Tier);
+  // The checklist's ticks live here, above the wide and phone layouts, so a resize does not clear them.
+  const [ticked, setTicked] = useState<readonly string[]>([]);
 
   // A 409 means the trade is not where this screen thought it was (shipped meanwhile, or the dispatch guard):
   // read the trade again and let its status choose the screen. The platform's words stay until it does.
@@ -373,7 +397,7 @@ function ShipForm({ trade }: { trade: TradeView }): React.JSX.Element {
             <ReadyBanner title="Logistics: ready to ship">
               Funds are protected. Ship to release them to you.
             </ReadyBanner>
-            <HandoverChecklist />
+            <HandoverChecklist ticked={ticked} onTick={setTicked} />
             {evidence}
           </div>
           <aside aria-label="Order and route" className="min-w-0">
@@ -384,6 +408,11 @@ function ShipForm({ trade }: { trade: TradeView }): React.JSX.Element {
               You arrange the delivery yourself. Collection is confirmed from the waybill, so keep the
               receipt.
             </NoteBanner>
+            <p className="mb-0 mt-[10px] text-[12px]">
+              <a href={waybillHref(trade.id)} className="font-semibold text-info-on-soft">
+                Hand over step by step
+              </a>
+            </p>
           </aside>
         </div>
         <ActionStack className="mt-[16px] md:flex-row-reverse md:justify-start">
@@ -430,8 +459,13 @@ const CHECKLIST = ['Package sealed and labelled', 'Waybill or courier receipt re
  * DX-19's handover checklist: the seller's own reminder before the item leaves. Ticking opens nothing; the
  * evidence fields and the platform's own guards are what let the item ship.
  */
-function HandoverChecklist(): React.JSX.Element {
-  const [ticked, setTicked] = useState<readonly string[]>([]);
+function HandoverChecklist({
+  ticked,
+  onTick,
+}: {
+  ticked: readonly string[];
+  onTick: (ticked: readonly string[]) => void;
+}): React.JSX.Element {
   return (
     <fieldset className="mb-[14px] min-w-0 border-0 p-0" aria-label="Handover checklist">
       <legend className="mb-[8px] p-0">
@@ -447,9 +481,7 @@ function HandoverChecklist(): React.JSX.Element {
             className="mt-[1px] h-[16px] w-[16px] shrink-0 accent-trust-indigo"
             checked={ticked.includes(item)}
             onChange={(event) => {
-              setTicked((current) =>
-                event.target.checked ? [...current, item] : current.filter((entry) => entry !== item),
-              );
+              onTick(event.target.checked ? [...ticked, item] : ticked.filter((entry) => entry !== item));
             }}
           />
           {item}
@@ -537,24 +569,30 @@ function Frame({
   wide?: { title: string; subtitle: string };
   children: React.ReactNode;
 }): React.JSX.Element {
-  const tier = useViewportTier();
-  if (tier === 'base') {
-    return (
-      <ScreenColumn>
-        <ScreenHeader title={title} backHref={tradeHref(id)} backLabel="Back to the trade" />
-        {children}
-      </ScreenColumn>
-    );
-  }
+  const tier = useContext(Tier);
+  // One root across the widths, so a resize keeps the form beneath it; only the header is swapped.
   return (
-    <div className="mx-auto w-full md:max-w-[760px] lg:max-w-none">
-      <a href={ORDERS_HREF} className="mb-[8px] inline-block text-[12px] font-semibold text-info-on-soft">
-        ‹ Orders
-      </a>
-      <header className="mb-[16px]">
-        <h1 className="m-0 text-[19px] font-semibold">{wide?.title ?? title}</h1>
-        {wide !== undefined && <p className="m-0 mt-[2px] text-[12.5px] text-slate">{wide.subtitle}</p>}
-      </header>
+    <div
+      className={
+        tier === 'base' ? 'mx-auto w-full max-w-[480px]' : 'mx-auto w-full md:max-w-[760px] lg:max-w-none'
+      }
+    >
+      {tier === 'base' ? (
+        <ScreenHeader title={title} backHref={tradeHref(id)} backLabel="Back to the trade" />
+      ) : (
+        <>
+          <a
+            href={tradeHref(id)}
+            className="mb-[8px] inline-block text-[12px] font-semibold text-info-on-soft"
+          >
+            ‹ Back to the trade
+          </a>
+          <header className="mb-[16px]">
+            <h1 className="m-0 text-[19px] font-semibold">{wide?.title ?? title}</h1>
+            {wide !== undefined && <p className="m-0 mt-[2px] text-[12.5px] text-slate">{wide.subtitle}</p>}
+          </header>
+        </>
+      )}
       {children}
     </div>
   );

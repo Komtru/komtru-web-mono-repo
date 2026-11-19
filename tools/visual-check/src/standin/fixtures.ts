@@ -21,7 +21,7 @@ import type {
   TradeView,
   VerificationStatus,
 } from '@komtru/api-client';
-import type { Address, TradeListItem, ViewerFacts } from '@komtru/shared-types';
+import type { Address, TradeActivityResponse, TradeListItem, ViewerFacts } from '@komtru/shared-types';
 import { FUNDED_TRADE_STATUSES } from '@komtru/shared-types';
 
 import { PERSONAS, type PersonaId, type ScenarioId } from './personas.ts';
@@ -273,7 +273,7 @@ const SELLER_TRADES: TradeListItem[] = [
     awaiting: null,
     attention: 'SHIP',
     counterparty: { ...BUYER_CARD, publicId: 'KMT-PUB-0003', username: 'bola.o', displayName: 'Bola Okoro' },
-    item: { title: 'Ankara set', categoryCode: 'FURNITURE', categoryName: 'Fashion' },
+    item: { title: 'Ankara print armchair', categoryCode: 'FURNITURE', categoryName: 'Furniture' },
     currency: 'NGN',
     itemAmountMinor: '8950000',
     buyerTotalMinor: '9310000',
@@ -392,7 +392,7 @@ const TRADE_FACTS: Readonly<Record<string, TradeFacts>> = {
   [TRADE_IDS.sellerFundedTwo]: {
     acceptedAt: '2026-11-17T10:30:00.000Z',
     proofMediaCount: 2,
-    itemSpec: { model: 'Ankara set', size: 'M' },
+    itemSpec: { model: 'Ankara print armchair', colour: 'Orange' },
   },
   [TRADE_IDS.sellerInspection]: {
     acceptedAt: '2026-11-13T09:40:00.000Z',
@@ -1215,16 +1215,6 @@ export function deliveryDeadlineFor(
   };
 }
 
-/** `GET /trades/:id/activity`: the trade's history, newest first. */
-export function tradeActivityFor(
-  persona: PersonaId,
-  scenario: ScenarioId,
-  tradeId: string,
-): unknown[] | null {
-  const item = tradesFor(persona, scenario).find((candidate) => candidate.id === tradeId);
-  return item === undefined ? null : [];
-}
-
 /** The media either side added under each event of a trade: the seller's dispatch photos and the buyer's inspection photos. */
 export function tradeEvidenceFor(
   persona: PersonaId,
@@ -1327,4 +1317,37 @@ export function payoutsFor(persona: PersonaId): Payout[] {
     paid(2, '8950000', '2026-11-08T10:20:00.000Z'),
     paid(3, '21000000', '2026-11-02T09:05:00.000Z'),
   ];
+}
+
+/** `GET /trades/:id/activity`: what the platform recorded on the completed sale, newest first. Other trades have none. */
+export function tradeActivityFor(
+  persona: PersonaId,
+  scenario: ScenarioId,
+  tradeId: string,
+): TradeActivityResponse | null {
+  const item = tradesFor(persona, scenario).find((candidate) => candidate.id === tradeId);
+  if (item === undefined) return null;
+  if (item.status !== 'SETTLED') return { items: [], nextCursor: null };
+  const row = (
+    n: number,
+    kind: TradeActivityResponse['items'][number]['kind'],
+    actor: 'YOU' | 'OTHER_PARTY' | 'KOMTRU',
+    at: string,
+  ) => ({
+    id: `S:${String(n)}`,
+    occurredAt: at,
+    kind,
+    actor,
+    toStatus: null,
+    reason: null,
+  });
+  return {
+    items: [
+      row(4, 'SETTLED', 'KOMTRU', '2026-11-12T14:14:00.000Z'),
+      row(3, 'DELIVERY_CONFIRMED', 'OTHER_PARTY', '2026-11-12T14:02:00.000Z'),
+      row(2, 'SHIPPED', 'YOU', '2026-11-07T09:30:00.000Z'),
+      row(1, 'FUNDS_PROTECTED', 'KOMTRU', '2026-11-05T10:05:00.000Z'),
+    ],
+    nextCursor: null,
+  };
 }

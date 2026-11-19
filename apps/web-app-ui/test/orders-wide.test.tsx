@@ -161,6 +161,46 @@ describe('Orders at a tablet (TX-11)', () => {
   });
 });
 
+describe('Orders across a resize and for the keyboard', () => {
+  it('announces the detail pane by moving focus to its heading when an order is chosen, and marks the choice', async () => {
+    setWidth('tablet');
+    answerWith(api.call, { 'GET /trades': list([toShip, moving]) });
+    renderWithApi(api.call, <ActiveOrders />);
+    const listing = await screen.findByRole('list', { name: 'Orders' });
+    const buds = within(listing).getByRole('button', { name: /Galaxy Buds Pro/ });
+    expect(buds.tagName).toBe('BUTTON');
+    expect(buds.getAttribute('aria-pressed')).toBe('false');
+    expect(document.activeElement).toBe(document.body);
+    buds.focus();
+    fireEvent.click(buds);
+    const heading = within(screen.getByRole('region', { name: 'Order detail' })).getByRole('heading', {
+      name: 'Galaxy Buds Pro',
+    });
+    expect(document.activeElement).toBe(heading);
+    expect(buds.getAttribute('aria-pressed')).toBe('true');
+  });
+
+  it('keeps the filter and the chosen order when the window is resized across a breakpoint', async () => {
+    setWidth('tablet');
+    answerWith(api.call, { 'GET /trades': list([toShip, moving, inspecting]) });
+    renderWithApi(api.call, <ActiveOrders />);
+    await screen.findByRole('list', { name: 'Orders' });
+    fireEvent.click(screen.getByRole('button', { name: 'In transit (1)' }));
+    expect(screen.getByRole('button', { name: 'In transit (1)' }).getAttribute('aria-pressed')).toBe('true');
+
+    setWidth('desktop');
+    const table = await screen.findByRole('table', { name: 'Orders' });
+    expect(within(table).getAllByRole('row')).toHaveLength(2);
+    expect(screen.getByRole('button', { name: 'In transit (1)' }).getAttribute('aria-pressed')).toBe('true');
+
+    setWidth('phone');
+    expect(await screen.findByRole('heading', { name: 'In transit' })).toBeTruthy();
+    setWidth('tablet');
+    expect(await screen.findByRole('button', { name: 'In transit (1)' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'In transit (1)' }).getAttribute('aria-pressed')).toBe('true');
+  });
+});
+
 describe('Orders on a phone', () => {
   it('stays the grouped list', async () => {
     setWidth('phone');

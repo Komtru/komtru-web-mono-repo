@@ -37,8 +37,23 @@ const closed = (n: number, status: string, categoryCode = 'electronics') =>
     },
   });
 
-const serve = (trade: unknown, closedTrades: unknown[] = []) =>
-  answerWith(api.call, { 'GET /trades/:id': trade, 'GET /trades': list(closedTrades) });
+const event = (n: number, kind: string, actor = 'KOMTRU', at = `2026-11-1${String(n)}T10:00:00.000Z`) => ({
+  id: `S:${String(n)}`,
+  occurredAt: at,
+  kind,
+  actor,
+  toStatus: null,
+  reason: null,
+});
+/** The record of a trade the buyer confirmed and the platform then paid out. */
+const CONFIRMED = [event(1, 'FUNDS_PROTECTED'), event(2, 'DELIVERY_CONFIRMED', 'YOU'), event(3, 'SETTLED')];
+
+const serve = (trade: unknown, closedTrades: unknown[] = [], activity: unknown[] = CONFIRMED) =>
+  answerWith(api.call, {
+    'GET /trades/:id': trade,
+    'GET /trades': list(closedTrades),
+    'GET /trades/:id/activity': list(activity),
+  });
 
 describe('Trade complete (DX-31)', () => {
   it('tells the buyer the payment was released, to whom and how much, with the record of what was done', async () => {
@@ -48,7 +63,7 @@ describe('Trade complete (DX-31)', () => {
     );
     const { container } = renderWithApi(api.call, <TradeCompleted id={id(1)} />);
     expect(await screen.findByRole('heading', { level: 1, name: 'Trade completed' })).toBeTruthy();
-    expect(screen.getByRole('heading', { name: 'Payment released' })).toBeTruthy();
+    expect(await screen.findByRole('heading', { name: 'Payment released' })).toBeTruthy();
     expect(
       screen.getByText(/₦452,000 released to TechEdge NG\. Both sides honoured the agreement in full\./),
     ).toBeTruthy();
@@ -57,16 +72,16 @@ describe('Trade complete (DX-31)', () => {
     expect(within(summary).getByText('KMT-9042800-NG')).toBeTruthy();
     expect(within(summary).getByText('Apple iPhone 13 Pro')).toBeTruthy();
 
-    const record = screen.getByRole('list', { name: 'What was done' });
+    const record = await screen.findByRole('list', { name: 'What was done' });
     expect(
       within(record)
         .getAllByRole('listitem')
         .map((step) => step.textContent),
     ).toEqual([
       'AgreementVersion 2',
-      'Funds protectedHeld until you confirmed',
-      'Delivered and inspectedConfirmed by you',
-      'Payment releasedDone',
+      'Funds protected11 Nov · 11:00',
+      'Delivery confirmedBy you · 12 Nov · 11:00',
+      'Payment released13 Nov · 11:00',
     ]);
 
     expect(await screen.findByText('3')).toBeTruthy();
@@ -76,10 +91,10 @@ describe('Trade complete (DX-31)', () => {
   });
 
   it('tells the seller what was released to them, and what they did', async () => {
-    serve(workspaceTrade('SETTLED', 'SELLER'));
+    serve(workspaceTrade('SETTLED', 'SELLER'), [], [event(2, 'DELIVERY_CONFIRMED', 'OTHER_PARTY')]);
     renderWithApi(api.call, <TradeCompleted id={id(1)} />);
     expect(await screen.findByText(/₦452,000 released to you\./)).toBeTruthy();
-    expect(screen.getByText('Confirmed by the buyer')).toBeTruthy();
+    expect(screen.getByText(/By the other party/)).toBeTruthy();
   });
 
   it('says the payment is still being carried out while the trade is only completed', async () => {
@@ -87,7 +102,44 @@ describe('Trade complete (DX-31)', () => {
     renderWithApi(api.call, <TradeCompleted id={id(1)} />);
     expect(await screen.findByText('Settlement is processing')).toBeTruthy();
     expect(screen.queryByRole('heading', { name: 'Payment released' })).toBeNull();
-    expect(screen.getByText('Processing')).toBeTruthy();
+    expect(screen.getByText('Not confirmed yet')).toBeTruthy();
+  });
+
+  it('claims no confirmation for a trade that released when the inspection window ran out', async () => {
+    serve(
+      workspaceTrade('SETTLED', 'BUYER'),
+      [],
+      [event(1, 'FUNDS_PROTECTED'), event(2, 'INSPECTION_ELAPSED'), event(3, 'SETTLED')],
+    );
+    renderWithApi(api.call, <TradeCompleted id={id(1)} />);
+    expect(await screen.findByText('Inspection window ended')).toBeTruthy();
+    expect(screen.queryByText(/confirmed by you/i)).toBeNull();
+    expect(screen.queryByText('Delivery confirmed')).toBeNull();
+  });
+
+  it('says a dispute decided it, and names no amount, when the case resolved the trade', async () => {
+    serve(
+      workspaceTrade('SETTLED', 'BUYER'),
+      [],
+      [event(1, 'FUNDS_PROTECTED'), event(2, 'DISPUTE_RESOLVED'), event(3, 'SETTLED')],
+    );
+    renderWithApi(api.call, <TradeCompleted id={id(1)} />);
+    expect(await screen.findByRole('heading', { name: 'Settled after a dispute' })).toBeTruthy();
+    expect(screen.queryByText(/₦452,000 released/)).toBeNull();
+    expect(screen.queryByText(/honoured the agreement/)).toBeNull();
+    expect(screen.getByText('Dispute resolved')).toBeTruthy();
+  });
+
+  it('keeps the rest of the screen and says so when the record of what was done cannot be read', async () => {
+    answerWith(api.call, {
+      'GET /trades/:id': workspaceTrade('SETTLED', 'BUYER'),
+      'GET /trades': list([]),
+      'GET /trades/:id/activity': new Error('offline'),
+    });
+    renderWithApi(api.call, <TradeCompleted id={id(1)} />);
+    expect(await screen.findByText('The record of what was done couldn’t load.')).toBeTruthy();
+    expect(screen.queryByRole('heading', { name: 'Payment released' })).toBeNull();
+    expect(screen.getByRole('heading', { name: 'Leave a review' })).toBeTruthy();
   });
 
   it('has no review form and says reviews are not open yet', async () => {
@@ -103,6 +155,7 @@ describe('Trade complete (DX-31)', () => {
     answerWith(api.call, {
       'GET /trades/:id': workspaceTrade('SETTLED', 'BUYER'),
       'GET /trades': new Error('offline'),
+      'GET /trades/:id/activity': list(CONFIRMED),
     });
     renderWithApi(api.call, <TradeCompleted id={id(1)} />);
     expect(await screen.findByRole('heading', { name: 'Payment released' })).toBeTruthy();
@@ -114,6 +167,7 @@ describe('Trade complete (DX-31)', () => {
       'GET /trades/:id': workspaceTrade('SETTLED', 'BUYER'),
       'GET /trades': ({ query }: { query?: Record<string, unknown> }) =>
         query?.cursor === undefined ? list([closed(2, 'SETTLED')], 'c2') : list([closed(3, 'SETTLED')]),
+      'GET /trades/:id/activity': list(CONFIRMED),
     });
     renderWithApi(api.call, <TradeCompleted id={id(1)} />);
     expect(await screen.findByText('2')).toBeTruthy();

@@ -273,8 +273,8 @@ const ROUTES: readonly (PublicRoute | ConsumerRoute | AnonymousRoute)[] = [
     path: '/trades/:id/activity',
     kind: 'consumer',
     handle: ({ persona, scenario }, { id }) => {
-      const items = tradeActivityFor(persona.id, scenario, id ?? '');
-      return items === null ? problem(404, 'Trade not found', id) : page(items);
+      const activity = tradeActivityFor(persona.id, scenario, id ?? '');
+      return activity === null ? problem(404, 'Trade not found', id) : { status: 200, body: activity };
     },
   },
   {

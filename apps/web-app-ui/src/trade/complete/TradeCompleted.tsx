@@ -1,7 +1,7 @@
 'use client';
 
 import type { TradeView } from '@komtru/api-client';
-import { useTrade, useTradeList } from '@komtru/api-client/react';
+import { useTrade, useTradeActivity, useTradeList } from '@komtru/api-client/react';
 import {
   ActionStack,
   Button,
@@ -13,10 +13,10 @@ import {
   TermList,
   TermRow,
   VersionTimeline,
-  type VersionStep,
 } from '@komtru/ui-kit';
 import { useEffect } from 'react';
 import { isProblem, itemTitle, nairaShort, partyName, problemMessage } from '../format';
+import { storyOf } from './story';
 import { stateCopy } from '../workspace-copy';
 
 const tradeHref = (id: string) => `/trade/${id}`;
@@ -60,9 +60,13 @@ export function TradeCompleted({ id }: { id: string }): React.JSX.Element {
 }
 
 function Completed({ trade }: { trade: TradeView }): React.JSX.Element {
-  const buyer = trade.yourRole === 'BUYER';
   const settled = trade.status === 'SETTLED';
   const { fees } = trade;
+  const activity = useTradeActivity(trade.id);
+  const { hasNextPage, isFetchingNextPage, isFetchNextPageError, fetchNextPage } = activity;
+  useEffect(() => {
+    if (hasNextPage && !isFetchingNextPage && !isFetchNextPageError) void fetchNextPage();
+  }, [hasNextPage, isFetchingNextPage, isFetchNextPageError, fetchNextPage]);
   const copy = stateCopy(settled ? 'SETTLED' : 'COMPLETED', trade.yourRole, {
     itemAmount: fees === null ? undefined : nairaShort(fees.itemAmountMinor),
     proceeds: fees === null ? undefined : nairaShort(fees.sellerProceedsMinor),
@@ -71,32 +75,48 @@ function Completed({ trade }: { trade: TradeView }): React.JSX.Element {
         ? undefined
         : partyName(trade.counterparty),
   });
-  const steps: VersionStep[] = [
-    {
-      id: 'agreement',
-      title: 'Agreement',
-      ...(trade.terms === null ? {} : { detail: `Version ${String(trade.terms.versionNumber)}` }),
-      state: 'done',
-    },
-    {
-      id: 'funded',
-      title: 'Funds protected',
-      detail: buyer ? 'Held until you confirmed' : 'Held until the buyer confirmed',
-      state: 'done',
-    },
-    {
-      id: 'delivered',
-      title: 'Delivered and inspected',
-      detail: buyer ? 'Confirmed by you' : 'Confirmed by the buyer',
-      state: 'done',
-    },
-    {
-      id: 'released',
-      title: 'Payment released',
-      detail: settled ? 'Done' : 'Processing',
-      state: settled ? 'done' : 'active',
-    },
-  ];
+  const read = activity.data !== undefined && !hasNextPage;
+  const story = read
+    ? storyOf(
+        activity.data.pages.flatMap((page) => page.items),
+        trade.terms,
+        settled,
+      )
+    : undefined;
+  const failed = activity.isError || isFetchNextPageError;
+  // The hero and the timeline both depend on how the trade ended, so they wait for the record: a trade that
+  // a dispute decided did not release the agreed price, and one that ran out its window was not confirmed.
+  const hero =
+    story === undefined ? undefined : story.how === 'resolved' ? (
+      <StatusHero tone="info" as="h2" title="Settled after a dispute">
+        The case was decided and the money moved as it decided. The amounts are on the case.
+      </StatusHero>
+    ) : settled && copy.hero !== undefined ? (
+      <StatusHero tone="success" as="h2" title="Payment released">
+        {copy.hero.body}
+      </StatusHero>
+    ) : (
+      copy.banner !== undefined && (
+        <StatusHero tone="info" as="h2" title={copy.banner.title}>
+          {copy.banner.body}
+        </StatusHero>
+      )
+    );
+  const timeline =
+    story !== undefined ? (
+      <VersionTimeline aria-label="What was done" steps={story.steps} />
+    ) : failed ? (
+      <p role="alert" className="m-0 text-[12px] text-risk-on-soft">
+        The record of what was done couldn’t load.{' '}
+        <button type="button" className="underline" onClick={() => void activity.refetch()}>
+          Try again
+        </button>
+      </p>
+    ) : (
+      <div role="status" aria-label="Loading what was done" aria-busy="true">
+        <Skeleton width="full" lines={3} />
+      </div>
+    );
   return (
     <Frame
       id={trade.id}
@@ -105,24 +125,14 @@ function Completed({ trade }: { trade: TradeView }): React.JSX.Element {
     >
       <div className="grid gap-[16px] lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
         <div className="min-w-0">
-          {settled && copy.hero !== undefined ? (
-            <StatusHero tone="success" as="h2" title="Payment released">
-              {copy.hero.body}
-            </StatusHero>
-          ) : (
-            copy.banner !== undefined && (
-              <StatusHero tone="info" as="h2" title={copy.banner.title}>
-                {copy.banner.body}
-              </StatusHero>
-            )
-          )}
+          {hero}
           <SectionLabel>Summary</SectionLabel>
           <TermList aria-label="Summary">
             <TermRow label="Trade">{trade.tradeCode}</TermRow>
             {trade.terms !== null && <TermRow label="Item">{itemTitle(trade.terms.itemSpec)}</TermRow>}
           </TermList>
           <SectionLabel>What was done</SectionLabel>
-          <VersionTimeline aria-label="What was done" steps={steps} />
+          {timeline}
         </div>
         <div className="min-w-0">
           <section aria-labelledby="review-title" className="mb-[16px]">
