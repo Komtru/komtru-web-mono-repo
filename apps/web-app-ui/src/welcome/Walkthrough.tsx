@@ -2,7 +2,7 @@
 
 import { Button } from '@komtru/ui-kit';
 import { useRouter } from 'next/navigation';
-import { Dots, WalkthroughArt, WelcomeFrame } from './parts';
+import { Dots, Overview, WalkthroughArt, WelcomeFrame } from './parts';
 import { AFTER_WELCOME, nextPath, stepFor, type StepKey } from './steps';
 import { markWelcomeDone } from './state';
 import { useWelcomeGate } from './useWelcomeGate';
@@ -31,6 +31,7 @@ export function Walkthrough({ step }: { step: '1' | '2' | '3' }): React.JSX.Elem
 
   return (
     <WelcomeFrame
+      wide
       footerRow
       footer={
         <>
@@ -47,13 +48,23 @@ export function Walkthrough({ step }: { step: '1' | '2' | '3' }): React.JSX.Elem
         </>
       }
     >
-      <WalkthroughArt step={step} />
-      <div className="px-[12px] text-center">
-        <h2 className="mb-[10px] text-[20px] font-semibold leading-[1.3]">{copy.title}</h2>
-        <p className="mx-auto max-w-[260px] text-[13px] leading-[1.6] text-slate">{copy.body}</p>
-      </div>
-      <div className="mt-auto pb-[90px] pt-[24px]">
-        <Dots at={POSITION[step]} />
+      {/* The wrapper is always here and the overview is its first child or nothing, so the step never remounts. */}
+      <div className="flex flex-1 flex-col lg:flex-row lg:items-center">
+        <Overview at={key} />
+        <div className="flex flex-1 flex-col">
+          <WalkthroughArt step={step} />
+          <div className="px-[12px] text-center">
+            <h2 className="mb-[10px] text-[20px] font-semibold leading-[1.3] md:text-[24px] lg:text-[26px]">
+              {copy.title}
+            </h2>
+            <p className="mx-auto max-w-[260px] text-[13px] leading-[1.6] text-slate md:max-w-[420px] md:text-[15px]">
+              {copy.body}
+            </p>
+          </div>
+          <div className="mt-auto pb-[90px] pt-[24px] md:pb-0 md:pt-[32px]">
+            <Dots at={POSITION[step]} />
+          </div>
+        </div>
       </div>
     </WelcomeFrame>
   );

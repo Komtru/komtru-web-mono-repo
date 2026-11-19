@@ -74,8 +74,8 @@ function DoneContent(): React.JSX.Element {
         )
       }
     >
-      <div className="px-[20px] pt-[12px] text-center">
-        <div aria-hidden className="mx-auto mb-[16px] h-[56px] w-[56px]">
+      <div className="px-[20px] pt-[12px] text-center md:pt-0">
+        <div aria-hidden className="mx-auto mb-[16px] h-[56px] w-[56px] md:h-[64px] md:w-[64px]">
           <svg
             viewBox="0 0 24 24"
             fill="none"
@@ -87,10 +87,10 @@ function DoneContent(): React.JSX.Element {
             <path d="M7 12.5l3.2 3.2L17 9" />
           </svg>
         </div>
-        <h2 className="mb-[6px] text-[19px] font-semibold">
+        <h2 className="mb-[6px] text-[19px] font-semibold md:text-[24px]">
           {name === null ? "You're all set" : `You're all set, ${name}`}
         </h2>
-        <p className="mb-[16px] text-[12.5px] leading-[1.5] text-slate">
+        <p className="mx-auto mb-[16px] text-[12.5px] leading-[1.5] text-slate md:max-w-[440px] md:text-[14.5px]">
           Start your first protected Trade, or find one a seller already sent you.
         </p>
       </div>

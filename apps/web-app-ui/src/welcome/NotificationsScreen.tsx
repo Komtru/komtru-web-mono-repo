@@ -93,7 +93,7 @@ export function NotificationsScreen({
       <div className="text-center">
         <div
           aria-hidden
-          className="mx-auto mb-[20px] mt-[32px] flex h-[64px] w-[64px] items-center justify-center rounded-[50%] bg-trust-indigo-soft"
+          className="mx-auto mb-[20px] mt-[32px] flex h-[64px] w-[64px] md:mt-0 md:h-[72px] md:w-[72px] items-center justify-center rounded-[50%] bg-trust-indigo-soft"
         >
           <svg
             viewBox="0 0 24 24"
@@ -108,8 +108,10 @@ export function NotificationsScreen({
             <path d="M10 18.5a2 2 0 0 0 4 0" />
           </svg>
         </div>
-        <h2 className="mb-[8px] text-[18px] font-semibold">{copy?.title}</h2>
-        <p className="mx-auto mb-[20px] max-w-[260px] text-[12.5px] leading-[1.6] text-slate">{copy?.body}</p>
+        <h2 className="mb-[8px] text-[18px] font-semibold md:text-[22px]">{copy?.title}</h2>
+        <p className="mx-auto mb-[20px] max-w-[260px] text-[12.5px] leading-[1.6] text-slate md:max-w-[440px] md:text-[14.5px]">
+          {copy?.body}
+        </p>
         {/* Mounted before it has anything to say, so a screen reader hears it when it fills. */}
         <div className="text-left" role="status">
           {blocked !== undefined && <NoteBanner>{BLOCKED_COPY[blocked]}</NoteBanner>}
