@@ -13,6 +13,8 @@ node_modules/
 dist/
 build/
 .next/
+# the visual check builds here so it cannot clobber a running dev server (see docs/runbooks/visual-check.md)
+.next-visual-check/
 out/
 coverage/
 .turbo/
