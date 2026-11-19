@@ -5,20 +5,62 @@ bit us the first time. Scripts live in [`scripts/deploy/`](../../scripts/deploy/
 
 ## What is running today
 
-|            |                                                                                       |
-| ---------- | ------------------------------------------------------------------------------------- |
-| Host       | `staging-api.komtru.com` (Ubuntu 24.04, x86_64, 2 vCPU, 7.6 GB RAM, 8 GB root volume) |
-| Processes  | `komtru-api` and `komtru-worker` under PM2, as the `komtru` service account           |
-| Front door | Apache, TLS from Let's Encrypt, `:80` redirecting to `:443`                           |
-| Postgres   | RDS, reached over TLS. Migrations go direct as the owner role                         |
-| Redis      | `redis-server` on the box, bound to `127.0.0.1`, append-only, `noeviction`            |
-| Code       | `/srv/komtru/app`, pushed by rsync — the monorepo has no git remote yet               |
-| Secrets    | `/srv/komtru/.env.backend`, mode 0600, owned by `komtru`                              |
+Two hosts, same shape, different databases.
 
-`NODE_ENV` is `development`, not `production`, and that is deliberate — see
-[Why this host is not NODE_ENV=production](#why-this-host-is-not-node_envproduction).
+|          | staging                               | production                              |
+| -------- | ------------------------------------- | --------------------------------------- |
+| Hostname | `staging-api.komtru.com`              | `api.komtru.com`                        |
+| Instance | t3.large, Ubuntu 24.04, **us-west-1** | t2.medium, Amazon Linux 2023, us-east-1 |
+| Disk     | 8 GB root volume                      | 30 GB root volume                       |
+| Database | `komtru_v2_dev`                       | `komtru_v2_prod`                        |
+| Login    | `ubuntu`                              | `ec2-user`                              |
+
+Everything else is the same on both: `komtru-api` and `komtru-worker` under PM2 as the `komtru`
+service account; Apache in front with a Let's Encrypt certificate and `:80` redirecting to `:443`;
+Redis on the box bound to `127.0.0.1`, append-only, `noeviction`; code in `/srv/komtru/app`;
+secrets in `/srv/komtru/.env.backend`, mode 0600, owned by `komtru`.
+
+`NODE_ENV` is `development` on **both**, and that is deliberate — see
+[Why this host is not NODE_ENV=production](#why-this-host-is-not-node_envproduction). It applies
+to the production host too, and is the main thing to fix before real customers arrive.
+
+### Three things about this pair that will surprise you
+
+**They share one Postgres instance, and therefore one `komtru_app` role.** Postgres roles are
+cluster-wide. The migrator does `ALTER ROLE komtru_app LOGIN PASSWORD ...` on every run, so the two
+hosts must carry the _same_ `POSTGRES_APP_PASSWORD` — give production a different one and the next
+deploy on either host locks the other out. Separating them needs a second RDS instance, or making
+`RUNTIME_ROLE` configurable.
+
+**That RDS instance is not Komtru's.** It also hosts several unrelated projects, the largest 17 GB.
+Treat it as shared infrastructure.
+
+**Staging is in the wrong region.** The database is in us-east-1 and the staging host is in
+us-west-1, so every query it makes crosses the country. Production is in us-east-1 with the
+database, which is one reason it is the faster of the two despite being the smaller instance.
 
 ## One-time: bootstrap
+
+The script runs on Ubuntu and on Amazon Linux 2023. Four differences between them are handled in
+the script and are each worth knowing, because every one of them stopped the bootstrap dead the
+first time it met Amazon Linux:
+
+- **`curl` conflicts.** Amazon Linux ships `curl-minimal`, which provides a working `/usr/bin/curl`
+  but conflicts with the full `curl` package. Naming curl unconditionally makes dnf print several
+  hundred lines of conflict and install nothing, so it is only requested when actually missing.
+- **Different names for the same things.** `redis-server` vs `redis6`, `apache2` vs `httpd`, and no
+  `a2enmod`/`a2ensite` at all — httpd includes every `conf.d/*.conf` instead.
+- **`${APACHE_LOG_DIR}`** is set by Debian's `envvars` and does not exist elsewhere; the vhost
+  template takes a substituted `__LOG_DIR__` instead.
+- **mod_ssl's stub certificate.** Its shipped `ssl.conf` points at `/etc/pki/tls/certs/localhost.crt`,
+  which the image does not generate, and Apache refuses to start without it — before certbot has
+  ever run, so before there is a real certificate to replace it with. The script generates it.
+
+And one trap that is not a distribution difference at all: **certbot says it scheduled renewal even
+when nothing will run it.** Amazon Linux ships `certbot-renew.timer` disabled and has no cron daemon,
+so the certificate would quietly expire ninety days later. The script enables the timer and installs
+a deploy hook that reloads the web server, because certbot writes the new certificate but leaves the
+running server holding the old one.
 
 ```bash
 sudo bash scripts/deploy/bootstrap-ec2.sh

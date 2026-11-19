@@ -14,8 +14,10 @@
 #   4. the reverse-proxy vhost, with the WebSocket upgrade Socket.IO needs
 #   5. PM2 under systemd, with an explicit PM2_HOME so the process list survives a reboot
 #
-# Tested on Ubuntu 24.04 x86_64. Amazon Linux is handled where it is cheap to do so, but has
-# not been run end to end.
+# Tested end to end on Ubuntu 24.04 and Amazon Linux 2023, both x86_64. The two differ in more
+# than their package manager — the names of the Redis and Apache packages, the names of their
+# services, where a vhost goes, and whether `a2enmod` exists at all — so those are resolved once,
+# into the variables below, rather than branched on at each use.
 set -euo pipefail
 
 log()  { printf '\n\033[1;36m==> %s\033[0m\n' "$*"; }
@@ -54,8 +56,24 @@ LOGROTATE_MAX_SIZE="${LOGROTATE_MAX_SIZE:-50M}"
 # shellcheck source=/dev/null
 . /etc/os-release
 case "${ID}" in
-  ubuntu|debian) PKG=apt ;;
-  amzn|rhel|fedora|centos|rocky|almalinux) PKG=dnf ;;
+  ubuntu|debian)
+    PKG=apt
+    REDIS_PKGS=(redis-server); REDIS_SVC=redis-server
+    HTTPD_PKGS=(apache2 python3-certbot-apache certbot); HTTPD_SVC=apache2
+    HTTPD_SITE=/etc/apache2/sites-available/komtru-api.conf
+    HTTPD_LOG_DIR='${APACHE_LOG_DIR}'
+    ;;
+  amzn|rhel|fedora|centos|rocky|almalinux)
+    PKG=dnf
+    # Amazon Linux 2023 ships Redis as `redis6`; there is no plain `redis` package.
+    REDIS_PKGS=(redis6); REDIS_SVC=redis6
+    # `mod_ssl` is a separate package here, and the vhost template's SSLEngine lines are a config
+    # error without it.
+    HTTPD_PKGS=(httpd mod_ssl python3-certbot-apache certbot); HTTPD_SVC=httpd
+    # No sites-available/sites-enabled split: httpd includes every *.conf in conf.d.
+    HTTPD_SITE=/etc/httpd/conf.d/komtru-api.conf
+    HTTPD_LOG_DIR=/var/log/httpd
+    ;;
   *) die "unsupported distribution '${ID}'." ;;
 esac
 log "host: ${PRETTY_NAME:-${ID}} on $(uname -m) (${PKG})"
@@ -87,9 +105,16 @@ esac
 
 # curl is NOT present on a minimal Ubuntu cloud image, and both the NodeSource key and the RDS
 # bundle are fetched with it.
+#
+# It is only asked for when it is actually missing. Amazon Linux 2023 ships `curl-minimal`, which
+# provides a perfectly good /usr/bin/curl but CONFLICTS with the full `curl` package — naming curl
+# unconditionally makes dnf print several hundred lines of conflict and give up before anything is
+# installed.
 log "installing base packages"
 wait_for_dpkg_lock
-pkg_install ca-certificates curl gnupg git rsync jq openssl
+BASE_PKGS=(ca-certificates gnupg git rsync jq openssl)
+command -v curl >/dev/null || BASE_PKGS+=(curl)
+pkg_install "${BASE_PKGS[@]}"
 
 # ---------------------------------------------------------------------------
 # Node 22. NodeSource publishes x86_64 and aarch64, so Graviton needs no special case, and
@@ -133,20 +158,27 @@ pm2 -v
 # state lives in it, and evicting a queue key loses queued notifications and ledger work.
 # ---------------------------------------------------------------------------
 if [[ ${REDIS_MODE} == native ]]; then
-  log "installing and hardening Redis"
+  log "installing and hardening Redis (${REDIS_PKGS[*]})"
   wait_for_dpkg_lock
-  pkg_install redis-server
-  REDIS_CONF=/etc/redis/redis.conf
-  [[ -f ${REDIS_CONF} ]] || REDIS_CONF=/etc/redis.conf
+  pkg_install "${REDIS_PKGS[@]}"
+  # Debian puts it at /etc/redis/redis.conf; Amazon Linux's redis6 at /etc/redis6/redis6.conf.
+  REDIS_CONF=""
+  for candidate in /etc/redis/redis.conf /etc/redis6/redis6.conf /etc/redis.conf; do
+    [[ -f ${candidate} ]] && { REDIS_CONF="${candidate}"; break; }
+  done
+  [[ -n ${REDIS_CONF} ]] || die "Redis installed but no redis.conf found."
+  log "  config: ${REDIS_CONF}"
   sed -i -E \
     -e 's/^# *maxmemory-policy .*/maxmemory-policy noeviction/' \
     -e 's/^appendonly no/appendonly yes/' \
     -e 's/^bind .*/bind 127.0.0.1 -::1/' \
     "${REDIS_CONF}"
   grep -q '^maxmemory-policy' "${REDIS_CONF}" || echo 'maxmemory-policy noeviction' >> "${REDIS_CONF}"
-  systemctl enable --now redis-server
-  systemctl restart redis-server
-  redis-cli ping
+  grep -q '^appendonly yes' "${REDIS_CONF}" || echo 'appendonly yes' >> "${REDIS_CONF}"
+  systemctl enable --now "${REDIS_SVC}"
+  systemctl restart "${REDIS_SVC}"
+  # redis6 names its client redis6-cli; either is fine for a ping.
+  "$(command -v redis-cli || command -v redis6-cli)" ping
 else
   log "REDIS_MODE=${REDIS_MODE}: skipping Redis; REDIS_URL must point at a managed instance."
 fi
@@ -195,21 +227,50 @@ fi
 # Reverse proxy.
 # ---------------------------------------------------------------------------
 if [[ ${WEB_SERVER} == apache ]]; then
-  log "installing Apache and the modules the API needs"
+  log "installing Apache (${HTTPD_PKGS[*]}) and the modules the API needs"
   wait_for_dpkg_lock
-  pkg_install apache2 python3-certbot-apache certbot
-  # mpm_event and authz_core are not optional: without them `Require` is an unknown directive and
-  # Apache will not even pass a config test.
-  a2enmod proxy proxy_http proxy_wstunnel headers rewrite ssl mpm_event \
-          access_compat alias auth_basic authn_core authn_file authz_core authz_host authz_user \
-          autoindex deflate dir env filter mime negotiation reqtimeout setenvif status >/dev/null
-  a2dissite 000-default >/dev/null 2>&1 || true
+  pkg_install "${HTTPD_PKGS[@]}"
+  if [[ ${PKG} == apt ]]; then
+    # mpm_event and authz_core are not optional: without them `Require` is an unknown directive
+    # and Apache will not even pass a config test.
+    a2enmod proxy proxy_http proxy_wstunnel headers rewrite ssl mpm_event \
+            access_compat alias auth_basic authn_core authn_file authz_core authz_host authz_user \
+            autoindex deflate dir env filter mime negotiation reqtimeout setenvif status >/dev/null
+    a2dissite 000-default >/dev/null 2>&1 || true
+  else
+    # No a2enmod on this family: httpd loads whatever conf.modules.d declares, and the base set
+    # already covers everything the vhost needs except proxy_wstunnel, which Socket.IO does need.
+    # Assert rather than assume — a missing LoadModule is a config error at reload, not here.
+    for mod in proxy_module proxy_http_module proxy_wstunnel_module headers_module \
+               rewrite_module ssl_module authz_core_module; do
+      grep -rqs "^LoadModule ${mod}" /etc/httpd/conf.modules.d /etc/httpd/conf \
+        || die "httpd is missing ${mod}; the vhost will not load."
+    done
+    # The stock welcome page answers / on every vhost and would shadow the proxy.
+    [[ -f /etc/httpd/conf.d/welcome.conf ]] && : > /etc/httpd/conf.d/welcome.conf
+    # mod_ssl ships an ssl.conf pointing at a self-signed pair this image does not generate, and
+    # Apache will not start while it is missing — before certbot has ever run, and so before
+    # there is any real certificate to replace it with. Generate the stub it expects.
+    if [[ ! -s /etc/pki/tls/certs/localhost.crt ]]; then
+      log "generating the stub certificate mod_ssl's shipped ssl.conf refers to"
+      install -d -m 0755 /etc/pki/tls/certs
+      install -d -m 0700 /etc/pki/tls/private
+      openssl req -new -x509 -nodes -days 3650 -newkey rsa:2048 \
+        -keyout /etc/pki/tls/private/localhost.key \
+        -out /etc/pki/tls/certs/localhost.crt \
+        -subj "/CN=localhost" >/dev/null 2>&1
+      chmod 600 /etc/pki/tls/private/localhost.key
+      chmod 644 /etc/pki/tls/certs/localhost.crt
+    fi
+  fi
   sed -e "s|__API_DOMAIN__|${API_DOMAIN}|g" -e "s|__API_PORT__|${API_PORT}|g" \
-    "${SCRIPT_DIR}/apache/komtru-api.conf.template" > /etc/apache2/sites-available/komtru-api.conf
-  a2ensite komtru-api >/dev/null
-  apache2ctl configtest
-  systemctl enable --now apache2
-  systemctl reload apache2
+      -e "s|__LOG_DIR__|${HTTPD_LOG_DIR}|g" \
+    "${SCRIPT_DIR}/apache/komtru-api.conf.template" > "${HTTPD_SITE}"
+  [[ ${PKG} == apt ]] && a2ensite komtru-api >/dev/null
+  # `apachectl` exists on both; `apache2ctl` does not exist on Amazon Linux.
+  apachectl configtest
+  systemctl enable --now "${HTTPD_SVC}"
+  systemctl reload "${HTTPD_SVC}"
 else
   die "WEB_SERVER=${WEB_SERVER} is not supported by this script; only 'apache' is implemented."
 fi
@@ -222,7 +283,32 @@ log "requesting a certificate for ${API_DOMAIN}"
 CERTBOT_ARGS=(--apache --non-interactive --agree-tos --redirect -d "${API_DOMAIN}")
 if [[ -n ${TLS_EMAIL} ]]; then CERTBOT_ARGS+=(-m "${TLS_EMAIL}"); else CERTBOT_ARGS+=(--register-unsafely-without-email); fi
 certbot "${CERTBOT_ARGS[@]}" \
-  || warn "certbot failed. Point ${API_DOMAIN} at this instance, then rerun: certbot --apache -d ${API_DOMAIN}"
+  || warn "certbot failed. The HTTP-01 challenge needs ${API_DOMAIN} to resolve here AND inbound
+         tcp/80 open in this instance's security group. Fix both, then rerun:
+           sudo certbot --apache -d ${API_DOMAIN}"
+
+# ---------------------------------------------------------------------------
+# Renewal. certbot prints "Certbot has set up a scheduled task to automatically renew" whether or
+# not anything will actually run it: Amazon Linux ships certbot-renew.timer DISABLED and has no
+# cron daemon at all, so without this the certificate quietly expires ninety days later. The
+# deploy hook matters just as much — certbot writes the new certificate but does not restart the
+# server still holding the old one in memory.
+# ---------------------------------------------------------------------------
+log "scheduling certificate renewal"
+install -d -m 0755 /etc/letsencrypt/renewal-hooks/deploy
+cat > /etc/letsencrypt/renewal-hooks/deploy/reload-httpd.sh <<HOOK
+#!/bin/sh
+systemctl reload ${HTTPD_SVC}
+HOOK
+chmod 0755 /etc/letsencrypt/renewal-hooks/deploy/reload-httpd.sh
+if systemctl list-unit-files 2>/dev/null | grep -q '^certbot-renew\.timer'; then
+  systemctl enable --now certbot-renew.timer
+  echo "  certbot-renew.timer: $(systemctl is-active certbot-renew.timer)"
+elif systemctl list-unit-files 2>/dev/null | grep -q '^snap\.certbot'; then
+  echo "  renewal handled by the certbot snap's own timer"
+else
+  warn "no certbot renewal timer found; add one or the certificate expires in 90 days."
+fi
 
 # ---------------------------------------------------------------------------
 # PM2 under systemd. PM2_HOME is passed explicitly: pm2 derives it from $HOME, sudo does not
@@ -268,8 +354,15 @@ sed -e "s/maxsize 50M/maxsize ${LOGROTATE_MAX_SIZE}/" \
 chmod 0644 /etc/logrotate.d/komtru
 # A size ceiling on the DISTRIBUTION's rsyslog entry rather than a second config: logrotate
 # refuses to run at all when a file is claimed by two definitions.
+# Amazon Linux journals to systemd and ships no rsyslog entry, so this is Debian-only in practice.
 if [[ -f /etc/logrotate.d/rsyslog ]] && ! grep -q maxsize /etc/logrotate.d/rsyslog; then
   sed -i "0,/^\s*rotate /s//\tmaxsize ${LOGROTATE_MAX_SIZE}\n\trotate /" /etc/logrotate.d/rsyslog
+fi
+# The journal has no ceiling by default and is what grows instead on a systemd-only image.
+if [[ ! -f /etc/logrotate.d/rsyslog ]]; then
+  install -d -m 0755 /etc/systemd/journald.conf.d
+  printf '[Journal]\nSystemMaxUse=200M\n' > /etc/systemd/journald.conf.d/99-komtru.conf
+  systemctl restart systemd-journald 2>/dev/null || true
 fi
 logrotate --debug /etc/logrotate.conf >/dev/null 2>&1 || warn "logrotate reports a configuration problem; run: logrotate --debug /etc/logrotate.conf"
 systemctl enable --now logrotate.timer >/dev/null 2>&1 || true
@@ -278,6 +371,11 @@ log "registering PM2 with systemd for ${APP_USER}"
 env PATH="${PATH}:$(dirname "$(command -v node)")" PM2_HOME="${PM2_HOME}" \
   pm2 startup systemd -u "${APP_USER}" --hp "${APP_HOME}" >/dev/null
 systemctl enable "pm2-${APP_USER}" >/dev/null 2>&1 || true
+# Enabled is not running. deploy.sh starts PM2 directly, which leaves a daemon systemd does not
+# own: everything works until the first reboot, when systemd starts a second one from the dump
+# and the ports collide. Starting the unit here means the state a reboot reproduces is the state
+# the host is already in.
+systemctl is-active --quiet "pm2-${APP_USER}" || systemctl start "pm2-${APP_USER}" 2>/dev/null || true
 
 log "bootstrap complete"
 cat <<DONE

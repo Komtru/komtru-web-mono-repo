@@ -35,6 +35,9 @@
     # FILES_MAX_UPLOAD_BYTES is 10 MiB; this leaves room for the multipart envelope.
     LimitRequestBody 12582912
 
-    ErrorLog  ${APACHE_LOG_DIR}/komtru-api.error.log
-    CustomLog ${APACHE_LOG_DIR}/komtru-api.access.log combined
+    # __LOG_DIR__, not ${APACHE_LOG_DIR}: that variable is set by Debian's envvars file and does
+    # not exist on Amazon Linux, where Apache refuses to start with "Config variable
+    # ${APACHE_LOG_DIR} is not defined".
+    ErrorLog  __LOG_DIR__/komtru-api.error.log
+    CustomLog __LOG_DIR__/komtru-api.access.log combined
 </VirtualHost>
