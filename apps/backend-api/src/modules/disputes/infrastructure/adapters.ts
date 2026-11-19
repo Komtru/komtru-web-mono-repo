@@ -3,7 +3,6 @@
 // makes the ports worth having: the services above never learn that a trade's dispatch photos
 // live in `trade.trade_evidence_media`.
 import { and, eq, inArray } from 'drizzle-orm';
-import type { Tx } from '../../../platform/events/publish.js';
 import { grantAccess } from '../../files/index.js';
 import { applyTransition, tradeEvidenceMedia, tradeProofMedia, trades } from '../../trades/index.js';
 import type {
