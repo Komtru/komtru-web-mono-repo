@@ -35,8 +35,8 @@ export function SellLive(): React.JSX.Element {
     );
   }
 
-  const live = phaseOf(application.data) === 'APPROVED' && application.data !== null;
-  if (!live) {
+  const app = application.data;
+  if (app === null || phaseOf(app) !== 'APPROVED') {
     return (
       <ScreenColumn>
         <EmptyState
@@ -52,7 +52,7 @@ export function SellLive(): React.JSX.Element {
     );
   }
 
-  const names = (application.data.form.categories ?? []).map(
+  const names = (app.form.categories ?? []).map(
     (code) => standards.data.find((standard) => standard.categoryCode === code)?.categoryName ?? code,
   );
   const plural = names.length === 1 ? 'this category' : 'these categories';
