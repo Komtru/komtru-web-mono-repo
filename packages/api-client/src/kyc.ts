@@ -92,6 +92,9 @@ export const REJECTION_CODES = [
   'DUPLICATE_IDENTITY',
   'REVIEW_DECLINED',
   'NEEDS_HUMAN_REVIEW',
+  /** The person closed the liveness SDK without finishing. Never shown on VF1 — the status
+   *  endpoint filters it out of `rejections` — but TrustOps reads the stored code. */
+  'ABANDONED',
 ] as const;
 export type RejectionCode = (typeof REJECTION_CODES)[number];
 

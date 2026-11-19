@@ -460,6 +460,25 @@ export const startLivenessSession = defineEndpoint({
   },
 });
 
+/**
+ * Ends a liveness session the person closed without finishing.
+ *
+ * `retryable: false` because a repeat is harmless rather than because it is forbidden: the server
+ * answers a second close with `abandoned: false`. That matters here — the call is fired as the
+ * SDK's modal closes, which is exactly when a connection is most likely to drop.
+ */
+export const abandonLivenessSession = defineEndpoint({
+  method: 'post',
+  path: '/verification/liveness/session/:requestId/abandon',
+  scope: 'CONSUMER',
+  retryable: false,
+  schema: {
+    params: z.object({ requestId: z.uuid() }),
+    /** False means this call moved nothing — a second close, or a retry after one that landed. */
+    response: z.strictObject({ abandoned: z.boolean() }),
+  },
+});
+
 // --- recovery (SP-M05's "I can't get the code") -------------------------------------------------------------
 
 export const RECOVERY_METHODS = [

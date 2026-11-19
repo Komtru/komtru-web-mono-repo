@@ -256,15 +256,67 @@ export async function readVerificationStatus(
       submittedAt: request.submittedAt.toISOString(),
       expiresAt: request.expiresAt.toISOString(),
     })),
-    rejections: rejected.map((request) => ({
-      requestId: request.requestId,
-      type: request.verificationType,
-      decidedAt: request.decidedAt?.toISOString() ?? null,
-      // `?? ''` rather than a branch: `describeRejection` is total and falls back to
-      // NEEDS_HUMAN_REVIEW, so a rejection written before codes existed still renders something.
-      reason: describeRejection(request.rejectionReason ?? ''),
-    })),
+    rejections: rejected
+      /*
+        An abandoned session is not the platform's word on anything.
+
+        It shares the EXPIRED status with a swept request, so the query that finds "the most recent
+        terminally-failed request per type" finds it too. Letting it through would put a failure
+        banner and a "Try again" on VF1 for somebody who closed a camera — and worse, it would keep
+        the screen out of the branch that renders the control to start over, which is the one thing
+        they came back for.
+      */
+      .filter((request) => request.rejectionReason !== 'ABANDONED')
+      .map((request) => ({
+        requestId: request.requestId,
+        type: request.verificationType,
+        decidedAt: request.decidedAt?.toISOString() ?? null,
+        // `?? ''` rather than a branch: `describeRejection` is total and falls back to
+        // NEEDS_HUMAN_REVIEW, so a rejection written before codes existed still renders something.
+        reason: describeRejection(request.rejectionReason ?? ''),
+      })),
   };
+}
+
+/**
+ * The person opened the camera flow and closed it without finishing.
+ *
+ * Ends the request so VF1's start branch renders again at once. Without it the row sits at
+ * PROVIDER_PENDING until the §6.2 sweep expires it a day later, and for that day the screen shows
+ * "We're checking" over a check nobody is performing — with no control to retry, because the start
+ * branch only renders when nothing is in flight.
+ *
+ * The UPDATE goes first and the read only happens when it moved nothing. That ordering is the
+ * concurrency control: ownership, type and status all live in the WHERE clause, so two `onClose`
+ * calls cannot both conclude they are the one ending the session, and a close racing the sweep
+ * loses cleanly instead of overwriting a decision.
+ */
+export async function abandonLivenessSession(
+  deps: VerificationDeps,
+  input: { userId: string; requestId: string },
+): Promise<{ abandoned: boolean }> {
+  if (await deps.store.abandonLiveness({ userId: input.userId, requestId: input.requestId })) {
+    return { abandoned: true };
+  }
+
+  // Nothing moved. The row itself says why, and each answer is different to the caller.
+  const request = await deps.store.findRequest(input.requestId);
+  if (request === undefined || request.userId !== input.userId) {
+    // One answer for "no such request" and "not yours": a 403 here would confirm that somebody
+    // else's request id exists.
+    throw new ApiError(404, 'NOT_FOUND', 'No such verification');
+  }
+  if (request.verificationType !== 'LIVENESS') {
+    throw new ApiError(409, 'CONFLICT', 'Only a selfie check can be closed this way');
+  }
+  if (request.status === 'EXPIRED' && request.rejectionReason === 'ABANDONED') {
+    // Idempotent on purpose. `onClose` can fire twice, and the call is retried over a connection
+    // that may have dropped after the server already acted; a second close is not an error.
+    return { abandoned: false };
+  }
+  // APPROVED, REJECTED, or a sweep that got there first. An approved liveness check is a level,
+  // and discarding it here would quietly take one away.
+  throw new ApiError(409, 'CONFLICT', 'This check has already been decided');
 }
 
 /**

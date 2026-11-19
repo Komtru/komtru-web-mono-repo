@@ -264,6 +264,16 @@ export interface TrustStore {
    * expired it, or a human decided it — and the caller must not call a provider.
    */
   markProviderPending(requestId: string, provider: KycProvider): Promise<boolean>;
+  /**
+   * Ends a liveness session the person closed without finishing.
+   *
+   * One conditional UPDATE, scoped to the owner and to the two statuses that can still be given up
+   * on. False means it moved nothing — somebody else's request, an unknown id, or a check the
+   * platform has already decided — and the service reads the row to say which. Doing the check as
+   * a WHERE rather than a read-then-write is what stops two `onClose` calls, or a close racing the
+   * sweep, from both deciding they are the one ending it.
+   */
+  abandonLiveness(input: { userId: string; requestId: string }): Promise<boolean>;
   recordProviderCall(input: ProviderCallInput): Promise<void>;
   /**
    * Insert the outcome row and move the request, in one transaction.

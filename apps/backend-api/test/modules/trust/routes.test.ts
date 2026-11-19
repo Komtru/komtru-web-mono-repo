@@ -52,6 +52,9 @@ describe('trustRoutes', () => {
       // Not in §11's original table: the browser-SDK session, added when liveness stopped being a
       // call this backend makes and became one the user's browser makes on our behalf.
       'POST /verification/liveness/session',
+      // Its counterpart: the person closed the SDK without finishing, and the request must end now
+      // rather than hold their one in-flight slot until the §6.2 sweep notices tomorrow.
+      'POST /verification/liveness/session/:requestId/abandon',
       'POST /verification/business',
       'POST /verification/bank-account',
       'POST /verification/address',
@@ -82,11 +85,18 @@ describe('trustRoutes', () => {
     // answers 201. The liveness session answers 200 because it is not a check at all: it hands the
     // caller the merchant key and reference its browser needs NOW, and 202 would promise a result
     // that is never coming on this response — the verdict arrives over a webhook.
-    const synchronous = new Set(['POST /verification/social-proof', 'POST /verification/liveness/session']);
+    // Abandoning joins them: it is the end of a check rather than the start of one, and the work
+    // is finished by the time the response is written, so there is nothing for a 202 to promise.
+    const synchronous = new Set([
+      'POST /verification/social-proof',
+      'POST /verification/liveness/session',
+      'POST /verification/liveness/session/:requestId/abandon',
+    ]);
     const checks = labels.filter((l) => l.startsWith('POST') && !synchronous.has(l));
     for (const label of checks) expect(routeFor(label).status).toBe(202);
     expect(routeFor('POST /verification/social-proof').status).toBe(201);
     expect(routeFor('POST /verification/liveness/session').status).toBeUndefined();
+    expect(routeFor('POST /verification/liveness/session/:requestId/abandon').status).toBeUndefined();
   });
 
   /**
