@@ -155,14 +155,32 @@ describe.each(APPS)('%s workflow', (app) => {
   const workflow = workflows.get(app)!;
   const jobs = workflow.jobs;
 
+  /** The only workflow whose own deploy job ships anything; see the deploy tests below. */
+  const REALLY_DEPLOYS = new Set(['backend-api']);
+
   it('has a manifest named after its directory, which the filter derivation relies on', () => {
     expect(manifests.has(`@komtru/${app}`)).toBe(true);
   });
 
-  it('is path-filtered to the app, its workspace dependencies and the shared root files', () => {
+  /*
+   * The filter follows the app, not the graph — with one exception.
+   *
+   * Deriving it from `packageDependenciesOf` meant a one-line edit to `api-client` started five
+   * full pipelines, because `app-kit` depends on it and every app depends on `app-kit`. Two
+   * things make the narrow filter safe: `repo.yml` filters nothing and runs lint, typecheck,
+   * test and build over every workspace package on every push, so a shared-package change that
+   * breaks a consumer is still caught; and none of these workflows deploy — Vercel's git
+   * integration watches the branch itself.
+   *
+   * `backend-api` is the exception. It is the one workflow that really deploys, so it keeps its
+   * dependency paths: a change to `shared-types` alone must still rebuild and redeploy the API.
+   */
+  it('is path-filtered to the app and the shared root files, plus its dependencies only where it deploys', () => {
     const expected = new Set([
       `apps/${app}/**`,
-      ...[...packageDependenciesOf(`@komtru/${app}`)].map((dir) => `packages/${dir}/**`),
+      ...(REALLY_DEPLOYS.has(app)
+        ? [...packageDependenciesOf(`@komtru/${app}`)].map((dir) => `packages/${dir}/**`)
+        : []),
       'package.json',
       'pnpm-lock.yaml',
       '.npmrc',
@@ -183,7 +201,7 @@ describe.each(APPS)('%s workflow', (app) => {
     for (const other of APPS.filter((name) => name !== app)) {
       expect(paths.some((path) => path.startsWith(`apps/${other}/`))).toBe(false);
     }
-    const needed = packageDependenciesOf(`@komtru/${app}`);
+    const needed = REALLY_DEPLOYS.has(app) ? packageDependenciesOf(`@komtru/${app}`) : new Set<string>();
     for (const pkg of PACKAGES.filter((name) => !needed.has(name))) {
       expect(paths.some((path) => path.startsWith(`packages/${pkg}/`))).toBe(false);
     }
@@ -242,7 +260,6 @@ describe.each(APPS)('%s workflow', (app) => {
    * The assertion that matters for all three is the gate, not the body: a deploy must never be
    * reachable from a feature branch or from a run whose tests did not pass.
    */
-  const REALLY_DEPLOYS = new Set(['backend-api']);
   const DEPLOYS_ELSEWHERE = new Set(['web-site', 'web-app-ui', 'operations-app']);
 
   it('deploys only from a release branch and only after the tests', () => {

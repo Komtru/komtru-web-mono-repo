@@ -1,6 +1,16 @@
-# CI for apps/web-app-ui. Path-filtered to the app, the packages it depends on and the few root files that
-# change every build, so a change to another app never starts this run. GitHub Actions does not
-# support YAML anchors, hence the duplicated `paths:` list.
+# CI for apps/web-app-ui.
+#
+# Filtered to this app's OWN directory, deliberately — not to the packages it imports.
+#
+# A change to `api-client` or `ui-kit` used to start this run, and every other app's run with it:
+# one edit to a shared package meant five full pipelines. Two things make the narrow filter safe.
+# `repo.yml` filters nothing and runs `turbo run lint typecheck test build` over every workspace
+# package on every push, so a shared-package change that breaks this app is still caught there.
+# And this workflow does not deploy — Vercel's own git integration watches the branch, so what
+# ships is decided by the push, not by whether this filter matched.
+#
+# `backend-api` is the exception and keeps its dependency paths: it is the one workflow that
+# really deploys, so it has to rebuild when the code it bundles changes.
 name: web-app-ui
 
 on:
@@ -12,11 +22,6 @@ on:
     branches: [main, staging]
     paths:
       - 'apps/web-app-ui/**'
-      - 'packages/api-client/**'
-      - 'packages/app-kit/**'
-      - 'packages/config/**'
-      - 'packages/shared-types/**'
-      - 'packages/ui-kit/**'
       - 'package.json'
       - 'pnpm-lock.yaml'
       - '.npmrc'
@@ -27,11 +32,6 @@ on:
   pull_request:
     paths:
       - 'apps/web-app-ui/**'
-      - 'packages/api-client/**'
-      - 'packages/app-kit/**'
-      - 'packages/config/**'
-      - 'packages/shared-types/**'
-      - 'packages/ui-kit/**'
       - 'package.json'
       - 'pnpm-lock.yaml'
       - '.npmrc'
