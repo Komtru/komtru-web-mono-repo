@@ -105,4 +105,4 @@ jobs:
     steps:
       # Placeholder: the hosting target is design §12 Q1, confirmed and wired up in T-005. Real
       # credentials will arrive as ${{ secrets.* }}; never as literals in this file.
-      - run: echo "No deploy target for web-app-ui yet - T-005 confirms the hosting target and replaces this step."
+      - run: echo "web-app-ui deploys from Vercel's git integration (app.komtru.com from main, staging.komtru.com from staging); T-005 owns any move off it."

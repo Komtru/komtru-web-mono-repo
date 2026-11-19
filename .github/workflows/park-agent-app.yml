@@ -91,4 +91,4 @@ jobs:
     steps:
       # Placeholder: the hosting target is design §12 Q1, confirmed and wired up in T-005. Real
       # credentials will arrive as ${{ secrets.* }}; never as literals in this file.
-      - run: echo "No deploy target for park-agent-app yet - T-005 confirms the hosting target and replaces this step."
+      - run: echo "No deploy target for park-agent-app yet - it is post-MVP and gets a host with its wave (T-005 hosted the MVP apps)."

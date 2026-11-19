@@ -235,14 +235,15 @@ describe.each(APPS)('%s workflow', (app) => {
    *
    *  - `backend-api` really deploys. It opens an SSH session against the EC2 host, and the key it
    *    uses is a forced command there, so the branch name it sends is data rather than a command.
-   *  - `web-site` is built and released by Vercel's own git integration, so CI has nothing to push.
-   *  - the rest have no hosting target yet and carry T-005's placeholder.
+   *  - `web-site`, `web-app-ui` and `operations-app` are built and released by Vercel's own git
+   *    integration, so CI has nothing to push.
+   *  - `logistics-ops` and `park-agent-app` are post-MVP and have no hosting target yet.
    *
    * The assertion that matters for all three is the gate, not the body: a deploy must never be
    * reachable from a feature branch or from a run whose tests did not pass.
    */
   const REALLY_DEPLOYS = new Set(['backend-api']);
-  const DEPLOYS_ELSEWHERE = new Set(['web-site']);
+  const DEPLOYS_ELSEWHERE = new Set(['web-site', 'web-app-ui', 'operations-app']);
 
   it('deploys only from a release branch and only after the tests', () => {
     expect(asArray(jobs.deploy?.needs)).toContain('test');
@@ -276,7 +277,11 @@ describe.each(APPS)('%s workflow', (app) => {
     }
     expect(jobs.deploy?.steps).toHaveLength(1);
     const step = jobs.deploy?.steps[0]?.run ?? '';
-    expect(DEPLOYS_ELSEWHERE.has(app) ? step : `${step} T-005`).toContain('T-005');
+    // Name where the app really ships from, or say there is nowhere yet: an `echo` that claims
+    // neither would let a green deploy job pass for a deploy that never happened.
+    expect(step).toMatch(
+      DEPLOYS_ELSEWHERE.has(app) ? /Vercel's git integration/ : /^echo "No deploy target for /,
+    );
   });
 
   /*
