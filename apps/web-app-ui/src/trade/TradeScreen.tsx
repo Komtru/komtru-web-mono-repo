@@ -33,6 +33,7 @@ import { ClaimPanel } from './ClaimPanel';
 import { ShareTrade } from './ShareTrade';
 import { isProblem, proofNeeds, problemMessage } from './format';
 import { BACK_TO_TRADES, ConfirmSheet, ItemSummary, PartyHeader, TermsRows } from './parts';
+import { ProposeWorkspace } from './create/ProposeWorkspace';
 import { ReviewAccept } from './create/ReviewAccept';
 import { BuyerChoose } from './create/BuyerChoose';
 import { isRequestShaped, isRequestSpec, isSellerOffer } from './create/request';
@@ -192,8 +193,9 @@ function AnswerProposal({ trade }: { trade: TradeView }): React.JSX.Element {
   };
 
   return (
-    <ScreenColumn>
-      <ScreenHeader title={selling ? 'New Request' : 'Review terms'} backHref="/trades" />
+    <ProposeWorkspace
+      header={<ScreenHeader title={selling ? 'New Request' : 'Review terms'} backHref="/trades" />}
+    >
       <NoteBanner>
         {selling
           ? 'A buyer wants this from you. Review the terms, then accept, change them or decline.'
@@ -281,7 +283,7 @@ function AnswerProposal({ trade }: { trade: TradeView }): React.JSX.Element {
             : {})}
         />
       </ConfirmSheet>
-    </ScreenColumn>
+    </ProposeWorkspace>
   );
 }
 

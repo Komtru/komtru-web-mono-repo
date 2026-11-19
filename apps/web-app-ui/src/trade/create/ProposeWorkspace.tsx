@@ -5,10 +5,12 @@ import type { ReactNode } from 'react';
 export interface ProposeWorkspaceProps {
   /** The screen's title and back link: drawn once, across the whole frame, above the rail. */
   header?: ReactNode;
-  /** The assembly rail: the stages the trade goes through, with the one the person is on marked. */
-  rail: ReactNode;
+  /** The assembly rail: the stages the trade goes through, with the one the person is on marked. Absent where a screen is not staged. */
+  rail?: ReactNode;
   /** The contract so far: the figures and terms the person has entered, beside the stage they are on. */
   preview?: ReactNode;
+  /** What the preview column is called for assistive technology. Defaults to "Contract so far". */
+  previewLabel?: string;
   /** The stage itself. */
   children: ReactNode;
 }
@@ -28,6 +30,7 @@ export function ProposeWorkspace({
   header,
   rail,
   preview,
+  previewLabel = 'Contract so far',
   children,
 }: ProposeWorkspaceProps): React.JSX.Element {
   return (
@@ -41,17 +44,22 @@ export function ProposeWorkspace({
             : 'md:grid-cols-[minmax(0,1fr)_minmax(0,260px)] lg:grid-cols-[200px_minmax(0,1.5fr)_minmax(0,1fr)]',
         ].join(' ')}
       >
-        <nav
-          aria-label="Trade assembly"
-          className={preview === undefined ? 'min-w-0' : 'min-w-0 md:col-span-2 lg:col-span-1'}
-        >
-          {rail}
-        </nav>
+        {rail !== undefined && (
+          <nav
+            aria-label="Trade assembly"
+            className={preview === undefined ? 'min-w-0' : 'min-w-0 md:col-span-2 lg:col-span-1'}
+          >
+            {rail}
+          </nav>
+        )}
         <div data-propose-work className={preview === undefined ? 'min-w-0 lg:col-span-1' : 'min-w-0'}>
           {children}
         </div>
         {preview !== undefined && (
-          <aside aria-label="Contract so far" className="min-w-0 md:sticky md:top-[16px] md:self-start">
+          <aside
+            aria-label={previewLabel}
+            className="hidden min-w-0 md:sticky md:top-[16px] md:block md:self-start"
+          >
             {preview}
           </aside>
         )}
