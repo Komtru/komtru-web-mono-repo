@@ -1125,7 +1125,7 @@ export function shipOptionsFor(
         requiredFields: ['waybillNumber', 'receiptFileId', 'driverPhone', 'vehiclePlate'],
       },
     ],
-  } as ShipOptions;
+  };
 }
 
 /** `GET /trades/:id/delivery-deadline`: the seller's time to ship a funded trade, from the pinned clock. */
