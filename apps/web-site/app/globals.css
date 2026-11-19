@@ -1,0 +1,22 @@
+/*
+ * The marketing site's one stylesheet.
+ *
+ * Two deliberate differences from the app's `globals.css`:
+ *
+ * 1. It imports the Tailwind preset directly rather than `@komtru/app-kit/styles.css`. The site
+ *    holds no session and renders no app screen, so it wants the tokens and the preflight and none
+ *    of app-kit's screens; pulling that package in would also pull its `@source` globs, and every
+ *    class name in every app screen would ship in this site's CSS.
+ *
+ * 2. It carries a component layer (`site.css`) instead of expressing the design in utilities. The
+ *    reference is 20KB of hand-tuned CSS built around a dozen names — `.band`, `.card`, `.split`,
+ *    `.btn.bp` — and rewriting that as utility strings would lose the breakpoints and the easing
+ *    curves it was measured against, for markup nobody could read. The palette is the part that
+ *    must not fork, and it does not: every colour below is a token.
+ */
+@import '@komtru/config/tailwind/preset.css';
+
+@source './**/*.{ts,tsx}';
+@source '../src/**/*.{ts,tsx}';
+
+@import './site.css';

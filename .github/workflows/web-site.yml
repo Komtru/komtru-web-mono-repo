@@ -1,0 +1,95 @@
+# CI for apps/web-site, the public marketing site at komtru.com. Path-filtered to the app, the
+# packages it depends on and the few root files that change every build, so a change to another app
+# never starts this run. GitHub Actions does not support YAML anchors, hence the duplicated
+# `paths:` list.
+#
+# The filter is short because the site's dependency on the rest of the monorepo is: it takes the
+# design tokens and the three typefaces from `ui-kit` and the tool presets from `config`, and
+# nothing else. It holds no session, so it does not reach for `app-kit`; it calls one unauthenticated
+# route, so it does not reach for `api-client`.
+name: web-site
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'apps/web-site/**'
+      - 'packages/config/**'
+      - 'packages/ui-kit/**'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+      - '.npmrc'
+      - 'pnpm-workspace.yaml'
+      - 'turbo.json'
+      - '.github/workflows/web-site.yml'
+      - '.github/actions/setup/**'
+  pull_request:
+    paths:
+      - 'apps/web-site/**'
+      - 'packages/config/**'
+      - 'packages/ui-kit/**'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+      - '.npmrc'
+      - 'pnpm-workspace.yaml'
+      - 'turbo.json'
+      - '.github/workflows/web-site.yml'
+      - '.github/actions/setup/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: web-site-${{ github.ref }}
+  # Superseding a feature branch's run is fine; cancelling main's would kill a deploy half-way.
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/setup
+        with:
+          cache-key: web-site
+      - run: pnpm exec turbo run lint --filter=@komtru/web-site
+
+  typecheck:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/setup
+        with:
+          cache-key: web-site
+      - run: pnpm exec turbo run typecheck --filter=@komtru/web-site
+
+  test:
+    needs: [lint, typecheck]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/setup
+        with:
+          cache-key: web-site
+      - run: pnpm exec turbo run test --filter=@komtru/web-site
+
+  build:
+    needs: [test]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/setup
+        with:
+          cache-key: web-site
+      - run: pnpm exec turbo run build --filter=@komtru/web-site
+
+  deploy:
+    needs: [test, build]
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      # Vercel builds and deploys this app from its own git integration on every push to `main`, so
+      # there is nothing for CI to push. This step is the marker the workflow contract expects, and
+      # the place a deploy would go if the site ever leaves Vercel - as T-005 covers for the others.
+      - run: echo "web-site deploys from Vercel's git integration; T-005 owns any move off it."

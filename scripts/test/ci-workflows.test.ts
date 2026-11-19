@@ -12,7 +12,13 @@ const repoRoot = resolve(import.meta.dirname, '../..');
 const read = (relative: string) => readFileSync(resolve(repoRoot, relative), 'utf8');
 const readYaml = <T>(relative: string): T => parse(read(relative)) as T;
 
-type Step = { uses?: string; run?: string; with?: Record<string, string>; name?: string };
+type Step = {
+  uses?: string;
+  run?: string;
+  with?: Record<string, string>;
+  name?: string;
+  env?: Record<string, string>;
+};
 type CompositeAction = { inputs?: Record<string, unknown>; runs: { using: string; steps: Step[] } };
 
 const action = readYaml<CompositeAction>('.github/actions/setup/action.yml');
@@ -78,8 +84,9 @@ type Job = {
   'runs-on': string;
   needs?: string | string[];
   if?: string;
-  'runs-on'?: string;
   env?: Record<string, string>;
+  /** Only a job that really deploys sets one, to serialise itself against another run. */
+  concurrency?: { group: string; 'cancel-in-progress': boolean | string };
   services?: Record<
     string,
     { image: string; env?: Record<string, string>; ports?: string[]; options?: string }
@@ -212,12 +219,44 @@ describe.each(APPS)('%s workflow', (app) => {
     }
   });
 
-  it('deploys only from main, only after the tests, and only a placeholder until T-005', () => {
+  /**
+   * Every app deploys only from `main` and only after its tests. What the deploy step *is* differs:
+   *
+   *  - `backend-api` really deploys. It opens an SSH session against the EC2 host, and the key it
+   *    uses is a forced command there, so the branch name it sends is data rather than a command.
+   *  - `web-site` is built and released by Vercel's own git integration, so CI has nothing to push.
+   *  - the rest have no hosting target yet and carry T-005's placeholder.
+   *
+   * The assertion that matters for all three is the gate, not the body: a deploy must never be
+   * reachable from a feature branch or from a run whose tests did not pass.
+   */
+  const REALLY_DEPLOYS = new Set(['backend-api']);
+  const DEPLOYS_ELSEWHERE = new Set(['web-site']);
+
+  it('deploys only from main and only after the tests', () => {
     expect(asArray(jobs.deploy?.needs)).toContain('test');
     if (app === 'backend-api') expect(asArray(jobs.deploy?.needs)).toContain('migration-safety');
     expect(jobs.deploy?.if).toBe("github.ref == 'refs/heads/main'");
+  });
+
+  it('either deploys for real or says plainly that it does not', () => {
+    if (REALLY_DEPLOYS.has(app)) {
+      // One at a time: two overlapping runs would race on the same checkout and the same reload.
+      expect(jobs.deploy?.concurrency?.['cancel-in-progress']).toBe(false);
+      return;
+    }
     expect(jobs.deploy?.steps).toHaveLength(1);
-    expect(jobs.deploy?.steps[0]?.run).toContain('T-005');
+    const step = jobs.deploy?.steps[0]?.run ?? '';
+    expect(DEPLOYS_ELSEWHERE.has(app) ? step : `${step} T-005`).toContain('T-005');
+  });
+
+  /* A deploy job must never carry a literal credential; real ones arrive as `secrets.*`. */
+  it('takes any deploy credential from secrets rather than from this file', () => {
+    const steps = JSON.stringify(jobs.deploy?.steps ?? []);
+    expect(/-----BEGIN [A-Z ]*PRIVATE KEY-----/.test(steps)).toBe(false);
+    for (const value of Object.values(jobs.deploy?.steps?.[0]?.env ?? {})) {
+      expect(String(value)).toMatch(/\$\{\{\s*secrets\./);
+    }
   });
 
   it('never cancels a run on main, where a deploy may be in flight', () => {

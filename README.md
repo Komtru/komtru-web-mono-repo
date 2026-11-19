@@ -48,8 +48,11 @@ Three things have to be in place before the first run, all covered by the [local
 | `apps/backend-api` worker | no port; BullMQ consumer |
 | `apps/web-app-ui`         | http://localhost:3001    |
 | `apps/operations-app`     | http://localhost:3002    |
+| `apps/web-site`           | http://localhost:3005    |
 
 `apps/logistics-ops` and `apps/park-agent-app` are still placeholder packages with no dev server, so `pnpm dev` skips them; they join it when their tickets turn them into Next apps.
+
+`apps/web-site` is the public marketing site — komtru.com, the pages someone reads before they have an account. It is a separate app rather than routes inside `web-app-ui` because it shares almost nothing with the product: no session, no service worker, no API client. It takes the design tokens and the three typefaces from `ui-kit`, and calls exactly one backend route, `POST /v1/waitlist`.
 
 To start a subset:
 

@@ -1,0 +1,1466 @@
+/*
+ * The reference stylesheet (Komtru website v4.2), ported.
+ *
+ * The reference opens with a `:root` block of its own — `--mid`, `--ind`, `--em`, `--cl`, `--line`
+ * and the rest. Every one of those values is already a token in `@komtru/config/tailwind/preset.css`
+ * under a longer name, so the block is gone and each rule below names the token instead. That is
+ * the whole point of the port: the site and the app go out of date together or not at all.
+ *
+ * Kept verbatim from the reference, because each was measured rather than chosen: the breakpoints
+ * (900px for a two-column split, 1160px before the nav links fit), the easing curve and the three
+ * durations, the card's two-layer shadow, and the type ramp's `clamp()` bounds.
+ */
+
+:root {
+  /* The reference's own names, kept only where a rule reads better for having them. */
+  --site-radius-s: 8px;
+  --site-radius-m: 12px;
+  --site-radius-l: 20px;
+  --site-shadow: 0 8px 24px rgba(13, 20, 32, 0.1);
+  --site-ease: cubic-bezier(0.4, 0, 0.2, 1);
+  --site-fast: 150ms;
+  --site-std: 250ms;
+  --site-trust: 400ms;
+}
+
+html {
+  scroll-behavior: smooth;
+  scroll-padding-top: 80px;
+}
+
+body {
+  margin: 0;
+  font: 16px/1.6 var(--font-body);
+  color: var(--midnight-text);
+  background: var(--pure-white);
+  -webkit-font-smoothing: antialiased;
+  overflow-x: hidden;
+}
+
+h1,
+h2,
+h3,
+h4 {
+  font-family: var(--font-display);
+  font-weight: 600;
+  margin: 0;
+  letter-spacing: -0.01em;
+  line-height: 1.1;
+}
+
+p {
+  margin: 0;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+button {
+  font: inherit;
+  cursor: pointer;
+}
+
+:focus-visible {
+  outline: 2.5px solid var(--trust-indigo);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+[hidden] {
+  display: none !important;
+}
+
+/* The one width every band's contents sit in. */
+.w {
+  max-width: 1120px;
+  margin: 0 auto;
+  padding: 0 20px;
+}
+
+/* --- Buttons -------------------------------------------------------------- */
+
+.btn {
+  border: 1.5px solid transparent;
+  border-radius: var(--site-radius-s);
+  padding: 12px 20px;
+  font-weight: 600;
+  font-size: 14px;
+  line-height: 1.2;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  transition:
+    transform var(--site-fast) var(--site-ease),
+    opacity var(--site-fast),
+    border-color var(--site-fast),
+    background var(--site-fast);
+}
+
+.btn:active {
+  transform: scale(0.97);
+}
+
+/* bp/bs on light, bw/bsd on the midnight bands. */
+.bp {
+  background: var(--midnight-text);
+  color: var(--pure-white);
+}
+.bp:hover {
+  opacity: 0.88;
+}
+
+.bs {
+  background: transparent;
+  color: var(--midnight-text);
+  border-color: var(--border-hairline);
+}
+.bs:hover {
+  border-color: var(--trust-gray);
+  background: var(--cloud-gray);
+}
+
+.bw {
+  background: var(--pure-white);
+  color: var(--komtru-midnight);
+}
+.bw:hover {
+  opacity: 0.9;
+}
+
+.bsd {
+  background: transparent;
+  color: var(--pure-white);
+  border-color: rgb(255 255 255 / 0.3);
+}
+.bsd:hover {
+  background: rgb(255 255 255 / 0.08);
+}
+
+.btn[disabled] {
+  background: var(--border-hairline);
+  color: var(--trust-gray);
+  cursor: not-allowed;
+}
+
+/* --- Navigation ----------------------------------------------------------- */
+
+.site-nav {
+  position: sticky;
+  top: 0;
+  z-index: 60;
+  background: rgb(255 255 255 / 0.92);
+  backdrop-filter: blur(10px);
+  border-bottom: 1px solid var(--border-hairline);
+  transition: box-shadow var(--site-std);
+}
+
+.site-nav.sc {
+  box-shadow: 0 4px 16px rgba(13, 20, 32, 0.06);
+}
+
+.site-nav .w {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 64px;
+  gap: 10px;
+}
+
+.logo img {
+  display: block;
+  height: 28px;
+  width: auto;
+}
+
+.lk {
+  display: none;
+  gap: 2px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--slate);
+}
+
+.lk a {
+  padding: 8px;
+  border-radius: var(--site-radius-s);
+  white-space: nowrap;
+  transition:
+    color var(--site-fast),
+    background var(--site-fast);
+}
+
+.lk a:hover {
+  color: var(--trust-indigo);
+}
+
+.lk a[aria-current='page'] {
+  background: var(--trust-indigo-soft);
+  color: var(--trust-indigo);
+  font-weight: 600;
+}
+
+/* 1160px, not a round breakpoint: it is where the seven links stop colliding with the buttons. */
+@media (min-width: 1160px) {
+  .lk {
+    display: flex;
+  }
+  .bur {
+    display: none !important;
+  }
+}
+
+.na {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.na .bs {
+  border: 0;
+  padding: 10px 14px;
+}
+.na .btn {
+  padding: 10px 16px;
+  white-space: nowrap;
+}
+
+.bur {
+  border: 1.5px solid var(--border-hairline);
+  background: var(--pure-white);
+  border-radius: var(--site-radius-s);
+  width: 40px;
+  height: 40px;
+  font-size: 18px;
+}
+
+.mm {
+  display: none;
+  flex-direction: column;
+  padding: 6px 20px 14px;
+  border-top: 1px solid var(--border-hairline);
+  background: var(--pure-white);
+}
+.mm.o {
+  display: flex;
+}
+.mm a {
+  padding: 12px 0;
+  border-bottom: 1px solid var(--border-hairline);
+  font-weight: 500;
+}
+
+@media (max-width: 520px) {
+  .na .btn {
+    padding: 9px 11px;
+    font-size: 13px;
+  }
+  .na .bs {
+    padding: 9px 8px;
+  }
+  .logo img {
+    height: 22px;
+  }
+  .na {
+    gap: 4px;
+  }
+}
+
+/* --- Bands and type ------------------------------------------------------- */
+
+.band {
+  padding: 80px 0;
+}
+
+h2 {
+  font-size: clamp(28px, 4.2vw, 42px);
+}
+h3 {
+  font-size: 20px;
+}
+
+.lede {
+  margin-top: 14px;
+  max-width: 560px;
+  font-size: 17px;
+  color: var(--slate);
+}
+
+.note {
+  font-size: 12.5px;
+  color: var(--slate);
+  margin-top: 10px;
+}
+
+.dk .lede,
+.dk .note {
+  color: rgb(255 255 255 / 0.72);
+}
+
+.cl {
+  background: var(--cloud-gray);
+}
+.is {
+  background: var(--trust-indigo-soft);
+}
+.es {
+  background: var(--trust-emerald-soft);
+}
+.dk {
+  background: var(--komtru-midnight);
+  color: var(--pure-white);
+}
+
+.row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 26px;
+}
+
+/* --- Layout --------------------------------------------------------------- */
+
+.split {
+  display: grid;
+  gap: 48px;
+  align-items: center;
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.split > * {
+  min-width: 0;
+}
+
+@media (min-width: 900px) {
+  .split {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  /* `.r` puts the illustration first in the source and second on screen, so a narrow viewport
+     reads the words before the picture. */
+  .split.r > :first-child {
+    order: 2;
+  }
+}
+
+.grid {
+  display: grid;
+  gap: 16px;
+  margin-top: 36px;
+}
+
+.grid > * {
+  min-width: 0;
+}
+
+@media (min-width: 760px) {
+  .g2 {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .g3 {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+/* --- Cards ---------------------------------------------------------------- */
+
+.card {
+  background: var(--pure-white);
+  border: 1px solid var(--border-hairline);
+  border-radius: var(--site-radius-l);
+  padding: 24px;
+  box-shadow:
+    0 1px 2px rgba(13, 20, 32, 0.04),
+    0 4px 16px rgba(13, 20, 32, 0.06);
+  transition:
+    box-shadow var(--site-std) var(--site-ease),
+    border-color var(--site-std);
+}
+
+.card:hover {
+  box-shadow: var(--site-shadow);
+  border-color: var(--trust-gray);
+}
+
+.card h3 {
+  margin-bottom: 6px;
+}
+
+.card p {
+  font-size: 14.5px;
+  color: var(--slate);
+}
+
+/* The link card: image on top, words beneath, the whole thing one target. */
+.lc {
+  padding: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+.lc .im {
+  aspect-ratio: 4 / 3;
+}
+.lc .im svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+.lc .tx {
+  padding: 20px 22px 24px;
+}
+
+.ill {
+  border-radius: var(--site-radius-l);
+  overflow: hidden;
+  box-shadow: var(--site-shadow);
+}
+.ill svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  aspect-ratio: 4 / 3;
+}
+
+/* --- Reveal on scroll ----------------------------------------------------- */
+
+.rv {
+  opacity: 0;
+  transform: translateY(10px);
+  transition:
+    opacity var(--site-trust) var(--site-ease),
+    transform var(--site-trust) var(--site-ease);
+}
+
+.rv.in {
+  opacity: 1;
+  transform: none;
+}
+
+/*
+ * Reduced motion turns the reveal off by showing the end state, not by leaving `.rv` at opacity 0:
+ * the observer may never fire for content already on screen, and a visitor who asked for less
+ * motion must still be able to read the page.
+ */
+@media (prefers-reduced-motion: reduce) {
+  .rv {
+    opacity: 1;
+    transform: none;
+    transition: none;
+  }
+  * {
+    animation: none !important;
+    scroll-behavior: auto;
+  }
+}
+
+/* --- Hero ----------------------------------------------------------------- */
+
+.hero {
+  position: relative;
+  overflow: hidden;
+  background: var(--pure-white);
+  padding: 36px 0 0;
+}
+
+.hero .net {
+  position: absolute;
+  right: -40px;
+  top: 0;
+  width: 560px;
+  height: 100%;
+  opacity: 0.55;
+  pointer-events: none;
+}
+
+.hero .net circle.p {
+  animation: np 3.2s var(--site-ease) infinite;
+}
+.hero .net circle.p:nth-child(2n) {
+  animation-delay: 0.9s;
+}
+.hero .net circle.p:nth-child(3n) {
+  animation-delay: 1.8s;
+}
+
+@keyframes np {
+  0%,
+  100% {
+    opacity: 0.35;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+.hero .g {
+  display: grid;
+  gap: 8px;
+  align-items: center;
+  position: relative;
+}
+
+.hero .g > * {
+  min-width: 0;
+}
+
+@media (min-width: 960px) {
+  .hero .g {
+    grid-template-columns: 1.05fr 0.95fr;
+  }
+}
+
+.hero h1 {
+  font-size: clamp(36px, 5.6vw, 60px);
+  max-width: 620px;
+}
+
+.hero .lede {
+  max-width: 560px;
+}
+
+.hero .row .btn {
+  padding: 14px 24px;
+  font-size: 15px;
+}
+
+/* --- The phone ------------------------------------------------------------ */
+
+/*
+ * An iPhone 16 Pro Max, drawn in CSS: titanium rail, black bezel, dynamic island and the four side
+ * buttons. The reference scales the whole assembly with `zoom` rather than a transform, because a
+ * transform would leave the original footprint behind and tear a hole in the layout beneath it.
+ */
+.pw {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.pw .zoom {
+  zoom: 1;
+}
+
+.ip {
+  position: relative;
+  width: 368px;
+  height: 767px;
+  border-radius: 56px;
+  background: linear-gradient(145deg, #d2cabd, #8d867b 40%, #bfb7aa 70%, #7a746a);
+  padding: 4px;
+  box-shadow:
+    0 40px 70px rgba(13, 20, 32, 0.28),
+    inset 0 0 0 1px rgb(255 255 255 / 0.4);
+  flex: none;
+}
+
+.ip .bz {
+  width: 100%;
+  height: 100%;
+  border-radius: 52px;
+  background: #000;
+  padding: 10px;
+}
+
+.ip .scr {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  border-radius: 42px;
+  overflow: hidden;
+  background: var(--pure-white);
+  display: flex;
+  flex-direction: column;
+}
+
+.ip .di {
+  position: absolute;
+  top: 9px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 97px;
+  height: 29px;
+  border-radius: 99px;
+  background: #000;
+  z-index: 20;
+}
+
+.ip .sb {
+  height: 44px;
+  flex: none;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  padding: 0 30px 6px;
+  font: 600 13px var(--font-body);
+  background: var(--pure-white);
+  position: relative;
+  z-index: 10;
+  color: var(--midnight-text);
+}
+
+.ip .host {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.ip i.bt {
+  position: absolute;
+  width: 4px;
+  border-radius: 2px;
+  background: linear-gradient(#b3ab9f, #7a746a);
+}
+
+/* The hero's phone sits inside an illustration, so it scales with the picture, not on its own. */
+.hh {
+  position: relative;
+  width: 560px;
+  height: 880px;
+  margin: 0 auto;
+}
+
+.hh .bk,
+.hh .fr {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.hh .pw {
+  position: absolute;
+  left: 96px;
+  top: 20px;
+}
+
+.hh .fr {
+  z-index: 3;
+}
+
+.hh .pw .zoom {
+  zoom: 1;
+}
+
+.hz {
+  zoom: 0.85;
+  max-width: 100%;
+}
+
+@media (max-width: 1100px) {
+  .hz {
+    zoom: 0.72;
+  }
+}
+@media (max-width: 600px) {
+  .hz {
+    zoom: 0.62;
+  }
+}
+@media (max-width: 420px) {
+  .hz {
+    zoom: 0.5;
+  }
+}
+@media (max-width: 350px) {
+  .hz {
+    zoom: 0.45;
+  }
+}
+
+/* --- The screen inside the phone ------------------------------------------ */
+
+/*
+ * One app screen, hand-ported from the design reference's screen library rather than injected from
+ * it. The library ships 65 screens behind 275KB of its own CSS; the hero shows exactly one, so it
+ * is cheaper and far more legible to write that one out here in the site's own tokens.
+ */
+.scr-topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border-hairline);
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 15px;
+  flex: none;
+}
+
+.scr-topbar .back-btn {
+  width: 32px;
+  height: 32px;
+  display: grid;
+  place-items: center;
+  color: var(--midnight-text);
+}
+
+.scr-body {
+  flex: 1;
+  min-height: 0;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  overflow: hidden;
+}
+
+.info-banner {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  background: var(--trust-indigo-soft);
+  color: var(--midnight-text);
+  border-radius: var(--site-radius-m);
+  padding: 12px 14px;
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+
+.info-banner svg {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  margin-top: 1px;
+  stroke: var(--trust-indigo);
+}
+
+.scr-field label {
+  display: block;
+  font-size: 12.5px;
+  font-weight: 600;
+  margin-bottom: 6px;
+}
+
+.scr-field .input {
+  width: 100%;
+  border: 1.5px solid var(--border-hairline);
+  border-radius: var(--site-radius-s);
+  background: var(--cloud-gray);
+  padding: 12px 14px;
+  font: 500 15px var(--font-mono);
+  color: var(--midnight-text);
+}
+
+.scr-field .helper {
+  font-size: 11.5px;
+  color: var(--slate);
+  margin-top: 6px;
+  line-height: 1.5;
+}
+
+.btn-sticky {
+  flex: none;
+  padding: 16px;
+  border-top: 1px solid var(--border-hairline);
+}
+
+.btn-primary {
+  width: 100%;
+  border: 0;
+  border-radius: var(--site-radius-s);
+  background: var(--midnight-text);
+  color: var(--pure-white);
+  padding: 13px;
+  font-weight: 600;
+  font-size: 14px;
+}
+
+/* --- Forms and the Trade Code lookup -------------------------------------- */
+
+.cf {
+  display: flex;
+  gap: 8px;
+  margin-top: 22px;
+  max-width: 480px;
+}
+
+.fld {
+  border: 1.5px solid var(--border-hairline);
+  background: var(--cloud-gray);
+  border-radius: var(--site-radius-s);
+  padding: 12px 14px;
+  font: 15px var(--font-body);
+  color: var(--midnight-text);
+  width: 100%;
+  min-width: 0;
+  transition:
+    border-color var(--site-fast),
+    box-shadow var(--site-fast);
+}
+
+.fld:focus {
+  outline: none;
+  border-color: var(--trust-indigo);
+  box-shadow: 0 0 0 3px var(--trust-indigo-soft);
+  background: var(--pure-white);
+}
+
+.fld.er {
+  border-color: var(--risk);
+}
+
+label.l {
+  display: block;
+  font-size: 13px;
+  font-weight: 600;
+  margin: 14px 0 5px;
+}
+
+.er-t {
+  font-size: 12.5px;
+  color: var(--risk);
+  margin-top: 5px;
+}
+
+/* The answer the lookup renders, and the row it is built out of. */
+.lk2 {
+  margin-top: 16px;
+  background: var(--pure-white);
+  border: 1px solid var(--border-hairline);
+  border-radius: var(--site-radius-l);
+  padding: 18px;
+  max-width: 480px;
+  box-shadow: var(--site-shadow);
+  animation: fi var(--site-trust) var(--site-ease);
+}
+
+@keyframes fi {
+  from {
+    opacity: 0;
+  }
+}
+
+.tr2 {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 9px 0;
+  border-top: 1px solid var(--border-hairline);
+  font-size: 14px;
+  color: var(--midnight-text);
+}
+
+.tr2 span:first-child {
+  color: var(--slate);
+}
+
+.tr2 b {
+  font-weight: 600;
+}
+
+.tcb {
+  background: var(--trust-indigo-soft);
+}
+
+.tcc {
+  position: relative;
+  border-radius: var(--site-radius-l);
+  overflow: hidden;
+  min-height: 380px;
+  display: flex;
+  align-items: flex-end;
+  padding: 28px;
+  color: var(--pure-white);
+  background: linear-gradient(180deg, #4552d6 0%, #3b46c4 48%, #0c6b49 100%);
+  isolation: isolate;
+}
+
+.tcs {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: -1;
+}
+
+.tcc::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(transparent 50%, rgba(13, 20, 32, 0.45));
+  z-index: -1;
+}
+
+.tcq h3 {
+  font-size: clamp(20px, 2.4vw, 26px);
+}
+
+.tcq p {
+  opacity: 0.9;
+  margin-top: 6px;
+  font-size: 15px;
+}
+
+.tcf {
+  margin-top: 24px;
+}
+
+.tcf input {
+  border-radius: 99px;
+  padding: 14px 22px;
+  font: 500 16px var(--font-mono);
+  border: 1.5px solid var(--border-hairline);
+  background: var(--pure-white);
+  flex: 1;
+  min-width: 0;
+}
+
+.tcf input:focus {
+  outline: none;
+  border-color: var(--trust-indigo);
+  box-shadow: 0 0 0 3px var(--trust-indigo-soft);
+}
+
+.tcf .btn {
+  border-radius: 99px;
+  padding: 14px 26px;
+}
+
+/* --- Launch cities -------------------------------------------------------- */
+
+/*
+ * A snap-scrolling rail. `--n` is how many cards are in view, so the card width is one expression
+ * at every breakpoint instead of four. The reference held all four photos in one 8000px sprite
+ * behind background-position percentages; here each is its own image, which is what lets the
+ * browser size and lazy-load them.
+ */
+.cs {
+  --n: 1.5;
+  --g: 16px;
+  display: flex;
+  gap: var(--g);
+  overflow-x: auto;
+  scroll-snap-type: x mandatory;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+  margin-top: 32px;
+}
+
+.cs::-webkit-scrollbar {
+  display: none;
+}
+
+.cs .po {
+  flex: 0 0 calc((100% - (var(--n) - 1) * var(--g)) / var(--n));
+  width: calc((100% - (var(--n) - 1) * var(--g)) / var(--n));
+  aspect-ratio: 1835 / 2595;
+  scroll-snap-align: start;
+  border-radius: var(--site-radius-m);
+  overflow: hidden;
+  position: relative;
+}
+
+.cs .po img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+@media (min-width: 600px) {
+  .cs {
+    --n: 2.5;
+  }
+}
+@media (min-width: 900px) {
+  .cs {
+    --n: 3.5;
+  }
+}
+@media (min-width: 1100px) {
+  .cs {
+    --n: 4;
+  }
+}
+
+/* --- Trust Passport card -------------------------------------------------- */
+
+.pp {
+  background: linear-gradient(135deg, #1a2440, var(--komtru-midnight));
+  border: 1px solid rgb(255 255 255 / 0.12);
+  border-radius: var(--site-radius-l);
+  padding: 26px;
+  max-width: 420px;
+  color: var(--pure-white);
+}
+
+.pp .s {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  margin-top: 18px;
+}
+
+.pp b {
+  display: block;
+  font: 600 22px var(--font-mono);
+}
+
+.pp small {
+  font-size: 10px;
+  text-transform: uppercase;
+  opacity: 0.6;
+}
+
+/* --- Partners ------------------------------------------------------------- */
+
+.pl {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+  margin-top: 28px;
+}
+
+@media (min-width: 760px) {
+  .pl {
+    grid-template-columns: repeat(5, 1fr);
+  }
+}
+
+.pl .lg {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 84px;
+  border: 1px solid var(--border-hairline);
+  border-radius: var(--site-radius-m);
+  background: var(--pure-white);
+  padding: 16px;
+  font: 600 15px var(--font-display);
+  color: var(--slate);
+  transition:
+    border-color var(--site-std) var(--site-ease),
+    box-shadow var(--site-std);
+}
+
+.pl .lg:hover {
+  border-color: var(--trust-gray);
+  box-shadow: var(--site-shadow);
+}
+
+.pl .lg img {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+}
+
+/* --- Waitlist, QR and the store badges ------------------------------------ */
+
+.wl {
+  background: var(--pure-white);
+  border: 1px solid var(--border-hairline);
+  border-radius: var(--site-radius-l);
+  padding: 26px;
+  box-shadow: var(--site-shadow);
+  max-width: 480px;
+  width: 100%;
+}
+
+.wl h3 {
+  font-size: 22px;
+}
+
+.wl form {
+  margin-top: 6px;
+}
+
+.ro {
+  display: flex;
+  gap: 8px;
+  margin-top: 6px;
+}
+
+.ro button {
+  flex: 1;
+  border: 1.5px solid var(--border-hairline);
+  background: var(--pure-white);
+  border-radius: var(--site-radius-s);
+  padding: 10px;
+  font-weight: 600;
+  font-size: 13px;
+  color: var(--slate);
+  transition:
+    border-color var(--site-fast),
+    background var(--site-fast);
+}
+
+.ro button[aria-pressed='true'] {
+  border-color: var(--trust-indigo);
+  background: var(--trust-indigo-soft);
+  color: var(--trust-indigo);
+}
+
+/* Three pulsing nodes while the signup is in flight — the brand's loader, not a spinner. */
+.nl {
+  display: flex;
+  justify-content: center;
+  gap: 6px;
+  padding: 24px;
+}
+
+.nl i {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--trust-emerald);
+  animation: nodePulse 1.4s ease-in-out infinite;
+}
+
+.nl i:nth-child(2) {
+  animation-delay: 0.18s;
+}
+.nl i:nth-child(3) {
+  animation-delay: 0.36s;
+}
+
+.ok {
+  text-align: center;
+  padding: 14px 0;
+}
+
+/*
+ * `tick`, not `ring`: Tailwind generates a `ring` utility, and a bare `.ring` in the markup picks
+ * it up and paints a 1px box-shadow square around the mark. The reference had no Tailwind and so
+ * had no reason to avoid the name.
+ */
+.ok .tick {
+  width: 56px;
+  height: 56px;
+  margin: 0 auto 12px;
+}
+
+/*
+ * The mark draws itself on.
+ *
+ * `stroke-dashoffset` is set in the animation rather than on the path, so the checkmark is simply
+ * there when the animation does not run. Setting it on the path instead — which is how the
+ * reference wrote it — makes the confirmation permanently blank for anyone who asked for reduced
+ * motion, because the rule that disables the animation never restores the offset.
+ */
+.ok .tick path {
+  stroke-dasharray: 30;
+  animation: dr var(--site-trust) var(--site-ease) 0.1s backwards;
+}
+
+@keyframes dr {
+  from {
+    stroke-dashoffset: 30;
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+.qrb {
+  display: flex;
+  gap: 20px;
+  align-items: center;
+  flex-wrap: wrap;
+  background: var(--pure-white);
+  border: 1px solid var(--border-hairline);
+  border-radius: var(--site-radius-l);
+  padding: 20px;
+  max-width: 480px;
+  box-shadow: var(--site-shadow);
+}
+
+.qr {
+  width: 128px;
+  height: 128px;
+  flex: none;
+  padding: 8px;
+  border: 1px solid var(--border-hairline);
+  border-radius: var(--site-radius-m);
+  display: grid;
+  place-items: center;
+  font: 12px var(--font-body);
+  color: var(--slate);
+  text-align: center;
+}
+
+.qr svg {
+  width: 100%;
+  height: 100%;
+}
+
+.stores {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.sb2 {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: var(--komtru-midnight);
+  color: var(--pure-white);
+  border-radius: var(--site-radius-s);
+  padding: 8px 14px;
+  min-width: 0;
+  opacity: 0.95;
+}
+
+.sb2 svg {
+  width: 22px;
+  height: 22px;
+  flex: none;
+}
+
+.sb2 small {
+  display: block;
+  font-size: 10px;
+  opacity: 0.7;
+  line-height: 1.1;
+}
+
+.sb2 b {
+  font: 600 15px var(--font-display);
+  line-height: 1.1;
+}
+
+.wa {
+  gap: 8px;
+}
+
+.wa svg {
+  flex: none;
+}
+
+.wab {
+  margin-top: 12px;
+}
+
+/* --- FAQ ------------------------------------------------------------------ */
+
+details {
+  border-top: 1px solid var(--border-hairline);
+  padding: 16px 0;
+}
+
+summary {
+  cursor: pointer;
+  font: 600 17px var(--font-display);
+  list-style: none;
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+summary::-webkit-details-marker {
+  display: none;
+}
+
+summary::after {
+  content: '+';
+  color: var(--slate);
+}
+
+details[open] summary::after {
+  content: '–';
+}
+
+details p {
+  color: var(--slate);
+  margin-top: 8px;
+  font-size: 15px;
+}
+
+.faqg {
+  display: grid;
+  gap: 36px;
+}
+
+@media (min-width: 900px) {
+  .faqg {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr);
+    gap: 72px;
+    align-items: start;
+  }
+}
+
+.faqc {
+  background: #eceef2;
+  border-radius: var(--site-radius-l);
+  padding: 32px;
+  margin-top: 36px;
+  max-width: 520px;
+}
+
+.faqc h3 {
+  font-size: 30px;
+  margin: 18px 0 8px;
+}
+
+.faqc p {
+  color: var(--midnight-text);
+  margin-bottom: 22px;
+}
+
+.avs {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.avt {
+  width: 50px;
+  height: 50px;
+  border-radius: 50%;
+  border: 3px solid #eceef2;
+}
+
+.avs .plus {
+  color: var(--slate);
+  margin: 0 4px;
+}
+
+.avs .you {
+  width: 50px;
+  height: 50px;
+  border-radius: 50%;
+  background: var(--trust-indigo);
+  color: var(--pure-white);
+  display: grid;
+  place-items: center;
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.faqr details {
+  background: var(--pure-white);
+  border: 0;
+  border-radius: var(--site-radius-l);
+  padding: 22px 28px;
+  margin-bottom: 12px;
+}
+
+.faqr summary {
+  font: 500 17px var(--font-body);
+}
+
+.faqr summary::after {
+  font-size: 26px;
+  font-weight: 300;
+  color: var(--midnight-text);
+}
+
+.faqr details p {
+  margin-top: 14px;
+  font-size: 15px;
+  line-height: 1.7;
+}
+
+/* --- Footer --------------------------------------------------------------- */
+
+.site-footer {
+  background: var(--komtru-midnight);
+  color: rgb(255 255 255 / 0.72);
+  padding: 56px 0 28px;
+  font-size: 15px;
+}
+
+.site-footer a {
+  display: block;
+  padding: 6px 0;
+  transition: color var(--site-fast);
+}
+
+.site-footer a:hover {
+  color: var(--pure-white);
+}
+
+.fg {
+  display: grid;
+  gap: 32px;
+}
+
+.fg > div {
+  min-width: 0;
+}
+
+@media (min-width: 560px) {
+  .fg {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 1000px) {
+  .fg {
+    grid-template-columns: 1.5fr 1fr 1fr 1fr 1.4fr;
+  }
+}
+
+.site-footer b {
+  color: var(--pure-white);
+  display: block;
+  margin-bottom: 10px;
+  font-size: 13px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.ftl {
+  line-height: 1.7;
+  max-width: 360px;
+}
+
+.ftc {
+  color: var(--pure-white);
+  font-weight: 600;
+  margin-top: 16px;
+}
+
+.fb {
+  display: flex;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+  border-top: 1px solid rgb(255 255 255 / 0.14);
+  margin-top: 40px;
+  padding-top: 20px;
+  font-size: 14px;
+}
+
+.site-footer .fad {
+  margin-top: 10px;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.site-footer .fad a {
+  display: inline;
+  padding: 0;
+  overflow-wrap: anywhere;
+}
+
+.soc {
+  display: flex;
+  gap: 10px;
+  margin-top: 18px;
+}
+
+.site-footer .soc a {
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  border: 1px solid rgb(255 255 255 / 0.25);
+  display: grid;
+  place-items: center;
+  padding: 0;
+}
+
+.site-footer .soc a:hover {
+  background: rgb(255 255 255 / 0.1);
+}
+
+/*
+ * The faces overlap by 12px. The reference set that as an inline `margin-left` on each SVG after
+ * the first; expressing it as a rule keeps the overlap a property of the row rather than of the
+ * pictures, so adding or removing a face cannot leave a gap.
+ */
+.avs .avt:not(:first-child) {
+  margin-left: -12px;
+}
