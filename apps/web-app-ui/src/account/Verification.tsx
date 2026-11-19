@@ -1,17 +1,11 @@
 'use client';
 
+import { type VerificationRejection, type VerificationStatus } from '@komtru/api-client';
 import {
-  UploadError,
-  uploadFile,
-  type VerificationRejection,
-  type VerificationStatus,
-} from '@komtru/api-client';
-import {
-  useApiClient,
   useMe,
   useSubmitBvn,
+  useAbandonLivenessSession,
   useStartLivenessSession,
-  useSubmitLiveness,
   useSubmitNin,
   useVerificationStatus,
 } from '@komtru/api-client/react';
@@ -20,9 +14,7 @@ import {
   Button,
   Chip,
   EmptyState,
-  FileDropzone,
   RiskBanner,
-  ScreenColumn,
   ScreenHeader,
   SectionLabel,
   SettingsGroup,
@@ -30,7 +22,6 @@ import {
   TermList,
   TermRow,
   TextField,
-  type MediaItem,
 } from '@komtru/ui-kit';
 import { useState } from 'react';
 import { VERIFICATION_HREF } from '../sell/rules';
@@ -48,8 +39,6 @@ const ALERT_MARK = (
 
 /** The three checks this screen can send again. Any other type would be sent as the wrong check, so it gets no form. */
 const RESUBMITTABLE: ReadonlySet<string> = new Set(['NIN', 'BVN', 'LIVENESS']);
-
-const KYC_FILE = { category: 'KYC_DOCUMENT', visibility: 'PRIVATE_OWNER' } as const;
 
 /** What each check is called to the person. NIN and BVN are two ways to say the one thing VF1 is about: an ID. */
 const CHECK_NAME: Record<string, string> = {
@@ -98,7 +87,14 @@ export function Verification(): React.JSX.Element {
   const me = useMe();
 
   return (
-    <ScreenColumn>
+    /*
+      Mobile is the baseline and the reference draws VF1 for mobile web only, so the column is
+      unchanged at base. Wider screens follow the house treatment HomeScreen and Payouts already
+      use rather than a shape invented here: roomier at `md`, and at `lg` the checklist moves
+      beside the action instead of under it. Recorded as a deviation in docs/ui-review, because
+      the reference has no desktop drawing to check against.
+    */
+    <div className="mx-auto w-full max-w-[480px] md:max-w-[760px] lg:max-w-none">
       <ScreenHeader title="Verification" backHref="/account" backLabel="Back to your account" />
       {/*
         Contact first, and outside the `status` branch above: email and phone are level 1 and they
@@ -120,11 +116,35 @@ export function Verification(): React.JSX.Element {
           href={VERIFICATION_HREF}
         />
       </SettingsGroup>
-    </ScreenColumn>
+    </div>
   );
 }
 
 function Loaded({
+  status,
+  reference,
+}: {
+  status: VerificationStatus;
+  reference: string | undefined;
+}): React.JSX.Element {
+  /*
+    One grid for all three states.
+
+    "What's needed" used to be repeated at the end of every branch. Hoisting it here is what makes
+    the desktop column possible at all — the checklist has to be a sibling of the action to sit
+    beside it — and it removes three copies of the same line.
+  */
+  return (
+    <div className="gap-[16px] lg:grid lg:grid-cols-[minmax(0,1fr)_minmax(0,320px)] lg:items-start">
+      <div className="min-w-0">
+        <LoadedMain status={status} reference={reference} />
+      </div>
+      <Requirements status={status} />
+    </div>
+  );
+}
+
+function LoadedMain({
   status,
   reference,
 }: {
@@ -144,7 +164,6 @@ function Loaded({
             body="Your ID and selfie check are done."
             className="mb-[14px]"
           />
-          <Requirements status={status} />
         </>
       );
     }
@@ -157,12 +176,7 @@ function Loaded({
       §4's order decides which control appears: an identifier first, then the selfie it is matched
       against. Offering both at once would let a user into a camera flow the backend refuses.
     */
-    return (
-      <>
-        {status.requirements.identifier ? <StartSelfie /> : <StartIdentity />}
-        <Requirements status={status} />
-      </>
-    );
+    return <>{status.requirements.identifier ? <StartSelfie /> : <StartIdentity />}</>;
   }
 
   return (
@@ -180,7 +194,6 @@ function Loaded({
           reference={reference ?? rejection.requestId}
         />
       ))}
-      <Requirements status={status} />
     </>
   );
 }
@@ -237,67 +250,20 @@ function Failure({
       {canResubmit && (
         <>
           <SectionLabel>Try again</SectionLabel>
-          {rejection.type === 'LIVENESS' ? <ResubmitSelfie /> : <ResubmitId type={rejection.type} />}
+          {/*
+            A failed selfie is retried through the provider SDK, not a photo upload.
+
+            `ResubmitSelfie` used to live here, posting a file to `/verification/liveness`. Since
+            F-045 the verdict only ever arrives on a signed Youverify webhook, so an upload could
+            produce no decision at all — the user would send a photo and wait forever.
+          */}
+          {rejection.type === 'LIVENESS' ? <SelfieLauncher /> : <ResubmitId type={rejection.type} />}
         </>
       )}
       <div className="mt-[8px]">
         <ContactSupport label="Contact support instead" reference={reference} />
       </div>
     </section>
-  );
-}
-
-function ResubmitSelfie(): React.JSX.Element {
-  const client = useApiClient();
-  const submit = useSubmitLiveness();
-  const [file, setFile] = useState<File | undefined>(undefined);
-  const [uploading, setUploading] = useState(false);
-  const [problem, setProblem] = useState<string | undefined>(undefined);
-
-  const media: MediaItem[] = file === undefined ? [] : [{ id: 'selfie', kind: 'photo', alt: file.name }];
-
-  const send = async () => {
-    if (file === undefined) return;
-    setProblem(undefined);
-    setUploading(true);
-    try {
-      const selfieFileId = await uploadFile(client, file, KYC_FILE);
-      await submit.mutateAsync(selfieFileId);
-      setFile(undefined);
-    } catch (error) {
-      setProblem(
-        error instanceof UploadError
-          ? error.reason === 'TOO_LARGE'
-            ? 'That photo is too large. Choose a smaller one.'
-            : 'That photo didn’t upload. Check your connection and try again.'
-          : accountProblem(error, 'verify-id'),
-      );
-    } finally {
-      setUploading(false);
-    }
-  };
-
-  return (
-    <>
-      <FileDropzone
-        label="Upload a clearer photo"
-        hint="Flat surface, good light, all four corners visible"
-        media={media}
-        requiredCount={0}
-        slots={2}
-        accept="image/jpeg,image/png,image/webp"
-        onAdd={(files) => setFile(files[0])}
-        onRemove={() => setFile(undefined)}
-      />
-      {problem !== undefined && <RiskBanner>{problem}</RiskBanner>}
-      <Button
-        type="button"
-        disabled={file === undefined || uploading || submit.isPending}
-        onClick={() => void send()}
-      >
-        {uploading || submit.isPending ? 'Sending…' : 'Resubmit'}
-      </Button>
-    </>
   );
 }
 
@@ -395,10 +361,34 @@ function StartIdentity(): React.JSX.Element {
  * else — `onSuccess` takes no payload and anyone can call it from a console, so the verdict comes
  * from the signed webhook and reaches this screen over the socket that already updates it.
  */
-function StartSelfie(): React.JSX.Element {
+function SelfieLauncher({ intro = false }: { intro?: boolean }): React.JSX.Element {
   const start = useStartLivenessSession();
+  const abandon = useAbandonLivenessSession();
   const [problem, setProblem] = useState<string | undefined>(undefined);
   const [running, setRunning] = useState(false);
+
+  /**
+   * The person shut the modal without finishing, so the request must end now.
+   *
+   * Left open it sits at PROVIDER_PENDING until the §6.2 sweep expires it a day later, and for
+   * that whole day this screen shows "We're checking" over a check nobody is performing — with no
+   * control to press, because the start branch only renders when nothing is in flight.
+   *
+   * Still inert as to the VERDICT. It says "this attempt is over", never "this person failed";
+   * the platform decides that on the signed webhook and nowhere else.
+   *
+   * A failure here is swallowed on purpose. The worst case is the request expiring on its own
+   * later, which is exactly where we were before — so there is nothing useful to tell the user,
+   * and an error banner over a camera they just closed would only confuse.
+   */
+  const endSession = async (requestId: string) => {
+    setRunning(false);
+    try {
+      await abandon.mutateAsync(requestId);
+    } catch {
+      // Deliberately ignored; see above.
+    }
+  };
 
   const open = async () => {
     setProblem(undefined);
@@ -410,10 +400,11 @@ function StartSelfie(): React.JSX.Element {
         publicMerchantKey: session.publicMerchantKey,
         sandboxEnvironment: session.sandbox,
         metadata: { reference: session.reference },
-        // Deliberately inert. The platform decides on the webhook; these only move the screen.
+        // Still inert as to the verdict: `onSuccess` carries no payload and anyone can call it
+        // from a console, so it only keeps the button busy while the webhook is in flight.
         onSuccess: () => setRunning(true),
-        onFailure: () => setRunning(false),
-        onClose: () => setRunning(false),
+        onFailure: () => void endSession(session.requestId),
+        onClose: () => void endSession(session.requestId),
       });
       liveness.initialize();
       liveness.start();
@@ -424,15 +415,33 @@ function StartSelfie(): React.JSX.Element {
   };
 
   return (
-    <section aria-label="Selfie check" className="mb-[14px]">
-      <Banner tone="info" title="One more step">
-        Your ID is verified. Now a quick selfie so we know it’s you — it opens your camera and takes about ten
-        seconds.
-      </Banner>
+    <>
+      {intro && (
+        <Banner tone="info" title="One more step">
+          Your ID is verified. Now a quick selfie so we know it’s you — it opens your camera and takes about
+          ten seconds.
+        </Banner>
+      )}
       {problem !== undefined && <RiskBanner>{problem}</RiskBanner>}
       <Button type="button" disabled={running || start.isPending} onClick={() => void open()}>
         {running || start.isPending ? 'Opening…' : 'Take a selfie check'}
       </Button>
+    </>
+  );
+}
+
+/**
+ * The first step's framing around the launcher.
+ *
+ * Only the start branch owns a region of its own. Inside a rejection the launcher is rendered bare,
+ * because `Failure` has already opened a section named "Selfie check" — nesting a second region
+ * with the same name gives a screen reader two things by that name and gives a test an ambiguous
+ * query.
+ */
+function StartSelfie(): React.JSX.Element {
+  return (
+    <section aria-label="Selfie check" className="mb-[14px]">
+      <SelfieLauncher intro />
     </section>
   );
 }

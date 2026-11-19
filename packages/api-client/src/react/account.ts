@@ -37,6 +37,7 @@ import {
   submitBvn,
   submitLiveness,
   startEmailVerification,
+  abandonLivenessSession,
   startLivenessSession,
   startPhoneChange,
   startPhoneVerification,
@@ -230,6 +231,20 @@ export function useSubmitBvn() {
 export function useStartLivenessSession() {
   const client = useApiClient();
   return useAccountMutation(() => client.call(startLivenessSession, {}));
+}
+
+/**
+ * Ends a session the person closed without finishing, so VF1's start branch renders again.
+ *
+ * A mutation, like opening one, because it invalidates the account query tree — and the refetched
+ * status is the whole point: it is what removes the request from `inFlight` and brings the control
+ * back.
+ */
+export function useAbandonLivenessSession() {
+  const client = useApiClient();
+  return useAccountMutation((requestId: string) =>
+    client.call(abandonLivenessSession, { params: { requestId } }),
+  );
 }
 
 export function useSubmitLiveness() {

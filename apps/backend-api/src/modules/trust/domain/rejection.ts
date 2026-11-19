@@ -63,6 +63,15 @@ export const REJECTION_CODES = [
   'REVIEW_DECLINED',
   /** Not a rejection: a MANUAL_REVIEW request, which is waiting on a person (§7). */
   'NEEDS_HUMAN_REVIEW',
+  /**
+   * Not a rejection either: the person opened the liveness SDK and closed it without finishing.
+   *
+   * It shares the EXPIRED status with `PROVIDER_UNAVAILABLE` because the request did end without an
+   * answer, but the two must not read the same. A provider that never replied is a failure the user
+   * should be told about; changing your mind is not, and `verificationStatus` leaves this code out
+   * of `rejections` so VF1 offers the camera again instead of an apology.
+   */
+  'ABANDONED',
 ] as const;
 
 export type RejectionCode = (typeof REJECTION_CODES)[number];
@@ -238,6 +247,17 @@ const REASONS: Record<RejectionCode, Omit<RejectionReason, 'code'>> = {
     // this one asks them to do the same thing again, and saying so is the difference between a
     // retry and a support ticket.
     why: 'We did not hear back in time from the service that checks this. Nothing was wrong with what you sent — please try again.',
+    remedy: 'RESUBMIT',
+    identityLevelAffected: false,
+  },
+  ABANDONED: {
+    surface: 'VF1',
+    outcome: 'FAILED',
+    whyHeading: 'Why this happened',
+    // Never rendered: `verificationStatus` filters this code out of `rejections`. It exists so
+    // `describeRejection` stays total over the union, and so TrustOps has a sentence if it ever
+    // shows one.
+    why: 'You closed the selfie check before it finished. Nothing was wrong — you can start it again whenever you like.',
     remedy: 'RESUBMIT',
     identityLevelAffected: false,
   },

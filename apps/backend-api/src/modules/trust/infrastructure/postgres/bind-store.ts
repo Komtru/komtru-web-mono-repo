@@ -247,6 +247,25 @@ export function bindStore(db: Db): TrustStore {
         )
         .orderBy(desc(verificationRequests.submittedAt)),
 
+    abandonLiveness: async ({ userId, requestId }) => {
+      // LIVENESS only, and only from the two statuses that are still waiting on the browser.
+      // MANUAL_REVIEW is excluded for the reason `expireStale` excludes it: it waits on a person,
+      // and the person closing their camera says nothing about the case a reviewer has open.
+      const moved = await db
+        .update(verificationRequests)
+        .set({ status: 'EXPIRED', decidedAt: sql`now()`, rejectionReason: 'ABANDONED' })
+        .where(
+          and(
+            eq(verificationRequests.id, requestId),
+            eq(verificationRequests.userId, userId),
+            eq(verificationRequests.verificationType, 'LIVENESS'),
+            inArray(verificationRequests.status, ['SUBMITTED', 'PROVIDER_PENDING']),
+          ),
+        )
+        .returning({ id: verificationRequests.id });
+      return moved.length > 0;
+    },
+
     markProviderPending: async (requestId, provider) => {
       // SUBMITTED only, not every open status: a MANUAL_REVIEW request dragged back to
       // PROVIDER_PENDING by a redelivered job becomes sweepable, which silently closes the human

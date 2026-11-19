@@ -132,6 +132,15 @@ export const socialProofBody = z.strictObject({
 
 export const claimIdParam = z.strictObject({ id: z.uuid() });
 
+export const livenessRequestIdParam = z.strictObject({ requestId: z.uuid() });
+
+/**
+ * `abandoned` is false when this call moved nothing — a second `onClose`, or a retry that landed
+ * after the first one succeeded. Both are successes to the browser, which only wants to know it
+ * may offer the camera again, so the distinction is reported rather than thrown.
+ */
+export const livenessAbandonResponse = z.strictObject({ abandoned: z.boolean() });
+
 const socialProofClaimResponse = z.object({
   claimId: z.uuid(),
   platform: z.enum(['INSTAGRAM', 'X']),

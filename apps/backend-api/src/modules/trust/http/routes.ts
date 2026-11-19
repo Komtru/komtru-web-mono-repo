@@ -13,11 +13,13 @@ import type { TrustHttpDeps } from './controllers.js';
 import {
   addressBody,
   bankAccountBody,
-  livenessSessionResponse,
   businessBody,
   bvnBody,
   claimIdParam,
+  livenessAbandonResponse,
   livenessBody,
+  livenessRequestIdParam,
+  livenessSessionResponse,
   ninBody,
   socialProofBody,
   socialProofCheckResponse,
@@ -99,6 +101,26 @@ export function trustRoutes(deps: TrustHttpDeps): RouteDefinition[] {
       schema: { response: livenessSessionResponse },
       handler: ({ actor }) =>
         controllers.startLiveness(deps, { userId: requireUserId(actor, VERIFY_YOURSELF) }),
+    }),
+
+    defineRoute({
+      method: 'post',
+      path: '/verification/liveness/session/:requestId/abandon',
+      scope: 'CONSUMER',
+      summary: 'End a liveness session the person closed without finishing',
+      // No idempotency key: a repeat is harmless by construction, the same reason the webhook
+      // receiver needs none. Ownership and status live in the UPDATE's WHERE clause, so a second
+      // close moves nothing and the service answers `abandoned: false` rather than a conflict.
+      // This matters because the call goes out as the SDK's modal is closing, which is exactly
+      // when a connection is most likely to drop and be retried.
+      retryable: false,
+      rateLimit: { ...SUBMISSION_LIMIT, by: [...SUBMISSION_LIMIT.by] },
+      schema: { params: livenessRequestIdParam, response: livenessAbandonResponse },
+      handler: ({ actor, params }) =>
+        controllers.abandonLiveness(deps, {
+          userId: requireUserId(actor, VERIFY_YOURSELF),
+          requestId: params.requestId,
+        }),
     }),
 
     defineRoute({

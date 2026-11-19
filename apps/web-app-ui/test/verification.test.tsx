@@ -43,50 +43,22 @@ describe('Verification failed (VF1)', () => {
     expect(screen.getByText('Failed')).toBeDefined();
     expect(screen.getByText('Why this usually happens')).toBeDefined();
     expect(screen.getByText(/A blurry photo or glare across the ID is the usual cause/)).toBeDefined();
-    expect(screen.getByText('Upload a clearer photo')).toBeDefined();
-    expect(screen.getByText('Flat surface, good light, all four corners visible')).toBeDefined();
-    expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Resubmit' }).disabled).toBe(true);
+    // The retry is the provider SDK, not a photo upload: since F-045 the verdict only ever
+    // arrives on a signed webhook, so an uploaded file could produce no decision at all.
+    expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Take a selfie check' }).disabled).toBe(
+      false,
+    );
+    expect(container.querySelector('input[type="file"]')).toBeNull();
     await expectNoAxeViolations(container, SHELL_RULES);
   });
 
-  it('uploads the clearer photo as the person’s own KYC document and submits it for the liveness check', async () => {
-    api.upload.mockResolvedValue(id(900));
-    answerWith(api.call, {
-      ...base,
-      'GET /verification/status': status({ rejections: [rejection('LIVENESS')] }),
-      'POST /verification/liveness': { requestId: id(901), status: 'SUBMITTED' },
-    });
-    const { container } = renderWithApi(api.call, <Verification />);
-    await screen.findByText('Upload a clearer photo');
-    const file = new File(['x'], 'selfie.jpg', { type: 'image/jpeg' });
-    fireEvent.change(container.querySelector('input[type="file"]') as HTMLInputElement, {
-      target: { files: [file] },
-    });
-    fireEvent.click(screen.getByRole('button', { name: 'Resubmit' }));
-    await waitFor(() => expect(callsTo(api.call, 'POST', '/verification/liveness')).toHaveLength(1));
-    expect(api.upload.mock.calls[0]?.[1]).toBe(file);
-    expect(api.upload.mock.calls[0]?.[2]).toEqual({ category: 'KYC_DOCUMENT', visibility: 'PRIVATE_OWNER' });
-    expect(callsTo(api.call, 'POST', '/verification/liveness')[0]?.body).toEqual({ selfieFileId: id(900) });
-  });
-
-  it('says a photo that would not upload did not upload, and sends nothing', async () => {
-    const { UploadError } = await vi.importActual<typeof ApiClient>('@komtru/api-client');
-    api.upload.mockRejectedValue(new UploadError('x', 'UNREACHABLE'));
-    answerWith(api.call, {
-      ...base,
-      'GET /verification/status': status({ rejections: [rejection('LIVENESS')] }),
-    });
-    const { container } = renderWithApi(api.call, <Verification />);
-    await screen.findByText('Upload a clearer photo');
-    fireEvent.change(container.querySelector('input[type="file"]') as HTMLInputElement, {
-      target: { files: [new File(['x'], 'selfie.jpg', { type: 'image/jpeg' })] },
-    });
-    fireEvent.click(screen.getByRole('button', { name: 'Resubmit' }));
-    expect(
-      await screen.findByText('That photo didn’t upload. Check your connection and try again.'),
-    ).toBeDefined();
-    expect(callsTo(api.call, 'POST', '/verification/liveness')).toHaveLength(0);
-  });
+  /*
+    Two tests stood here: that a clearer photo uploaded as a KYC_DOCUMENT and posted to
+    `/verification/liveness`, and that a failed upload said so and sent nothing. Both covered the
+    photo-upload retry, which this change removes — a liveness verdict now only ever arrives on a
+    signed Youverify webhook, so an upload could never produce one. The behaviour that replaced
+    them is pinned in `verification-liveness-retry.test.tsx`.
+  */
 
   it('resubmits a failed NIN with the number and the name on it', async () => {
     answerWith(api.call, {

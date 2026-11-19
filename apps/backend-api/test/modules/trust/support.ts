@@ -119,6 +119,8 @@ export interface StubStoreOptions {
   grantResult?: LevelOutcome;
   /** False simulates the request having been decided by someone else mid-call. */
   outcomeApplied?: boolean;
+  /** What the conditional UPDATE behind `abandonLiveness` reports: false means it moved nothing. */
+  livenessAbandoned?: boolean;
   // --- T-051 ---------------------------------------------------------------------------------
   /** §7's CAC branch: who already holds this RC as their one verified business. */
   businessOwner?: BusinessOwner | undefined;
@@ -202,6 +204,7 @@ export function stubStore(options: StubStoreOptions = {}): RecordedStore {
       return Promise.resolve(row);
     },
 
+    abandonLiveness: () => Promise.resolve(options.livenessAbandoned ?? true),
     findRequest: () => Promise.resolve(options.request),
     listOpenRequests: () => Promise.resolve(options.openRequests ?? []),
     markProviderPending: () => Promise.resolve(options.outcomeApplied ?? true),

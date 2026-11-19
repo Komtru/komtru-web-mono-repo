@@ -19,6 +19,7 @@ import type { TrustStore } from '../infrastructure/postgres/store.js';
 import {
   readVerificationStatus,
   submitIdentifierCheck,
+  abandonLivenessSession,
   startLivenessSession,
   submitLivenessCheck,
   type LivenessSession,
@@ -118,6 +119,14 @@ async function enqueueIdentity(
  * Opens a browser liveness session. Returns what the SDK needs and nothing the caller did not
  * already know about themselves — the reference is minted here, never supplied by the client.
  */
+/** Ends a liveness session the person closed without finishing, so VF1 can offer it again. */
+export async function abandonLiveness(
+  deps: TrustHttpDeps,
+  input: { userId: string; requestId: string },
+): Promise<{ abandoned: boolean }> {
+  return abandonLivenessSession(serviceDeps(deps), input);
+}
+
 export async function startLiveness(
   deps: TrustHttpDeps,
   input: { userId: string },
