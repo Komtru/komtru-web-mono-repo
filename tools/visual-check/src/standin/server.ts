@@ -151,6 +151,12 @@ async function handle(
 
   const url = new URL(request.url ?? '/', 'http://localhost');
   const label = `${method} ${url.pathname}`;
+  if (url.pathname.startsWith('/socket.io/')) {
+    // Realtime is deliberately not served: a stand-in holds no live trade to push. The apps retry quietly.
+    log(`NOT SERVED ${label} — realtime is outside the stand-in`);
+    send(response, problem(404, 'Realtime is not served by the visual-check stand-in'));
+    return;
+  }
   if (!url.pathname.startsWith('/v1/')) {
     log(`UNMATCHED ${label} — outside the /v1 base the apps call`);
     send(response, problem(404, 'Not in the visual-check stand-in', label));
