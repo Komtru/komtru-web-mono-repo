@@ -69,7 +69,7 @@ list a trade.
 | **Sell on Komtru**                          | F-040–F-043 (4)  | The merchant storefront: certification, listings, shop settings, customers.                                                                                                                                                                   |
 | **Account, trust & support**                | F-044–F-048 (5)  | The Account tab and everything reached from it, plus messaging and help.                                                                                                                                                                      |
 | **TrustOps console**                        | F-049–F-059 (11) | Staff work that has no consumer counterpart. Dispute decisions, identity review and merchant review are _not_ here — they sit in the journey they serve.                                                                                      |
-| **Park network**                            | F-060–F-064 (5)  | The hub agent persona and the custody network. The signature feature, deferred as a block.                                                                                                                                                    |
+| **Park network**                            | F-060–F-064 (5)  | The hub agent persona and the custody network. The signature feature, in the MVP since 2026-11-19.                                                                                                                                            |
 | **Logistics partner**                       | F-065–F-066 (2)  | The partner portal and ship-to-company.                                                                                                                                                                                                       |
 | **Desktop & tablet journeys**               | F-067–F-074 (8)  | v2 draws desktop and tablet as whole-journey layouts (Desktop · 01–11, Tablet · 01–11), not per-screen variants. Keeping that seam means the mobile journey ships first and the wide layouts follow, which is how the reference is organised. |
 | **Launch & assurance (not a user journey)** | F-075–F-079 (5)  | **Not a journey.** Hosting, end-to-end suites, security review, load, and the final audit and first push.                                                                                                                                     |
@@ -279,7 +279,7 @@ list a trade.
 - **Backend scope:** Trade schema, state machine and audit; the proposal flow; party lookup and invitations; Trade Standards by category. **Already built in full** (T-060, T-061, T-035, T-049). Multi-item ordering moved to F-080.
 - **Frontend scope:** Create and propose a trade: seller pick (I3), Trade Standards (CTS1), proposal follow-through (Q1, R1), held-for-review (IF1), agreement (TC-05, TC-06), invite (G3), buyer tab (Customer-2), plus the IMEI entry points MI1, MI2 gated off until F-020. _12 v2 screens._
 - **Status:** Done
-- **Depends on:** F-020 _(post-MVP)_, F-021 _(post-MVP)_ — **nothing blocking for MVP**
+- **Depends on:** F-020 _(post-MVP)_, F-021 _(MVP since 2026-11-19; adds the risk hold to this shipped flow)_ — **nothing blocking**
 - **MVP:** yes
 - **Note:** T-115's dependencies on IMEI (F-020) and the risk hold (F-021) are dropped for MVP, per docs/MVP.md. **Amended 2026-11-09:** multi-item ordering (T-063) was split out to F-080. T-063 depends on listings (T-056), so folding it in here made the whole buyer/seller trade arc wait on the merchant storefront — F-037 → F-040 → F-041 → F-017 — when a single-item trade needs no listings at all. Splitting it moves this feature from tier 4 to tier 1 and pulls the trade workspace forward with it.
 
@@ -327,8 +327,8 @@ list a trade.
 - **Frontend scope:** TrustOps · 03 · Proposals (OP-10, OP-11), and it turns on the IF1 held-for-review state F-017 already draws. _2 v2 screens._
 - **Status:** Not started
 - **Depends on:** F-052
-- **MVP:** no
-- **Note:** Deferred.
+- **MVP:** yes
+- **Note:** **Brought into the MVP 2026-11-19 by the owner**, with Park, logistics and the core TrustOps console.
 
 ### Journey: The trade workspace
 
@@ -391,7 +391,7 @@ list a trade.
 - **Backend scope:** Fulfilment: the ship step, delivery signals and deadlines. Already built (T-064).
 - **Frontend scope:** Seller trade handling: Seller tabs (Seller-2, Seller-3), mandatory proof and counter-proposal (W1–W3, BR1), dispatch guard (SD1), Park waybill and handover OTP (X1, X2), Active Orders (AC8), seller pick (MI3). _11 v2 screens._
 - **Status:** Done
-- **Depends on:** F-017, F-062 _(post-MVP)_, F-066 _(post-MVP)_
+- **Depends on:** F-017, F-062 _(MVP since 2026-11-19; turns on its Park path)_, F-066 _(MVP since 2026-11-19; turns on ship-to-company)_
 - **MVP:** yes
 - **Note:** Its dependencies on logistics packages (F-066) and Park (F-062) are dropped for MVP: the seller marks shipped and supplies their own tracking.
 
@@ -405,7 +405,7 @@ list a trade.
 - **Backend scope:** Inspection and completion, and release and settlement. Both already built (T-065, T-074).
 - **Frontend scope:** Delivery and inspection: confirm delivery (Z4, Z5), live logistics and buyer handover PIN (AB1, AB2), delivery extension (DE1–DE4), inspection checklist (BEI1, BEI2), buyer tab (Customer-4), seller pick (MI4). _12 v2 screens._
 - **Status:** Done
-- **Depends on:** F-022, F-062 _(post-MVP)_
+- **Depends on:** F-022, F-062 _(MVP since 2026-11-19; turns on the AB1/AB2 pickup PIN)_
 - **MVP:** yes
 - **Note:** Its dependency on Park integration (F-062) is dropped for MVP — self-arranged delivery only, no hub custody and no pickup PIN.
 
@@ -513,8 +513,8 @@ list a trade.
 - **Frontend scope:** Track D — Return custody, RX-16, RX-17 (consumer) and RX-20, RX-21 (Park agent). _4 v2 screens._
 - **Status:** Not started
 - **Depends on:** F-033, F-061, F-062
-- **MVP:** no
-- **Note:** Deferred with Park. MVP returns are self-arranged.
+- **MVP:** yes
+- **Note:** **Brought into the MVP 2026-11-19 by the owner**, with Park, logistics and the core TrustOps console.
 
 ### Journey: Complete & grow
 
@@ -716,8 +716,8 @@ list a trade.
 - **Frontend scope:** TrustOps · 06 · Risk (OP-17, OP-18) and · 14 · Risk & compliance (OP-44, OP-45). _4 v2 screens._
 - **Status:** Not started
 - **Depends on:** none
-- **MVP:** no
-- **Note:** Deferred.
+- **MVP:** yes
+- **Note:** **Brought into the MVP 2026-11-19 by the owner**, with Park, logistics and the core TrustOps console.
 
 #### F-053 — Settlement operations, chargebacks and reconciliation
 
@@ -728,8 +728,8 @@ list a trade.
 - **Frontend scope:** TrustOps · 04 and · 10 money operations (OP-13, OP-14, OP-34, OP-35) and the fulfilment exception OP-50. _5 v2 screens._
 - **Status:** Not started
 - **Depends on:** F-030
-- **MVP:** no
-- **Note:** Deferred. Reconciliation is infrastructure with a console surface; it is in the console journey rather than a money journey because no buyer or seller ever sees it.
+- **MVP:** yes
+- **Note:** **Brought into the MVP 2026-11-19 by the owner**, with Park, logistics and the core TrustOps console. Reconciliation is infrastructure with a console surface; it is in the console journey rather than a money journey because no buyer or seller ever sees it.
 
 #### F-054 — Directory, roles, approvals and impersonation
 
@@ -740,8 +740,8 @@ list a trade.
 - **Frontend scope:** TrustOps · 09 · Team & access (OP-26, OP-27, OP-29–OP-32) and the directory search OP-25. _7 v2 screens._
 - **Status:** Not started
 - **Depends on:** none
-- **MVP:** no
-- **Note:** Deferred.
+- **MVP:** yes
+- **Note:** **Brought into the MVP 2026-11-19 by the owner**, with Park, logistics and the core TrustOps console.
 
 #### F-055 — Audit, compliance and the trust trail
 
@@ -752,8 +752,8 @@ list a trade.
 - **Frontend scope:** TrustOps · 08 search & audit (OP-23, OP-24), · 11 audit & assurance (OP-36, OP-37), · 12 OP-40 and · 15 OP-52. _6 v2 screens._
 - **Status:** Not started
 - **Depends on:** F-054
-- **MVP:** no
-- **Note:** Deferred.
+- **MVP:** yes
+- **Note:** **Brought into the MVP 2026-11-19 by the owner**, with Park, logistics and the core TrustOps console.
 
 #### F-056 — Console overview, configuration, reporting and the location catalog
 
@@ -814,8 +814,8 @@ list a trade.
 - **Frontend scope:** Park Hub Registration & Onboarding (PH1–PH6), the TrustOps-owned lifecycle screens PA7, PA8, and the TrustOps Park applications queue (OP-07–OP-09). _11 v2 screens._
 - **Status:** Not started
 - **Depends on:** F-065
-- **MVP:** no
-- **Note:** Deferred. The first wave after MVP.
+- **MVP:** yes
+- **Note:** **Brought into the MVP 2026-11-19 by the owner**, with Park, logistics and the core TrustOps console. It is the first Park agent app feature, so it also brings up `park-agent-app`'s host (a Vercel project and its DNS record), which F-075 left for this wave.
 
 #### F-061 — Log an arrival, inspect and hold an item in custody
 
@@ -826,8 +826,8 @@ list a trade.
 - **Frontend scope:** Park agent app scaffold, login and hub context (no v2 screen — see Gaps found), hub dashboard and log arrival (U1, U2), and inspection, damage and incidents (U3, U6, PA10). _5 v2 screens._
 - **Status:** Not started
 - **Depends on:** F-060
-- **MVP:** no
-- **Note:** Deferred.
+- **MVP:** yes
+- **Note:** **Brought into the MVP 2026-11-19 by the owner**, with Park, logistics and the core TrustOps console.
 
 #### F-062 — Safe handover at the hub
 
@@ -838,8 +838,8 @@ list a trade.
 - **Frontend scope:** Safe handover (U4, U5), which turns on the AB1/AB2 pickup PIN screens F-027 already draws. _2 v2 screens._
 - **Status:** Not started
 - **Depends on:** F-061
-- **MVP:** no
-- **Note:** Deferred.
+- **MVP:** yes
+- **Note:** **Brought into the MVP 2026-11-19 by the owner**, with Park, logistics and the core TrustOps console.
 
 #### F-063 — Park fees, handover log, hub tools and stock count
 
@@ -850,8 +850,8 @@ list a trade.
 - **Frontend scope:** Handover log, hub profile and staff (PE1, PA9) and Supporting · Hub tools and Hub count (SP-M30–SP-M32, SP-M43–SP-M45). _8 v2 screens._
 - **Status:** Not started
 - **Depends on:** F-060, F-061, F-062
-- **MVP:** no
-- **Note:** Deferred.
+- **MVP:** yes
+- **Note:** **Brought into the MVP 2026-11-19 by the owner**, with Park, logistics and the core TrustOps console.
 
 #### F-064 — Park network oversight in TrustOps
 
@@ -862,8 +862,8 @@ list a trade.
 - **Frontend scope:** TrustOps · 05 · Custody (OP-15, OP-16) and · 19 · Network & merchants Park views (OP-59, OP-60). _4 v2 screens._
 - **Status:** Not started
 - **Depends on:** F-060, F-062
-- **MVP:** no
-- **Note:** Deferred.
+- **MVP:** yes
+- **Note:** **Brought into the MVP 2026-11-19 by the owner**, with Park, logistics and the core TrustOps console.
 
 ### Journey: Logistics partner
 
@@ -876,8 +876,8 @@ list a trade.
 - **Frontend scope:** Logistics portal scaffold and login, and team management — neither has a v2 screen (see Gaps found).
 - **Status:** Not started
 - **Depends on:** none
-- **MVP:** no
-- **Note:** Deferred.
+- **MVP:** yes
+- **Note:** **Brought into the MVP 2026-11-19 by the owner**, with Park, logistics and the core TrustOps console. It is the first partner portal feature, so it also brings up `logistics-ops`'s host (a Vercel project and its DNS record), which F-075 left for this wave.
 
 #### F-066 — Ship through a logistics company
 
@@ -888,8 +888,8 @@ list a trade.
 - **Frontend scope:** Partner portal packages (no v2 screen) and the TrustOps logistics screens OP-51, OP-67–OP-69. _4 v2 screens._
 - **Status:** Not started
 - **Depends on:** F-065
-- **MVP:** no
-- **Note:** Deferred. Turns on the ship-to-company path F-026 leaves out for MVP.
+- **MVP:** yes
+- **Note:** **Brought into the MVP 2026-11-19 by the owner**, with Park, logistics and the core TrustOps console. Turns on the ship-to-company path F-026 leaves out for MVP.
 
 ### Journey: Desktop & tablet journeys
 
@@ -1006,9 +1006,9 @@ list a trade.
 - **Backend scope:** Playwright critical paths against the real backend (T-180).
 - **Frontend scope:** Exercises the shipped screens; adds none.
 - **Status:** Not started
-- **Depends on:** F-026, F-027, F-062 _(post-MVP)_, F-064 _(post-MVP)_, F-066 _(post-MVP)_
+- **Depends on:** F-026, F-027, F-062, F-064, F-066
 - **MVP:** yes
-- **Note:** For MVP its definition of end to end is propose → fund → deliver → inspect → release plus the dispute path; the Park, logistics and network console paths (F-062, F-064, F-066) are added with those waves.
+- **Note:** End to end is propose → fund → deliver → inspect → release, plus the dispute path, plus (since the owner brought them into the MVP on 2026-11-19) the Park handover, ship-to-company and Park network console paths through F-062, F-064 and F-066.
 
 #### F-077 — Security review
 

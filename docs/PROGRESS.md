@@ -7,11 +7,11 @@ behind it is [`BUILD_PLAN.md`](BUILD_PLAN.md). The unit of work is the feature, 
 thing in an app.
 
 ```
-MVP   ██████████████████████············  32/50   (64%)
+MVP   █████████████████·················  32/63   (51%)
 Total █████████████·····················  32/81   (40%)
 ```
 
-18 MVP features left, 31 deferred past it.
+31 MVP features left, 18 deferred past it.
 
 ## Backend done, UI outstanding
 
@@ -28,18 +28,18 @@ The engine exists and only the UI is missing, so these are the highest-value wor
 | Platform (not a user journey)           | 9    | 10    | 9        | 10        |
 | Arrive & verify                         | 3    | 4     | 3        | 3         |
 | Home & discover                         | 1    | 2     | 1        | 2         |
-| Propose & agree                         | 3    | 5     | 3        | 3         |
+| Propose & agree                         | 3    | 5     | 3        | 4         |
 | The trade workspace                     | 2    | 2     | 2        | 2         |
 | Fund & protect                          | 1    | 2     | 1        | 1         |
 | Fulfil & dispatch                       | 1    | 1     | 1        | 1         |
 | Deliver & inspect                       | 3    | 3     | 3        | 3         |
-| Issues & resolution                     | 1    | 7     | 1        | 6         |
+| Issues & resolution                     | 1    | 7     | 1        | 7         |
 | Complete & grow                         | 1    | 3     | 1        | 1         |
 | Sell on Komtru                          | 0    | 4     | 0        | 1         |
 | Account, trust & support                | 2    | 5     | 2        | 3         |
-| TrustOps console                        | 3    | 11    | 3        | 3         |
-| Park network                            | 0    | 5     | 0        | 0         |
-| Logistics partner                       | 0    | 2     | 0        | 0         |
+| TrustOps console                        | 3    | 11    | 3        | 7         |
+| Park network                            | 0    | 5     | 0        | 5         |
+| Logistics partner                       | 0    | 2     | 0        | 2         |
 | Desktop & tablet journeys               | 0    | 8     | 0        | 6         |
 | Launch & assurance (not a user journey) | 2    | 7     | 2        | 5         |
 
@@ -50,6 +50,10 @@ The engine exists and only the UI is missing, so these are the highest-value wor
 | F-005   | Deterministic integration test suite                            | Platform (not a user journey)           | yes |
 | F-031   | Lifecycle exceptions: expiry, withdrawal and inspection updates | Issues & resolution                     | yes |
 | F-032   | Report an issue and open a dispute                              | Issues & resolution                     | yes |
+| F-052   | Fraud signals and restrictions                                  | TrustOps console                        | yes |
+| F-053   | Settlement operations, chargebacks and reconciliation           | TrustOps console                        | yes |
+| F-054   | Directory, roles, approvals and impersonation                   | TrustOps console                        | yes |
+| F-065   | Logistics companies, teams and the partner portal               | Logistics partner                       | yes |
 | F-068   | Desktop: propose, agree and fund                                | Desktop & tablet journeys               | yes |
 | F-069   | Desktop: fulfil, deliver, inspect and complete                  | Desktop & tablet journeys               | yes |
 | F-072   | Tablet: arrive, home, discover, propose and fund                | Desktop & tablet journeys               | yes |
@@ -60,10 +64,6 @@ The engine exists and only the UI is missing, so these are the highest-value wor
 | F-025   | Top up and pay from a Komtru Wallet                             | Fund & protect                          |     |
 | F-047   | Message the other party                                         | Account, trust & support                |     |
 | F-048   | Raise and resolve a support ticket                              | Account, trust & support                |     |
-| F-052   | Fraud signals and restrictions                                  | TrustOps console                        |     |
-| F-053   | Settlement operations, chargebacks and reconciliation           | TrustOps console                        |     |
-| F-054   | Directory, roles, approvals and impersonation                   | TrustOps console                        |     |
-| F-065   | Logistics companies, teams and the partner portal               | Logistics partner                       |     |
 
 ## Remaining MVP features
 
@@ -71,12 +71,25 @@ The engine exists and only the UI is missing, so these are the highest-value wor
 | ------- | --------------------------------------------------------------- | --------------------------------------- | --- |
 | F-005   | Deterministic integration test suite                            | Platform (not a user journey)           | yes |
 | F-016   | View a seller's profile and Trust Passport                      | Home & discover                         | yes |
+| F-021   | Hold a risky proposal for TrustOps review                       | Propose & agree                         | yes |
 | F-031   | Lifecycle exceptions: expiry, withdrawal and inspection updates | Issues & resolution                     | yes |
 | F-032   | Report an issue and open a dispute                              | Issues & resolution                     | yes |
 | F-033   | Resolution execution: the return track                          | Issues & resolution                     | yes |
 | F-034   | Resolution execution: replacement and mutual settlement         | Issues & resolution                     | yes |
 | F-035   | Decide a dispute in TrustOps                                    | Issues & resolution                     | yes |
+| F-036   | Return custody at a Park hub                                    | Issues & resolution                     | yes |
 | F-046   | Trust history, account and notification settings                | Account, trust & support                | yes |
+| F-052   | Fraud signals and restrictions                                  | TrustOps console                        | yes |
+| F-053   | Settlement operations, chargebacks and reconciliation           | TrustOps console                        | yes |
+| F-054   | Directory, roles, approvals and impersonation                   | TrustOps console                        | yes |
+| F-055   | Audit, compliance and the trust trail                           | TrustOps console                        | yes |
+| F-060   | Apply to run a Park hub and have it approved                    | Park network                            | yes |
+| F-061   | Log an arrival, inspect and hold an item in custody             | Park network                            | yes |
+| F-062   | Safe handover at the hub                                        | Park network                            | yes |
+| F-063   | Park fees, handover log, hub tools and stock count              | Park network                            | yes |
+| F-064   | Park network oversight in TrustOps                              | Park network                            | yes |
+| F-065   | Logistics companies, teams and the partner portal               | Logistics partner                       | yes |
+| F-066   | Ship through a logistics company                                | Logistics partner                       | yes |
 | F-067   | Desktop: arrive, home and discover                              | Desktop & tablet journeys               | yes |
 | F-068   | Desktop: propose, agree and fund                                | Desktop & tablet journeys               | yes |
 | F-069   | Desktop: fulfil, deliver, inspect and complete                  | Desktop & tablet journeys               | yes |
@@ -93,11 +106,11 @@ The same work counted per ticket. Useful for the detail in `docs/tickets/`, not 
 it counts backend and frontend layers separately, which is how the build drifted.
 
 ```
-MVP   ██████████████████████████········  81/104  (78%)
+MVP   ████████████████████··············  81/137  (59%)
 Total ████████████████··················  81/168  (48%)
 ```
 
-23 MVP tickets left, 64 deferred past it.
+56 MVP tickets left, 31 deferred past it.
 
 ### Tickets in progress
 
@@ -111,18 +124,18 @@ Total ████████████████·············
 | ------ | ----------------------------------------------------------------- | --- |
 | T-029  | Isolate the integration suite's shared Redis and queues           | yes |
 | T-055  | Merchant applications and certification                           | yes |
+| T-076  | Chargebacks, reconciliation and settlement operations             | yes |
 | T-080  | Disputes core                                                     | yes |
+| T-085  | Logistics schema and Park seed                                    | yes |
+| T-101  | Risk and fraud (M13)                                              | yes |
+| T-103  | Administration: impersonation and admin action log (M14, adapted) | yes |
 | T-198  | Lifecycle exceptions and trade extras                             | yes |
 | T-208  | Desktop: propose, agree and fund                                  | yes |
 | T-212  | Tablet: arrive, home, discover, propose and fund                  | yes |
 | T-213  | Tablet: fulfil, deliver, inspect and payouts                      | yes |
 | T-034  | Social login                                                      |     |
 | T-067  | IMEI verification                                                 |     |
-| T-076  | Chargebacks, reconciliation and settlement operations             |     |
-| T-085  | Logistics schema and Park seed                                    |     |
 | T-100  | Support tickets (M10)                                             |     |
-| T-101  | Risk and fraud (M13)                                              |     |
-| T-103  | Administration: impersonation and admin action log (M14, adapted) |     |
 | T-108  | Trade messaging                                                   |     |
 | T-155  | Location catalog management                                       |     |
 | T-219  | TrustOps: people development                                      |     |
@@ -140,14 +153,45 @@ Total ████████████████·············
 | ------ | ------------------------------------------------------------------ | --- |
 | T-029  | Isolate the integration suite's shared Redis and queues            | yes |
 | T-055  | Merchant applications and certification                            | yes |
+| T-062  | Proposal risk hold and TrustOps review                             | yes |
+| T-076  | Chargebacks, reconciliation and settlement operations              | yes |
 | T-080  | Disputes core                                                      | yes |
 | T-081  | Evidence comparison and dispute read models                        | yes |
+| T-085  | Logistics schema and Park seed                                     | yes |
+| T-086  | Logistics auth, companies and members                              | yes |
+| T-087  | Package pipeline and ship-to-company                               | yes |
+| T-090  | Park schema                                                        | yes |
+| T-091  | Hub onboarding, activation and lifecycle                           | yes |
+| T-092  | Custody operations API                                             | yes |
+| T-093  | Park and trade integration                                         | yes |
+| T-094  | Park cash-fee notices and handover log                             | yes |
+| T-095  | Park TrustOps read models                                          | yes |
+| T-101  | Risk and fraud (M13)                                               | yes |
 | T-102  | Reputation and ratings (M12)                                       | yes |
+| T-103  | Administration: impersonation and admin action log (M14, adapted)  | yes |
+| T-104  | Audit and compliance (M15)                                         | yes |
 | T-114  | Seller profile and Trust Passport                                  | yes |
 | T-120  | Disputes (buyer and seller)                                        | yes |
 | T-121  | Apply for merchant certification                                   | yes |
 | T-126  | Trust, account and settings                                        | yes |
+| T-130  | Park Hub application                                               | yes |
+| T-142  | Trade proposals                                                    | yes |
 | T-143  | Disputes                                                           | yes |
+| T-145  | Fraud signals and restrictions                                     | yes |
+| T-146  | Settlement operations                                              | yes |
+| T-147  | Park applications, registration and lifecycle                      | yes |
+| T-148  | Park network and custody                                           | yes |
+| T-149  | Logistics companies and packages                                   | yes |
+| T-150  | Directory, roles and approvals                                     | yes |
+| T-152  | Audit and compliance                                               | yes |
+| T-160  | Portal scaffold and login                                          | yes |
+| T-161  | Team management                                                    | yes |
+| T-162  | Packages                                                           | yes |
+| T-170  | App scaffold, login and hub context                                | yes |
+| T-171  | Hub dashboard and log arrival                                      | yes |
+| T-172  | Inspection, damage and incidents                                   | yes |
+| T-173  | Safe handover                                                      | yes |
+| T-174  | Handover log, hub profile and staff                                | yes |
 | T-180  | End-to-end critical paths                                          | yes |
 | T-182  | Security review                                                    | yes |
 | T-183  | Definition-of-done audit and first push                            | yes |
@@ -155,6 +199,8 @@ Total ████████████████·············
 | T-198  | Lifecycle exceptions and trade extras                              | yes |
 | T-199  | Resolution execution: return track                                 | yes |
 | T-200  | Resolution execution: replacement and mutual settlement            | yes |
+| T-201  | Resolution execution: return custody at the hub                    | yes |
+| T-206  | Park agent hub tools and hub count                                 | yes |
 | T-207  | Desktop: arrive, home and discover                                 | yes |
 | T-208  | Desktop: propose, agree and fund                                   | yes |
 | T-209  | Desktop: fulfil, deliver, inspect and complete                     | yes |

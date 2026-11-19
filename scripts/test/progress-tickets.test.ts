@@ -31,9 +31,13 @@ describe('progress.py MVP ticket scrape', () => {
     const [ids, declared, problems] = JSON.parse(run.out) as [string[], number, string[]];
     expect(problems).toEqual([]);
     expect(ids).toHaveLength(declared);
-    // 72 since the owner's 2026-11-15 catalogue cut: T-056, T-057, T-063, T-122 and T-202 moved to Deferred.
-    expect(declared).toBe(72);
-    for (const deferred of ['T-201', 'T-210', 'T-214']) expect(ids).not.toContain(deferred);
+    // 72 after the owner's 2026-11-15 catalogue cut (T-056, T-057, T-063, T-122 and T-202 moved to
+    // Deferred); 105 since 2026-11-19, when the owner brought in Park, logistics and the core
+    // TrustOps console (33 tickets, T-201 return custody among them).
+    expect(declared).toBe(105);
+    // Still deferred, and T-067 is named in the dependency-edits table, which must not be scraped.
+    for (const deferred of ['T-067', 'T-210', 'T-214']) expect(ids).not.toContain(deferred);
+    for (const added of ['T-090', 'T-087', 'T-145', 'T-201']) expect(ids).toContain(added);
   });
 
   it('fails loudly when the parsed ids disagree with the stated header', () => {

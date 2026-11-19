@@ -3,10 +3,10 @@
 **Decided 2026-10-06 by the owner: shape C, "escrow + merchant storefront".**
 
 A buyer and a seller agree a trade, the buyer funds escrow, goods move by self-arranged
-delivery, the buyer inspects, money is released or the trade is disputed — and a certified
+delivery, through a logistics company or via a Park hub (all three since 2026-11-19), the buyer inspects, money is released or the trade is disputed — and a certified
 merchant can run a storefront with listings and search on top of that.
 
-**51 features to MVP**, of 79 in all, tracked in [`tickets/FEATURE_MAP.md`](tickets/FEATURE_MAP.md); 13 are done. As tickets the same cut is 77 listed tickets on top of the work already done, of 168 in all. The headline is the feature count: 13/51 (25%), not the ticket count it replaced.
+**63 features to MVP**, of 81 in all, tracked in [`tickets/FEATURE_MAP.md`](tickets/FEATURE_MAP.md); 32 are done. `pnpm progress` is the live count. **Widened 2026-11-19 by the owner** to take in the Park network, the logistics partner and the core TrustOps console (13 features, 33 tickets); see [the widening](#widened-2026-11-19-park-logistics-and-the-core-trustops-console).
 
 > The full ticket list is [`TICKETS.md`](TICKETS.md); it is not reorganised by this document.
 > This is the cut through it, and the record of why each line sits where it does.
@@ -25,7 +25,7 @@ things in particular have to be changed deliberately rather than waited out:
   logistics packages and the Park network console. Its definition of "end to end" spans two
   apps the MVP does not build.
 
-## The MVP cut in features — 48 features
+## The MVP cut in features — 63 features
 
 This is the cut as the project now measures it. Each feature carries its backend and its frontend, and is done only when a user can do the thing in an app. The definitions live in [`tickets/FEATURE_MAP.md`](tickets/FEATURE_MAP.md); the tickets each one absorbs are listed alongside, and the ticket listing further down is the same cut as tickets, kept so the history stays traceable.
 
@@ -72,7 +72,7 @@ settings depend on it.
 | F-015   | Home, trade search and find-a-trade-by-code | Not started | T-113        |
 | F-016   | View a seller's profile and Trust Passport  | Not started | T-114, T-102 |
 
-### Propose & agree (3)
+### Propose & agree (4)
 
 The core buyer and seller journey. IMEI check (F-020) and the automated risk hold (F-021) are deferred; phones are a large share of this market, so F-020 is the first thing to add back.
 
@@ -81,6 +81,7 @@ The core buyer and seller journey. IMEI check (F-020) and the automated risk hol
 | F-017   | Propose a trade and invite the other party     | Done        | T-060, T-061, T-035, T-049, T-115 |
 | F-018   | Create a trade: buyer starts, seller completes | Not started | T-192                             |
 | F-019   | Create a trade: seller starts, buyer completes | Not started | T-193                             |
+| F-021   | Hold a risky proposal for TrustOps review      | Not started | T-062, T-142                      |
 
 ### The trade workspace (2)
 
@@ -117,7 +118,7 @@ Self-arranged delivery and inspection only: no hub custody and no Park pickup PI
 | F-028   | Delivery and evidence in the workspace          | Not started                  | T-195               |
 | F-029   | Capture and compare proof media                 | Not started                  | T-197               |
 
-### Issues & resolution (6)
+### Issues & resolution (7)
 
 Buyers and sellers must be able to open and follow a dispute, not only TrustOps (owner ruling, 2026-11-06). Return custody at a hub (F-036) stays deferred with Park, so returns are self-arranged.
 
@@ -129,6 +130,7 @@ Buyers and sellers must be able to open and follow a dispute, not only TrustOps 
 | F-033   | Resolution execution: the return track                          | Not started | T-199                      |
 | F-034   | Resolution execution: replacement and mutual settlement         | Not started | T-200                      |
 | F-035   | Decide a dispute in TrustOps                                    | Not started | T-143                      |
+| F-036   | Return custody at a Park hub                                    | Not started | T-201                      |
 
 ### Complete & grow (1)
 
@@ -160,15 +162,40 @@ Addresses, identity verification and account lifecycle are in; messaging and hel
 | F-045   | Verify yourself, and close or recover an account       | Backend done, UI outstanding | T-039, T-050, T-205 |
 | F-046   | Trust history, account and notification settings       | Not started                  | T-126               |
 
-### TrustOps console (3)
+### TrustOps console (7)
 
-The MVP console is the work queue, identity review and, with disputes and merchant review, nothing more.
+The MVP console is the work queue, identity review, disputes and merchant review, and since 2026-11-19 the core console: fraud signals, the risk hold on proposals, settlement and reconciliation, the staff directory and roles, and audit. Operations control, governance, treasury, field audits, people development, the TrustOps tablet and the console overview stay deferred.
 
-| Feature | Title                                  | Status                       | Absorbs             |
-| ------- | -------------------------------------- | ---------------------------- | ------------------- |
-| F-049   | Staff sign-in, console shell and roles | Done                         | T-037, T-038, T-140 |
-| F-050   | Work queue and the universal case      | Done                         | T-107, T-141        |
-| F-051   | Review identity and KYC                | Backend done, UI outstanding | T-052, T-144        |
+| Feature | Title                                                 | Status                       | Absorbs             |
+| ------- | ----------------------------------------------------- | ---------------------------- | ------------------- |
+| F-049   | Staff sign-in, console shell and roles                | Done                         | T-037, T-038, T-140 |
+| F-050   | Work queue and the universal case                     | Done                         | T-107, T-141        |
+| F-051   | Review identity and KYC                               | Backend done, UI outstanding | T-052, T-144        |
+| F-052   | Fraud signals and restrictions                        | Not started                  | T-101, T-145        |
+| F-053   | Settlement operations, chargebacks and reconciliation | Not started                  | T-076, T-146        |
+| F-054   | Directory, roles, approvals and impersonation         | Not started                  | T-103, T-150        |
+| F-055   | Audit, compliance and the trust trail                 | Not started                  | T-104, T-152        |
+
+### Park network (5, added 2026-11-19 by the owner)
+
+The hub agent app and the custody network: apply to run a hub, log arrivals and hold items, hand them over with a pickup PIN, run the hub, and oversee the network from TrustOps. F-036 (return custody at a hub) joined Issues & resolution with it.
+
+| Feature | Title                                               | Status      | Absorbs                    |
+| ------- | --------------------------------------------------- | ----------- | -------------------------- |
+| F-060   | Apply to run a Park hub and have it approved        | Not started | T-090, T-091, T-130, T-147 |
+| F-061   | Log an arrival, inspect and hold an item in custody | Not started | T-092, T-170, T-171, T-172 |
+| F-062   | Safe handover at the hub                            | Not started | T-093, T-173               |
+| F-063   | Park fees, handover log, hub tools and stock count  | Not started | T-094, T-174, T-206        |
+| F-064   | Park network oversight in TrustOps                  | Not started | T-095, T-148               |
+
+### Logistics partner (2, added 2026-11-19 by the owner)
+
+The partner portal and shipping through a logistics company, alongside self-arranged delivery.
+
+| Feature | Title                                             | Status      | Absorbs                    |
+| ------- | ------------------------------------------------- | ----------- | -------------------------- |
+| F-065   | Logistics companies, teams and the partner portal | Not started | T-085, T-086, T-160, T-161 |
+| F-066   | Ship through a logistics company                  | Not started | T-087, T-162, T-149        |
 
 ### Desktop & tablet journeys (6)
 
@@ -194,7 +221,7 @@ Hosting, end-to-end paths, security review and the first push. F-079 (load and r
 | F-077   | Security review                         | Not started | T-182   |
 | F-078   | Definition-of-done audit and first push | Not started | T-183   |
 
-## Included — 72 tickets
+## Included — 105 tickets
 
 The same cut as tickets, the secondary mapping. `tools/tickets/progress.py` reads this listing for the ticket-layer view (`pnpm progress --tickets`) and fails if it disagrees with the counts stated here.
 
@@ -270,14 +297,56 @@ ticket depends on it. It adds 30 tickets, 15 of them MVP, listed here:
 ### Disputes for buyers and sellers (5, added 2026-11-06 by the owner)
 
 The owner ruled that buyers and sellers must be able to open and follow a dispute in the MVP,
-not only TrustOps. Return custody at a hub (T-201) stays deferred with Park, so returns are
-self-arranged.
+not only TrustOps. Return custody at a hub (T-201) came in with Park on 2026-11-19, so a return can
+be self-arranged or go through a hub.
 
 - **T-120** disputes (buyer and seller), the mobile web dispute screens.
 - **T-196** trade workspace resolution and issue-reporting screens.
 - **T-199** resolution execution, the return track (Track A).
 - **T-200** resolution execution, replacement and mutual settlement (Tracks B and C).
 - **T-221** desktop and tablet issues and resolution, split out of T-210 and T-214.
+
+### Park network (16, added 2026-11-19 by the owner)
+
+T-090 Park schema ·
+T-091 hub onboarding, activation and lifecycle ·
+T-130 Park hub application ·
+T-147 Park applications, registration and lifecycle ·
+T-092 custody operations API ·
+T-170 app scaffold, login and hub context ·
+T-171 hub dashboard and log arrival ·
+T-172 inspection, damage and incidents ·
+T-093 Park and trade integration ·
+T-173 safe handover ·
+T-094 Park cash-fee notices and handover log ·
+T-174 handover log, hub profile and staff ·
+T-206 park agent hub tools and hub count ·
+T-095 Park TrustOps read models ·
+T-148 Park network and custody ·
+T-201 resolution execution: return custody at the hub
+
+### Logistics (7, added 2026-11-19 by the owner)
+
+T-085 logistics schema and Park seed ·
+T-086 logistics auth, companies and members ·
+T-160 portal scaffold and login ·
+T-161 team management ·
+T-087 package pipeline and ship-to-company ·
+T-162 packages ·
+T-149 logistics companies and packages
+
+### Core TrustOps console (10, added 2026-11-19 by the owner)
+
+T-101 risk and fraud (M13) ·
+T-145 fraud signals and restrictions ·
+T-076 chargebacks, reconciliation and settlement operations ·
+T-146 settlement operations ·
+T-103 administration: impersonation and admin action log (M14, adapted) ·
+T-150 directory, roles and approvals ·
+T-104 audit and compliance (M15) ·
+T-152 audit and compliance ·
+T-062 proposal risk hold and TrustOps review ·
+T-142 trade proposals
 
 ### Release (4)
 
@@ -286,42 +355,41 @@ T-183 definition-of-done audit and first push
 
 ## Dependency edits the MVP requires
 
+Since 2026-11-19 Park, logistics and the risk hold are in the MVP, so the edits that dropped T-093, T-087, T-062, T-173, T-162 and T-148 no longer apply and are gone from this table.
+
 Each of these removes a dependency on a deferred ticket. None of them changes what the
 depending ticket does for a user; each narrows what it covers.
 
-| Ticket                             | Drop                                 | Consequence                                                                                                                                     |
-| ---------------------------------- | ------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------- |
-| T-111 entry and authentication     | T-034 social login                   | Email, phone and handle login only. Social sign-in is a conversion lever worth revisiting early.                                                |
-| T-115 create and propose a trade   | T-062 risk hold, T-067 IMEI          | No automated risk hold on a proposal and no IMEI check. Phones are a large share of this market, so T-067 is the first thing to add back.       |
-| T-118 delivery and inspection      | T-093 Park integration               | Self-arranged delivery and inspection only — no hub custody, no Park pickup PIN.                                                                |
-| T-123 seller handling and shipping | T-087 logistics packages, T-093 Park | The seller marks a trade shipped and supplies their own tracking; no ship-to-company.                                                           |
-| T-180 end-to-end critical paths    | T-173, T-162, T-148                  | "End to end" means propose → fund → deliver → inspect → release, plus the dispute path. Park and logistics journeys are added with those waves. |
-| T-183 first push                   | everything outside this list         | Gates the push on the MVP set rather than on all 166.                                                                                           |
+| Ticket                           | Drop                         | Consequence                                                                                      |
+| -------------------------------- | ---------------------------- | ------------------------------------------------------------------------------------------------ |
+| T-111 entry and authentication   | T-034 social login           | Email, phone and handle login only. Social sign-in is a conversion lever worth revisiting early. |
+| T-115 create and propose a trade | T-067 IMEI                   | No IMEI check. Phones are a large share of this market, so T-067 is the first thing to add back. |
+| T-183 first push                 | everything outside this list | Gates the push on the MVP set rather than on all 166.                                            |
 
-## Deferred — 65 tickets
+## Widened 2026-11-19: Park, logistics and the core TrustOps console
+
+The owner brought three surfaces into the MVP that were deferred as blocks: the Park hub network (F-060–F-064 and F-036, return custody at a hub), the logistics partner (F-065, F-066) and the core TrustOps console (F-052 fraud signals, F-021 the proposal risk hold, F-053 settlement and reconciliation, F-054 directory and roles, F-055 audit). That is 13 features and 33 tickets. The rest of the console (F-056–F-059) stays deferred, so F-039 seller insights, which F-056 would have needed, stays deferred too. Every dependency of the 13 is either already in the MVP or one of the 13.
+
+Two consequences. F-076's end-to-end paths now include the Park handover, ship-to-company and network console paths. And `logistics-ops` and `park-agent-app` need hosts, which F-075 left for this wave: F-065 and F-060 each bring theirs up.
+
+## Deferred — 31 tickets
 
 - **Catalogue and storefront, 5 (deferred 2026-11-15 by the owner):** T-056 listings lifecycle,
   images and stock · T-057 search and discovery (the M19 listing index) · T-063 orders and
   multi-item trades · T-122 shop and listings · T-202 shop settings and catalogue import.
   Trades are proposed party to party, so none of the MVP journeys needs a catalogue.
 
-- **Park, 16:** T-090–T-095, T-130, T-147, T-148, T-170–T-174. The signature feature, and the
-  largest single block. It is the first wave after MVP.
-- **Logistics, 7:** T-085, T-086, T-087, T-149, T-160, T-161, T-162.
-- **Risk, trust and growth, 8:** T-062, T-067, T-101, T-106, T-127, T-128, T-108, T-145.
-- **Money extensions, 4:** T-076 chargebacks, T-077 and T-131 wallet, T-146 settlement ops.
-- **Support and admin, 11:** T-034, T-041, T-100, T-103, T-104, T-105, T-125, T-129, T-150,
-  T-151, T-152.
-- **Console and misc, 3:** T-142, T-153, T-155.
-- **UI master v2, 11:** each is deferred because the buyer or seller feature it draws is deferred,
+- **Risk, trust and growth, 5:** T-067, T-106, T-127, T-128, T-108.
+- **Money extensions, 2:** T-077 and T-131 wallet.
+- **Support and admin, 7:** T-034, T-041, T-100, T-105, T-125, T-129, T-151.
+- **Console and misc, 2:** T-153, T-155.
+- **UI master v2, 9:** each is deferred because the buyer or seller feature it draws is deferred,
   or because it belongs to a console or hub surface the MVP does not build.
   - T-210 desktop messages, trust and account: messaging is deferred. Its dispute screens moved to T-221 (MVP).
-  - T-201 Track D return custody and T-206 hub tools and count: Park is deferred.
   - T-203 seller customers, tax and badges: storefront polish after the first merchants are live.
   - T-211 desktop help and settings, T-214 tablet messages, account and help: help and messaging are deferred.
   - T-215 operations control, T-216 governance, T-217 treasury, T-218 field audits, T-219 people
-    development and T-220 TrustOps tablet: the MVP console is the work queue, disputes, identity
-    review and merchant review only.
+    development and T-220 TrustOps tablet: beyond the core console the MVP takes in.
 - **T-181 load and resilience** — deliberately after the MVP ships, when there is real traffic
   shape to test against.
 
