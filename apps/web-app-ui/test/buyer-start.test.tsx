@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { ProblemError } from '@komtru/api-client';
-import { cleanup, fireEvent, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { BuyerStart } from '../src/trade/create/BuyerStart';
 import { SELLER_TO_CONFIRM } from '../src/trade/create/request';
@@ -564,5 +564,41 @@ describe('moving between stages', () => {
     await waitFor(() => {
       expect(document.activeElement).toBe(screen.getByRole('list', { name: 'Start a Trade, step 2 of 4' }));
     });
+  });
+});
+
+describe('DX-10 / TX-07 contract so far beside the stage', () => {
+  it('is not drawn on the first stage, where it would repeat the seller and item being typed', async () => {
+    answerWith(api.call, handlers());
+    renderWithApi(api.call, <BuyerStart />);
+    await aboutStage();
+    expect(screen.queryByRole('complementary', { name: 'Contract so far' })).toBeNull();
+  });
+
+  it('draws the figures the platform gave, beside item and delivery, and says the total is still to come', async () => {
+    answerWith(api.call, handlers());
+    renderWithApi(api.call, <BuyerStart />);
+    await aboutStage();
+    press('Continue');
+    await screen.findByText('How should this item get to you?');
+    const contract = await screen.findByRole('complementary', { name: 'Contract so far' });
+    expect(within(contract).getByText('iPhone 13 Pro 256GB')).toBeTruthy();
+    expect(within(contract).getByText('Buyer Protection Fee')).toBeTruthy();
+    expect(within(contract).getByText('To be confirmed')).toBeTruthy();
+    expect(within(contract).getByText('Seller to add')).toBeTruthy();
+  });
+
+  it('is named by the trade assembly rail, with the stage the person is on marked', async () => {
+    answerWith(api.call, handlers());
+    renderWithApi(api.call, <BuyerStart />);
+    await aboutStage();
+    press('Continue');
+    await screen.findByText('How should this item get to you?');
+    const rail = screen.getByRole('navigation', { name: 'Trade assembly' });
+    expect(
+      within(rail)
+        .getByRole('list', { name: /step 2 of 4/ })
+        .getAttribute('aria-label'),
+    ).toMatch(/step 2 of 4/);
   });
 });

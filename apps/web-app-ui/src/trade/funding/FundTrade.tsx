@@ -30,6 +30,7 @@ import { isFundedTradeStatus } from '@komtru/shared-types';
 import { useQueryClient } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
 import { isProblem, naira, nairaShort, partyName, problemMessage, whenLabel } from '../format';
+import { ProposeWorkspace } from '../create/ProposeWorkspace';
 import { isRequestSpec } from '../create/request';
 import { readRequest } from '../create/read';
 import { ConfirmSheet, ItemSummary } from '../parts';
@@ -357,19 +358,26 @@ function Funding({
   }
 
   return (
-    <Frame title="Fund & Protect" back={tradeHref(trade.id)}>
-      <dl
-        aria-label="What you pay"
-        className="mb-[16px] rounded-md border border-solid border-border-hairline bg-surface-primary p-[14px]"
-      >
-        <FeeRow label="Trade reference">{trade.tradeCode}</FeeRow>
-        <FeeRow label="Item price">{naira(shown.itemAmountMinor)}</FeeRow>
-        <FeeRow label="Buyer Protection Fee">{naira(shown.buyerProtectionFeeMinor)}</FeeRow>
-        <FeeRow label="Total to pay" total>
-          {naira(total)}
-        </FeeRow>
-      </dl>
-      {deliveryNote}
+    <Frame
+      title="Fund & Protect"
+      back={tradeHref(trade.id)}
+      summary={
+        <>
+          <dl
+            aria-label="What you pay"
+            className="mb-[16px] rounded-md border border-solid border-border-hairline bg-surface-primary p-[14px]"
+          >
+            <FeeRow label="Trade reference">{trade.tradeCode}</FeeRow>
+            <FeeRow label="Item price">{naira(shown.itemAmountMinor)}</FeeRow>
+            <FeeRow label="Buyer Protection Fee">{naira(shown.buyerProtectionFeeMinor)}</FeeRow>
+            <FeeRow label="Total to pay" total>
+              {naira(total)}
+            </FeeRow>
+          </dl>
+          {deliveryNote}
+        </>
+      }
+    >
       <fieldset className="m-0 border-0 p-0">
         <legend className="p-0">
           <SectionLabel as="p">Choose how to pay</SectionLabel>
@@ -687,6 +695,7 @@ function Frame({
   back,
   onBack,
   backLabel = 'Back to the trade',
+  summary,
   children,
 }: {
   title: string;
@@ -694,17 +703,31 @@ function Frame({
   /** A step back inside this screen (V2 → V1) instead of leaving it. */
   onBack?: () => void;
   backLabel?: string;
+  /**
+   * The order summary the checkout keeps beside its methods on tablet and desktop (DX-15, TX-10). Where a screen has
+   * none, the frame is the single column it always was.
+   */
+  summary?: React.ReactNode;
   children: React.ReactNode;
 }): React.JSX.Element {
+  const header =
+    onBack === undefined ? (
+      <ScreenHeader title={title} backHref={back} backLabel={backLabel} />
+    ) : (
+      <ScreenHeader title={title} onBack={onBack} backLabel={backLabel} />
+    );
+  if (summary === undefined) {
+    return (
+      <ScreenColumn>
+        {header}
+        {children}
+      </ScreenColumn>
+    );
+  }
   return (
-    <ScreenColumn>
-      {onBack === undefined ? (
-        <ScreenHeader title={title} backHref={back} backLabel={backLabel} />
-      ) : (
-        <ScreenHeader title={title} onBack={onBack} backLabel={backLabel} />
-      )}
+    <ProposeWorkspace header={header} preview={summary} previewLabel="Order summary" previewOnMobile>
       {children}
-    </ScreenColumn>
+    </ProposeWorkspace>
   );
 }
 

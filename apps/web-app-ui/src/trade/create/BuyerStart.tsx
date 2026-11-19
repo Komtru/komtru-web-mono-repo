@@ -32,6 +32,8 @@ import { useRouter } from 'next/navigation';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { naira, problemMessage } from '../format';
 import { About, ItemAndDelivery, Sent, Terms } from './BuyerStages';
+import { ContractPreview } from './ContractPreview';
+import { ProposeWorkspace } from './ProposeWorkspace';
 import { Agreement, BUYER_STAGES, StageHeader } from './parts';
 import { detectCategory, parkAvailable, requestSpec, type DeliveryMode, type ParkOption } from './request';
 
@@ -243,13 +245,32 @@ export function BuyerStart({
   };
 
   return (
-    <ScreenColumn>
-      <ScreenHeader
-        title={stage === 3 ? 'Review' : 'Start a Trade'}
-        {...(stage === 0 ? { backHref: '/trades' } : { onBack: back })}
-      />
-      <StageHeader stages={BUYER_STAGES} current={stage} heading={stage === 3 ? 'Review' : 'Start a Trade'} />
-
+    <ProposeWorkspace
+      header={
+        <ScreenHeader
+          title={stage === 3 ? 'Review' : 'Start a Trade'}
+          {...(stage === 0 ? { backHref: '/trades' } : { onBack: back })}
+        />
+      }
+      rail={
+        <StageHeader
+          stages={BUYER_STAGES}
+          current={stage}
+          heading={stage === 3 ? 'Review' : 'Start a Trade'}
+        />
+      }
+      preview={
+        stage === 0 || stage === 3 ? undefined : (
+          <ContractPreview
+            sellerName={who.trim() === '' ? undefined : sellerName}
+            itemTitle={title.trim() === '' ? undefined : title.trim()}
+            itemMinor={amounts?.itemMinor}
+            protectionFeeMinor={amounts?.buyerProtectionFeeMinor}
+            inspectionHours={standard?.inspectionWindowHours}
+          />
+        )
+      }
+    >
       {stage === 0 && (
         <About
           who={who}
@@ -364,6 +385,6 @@ export function BuyerStart({
           </>
         )}
       </ActionStack>
-    </ScreenColumn>
+    </ProposeWorkspace>
   );
 }

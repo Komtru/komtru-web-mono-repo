@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { ProblemError } from '@komtru/api-client';
-import { cleanup, fireEvent, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { CompleteRequest } from '../src/trade/create/CompleteRequest';
 import { SELLER_TO_CONFIRM } from '../src/trade/create/request';
@@ -559,5 +559,26 @@ describe('completing a request: edges', () => {
     await itemStage(park.container);
     await screen.findByText(/collect at a Park/);
     await expectNoAxeViolations(park.container, SHELL_RULES);
+  });
+});
+
+describe("DX-10B / TX-07B the seller's contract so far beside the stage", () => {
+  it('shows the buyer, the item they asked for and the platform figures beside the item details', async () => {
+    answerWith(api.call, handlers(asSeller(), upload));
+    renderWithApi(api.call, <CompleteRequest id={id(1)} />);
+    expect(await screen.findByText(/Electronics specification/)).toBeTruthy();
+    const contract = screen.getByRole('complementary', { name: 'Contract so far' });
+    expect(within(contract).getByText('Buyer')).toBeTruthy();
+    expect(within(contract).getByText('Buyer Protection Fee')).toBeTruthy();
+    expect(within(contract).getByText('Waiting')).toBeTruthy();
+  });
+
+  it('keeps the contract beside the delivery stage as the seller sets the charge and the promise', async () => {
+    answerWith(api.call, handlers(asSeller(), upload));
+    renderWithApi(api.call, <CompleteRequest id={id(1)} />);
+    await screen.findByText(/Electronics specification/);
+    await itemStage(document.body);
+    await screen.findByText('Delivery partner');
+    expect(screen.getByRole('complementary', { name: 'Contract so far' })).toBeTruthy();
   });
 });

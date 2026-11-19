@@ -145,6 +145,16 @@ describe('a buyer request the seller has not completed', () => {
 });
 
 describe('V1: choose how to pay', () => {
+  it('keeps the order summary in its own column beside the methods on a wide screen', async () => {
+    serve(status('NONE'));
+    show();
+    const fees = await screen.findByLabelText('What you pay');
+    const summary = screen.getByRole('complementary', { name: 'Order summary' });
+    expect(within(summary).getByLabelText('What you pay')).toBe(fees);
+    expect(within(summary).queryByRole('radio')).toBeNull();
+    expect(screen.getAllByRole('radio')).toHaveLength(2);
+  });
+
   it('itemises the trade’s own fee snapshot and offers transfer, then card', async () => {
     serve(status('NONE'));
     const { container } = show();

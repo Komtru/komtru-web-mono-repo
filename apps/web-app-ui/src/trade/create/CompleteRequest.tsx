@@ -27,8 +27,10 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { AddressPicker } from '../AddressPicker';
-import { isProblem, naira, problemMessage, proofNeeds } from '../format';
+import { isProblem, naira, partyName, problemMessage, proofNeeds } from '../format';
 import { type Attached, ProofUpload } from '../ProofUpload';
+import { ContractPreview } from './ContractPreview';
+import { ProposeWorkspace } from './ProposeWorkspace';
 import { Agreement, ItemFields, StageHeader } from './parts';
 import { readRequest } from './read';
 import { allowedPromises, collidingKeys, completedSpec, isRequestSpec, parseCharge } from './request';
@@ -223,20 +225,35 @@ function Completion({ trade }: { trade: TradeView }): React.JSX.Element {
   const titles = ['Item Details', 'Delivery', 'Review'];
 
   return (
-    <ScreenColumn>
-      <ScreenHeader
-        title={titles[stage] ?? 'Item Details'}
-        {...(stage === 0
-          ? { backHref: `/trade/${trade.id}` }
-          : {
-              onBack: () => {
-                setTried(false);
-                setStage((current) => current - 1);
-              },
-            })}
-      />
-      <StageHeader stages={SELLER_STAGES} current={stage} heading={titles[stage] ?? 'Item Details'} />
-
+    <ProposeWorkspace
+      header={
+        <ScreenHeader
+          title={titles[stage] ?? 'Item Details'}
+          {...(stage === 0
+            ? { backHref: `/trade/${trade.id}` }
+            : {
+                onBack: () => {
+                  setTried(false);
+                  setStage((current) => current - 1);
+                },
+              })}
+        />
+      }
+      rail={<StageHeader stages={SELLER_STAGES} current={stage} heading={titles[stage] ?? 'Item Details'} />}
+      preview={
+        stage === 2 ? undefined : (
+          <ContractPreview
+            partyLabel="Buyer"
+            {...(trade.counterparty ? { sellerName: partyName(trade.counterparty) } : {})}
+            itemTitle={request.requestedItem}
+            itemMinor={amounts?.itemMinor}
+            protectionFeeMinor={amounts?.buyerProtectionFeeMinor}
+            inspectionHours={terms.inspectionWindowHours}
+            deliveryLine={chargeMinor === undefined ? 'Waiting' : naira(chargeMinor.toString())}
+          />
+        )
+      }
+    >
       {stage === 0 && (
         <>
           <p className="mb-[16px] mt-0 text-[12.5px] leading-[1.5] text-slate">
@@ -420,6 +437,6 @@ function Completion({ trade }: { trade: TradeView }): React.JSX.Element {
           </>
         )}
       </ActionStack>
-    </ScreenColumn>
+    </ProposeWorkspace>
   );
 }
