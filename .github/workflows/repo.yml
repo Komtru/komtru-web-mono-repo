@@ -73,4 +73,16 @@ jobs:
       - name: Every workspace package
         # Unfiltered, so a package no app imports yet is still linted, typechecked, tested and
         # built. Turbo's cache makes this cheap once the app workflows have run.
+        #
+        # The Next apps are built here too, and `next build` evaluates their route modules to
+        # collect page data — so an app whose config throws on a missing NEXT_PUBLIC_* fails here
+        # exactly as it would in its own workflow. The app workflows were given this environment;
+        # this step was not, so operations-app passed there and failed here on the same commit.
+        env:
+          NEXT_PUBLIC_KOMTRU_APP_URL: ${{ vars.WEB_APP_URL || 'https://app.komtru.com' }}
+          NEXT_PUBLIC_KOMTRU_API_URL: ${{ vars.KOMTRU_API_URL || 'https://api.komtru.com/v1' }}
+          NEXT_PUBLIC_KOMTRU_PASSPORT_URL: ${{ vars.KOMTRU_PASSPORT_URL || 'https://passport.komtru.com' }}
+          NEXT_PUBLIC_KOMTRU_PARK_URL: ${{ vars.KOMTRU_PARK_URL || 'https://park.komtru.com' }}
+          NEXT_PUBLIC_KOMTRU_SITE_URL: ${{ vars.KOMTRU_SITE_URL || 'https://komtru.com' }}
+          KOMTRU_SESSION_SECRET: ${{ secrets.KOMTRU_SESSION_SECRET || 'ci-build-only-placeholder-secret' }}
         run: pnpm exec turbo run lint typecheck test build

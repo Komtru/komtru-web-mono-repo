@@ -35,12 +35,18 @@ describe.runIf(infraEnabled)('trade evidence (F-028 CWT-S13)', () => {
     },
   });
 
-  /** A READY private upload owned by `owner`. */
+  /**
+   * A READY private upload owned by `owner`.
+   *
+   * DISPUTE_EVIDENCE, not OTHER. The fixture used to describe a file the platform cannot store —
+   * `OTHER` may only be PRIVATE_OWNER or INTERNAL_ONLY, never PRIVATE_CASE — so this suite proved
+   * the service accepted a combination no upload could ever produce.
+   */
   const upload = (owner: string, overrides: Record<string, unknown> = {}): string => {
     const id = randomUUID();
     world.files.set(id, {
       contentType: 'image/jpeg',
-      category: 'OTHER',
+      category: 'DISPUTE_EVIDENCE',
       uploaderUserId: owner,
       visibility: 'PRIVATE_CASE',
       grantedUserIds: [],
