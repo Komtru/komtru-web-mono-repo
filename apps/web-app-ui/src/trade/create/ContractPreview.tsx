@@ -3,8 +3,12 @@
 import { naira } from '../format';
 
 export interface ContractPreviewProps {
-  /** The seller as the buyer has named them, once known. */
+  /** Which side the other party is on: the buyer reads the seller, the seller reads the buyer. */
+  partyLabel?: 'Seller' | 'Buyer';
+  /** The other party as the person has named them, once known. */
   sellerName?: string | undefined;
+  /** What the delivery line says: "Seller to add" until the seller has set a charge. */
+  deliveryLine?: string | undefined;
   /** The item as the buyer has typed it, once there is one. */
   itemTitle?: string | undefined;
   /** The item's price in kobo, from the platform's fee snapshot. */
@@ -22,7 +26,9 @@ const ROW = 'flex items-baseline justify-between gap-[12px] py-[6px] text-[12.5p
  * figure is the platform's, and a figure the platform has not given is shown as waiting, never worked out here.
  */
 export function ContractPreview({
+  partyLabel = 'Seller',
   sellerName,
+  deliveryLine = 'Seller to add',
   itemTitle,
   itemMinor,
   protectionFeeMinor,
@@ -32,7 +38,7 @@ export function ContractPreview({
     <div className="rounded-[14px] border border-border-hairline bg-surface-primary p-[16px]">
       <dl className="m-0">
         <div className={ROW}>
-          <dt className="text-slate">Seller</dt>
+          <dt className="text-slate">{partyLabel}</dt>
           <dd className="m-0 text-right font-semibold">{sellerName ?? 'Not yet named'}</dd>
         </div>
         <div className={ROW}>
@@ -57,7 +63,7 @@ export function ContractPreview({
         </div>
         <div className={ROW}>
           <dt className="text-slate">Delivery</dt>
-          <dd className="m-0">Seller to add</dd>
+          <dd className="m-0">{deliveryLine}</dd>
         </div>
         <div className={`${ROW} mt-[4px] border-t border-border-hairline pt-[8px]`}>
           <dt className="font-semibold">Total due on funding</dt>
