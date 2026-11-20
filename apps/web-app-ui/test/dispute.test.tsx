@@ -203,6 +203,14 @@ describe('the outcome, both sides (H1 and H2)', () => {
     await expectNoAxeViolations(container);
   });
 
+  it('H1: does not say the case is still awaiting a response once it is decided', async () => {
+    serve({ 'GET /disputes/:id': decided('BUYER') });
+    renderWithApi(api.call, <CaseStatus id={TRADE} disputeId={CASE} />);
+    await screen.findByText('Refund issued in full');
+    expect(screen.queryByText('Awaiting the other side’s response')).toBeNull();
+    expect(screen.getByText('The response window closed')).toBeTruthy();
+  });
+
   it('H2: gives the seller a corrective framing, no reasoning card and no timeline', async () => {
     serve({ 'GET /disputes/:id': decided('SELLER') });
     const { container } = renderWithApi(api.call, <CaseStatus id={TRADE} disputeId={CASE} />);
@@ -245,6 +253,23 @@ describe('the seller’s notice (Seller-7)', () => {
     renderWithApi(api.call, <SellerNotice id={TRADE} disputeId={CASE} />);
     const link = await screen.findByRole('link', { name: 'Respond with evidence' });
     expect(link.getAttribute('href')).toBe(`/trade/${TRADE}/dispute/respond`);
+  });
+});
+
+describe('the item the case is about (Seller-7, DI-01)', () => {
+  it('names the item on the seller’s notice, not the trade code', async () => {
+    serve({
+      'GET /trades/:id': workspaceTrade('DISPUTED', 'SELLER'),
+      'GET /disputes/:id': detail({ yourRole: 'SELLER' }),
+    });
+    renderWithApi(api.call, <SellerNotice id={TRADE} disputeId={CASE} />);
+    await screen.findByText('Apple iPhone 13 Pro');
+  });
+
+  it('names the affected item on the issue review, not the trade code', async () => {
+    serve();
+    renderWithApi(api.call, <WithDispute id={TRADE} screen="issue" />);
+    await screen.findByText('Apple iPhone 13 Pro');
   });
 });
 
