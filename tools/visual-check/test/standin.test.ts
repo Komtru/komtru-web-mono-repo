@@ -14,7 +14,15 @@ import {
   meSchema,
   tradeViewSchema,
 } from '@komtru/api-client';
-import { disputesFor, merchantApplicationFor, paymentStatusFor, tradesFor } from '../src/standin/fixtures.ts';
+import {
+  disputeEvidenceFor,
+  disputesFor,
+  disputeTimelineFor,
+  evidenceComparisonFor,
+  merchantApplicationFor,
+  paymentStatusFor,
+  tradesFor,
+} from '../src/standin/fixtures.ts';
 import {
   getInspection,
   paymentStatusSchema,
@@ -261,6 +269,32 @@ describe('the trade, account and dispute routes over HTTP', () => {
     } finally {
       await standin.close();
     }
+  });
+
+  it('shapes the timeline, evidence and comparison to the case state', () => {
+    const caseId = disputesFor('buyer', 'with-trades')[0]?.id ?? '';
+    expect(caseId).not.toBe('');
+
+    // In mediation: only the opening step, only the buyer's evidence, and a running mediation clock.
+    const opening = disputeTimelineFor('buyer', 'dispute-mediation', caseId) ?? [];
+    expect(opening.map((entry) => entry.toStatus)).toEqual(['MEDIATION']);
+    expect(disputeEvidenceFor('buyer', 'dispute-mediation', caseId)).toHaveLength(1);
+    const open = evidenceComparisonFor('seller', 'dispute-mediation', caseId);
+    expect(open?.seller.fromDispute).toEqual([]);
+    expect(open?.buyer.fromDispute.length).toBeGreaterThan(0);
+    expect(open?.mediation?.remaining.expired).toBe(false);
+
+    // Decided: the decision step comes first, both sides have evidence, and no mediation clock runs.
+    const decided = disputeTimelineFor('seller', 'dispute-decided', caseId) ?? [];
+    expect(decided[0]?.toStatus).toBe('DECIDED');
+    expect(decided.length).toBeGreaterThan(opening.length);
+    expect(disputeEvidenceFor('seller', 'dispute-decided', caseId)).toHaveLength(2);
+    expect(evidenceComparisonFor('buyer', 'dispute-decided', caseId)?.mediation).toBeNull();
+
+    // A case that is not theirs answers null in every scenario.
+    expect(disputeTimelineFor('seller', 'with-trades', caseId)).toBeNull();
+    expect(disputeEvidenceFor('seller', 'with-trades', caseId)).toBeNull();
+    expect(evidenceComparisonFor('seller', 'with-trades', caseId)).toBeNull();
   });
 
   it('answers no case on a trade without one, and no dispute to a seller who is not a party to it', async () => {
