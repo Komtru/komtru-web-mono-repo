@@ -887,7 +887,8 @@ list a trade.
 - **Absorbs:** T-085 (todo), T-086 (todo), T-160 (todo), T-161 (todo)
 - **Backend scope:** Logistics schema and Park seed; logistics auth, companies and members (T-085, T-086).
 - **Frontend scope:** Logistics portal scaffold and login, and team management — neither has a v2 screen (see Gaps found).
-- **Status (2026-11-20): in progress** — both layers built on branch `f-065-logistics-companies` (migration `0057`, logistics integration tests 50/50 locally); next: review (opus, auth work), fix, merge; then the F-032 withdrawal migration follows it.
+- **Status:** Not started
+- **Progress note (2026-11-20):** in progress — both layers built on branch `f-065-logistics-companies` (migration `0057`, logistics integration tests 50/50 locally); next: review (opus, auth work), fix, merge; then the F-032 withdrawal migration follows it.
 - **Depends on:** none
 - **MVP:** yes
 - **Note:** **Brought into the MVP 2026-11-19 by the owner**, with Park, logistics and the core TrustOps console. It is the first partner portal feature, so it also brings up `logistics-ops`'s host (a Vercel project and its DNS record), which F-075 left for this wave.
