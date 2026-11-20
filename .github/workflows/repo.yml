@@ -25,27 +25,11 @@ concurrency:
   cancel-in-progress: ${{ github.ref != 'refs/heads/main' && github.ref != 'refs/heads/staging' }}
 
 jobs:
+  # Four jobs side by side instead of one long one (2026-11-20): the quick repository checks, the
+  # browser-gated suites, lint + typecheck + build, and the workspace tests split four ways. A cold
+  # run spent ~9 minutes in a single "every workspace package" step; each of these is a fraction.
   checks:
     runs-on: ubuntu-latest
-    # This job runs the backend suite unfiltered (see "Every workspace package" below), and parts
-    # of that suite build the socket module — which opens the Socket.IO adapter's Redis pair even
-    # in a unit test, because the registry is a pure function of its dependencies and builds every
-    # module. Without a Redis here those are refused connections, which is not a fair test of
-    # anything. Same image and published port as backend-api.yml and docker-compose.yml, because
-    # the tests hard-code redis://localhost:56379. Throwaway container; nothing here is a secret.
-    #
-    # Postgres is deliberately absent: the integration suites are gated on KOMTRU_INFRA_TESTS,
-    # which this job does not set, so they skip and nothing in the unfiltered run dials Postgres.
-    services:
-      redis:
-        image: redis:7-alpine
-        ports:
-          - '56379:6379'
-        options: >-
-          --health-cmd "redis-cli ping"
-          --health-interval 2s
-          --health-timeout 3s
-          --health-retries 30
     steps:
       # Full history. `scripts/test/migration-safety.test.ts` resolves a commit from before the
       # drizzle folder existed, to prove the tool explains itself rather than throwing when the
@@ -80,6 +64,14 @@ jobs:
         # own changed. This is the suite that checks the repository itself: env templates, commit
         # rules, secret hygiene, the workflows in this directory and the screen index.
         run: pnpm test:repo
+
+  browser:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/setup
+        with:
+          cache-key: repo-browser
       - name: Browser-gated suites
         # The visual-check harness and the Playwright smoke test are gated on KOMTRU_BROWSER_TESTS=1
         # so a fresh checkout without browsers stays green. Nothing else sets it, so without this
@@ -89,14 +81,19 @@ jobs:
           pnpm test:browser
           KOMTRU_BROWSER_TESTS=1 pnpm exec turbo run test --filter=@komtru/visual-check --force
 
-      - name: Every workspace package
-        # Unfiltered, so a package no app imports yet is still linted, typechecked, tested and
-        # built. Turbo's cache makes this cheap once the app workflows have run.
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/setup
+        with:
+          cache-key: repo-build
+      - name: Lint, typecheck and build every workspace package
+        # Unfiltered, so a package no app imports yet is still linted, typechecked and built.
         #
         # The Next apps are built here too, and `next build` evaluates their route modules to
         # collect page data — so an app whose config throws on a missing NEXT_PUBLIC_* fails here
-        # exactly as it would in its own workflow. The app workflows were given this environment;
-        # this step was not, so operations-app passed there and failed here on the same commit.
+        # exactly as it would in its own workflow.
         env:
           NEXT_PUBLIC_KOMTRU_APP_URL: ${{ vars.WEB_APP_URL || 'https://app.komtru.com' }}
           NEXT_PUBLIC_KOMTRU_API_URL: ${{ vars.KOMTRU_API_URL || 'https://api.komtru.com/v1' }}
@@ -114,4 +111,45 @@ jobs:
         #
         # Capping it does not make the step slower in any way that matters — the work was always
         # serialised by the two cores. It just stops the scheduler pretending otherwise.
-        run: pnpm exec turbo run lint typecheck test build --concurrency=2
+        run: pnpm exec turbo run lint typecheck build --concurrency=2
+
+  test:
+    runs-on: ubuntu-latest
+    # Every workspace package's tests, unfiltered, in four shards. `--shard` reaches each package's
+    # `vitest run`, so every package contributes a quarter of its files to each shard, and turbo
+    # folds the arguments after `--` into the task hash, so one shard is never handed another's
+    # cached result. `--passWithNoTests` because a package with fewer files than shards has an
+    # empty one. `fail-fast: false` so a red shard does not cancel the others and hide what they
+    # were about to report.
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
+    # This job runs the backend suite unfiltered, and parts
+    # of that suite build the socket module — which opens the Socket.IO adapter's Redis pair even
+    # in a unit test, because the registry is a pure function of its dependencies and builds every
+    # module. Without a Redis here those are refused connections, which is not a fair test of
+    # anything. Same image and published port as backend-api.yml and docker-compose.yml, because
+    # the tests hard-code redis://localhost:56379. Throwaway container; nothing here is a secret.
+    #
+    # Postgres is deliberately absent: the integration suites are gated on KOMTRU_INFRA_TESTS,
+    # which this job does not set, so they skip and nothing in the unfiltered run dials Postgres.
+    services:
+      redis:
+        image: redis:7-alpine
+        ports:
+          - '56379:6379'
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 2s
+          --health-timeout 3s
+          --health-retries 30
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/setup
+        with:
+          cache-key: repo-test
+      - name: Every workspace package's tests (shard ${{ matrix.shard }}/4)
+        # `--concurrency=2` to match the runner's two cores: more tasks than cores make Vitest
+        # timeouts fire on a loaded runner, which reports failures that are not real.
+        run: pnpm exec turbo run test --concurrency=2 -- --shard=${{ matrix.shard }}/4 --passWithNoTests
