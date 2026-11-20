@@ -81,7 +81,12 @@ export function ResponsiveAppShell({
     <div className="flex min-h-dvh flex-col bg-surface-secondary md:bg-surface-primary lg:flex-row">
       {/* `.scr-logo-row`, the mobile brand row. The tablet and desktop navigations carry the brand
           themselves, so from `md` up this would be a second one. */}
-      <LogoBar className="md:hidden" {...(mobileActions === undefined ? {} : { tools: mobileActions })} />
+      {/* Sticky on mobile (2026-11-20): with the tab bar pinned below, a pull-to-refresh bounce in
+          iOS browsers could leave the page scrolled and the brand row gone off the top. */}
+      <LogoBar
+        className="sticky top-0 z-20 md:hidden"
+        {...(mobileActions === undefined ? {} : { tools: mobileActions })}
+      />
 
       <div className="hidden md:block lg:hidden">
         <TopNav
@@ -109,14 +114,14 @@ export function ResponsiveAppShell({
         {/* `.scr-body`'s 16px and its 90px of bottom clearance for the tab bar, stepping to
             `.tweb-content`'s 20px and `.dweb-content`'s 24px where the tab bar is gone. */}
         {/* Below `md` the tab bar is fixed to the screen's bottom, so the content clears it itself:
-            the bar's 64px and the safe area, plus the raised action's 34px above the bar when there
-            is one. From `md` up the bar is gone and the padding steps to 20px and 24px. */}
+            the bar's 64px and the safe area, plus the raised action's 32px above the bar and a
+            little air when there is one. From `md` up the bar is gone and the padding steps to 20px and 24px. */}
         <main
           className={cx(
             'flex-1 p-[16px] md:p-[20px] lg:p-[24px]',
             mobileAction === undefined
               ? 'pb-[calc(90px+env(safe-area-inset-bottom,0px))]'
-              : 'pb-[calc(110px+env(safe-area-inset-bottom,0px))]',
+              : 'pb-[calc(120px+env(safe-area-inset-bottom,0px))]',
           )}
         >
           {banner}
