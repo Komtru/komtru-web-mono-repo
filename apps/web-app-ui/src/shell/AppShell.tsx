@@ -1,12 +1,13 @@
 import { ResponsiveAppShell, type NavItem } from '@komtru/ui-kit';
 import { OfflineStatus } from './OfflineStatus';
 import { BELL_ICON, TAB_ICONS } from './icons';
-import { BELL_HREF, tabsFor, type Mode, type TabId, type Viewer } from './nav';
-import { ModeControl, SearchBar } from './ShellTools';
+import { BELL_HREF, tabsFor, type TabId, type Viewer } from './nav';
+import { SearchBar } from './ShellTools';
 
 /**
- * This app's five destinations for the mode someone is in, in `@komtru/ui-kit`'s responsive shell, with
- * v2's top bar tools: global search, the Buy/Sell switch, the bell and the profile.
+ * This app's five destinations, in `@komtru/ui-kit`'s responsive shell, with v2's top bar tools: global
+ * search, the bell and the profile. There is no Buy/Sell switch (owner ruling 2026-11-20): which side
+ * someone is on is chosen per trade, on Start Trade.
  *
  * The chrome itself — the mobile brand row and tab bar, the tablet top nav, the desktop sidebar,
  * and the single `<main>` they are composed around — is `<ResponsiveAppShell>`, so the four other
@@ -18,8 +19,6 @@ export interface AppShellProps {
   /** Which of the five tabs this screen is under. `undefined` marks none of them. */
   tab?: TabId;
   viewer: Viewer;
-  /** Buy or Sell (`modeFor`). Defaults to Buy, which is what a static page such as OF1 draws. */
-  mode?: Mode;
   /**
    * Replaces the app's own destinations in the sidebar and the top nav. D9 does this: inside
    * Account the rail is headed "Account" and lists the account's sections, not the app's tabs.
@@ -28,8 +27,8 @@ export interface AppShellProps {
   children: React.ReactNode;
 }
 
-export function AppShell({ tab, viewer, mode = 'buy', nav, children }: AppShellProps): React.JSX.Element {
-  const tabs = tabsFor(viewer, mode).map<NavItem>((item) => ({
+export function AppShell({ tab, viewer, nav, children }: AppShellProps): React.JSX.Element {
+  const tabs = tabsFor(viewer).map<NavItem>((item) => ({
     label: item.label,
     href: item.href,
     icon: TAB_ICONS[item.id],
@@ -38,7 +37,6 @@ export function AppShell({ tab, viewer, mode = 'buy', nav, children }: AppShellP
 
   const actions = (
     <>
-      <ModeControl mode={mode} locked={viewer.certifiedMerchant} />
       <a
         href={BELL_HREF}
         aria-label="Alerts"
@@ -67,7 +65,6 @@ export function AppShell({ tab, viewer, mode = 'buy', nav, children }: AppShellP
       banner={<OfflineStatus />}
       search={<SearchBar />}
       actions={actions}
-      mobileActions={<ModeControl mode={mode} locked={viewer.certifiedMerchant} />}
     >
       {children}
     </ResponsiveAppShell>

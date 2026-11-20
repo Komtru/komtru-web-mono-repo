@@ -42,15 +42,15 @@ const BUYER: Record<'SUSPENDED' | 'RESTRICTED' | 'LOCKED', { title: string; lead
 
 const SELLER: Record<'SUSPENDED' | 'RESTRICTED' | 'LOCKED', { title: string; lead: string }> = {
   SUSPENDED: {
-    title: 'Your shop is suspended',
+    title: 'Your selling is suspended',
     lead: 'Triggered by an unusual pattern of activity — under TrustOps review now.',
   },
   RESTRICTED: {
-    title: 'Your shop is restricted',
+    title: 'Your selling is restricted',
     lead: 'Some things are limited right now while TrustOps looks at your account.',
   },
   LOCKED: {
-    title: 'Your shop is locked',
+    title: 'Your selling is locked',
     lead: 'We’ve locked your account to keep it safe — under TrustOps review now.',
   },
 };
@@ -94,7 +94,7 @@ export function Suspended({ seller = false }: { seller?: boolean }): React.JSX.E
           }
           action={
             <Button asChild>
-              <a href={seller ? '/shop' : '/home'}>{seller ? 'Back to your shop' : 'Back home'}</a>
+              <a href={seller ? '/trades' : '/home'}>{seller ? 'Back to your trades' : 'Back home'}</a>
             </Button>
           }
         />

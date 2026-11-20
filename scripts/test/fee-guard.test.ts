@@ -28,7 +28,7 @@ const tree = async (files: Record<string, string>): Promise<string> => {
 
 describe('feeValuesToGuard', () => {
   it('takes the distinctive values out of the fee file', () => {
-    expect(VALUES).toEqual(expect.arrayContaining(['150', '30000', '50000', '2026-10-05.1']));
+    expect(VALUES).toEqual(expect.arrayContaining(['150', '30000', '50000', '2026-11-20.1']));
   });
 
   it('leaves 0 and the booleans alone', () => {
@@ -55,7 +55,7 @@ describe('findFeeViolations', () => {
   it.each([
     ['const min = 30000;', '30000'],
     ['const min = 30_000n;', '30000'],
-    ["const v = '2026-10-05.1';", '2026-10-05.1'],
+    ["const v = '2026-11-20.1';", '2026-11-20.1'],
     ['const cap = 50000;', '50000'],
   ])('finds the fee literal in %s', async (code, detail) => {
     const root = await tree({ 'park/services/parcel.service.ts': `${code}\n` });

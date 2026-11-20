@@ -12,6 +12,7 @@ const valid = {
   merchant_commission: { rate_bps: 0, min_minor: 0, max_minor: null },
   park_cash_handling_fee: { min_minor: 30000, max_minor: 50000 },
   payout_fee: { amount_minor: 0 },
+  casual_sell_limit: { per_trade_minor: 20_000_000, per_day_minor: 200_000_000 },
 };
 
 /** Returns the thrown error rather than asserting on a callback, so the message can be inspected. */
@@ -85,7 +86,7 @@ const raw = parse(text) as unknown;
 describe('config/fees.yaml', () => {
   it('parses with the design §6.5 values', () => {
     const schedule = parseFeeSchedule(raw, 'config/fees.yaml');
-    expect(schedule.version).toBe('2026-10-05.1');
+    expect(schedule.version).toBe('2026-11-20.1');
     expect(schedule.currency).toBe('NGN');
     expect(schedule.buyerProtectionFee.rateBps).toBe(150);
     expect(schedule.buyerProtectionFee.minMinor).toBe(0n);
@@ -95,6 +96,14 @@ describe('config/fees.yaml', () => {
     expect(schedule.merchantCommission).toEqual({ rateBps: 0, minMinor: 0n, maxMinor: null });
     expect(schedule.parkCashHandlingFee).toEqual({ minMinor: 30000n, maxMinor: 50000n });
     expect(schedule.payoutFee.amountMinor).toBe(0n);
+    // Owner ruling 2026-11-20: ₦200,000 per trade and ₦2,000,000 a day for a non-merchant seller.
+    expect(schedule.casualSellLimit).toEqual({ perTradeMinor: 20_000_000n, perDayMinor: 200_000_000n });
+  });
+
+  it('refuses a per-trade sell limit above the daily one', () => {
+    expect(() =>
+      parseFeeSchedule({ ...(raw as object), casual_sell_limit: { per_trade_minor: 3, per_day_minor: 2 } }),
+    ).toThrow(/casual_sell_limit/);
   });
 
   it('keeps version a string and max_minor a real null', () => {

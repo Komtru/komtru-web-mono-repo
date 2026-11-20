@@ -168,12 +168,12 @@ describe.runIf(infraEnabled)('party service (M1 §8)', () => {
       });
     });
 
-    it('carries canBuy false and isMerchant true for a certified merchant (design §6.3)', async () => {
+    it('carries canBuy true and isMerchant true for a certified merchant (merchants buy, 2026-11-20)', async () => {
       const caller = await seedCaller();
       await seedParty({ username: 'janesgadgets', merchant: 'ACTIVE' });
       const result = await lookup(caller, { channel: 'USERNAME', canonical: 'janesgadgets' });
       expect(result).toMatchObject({ found: true });
-      if (result.found) expect(result.party).toMatchObject({ canBuy: false, isMerchant: true });
+      if (result.found) expect(result.party).toMatchObject({ canBuy: true, isMerchant: true });
     });
   });
 

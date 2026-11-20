@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import { AppShell } from '../../../../../src/shell/AppShell';
-import { resolveMode, resolveViewer } from '../../../../../src/shell/viewer';
+import { resolveViewer } from '../../../../../src/shell/viewer';
 import { ProposeChange } from '../../../../../src/trade/ProposeChange';
 
 export const metadata: Metadata = { title: 'Propose a Change' };
@@ -17,10 +17,9 @@ export default async function CounterPage({
   const { id } = await params;
   if (!UUID.test(id)) notFound();
   const viewer = await resolveViewer();
-  const mode = await resolveMode(viewer);
 
   return (
-    <AppShell tab="trades" viewer={viewer} mode={mode}>
+    <AppShell tab="trades" viewer={viewer}>
       <ProposeChange id={id} />
     </AppShell>
   );

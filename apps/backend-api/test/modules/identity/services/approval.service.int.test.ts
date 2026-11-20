@@ -222,7 +222,7 @@ describe.runIf(infraEnabled)('canActAsBuyer(userId) against Postgres', () => {
     const service = createCapabilityService({ facts: postgresBuyerFacts(t.db()) });
     expect(await service.canActAsBuyer(await withFacts(null))).toBe(true);
     expect(await service.canActAsBuyer(await withFacts('PENDING'))).toBe(true);
-    expect(await service.canActAsBuyer(await withFacts('ACTIVE'))).toBe(false);
+    expect(await service.canActAsBuyer(await withFacts('ACTIVE'))).toBe(true);
     expect(await service.canActAsBuyer(await withFacts('SUSPENDED'))).toBe(true);
     expect(await service.canActAsBuyer(await withFacts('REVOKED'))).toBe(true);
     expect(await service.canActAsBuyer(await withFacts(null, 'SUSPENDED'))).toBe(false);

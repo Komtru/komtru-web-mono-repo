@@ -30,8 +30,8 @@ export const STEP_HREF: Record<SellStep, string> = {
 };
 
 export const LIVE_HREF = `${VERIFICATION_HREF}/verified`;
-/** Where "Go to your shop" goes until F-041 gives the shop a page of its listings. */
-export const SHOP_HREF = '/shop';
+/** Where a new merchant goes next: Start Trade, already on the selling side. There is no shop (2026-11-20). */
+export const START_SELLING_HREF = '/trade/new?side=sell';
 
 /** Where the person stands, read from the application. `null` is someone who has not started one. */
 export type ApplicationPhase =

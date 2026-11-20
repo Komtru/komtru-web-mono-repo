@@ -78,9 +78,16 @@ describe('progress.py feature view', () => {
       number,
       string[],
     ];
-    expect(statuses.every((s) => ['Done', 'Backend done, UI outstanding', 'Not started'].includes(s))).toBe(
-      true,
-    );
+    // `Withdrawn` (2026-11-20): a feature the owner dropped, kept for its history. `Built, awaiting
+    // staging check`: code merged, not yet tried in the deployed app. Neither counts as done.
+    const known = [
+      'Done',
+      'Backend done, UI outstanding',
+      'Not started',
+      'Withdrawn',
+      'Built, awaiting staging check',
+    ];
+    expect(statuses.every((s) => known.includes(s))).toBe(true);
     expect(done).toBeLessThanOrEqual(mvp);
     expect(mvpDone).toBeLessThanOrEqual(done);
     expect(backendOnly + done).toBeLessThan(total);

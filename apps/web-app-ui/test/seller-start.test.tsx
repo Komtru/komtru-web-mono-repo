@@ -186,6 +186,38 @@ describe('CT-S1 About', () => {
     expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Continue' }).disabled).toBe(true);
   });
 
+  // Owner ruling 2026-11-20: the seller hears about the selling limit before anything is sent.
+  it('warns a seller over their per-trade limit and holds Continue', async () => {
+    answerWith(
+      api.call,
+      handlers({
+        'POST /trades/preview': {
+          ...preview(),
+          sellLimit: {
+            perTradeMinor: '20000000',
+            perDayMinor: '200000000',
+            remainingTodayMinor: '200000000',
+          },
+        },
+      }),
+    );
+    renderWithApi(api.call, <SellerStart />);
+    await aboutStage();
+    expect(await screen.findByText('Over your ₦200,000 limit per trade')).toBeTruthy();
+    expect(screen.getByRole('link', { name: 'About merchant status' }).getAttribute('href')).toBe(
+      '/account/verification/merchant',
+    );
+    expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Continue' }).disabled).toBe(true);
+  });
+
+  it('says nothing about a limit to a certified merchant', async () => {
+    answerWith(api.call, handlers({ 'POST /trades/preview': { ...preview(), sellLimit: null } }));
+    renderWithApi(api.call, <SellerStart />);
+    await aboutStage();
+    await screen.findByText(/You receive/);
+    expect(screen.queryByText(/limit per trade/)).toBeNull();
+  });
+
   it('invites someone who is not on Komtru and says how', async () => {
     answerWith(api.call, handlers());
     renderWithApi(api.call, <SellerStart />);
@@ -530,6 +562,6 @@ describe('CT-S4 Review and CT-S5 Sent', () => {
     const view = renderWithApi(api.call, <SellerStart />);
     await toReview(view.container);
     press('Send to buyer');
-    expect(await screen.findByText(/certified merchant can't be the buyer/)).toBeTruthy();
+    expect(await screen.findByText(/can't be the buyer on a trade right now/)).toBeTruthy();
   });
 });

@@ -1,9 +1,9 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { AccountSections } from '../src/shell/AccountSections';
 import { AppShell } from '../src/shell/AppShell';
-import { ANONYMOUS_VIEWER, type Mode, type TabId, type Viewer } from '../src/shell/nav';
+import { ANONYMOUS_VIEWER, type TabId, type Viewer } from '../src/shell/nav';
 import { expectNoAxeViolations } from './axe';
 
 const router = vi.hoisted(() => ({ push: vi.fn(), refresh: vi.fn() }));
@@ -17,9 +17,9 @@ afterEach(() => {
 const viewer = (overrides: Partial<Viewer> = {}): Viewer => ({ ...ANONYMOUS_VIEWER, ...overrides });
 const links = { parkUrl: 'https://park.komtru.com' };
 
-const shell = (overrides: Partial<Viewer> = {}, tab: TabId = 'trades', mode: Mode = 'buy') =>
+const shell = (overrides: Partial<Viewer> = {}, tab: TabId = 'trades') =>
   render(
-    <AppShell tab={tab} viewer={viewer(overrides)} mode={mode}>
+    <AppShell tab={tab} viewer={viewer(overrides)}>
       <h1>My Trades</h1>
     </AppShell>,
   );
@@ -67,7 +67,7 @@ describe('AppShell', () => {
     expect(container.querySelectorAll('[aria-current="page"]')).toHaveLength(0);
   });
 
-  it('draws the five Buy destinations in all three navigations, and no Alerts tab', () => {
+  it('draws the five destinations in all three navigations, and no Alerts tab', () => {
     shell();
     for (const name of ['Home', 'Trades', 'Messages', 'Discover', 'Account']) {
       expect(screen.getAllByRole('link', { name })).toHaveLength(3);
@@ -77,12 +77,13 @@ describe('AppShell', () => {
     expect(screen.getAllByRole('link', { name: 'Alerts' })).toHaveLength(2);
   });
 
-  it('draws Shop, Orders and Listings in Sell mode, five destinations again', () => {
-    shell({}, 'shop', 'sell');
-    for (const name of ['Shop', 'Orders', 'Listings', 'Messages', 'Account']) {
+  // Owner ruling 2026-11-20: one navigation for everyone, a certified merchant included.
+  it('draws the same five for a certified merchant, and no Shop, Orders or Listings', () => {
+    shell({ certifiedMerchant: true });
+    for (const name of ['Home', 'Trades', 'Messages', 'Discover', 'Account'])
       expect(screen.getAllByRole('link', { name })).toHaveLength(3);
-    }
-    expect(screen.queryByRole('link', { name: 'Home' })).toBeNull();
+    for (const name of ['Shop', 'Orders', 'Listings'])
+      expect(screen.queryByRole('link', { name })).toBeNull();
   });
 
   it('points Discover at search', () => {
@@ -101,53 +102,11 @@ describe('AppShell', () => {
 });
 
 describe('the top bar tools (v2: DX-03, TX-02)', () => {
-  const pressed = (mode: 'Buy' | 'Sell') =>
-    screen.getAllByRole('button', { name: mode }).map((button) => button.getAttribute('aria-pressed'));
-
-  it('shows the Buy/Sell switch with the current mode pressed, in the mobile header too', () => {
-    const { container, unmount } = shell();
-    // Desktop bar, tablet nav and mobile header each carry one.
-    expect(screen.getAllByRole('group', { name: 'Buy or sell mode' })).toHaveLength(3);
-    expect(pressed('Buy')).toEqual(['true', 'true', 'true']);
-    expect(pressed('Sell')).toEqual(['false', 'false', 'false']);
-    const mobile = container.querySelector('header.md\\:hidden');
-    expect(mobile?.querySelector('[role="group"]')).not.toBeNull();
-    unmount();
-    shell({}, 'shop', 'sell');
-    expect(pressed('Sell')).toEqual(['true', 'true', 'true']);
-  });
-
-  it('remembers the chosen mode and opens its landing screen', () => {
-    shell();
-    fireEvent.click(screen.getAllByRole('button', { name: 'Sell' })[0] as HTMLElement);
-    expect(document.cookie).toContain('komtru_mode=sell');
-    expect(router.push).toHaveBeenCalledWith('/shop');
-    expect(router.refresh).toHaveBeenCalled();
-  });
-
-  it('opens Home when switching from Sell to Buy', () => {
-    shell({}, 'shop', 'sell');
-    fireEvent.click(screen.getAllByRole('button', { name: 'Buy' })[0] as HTMLElement);
-    expect(document.cookie).toContain('komtru_mode=buy');
-    expect(router.push).toHaveBeenCalledWith('/home');
-  });
-
-  it('works from the mobile header exactly as on desktop', () => {
-    const { container } = shell();
-    const mobile = container.querySelector('header.md\\:hidden') as HTMLElement;
-    fireEvent.click(within(mobile).getByRole('button', { name: 'Sell' }));
-    expect(router.push).toHaveBeenCalledWith('/shop');
-  });
-
-  it('locks the switch on Sell for a certified merchant, in every copy, and says why', () => {
-    shell({ certifiedMerchant: true }, 'shop', 'sell');
-    for (const buy of screen.getAllByRole('button', { name: 'Buy' })) {
-      expect(buy.getAttribute('aria-disabled')).toBe('true');
-      expect(buy.getAttribute('aria-describedby')).toBeTruthy();
-      fireEvent.click(buy);
-    }
-    expect(screen.getAllByText('Certified merchants sell only')).toHaveLength(3);
-    expect(router.push).not.toHaveBeenCalled();
+  it('has no Buy/Sell switch anywhere: the side is chosen per trade, on Start Trade', () => {
+    shell({ certifiedMerchant: true });
+    expect(screen.queryByRole('group', { name: 'Buy or sell mode' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Sell' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Buy' })).toBeNull();
   });
 
   it('draws each duplicated copy of the tools inside an ancestor that hides it at the other widths', () => {
@@ -156,9 +115,6 @@ describe('the top bar tools (v2: DX-03, TX-02)', () => {
       for (const link of screen.getAllByRole('link', { name })) {
         expect(link.closest('[class~="hidden"]'), name).not.toBeNull();
       }
-    }
-    for (const group of screen.getAllByRole('group', { name: 'Buy or sell mode' })) {
-      expect(group.closest('[class~="hidden"], [class~="md:hidden"]')).not.toBeNull();
     }
     for (const search of screen.getAllByRole('search')) {
       expect(search.closest('[class~="hidden"]')).not.toBeNull();

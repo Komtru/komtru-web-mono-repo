@@ -87,7 +87,7 @@ describe.each([['tablet'], ['desktop']] as [Width][])('The dispatch workspace at
     expect(within(order).getByText(/You arrange the delivery yourself/)).toBeTruthy();
     // Park and couriers are out of the MVP: no option is drawn for them.
     expect(screen.queryByText(/Park/)).toBeNull();
-    expect(screen.getByRole('link', { name: 'Back to orders' }).getAttribute('href')).toBe('/orders');
+    expect(screen.getByRole('link', { name: 'Back to trades' }).getAttribute('href')).toBe('/trades');
     expect(screen.getByRole('link', { name: '‹ Back to the trade' })).toBeTruthy();
     await expectNoAxeViolations(container, SHELL_RULES);
   });

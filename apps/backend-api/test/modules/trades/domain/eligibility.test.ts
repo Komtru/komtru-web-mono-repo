@@ -30,9 +30,9 @@ const codeOf = (run: () => unknown): string => {
 };
 
 describe('canActAsBuyer', () => {
-  it.each(BUYER_PATHS)('blocks a certified merchant on the %s path', (path) => {
-    expect(canActAsBuyer(merchant)).toBe(false);
-    expect(codeOf(() => assertCanActAsBuyer(merchant, path))).toBe('MERCHANT_CANNOT_BUY');
+  it.each(BUYER_PATHS)('lets a certified merchant buy on the %s path', (path) => {
+    expect(canActAsBuyer(merchant)).toBe(true);
+    expect(codeOf(() => assertCanActAsBuyer(merchant, path))).toBe('no error');
   });
 
   it('lets an ordinary account buy', () => {
@@ -56,12 +56,9 @@ describe('initiatorRoleFor', () => {
     expect(initiatorRoleFor(principal(), 'SELLER')).toBe('SELLER');
   });
 
-  it('forces a certified merchant to SELLER', () => {
+  it('keeps the side a certified merchant chose, buyer included', () => {
     expect(initiatorRoleFor(merchant, 'SELLER')).toBe('SELLER');
-  });
-
-  it('rejects a certified merchant asking for BUYER', () => {
-    expect(codeOf(() => initiatorRoleFor(merchant, 'BUYER'))).toBe('MERCHANT_CANNOT_BUY');
+    expect(initiatorRoleFor(merchant, 'BUYER')).toBe('BUYER');
   });
 });
 

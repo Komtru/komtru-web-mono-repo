@@ -37,6 +37,9 @@ export const PROBLEM_CODES = [
   'ALREADY_HAS_ACTIVE_COMPANY',
   'ALREADY_A_MEMBER',
   'MERCHANT_CANNOT_BUY',
+  // The selling limit for an account without merchant status (owner ruling 2026-11-20).
+  'SELL_LIMIT_PER_TRADE',
+  'SELL_LIMIT_DAILY',
   'BUYER_NOT_VERIFIED',
   'SELLER_NOT_VERIFIED',
   'ADDRESS_REQUIRED',

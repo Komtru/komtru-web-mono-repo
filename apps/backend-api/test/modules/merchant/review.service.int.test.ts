@@ -545,9 +545,9 @@ describe.runIf(infraEnabled)('the staff review service (T-055)', () => {
         decidedByUserId: staff.userId,
       });
 
-      // The buy block follows the capability (design 6.3).
+      // Certification does not stop the merchant buying (owner ruling 2026-11-20).
       expect(await createCapabilityService({ facts: postgresBuyerFacts(db()) }).canActAsBuyer(userId)).toBe(
-        false,
+        true,
       );
     });
 

@@ -44,7 +44,11 @@ export function problemMessage(error: unknown, fallback: string): string {
   if (!(error instanceof ProblemError)) return fallback;
   switch (error.code) {
     case 'MERCHANT_CANNOT_BUY':
-      return "A certified merchant can't be the buyer on a trade. They sell on Komtru; they don't buy.";
+      return "This account can't be the buyer on a trade right now.";
+    case 'SELL_LIMIT_PER_TRADE':
+    case 'SELL_LIMIT_DAILY':
+      // The platform's own sentence names the limit and what is left today.
+      return error.problem.detail ?? 'This is over your selling limit. Merchant status lifts it.';
     case 'ADDRESS_REQUIRED':
       return 'Choose or add a saved address first.';
     case 'RATE_LIMITED':

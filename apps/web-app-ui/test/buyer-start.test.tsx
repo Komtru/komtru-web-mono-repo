@@ -160,11 +160,11 @@ describe('CT-B1 About', () => {
     expect(screen.queryByText('How should this item get to you?')).toBeNull();
   });
 
-  it('says a certified merchant cannot start a purchase', async () => {
+  it('says so when the platform will not let this account buy', async () => {
     answerWith(api.call, handlers({ 'POST /trades/preview': preview(['SELLER']) }));
     renderWithApi(api.call, <BuyerStart />);
     await aboutStage();
-    expect(await screen.findByText('Merchants sell on Komtru')).toBeTruthy();
+    expect(await screen.findByText("You can't buy on this account right now")).toBeTruthy();
     press('Continue');
     expect(screen.queryByText('How should this item get to you?')).toBeNull();
   });

@@ -11,7 +11,7 @@ export const appSpec = {
   scope: 'CONSUMER',
   // The reference's own URL for screen E4 (`app.komtru.com/login`).
   signInPath: '/login',
-  // Buy mode's landing (`landingFor('buy')`); `app/page.tsx` sends Sell mode to `/shop`.
+  // Where `/` sends someone signed in (`ROOT_DESTINATION`).
   homePath: '/home',
 } as const satisfies AppSpec;
 

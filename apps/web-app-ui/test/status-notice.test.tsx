@@ -23,7 +23,7 @@ describe('StatusNotice', () => {
     cleanup();
     renderWithApi(api.call, <StatusNotice seller />);
     expect((await screen.findByRole('link', { name: 'See what this means' })).getAttribute('href')).toBe(
-      '/shop/suspended',
+      '/account/suspended/selling',
     );
   });
 

@@ -23,6 +23,26 @@ export const merchantCannotBuyError = (path: BuyerPath): ApiError =>
     `This account sells as a certified merchant, so it cannot take the buyer side (${path}).`,
   );
 
+const naira = (minor: bigint): string => `₦${(minor / 100n).toLocaleString('en-NG')}`;
+
+/** Over the per-trade selling limit for an account without merchant status (2026-11-20). */
+export const sellLimitPerTradeError = (perTradeMinor: bigint): ApiError =>
+  new ApiError(
+    422,
+    'SELL_LIMIT_PER_TRADE',
+    'Over your selling limit',
+    `Without merchant status you can sell up to ${naira(perTradeMinor)} on one trade. Lower the price, or apply for merchant status to sell more.`,
+  );
+
+/** Over the daily selling total for an account without merchant status (2026-11-20). */
+export const sellLimitDailyError = (perDayMinor: bigint, remainingMinor: bigint): ApiError =>
+  new ApiError(
+    422,
+    'SELL_LIMIT_DAILY',
+    'Over your daily selling limit',
+    `Without merchant status you can sell up to ${naira(perDayMinor)} a day, and you have ${naira(remainingMinor)} left today. Try again tomorrow, or apply for merchant status to sell more.`,
+  );
+
 /** M1 level 1: funding is a contact-verified action. */
 export const buyerNotVerifiedError = (): ApiError =>
   new ApiError(

@@ -56,6 +56,14 @@ const feeFileSchema = z.strictObject({
       path: ['max_minor'],
     }),
   payout_fee: z.strictObject({ amount_minor: amount }),
+  // Not a fee: how much an account without merchant status may sell (owner ruling 2026-11-20). It
+  // lives here because it is a money rule and this file is where money rules are set and versioned.
+  casual_sell_limit: z
+    .strictObject({ per_trade_minor: amount, per_day_minor: amount })
+    .refine((value) => value.per_trade_minor <= value.per_day_minor, {
+      error: 'must not be above per_day_minor',
+      path: ['per_trade_minor'],
+    }),
 });
 
 // `readonly` throughout, and frozen at parse time. The whole premise of this ticket is that
@@ -76,6 +84,11 @@ export interface FeeSchedule {
   /** Informational only (C23): the buyer pays a Park agent this in cash; Komtru never touches it. */
   readonly parkCashHandlingFee: { readonly minMinor: Kobo; readonly maxMinor: Kobo };
   readonly payoutFee: { readonly amountMinor: Kobo };
+  /**
+   * The most an account WITHOUT an active merchant capability may sell: per trade, and in total per
+   * Lagos calendar day. Merchants have no selling limit and buying is never limited.
+   */
+  readonly casualSellLimit: { readonly perTradeMinor: Kobo; readonly perDayMinor: Kobo };
 }
 
 /** Freezes the schedule and every band in it, so `readonly` holds at runtime and not only in types. */
@@ -113,6 +126,10 @@ export const feeScheduleSchema: z.ZodType<FeeSchedule, unknown> = feeFileSchema.
     maxMinor: file.park_cash_handling_fee.max_minor,
   },
   payoutFee: { amountMinor: file.payout_fee.amount_minor },
+  casualSellLimit: {
+    perTradeMinor: file.casual_sell_limit.per_trade_minor,
+    perDayMinor: file.casual_sell_limit.per_day_minor,
+  },
 }));
 
 /**

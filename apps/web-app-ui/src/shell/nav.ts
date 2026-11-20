@@ -2,8 +2,9 @@ import { tradeCodeSchema } from '@komtru/shared-types';
 
 // The app's navigation, as data.
 //
-// One account (design C22, §6.3). v2 draws two views of it behind a Buy/Sell switch, five
-// destinations each (DX-03 and DX-04); a certified merchant is sell-only, so they are always in Sell.
+// One account, one navigation (owner ruling 2026-11-20). There are no buyer accounts and seller
+// accounts: anyone buys and sells, and which side they are on is chosen per trade, on Start Trade.
+// v2's Buy/Sell switch and its Sell-mode destinations (Shop, Orders, Listings) are gone.
 // Account carries **Payouts** once someone has sold, and a **Park Agent** item whose destination is
 // the hub application, the application's status, or `park.komtru.com`.
 //
@@ -14,7 +15,7 @@ import { tradeCodeSchema } from '@komtru/shared-types';
 export type ParkAgentState = 'none' | 'pending' | 'active';
 
 export interface Viewer {
-  /** Holds an `ACTIVE` `MERCHANT` capability: sell-only, and `canActAsBuyer` is false (§6.3). */
+  /** Holds an `ACTIVE` `MERCHANT` capability, which lifts the selling limit. Merchants buy too. */
   certifiedMerchant: boolean;
   /** Has been the seller on at least one trade. Not "is a merchant" — a casual seller has payouts too. */
   hasSold: boolean;
@@ -28,12 +29,7 @@ export interface Viewer {
  */
 export const ANONYMOUS_VIEWER: Viewer = { certifiedMerchant: false, hasSold: false, parkAgent: 'none' };
 
-/** v2's Buy/Sell switch (Y2, DX-03, DX-04). Two views of one account, not two accounts. */
-export type Mode = 'buy' | 'sell';
-
-export const MODE_COOKIE = 'komtru_mode';
-
-export type TabId = 'home' | 'trades' | 'messages' | 'discover' | 'account' | 'shop' | 'orders' | 'listings';
+export type TabId = 'home' | 'trades' | 'messages' | 'discover' | 'account';
 
 export interface Tab {
   id: TabId;
@@ -49,52 +45,21 @@ const TAB: Record<TabId, Tab> = {
   // catalogue is deferred with the listings, so the tab goes to search instead.
   discover: { id: 'discover', label: 'Discover', href: '/search' },
   account: { id: 'account', label: 'Account', href: '/account' },
-  shop: { id: 'shop', label: 'Shop', href: '/shop' },
-  orders: { id: 'orders', label: 'Orders', href: '/orders' },
-  listings: { id: 'listings', label: 'Listings', href: '/listings' },
 };
 
 /** Alerts left the nav in v2: it is the bell in the top bar. */
 export const BELL_HREF = '/alerts';
 
 /**
- * The five destinations of a mode, in the order v2 draws them: DX-03's sidebar for Buy and DX-04's for
- * Sell. The viewer is part of the signature because the mode it is in is decided with it (`modeFor`).
+ * The five destinations, in the order v2 draws them (DX-03's sidebar). The same for everyone: the
+ * viewer stays in the signature for the variations Account already has.
  */
-export function tabsFor(_viewer: Viewer, mode: Mode = 'buy'): readonly Tab[] {
-  return mode === 'sell'
-    ? [TAB.shop, TAB.orders, TAB.listings, TAB.messages, TAB.account]
-    : [TAB.home, TAB.trades, TAB.messages, TAB.discover, TAB.account];
+export function tabsFor(_viewer: Viewer): readonly Tab[] {
+  return [TAB.home, TAB.trades, TAB.messages, TAB.discover, TAB.account];
 }
 
-/**
- * The mode someone is in: the one they chose (a cookie the switch writes), Buy when they have not
- * chosen or the value is not a mode. A certified merchant is sell-only (design 6.3), so for them the
- * answer is Sell whatever the cookie says and the switch is locked.
- */
-export function modeFor(viewer: Viewer, chosen: string | undefined): Mode {
-  if (viewer.certifiedMerchant) return 'sell';
-  return chosen === 'sell' ? 'sell' : 'buy';
-}
-
-/** Where switching into a mode lands: the first item of its nav. */
-export const landingFor = (mode: Mode): string => tabsFor(ANONYMOUS_VIEWER, mode)[0]?.href ?? '/home';
-
-/**
- * Where `/` goes: the landing screen of the mode the person is in. The cookie is a view preference
- * only (a certified merchant lands on Sell whatever it says).
- *
- * TODO(T-111): buyer routes must be rejected on the server when the session says
- * `canActAsBuyer === false`. The chrome locks a certified merchant to Sell; it does not authorise.
- */
-export const rootDestination = (viewer: Viewer, chosen: string | undefined): string =>
-  landingFor(modeFor(viewer, chosen));
-
-const YEAR_SECONDS = 60 * 60 * 24 * 365;
-
-/** The `document.cookie` string for a chosen mode: Lax, and Secure anywhere but plain-http localhost. */
-export const modeCookie = (mode: Mode, secure: boolean): string =>
-  `${MODE_COOKIE}=${mode}; path=/; max-age=${YEAR_SECONDS}; samesite=lax${secure ? '; secure' : ''}`;
+/** Where `/` sends someone who is signed in. */
+export const ROOT_DESTINATION = '/home';
 
 /**
  * Where the global search and Trade Code bar sends a query: a Trade Code goes to that code's own page,
@@ -116,11 +81,11 @@ const isSegmentPrefix = (pathname: string, prefix: string): boolean =>
 
 /**
  * Which tab a path sits under, or `undefined` when it sits under none — a Park Hub application, the
- * alerts feed, or a destination of the other mode. Whole segments only: `/tradesmanship` is not the
+ * alerts feed. Whole segments only: `/tradesmanship` is not the
  * Trades tab, and `aria-current="page"` on the wrong tab is worse than on none.
  */
-export function currentTab(pathname: string, viewer: Viewer, mode: Mode = 'buy'): TabId | undefined {
-  return tabsFor(viewer, mode).find((tab) => isSegmentPrefix(pathname, tab.href))?.id;
+export function currentTab(pathname: string, viewer: Viewer): TabId | undefined {
+  return tabsFor(viewer).find((tab) => isSegmentPrefix(pathname, tab.href))?.id;
 }
 
 export type AccountItemId =

@@ -204,7 +204,7 @@ describe('identity module wiring (T-035)', () => {
   });
 
   it('answers canActAsBuyer so trades can delegate rather than keep a second copy', () => {
-    expect(identity.canActAsBuyer('ACTIVE')).toBe(false);
+    expect(identity.canActAsBuyer('ACTIVE')).toBe(true);
     expect(identity.canActAsBuyer('SUSPENDED')).toBe(true);
     expect(identity.canActAsBuyer(null)).toBe(true);
   });
