@@ -67,6 +67,51 @@ async function settle(page: Page, injectFonts: boolean): Promise<void> {
   });
 }
 
+/**
+ * Resolves once the page has painted a frame. A viewport resize is applied on the next frame, and on
+ * a loaded two-core CI runner Chromium can be asked for a screenshot before that frame exists — it
+ * then answers `Page.captureScreenshot: Unable to capture screenshot`, failing the run for a reason
+ * that has nothing to do with the screen. Two animation frames: the first is scheduled before the
+ * resize lands, the second after it has painted.
+ */
+async function nextPaint(page: Page): Promise<void> {
+  await page.evaluate(
+    () =>
+      new Promise<void>((resolve) => {
+        requestAnimationFrame(() => {
+          requestAnimationFrame(() => {
+            resolve();
+          });
+        });
+      }),
+  );
+}
+
+const CAPTURE_REFUSED = /Unable to capture screenshot/;
+
+/**
+ * `page.screenshot`, retried once after another painted frame when Chromium refuses the capture (see
+ * `nextPaint`). Any other failure, or a second refusal, is thrown with the screen's id on it, so a
+ * red run names the screen instead of only the protocol error.
+ */
+async function screenshotOnce(
+  page: Page,
+  clip: { x: number; y: number; width: number; height: number },
+  id: string,
+): Promise<Buffer> {
+  try {
+    return await page.screenshot({ clip });
+  } catch (error) {
+    if (!(error instanceof Error) || !CAPTURE_REFUSED.test(error.message)) throw error;
+    await nextPaint(page);
+    try {
+      return await page.screenshot({ clip });
+    } catch (again) {
+      throw new Error(`${id}: ${again instanceof Error ? again.message : String(again)}`, { cause: again });
+    }
+  }
+}
+
 /** The box the screen occupies inside its frame, excluding the mock browser bezel. */
 async function clipOf(page: Page): Promise<{ x: number; y: number; width: number; height: number } | null> {
   return page.evaluate(() => {
@@ -148,10 +193,11 @@ export async function shootReference(
       width: REFERENCE_VIEWPORT.width,
       height: Math.max(REFERENCE_VIEWPORT.height, Math.ceil(measured.y + measured.height) + 1),
     });
+    await nextPaint(page);
     const clip = await clipOf(page);
     if (clip === null) throw new Error(`${carved.row.id} lost its frame when the viewport grew`);
 
-    return { png: await page.screenshot({ clip }), width: clip.width, height: clip.height };
+    return { png: await screenshotOnce(page, clip, carved.row.id), width: clip.width, height: clip.height };
   } finally {
     await page.close();
   }
