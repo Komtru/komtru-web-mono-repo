@@ -24,7 +24,13 @@ import type {
 import type { Address, TradeActivityResponse, TradeListItem, ViewerFacts } from '@komtru/shared-types';
 import { FUNDED_TRADE_STATUSES } from '@komtru/shared-types';
 
-import { PERSONAS, type PersonaId, type ScenarioId } from './personas.ts';
+import {
+  PERSONAS,
+  isConsumerPersona,
+  type ConsumerPersonaId,
+  type PersonaId,
+  type ScenarioId,
+} from './personas.ts';
 
 /** The fixture trades, by name. A walk names one of these ids in its route. */
 export const TRADE_IDS = {
@@ -1054,7 +1060,7 @@ export const STANDARD_VERSION_IDS_LIST: readonly string[] = Object.values(STANDA
 /** `GET /verification/status`, which the account's verification tab reads. Levels follow `GET /me`. */
 export function verificationStatusFor(persona: PersonaId): VerificationStatus {
   const levels: Record<
-    Exclude<PersonaId, 'staff'>,
+    ConsumerPersonaId,
     { level: string; levelNumber: number; identifier: boolean; liveness: boolean; business: boolean }
   > = {
     buyer: { level: 'CONTACT_VERIFIED', levelNumber: 1, identifier: false, liveness: false, business: false },
@@ -1067,7 +1073,7 @@ export function verificationStatusFor(persona: PersonaId): VerificationStatus {
       business: true,
     },
   };
-  if (persona === 'staff') throw new Error('Staff have no consumer verification to read');
+  if (!isConsumerPersona(persona)) throw new Error(`${persona} has no consumer verification to read`);
   const row = levels[persona];
   return {
     level: row.level,

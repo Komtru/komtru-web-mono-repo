@@ -30,6 +30,7 @@ import {
   verificationStatusFor,
   viewerFactsFor,
 } from './fixtures.ts';
+import { isCourier, logisticsInvitationsFor, logisticsMeFor, logisticsMembersFor } from './logistics.ts';
 import { accessTokenFor, readBearer, readRefreshToken, refreshTokenFor, type Identity } from './identity.ts';
 
 export const STANDIN_DEFAULT_PORT = 7913;
@@ -58,6 +59,14 @@ type ConsumerRoute = {
   handle: (identity: Identity, params: Params, query: URLSearchParams) => Reply;
 };
 
+/** F-065: a read the logistics portal calls with a bearer token from a LOGISTICS session. */
+type LogisticsRoute = {
+  method: 'GET';
+  path: string;
+  kind: 'logistics';
+  handle: (identity: Identity, params: Params, query: URLSearchParams) => Reply;
+};
+
 /** A public read, which the apps call with no session (a trade standard is published to everyone). */
 type AnonymousRoute = {
   method: 'GET';
@@ -76,7 +85,36 @@ const problem = (status: number, title: string, detail?: string): Reply => ({
 /** A list the app pages through. The fixtures fit on one page, so the cursor is always null. */
 const page = (items: unknown[]): Reply => ({ status: 200, body: { items, nextCursor: null } });
 
-const ROUTES: readonly (PublicRoute | ConsumerRoute | AnonymousRoute)[] = [
+type Route = PublicRoute | ConsumerRoute | LogisticsRoute | AnonymousRoute;
+
+const courierOnly = (
+  identity: Identity,
+  reply: (persona: Parameters<typeof logisticsMeFor>[0]) => Reply,
+): Reply =>
+  isCourier(identity.persona.id)
+    ? reply(identity.persona.id)
+    : problem(403, "This account isn't attached to a logistics company");
+
+const ROUTES: readonly Route[] = [
+  {
+    method: 'GET',
+    path: '/logistics/me',
+    kind: 'logistics',
+    handle: (identity) =>
+      courierOnly(identity, (persona) => ({ status: 200, body: logisticsMeFor(persona) })),
+  },
+  {
+    method: 'GET',
+    path: '/logistics/members',
+    kind: 'logistics',
+    handle: (identity) => courierOnly(identity, () => ({ status: 200, body: logisticsMembersFor() })),
+  },
+  {
+    method: 'GET',
+    path: '/logistics/invitations',
+    kind: 'logistics',
+    handle: (identity) => courierOnly(identity, () => ({ status: 200, body: logisticsInvitationsFor() })),
+  },
   {
     method: 'POST',
     path: '/auth/refresh',
@@ -308,10 +346,7 @@ function matchPath(template: string, actual: string): Params | null {
   return params;
 }
 
-function findRoute(
-  method: string,
-  path: string,
-): { route: PublicRoute | ConsumerRoute | AnonymousRoute; params: Params } | null {
+function findRoute(method: string, path: string): { route: Route; params: Params } | null {
   for (const route of ROUTES) {
     if (route.method !== method) continue;
     const params = matchPath(route.path, path);
@@ -433,7 +468,8 @@ async function handle(
     send(response, problem(401, 'Not signed in'));
     return;
   }
-  if (identity.persona.scope !== 'CONSUMER') {
+  const wanted = route.kind === 'logistics' ? 'LOGISTICS' : 'CONSUMER';
+  if (identity.persona.scope !== wanted) {
     log(`${label} 403 — ${identity.persona.id} holds a ${identity.persona.scope} session`);
     send(response, problem(403, 'Wrong scope for this route'));
     return;
