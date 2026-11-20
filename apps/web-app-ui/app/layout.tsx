@@ -21,6 +21,15 @@ export const metadata: Metadata = {
   title: { default: 'Komtru', template: '%s · Komtru' },
   description: 'Trade with anyone in Nigeria and get paid, or get your money back.',
   applicationName: 'Komtru',
+  // Installable (2026-11-20). Next links `app/manifest.ts` itself; iOS reads these instead of the manifest.
+  icons: {
+    icon: [
+      { url: '/icons/icon-192.png', sizes: '192x192', type: 'image/png' },
+      { url: '/icons/icon.svg', type: 'image/svg+xml' },
+    ],
+    apple: [{ url: '/icons/apple-touch-icon.png', sizes: '180x180' }],
+  },
+  appleWebApp: { capable: true, title: 'Komtru', statusBarStyle: 'default' },
 };
 
 export const viewport: Viewport = {

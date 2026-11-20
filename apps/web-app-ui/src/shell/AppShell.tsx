@@ -1,6 +1,6 @@
-import { ResponsiveAppShell, type NavItem } from '@komtru/ui-kit';
+import { ResponsiveAppShell, type NavItem, type TabBarAction } from '@komtru/ui-kit';
 import { OfflineStatus } from './OfflineStatus';
-import { BELL_ICON, TAB_ICONS } from './icons';
+import { BELL_ICON, PLUS_ICON, TAB_ICONS } from './icons';
 import { BELL_HREF, tabsFor, type TabId, type Viewer } from './nav';
 import { SearchBar } from './ShellTools';
 
@@ -27,13 +27,21 @@ export interface AppShellProps {
   children: React.ReactNode;
 }
 
+/** Mobile's raised action. Start Trade asks which side the person is on (`SideChoice`). */
+const START_TRADE_ACTION: TabBarAction = { label: 'Start a trade', href: '/trade/new', icon: PLUS_ICON };
+
 export function AppShell({ tab, viewer, nav, children }: AppShellProps): React.JSX.Element {
-  const tabs = tabsFor(viewer).map<NavItem>((item) => ({
+  const all = tabsFor(viewer);
+  const toNav = (item: (typeof all)[number]): NavItem => ({
     label: item.label,
     href: item.href,
     icon: TAB_ICONS[item.id],
     ...(item.id === tab ? { current: true } : {}),
-  }));
+  });
+  const tabs = all.map(toNav);
+  // Mobile's bottom bar: Discover makes room for the raised Start Trade action (owner ruling
+  // 2026-11-20), leaving four tabs with the action in the middle. The rail keeps all five.
+  const barTabs = all.filter((item) => item.id !== 'discover').map(toNav);
 
   const actions = (
     <>
@@ -61,6 +69,8 @@ export function AppShell({ tab, viewer, nav, children }: AppShellProps): React.J
   return (
     <ResponsiveAppShell
       tabs={tabs}
+      barTabs={barTabs}
+      mobileAction={START_TRADE_ACTION}
       rail={nav}
       banner={<OfflineStatus />}
       search={<SearchBar />}

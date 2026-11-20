@@ -50,6 +50,13 @@ export const TAB_ICONS: Record<TabId, React.ReactNode> = {
   ),
 };
 
+/** The mobile tab bar's raised Start Trade action: a plus, drawn heavier so it holds on the blue. */
+export const PLUS_ICON: React.ReactNode = (
+  <svg {...ICON} strokeWidth="2.6">
+    <path d="M12 5v14M5 12h14" />
+  </svg>
+);
+
 /** The top bar's bell (`.tb-icon`): where Alerts went when it left the nav. */
 export const BELL_ICON: React.ReactNode = (
   <svg {...ICON} strokeWidth="2">

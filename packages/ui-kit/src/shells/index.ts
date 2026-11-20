@@ -9,6 +9,6 @@ export { type NavItem } from './NavItem.js';
 export { PublicShell, type PublicShellProps } from './PublicShell.js';
 export { ResponsiveAppShell, type ResponsiveAppShellProps } from './ResponsiveAppShell.js';
 export { SideNav, type SideNavProps } from './SideNav.js';
-export { TabBar, type TabBarProps } from './TabBar.js';
+export { TabBar, type TabBarAction, type TabBarProps } from './TabBar.js';
 export { TopBar, type TopBarAction, type TopBarProps } from './TopBar.js';
 export { TopNav, type TopNavProps } from './TopNav.js';

@@ -69,9 +69,11 @@ describe('AppShell', () => {
 
   it('draws the five destinations in all three navigations, and no Alerts tab', () => {
     shell();
-    for (const name of ['Home', 'Trades', 'Messages', 'Discover', 'Account']) {
+    for (const name of ['Home', 'Trades', 'Messages', 'Account']) {
       expect(screen.getAllByRole('link', { name })).toHaveLength(3);
     }
+    // The mobile bar gives Discover's place to Start a trade (owner ruling 2026-11-20).
+    expect(screen.getAllByRole('link', { name: 'Discover' })).toHaveLength(2);
     expect(screen.queryByRole('link', { name: 'Explore' })).toBeNull();
     // Alerts is the bell, not a tab: one in the desktop bar and one in the tablet nav.
     expect(screen.getAllByRole('link', { name: 'Alerts' })).toHaveLength(2);
@@ -80,10 +82,22 @@ describe('AppShell', () => {
   // Owner ruling 2026-11-20: one navigation for everyone, a certified merchant included.
   it('draws the same five for a certified merchant, and no Shop, Orders or Listings', () => {
     shell({ certifiedMerchant: true });
-    for (const name of ['Home', 'Trades', 'Messages', 'Discover', 'Account'])
+    for (const name of ['Home', 'Trades', 'Messages', 'Account'])
       expect(screen.getAllByRole('link', { name })).toHaveLength(3);
     for (const name of ['Shop', 'Orders', 'Listings'])
       expect(screen.queryByRole('link', { name })).toBeNull();
+  });
+
+  it('raises Start a trade in the middle of the mobile bar, in place of Discover', () => {
+    shell();
+    const bar = screen.getByRole('navigation', { name: 'Sections' });
+    const names = [...bar.querySelectorAll('a')].map((link) => link.textContent);
+    expect(names).toEqual(['Home', 'Trades', 'Start a trade', 'Messages', 'Account']);
+    const start = screen.getByRole('link', { name: 'Start a trade' });
+    expect(start.getAttribute('href')).toBe('/trade/new');
+    expect(start.getAttribute('aria-current')).toBeNull();
+    // Only the mobile bar carries it: the tablet and desktop navigations keep their five.
+    expect(screen.getAllByRole('link', { name: 'Start a trade' })).toHaveLength(1);
   });
 
   it('points Discover at search', () => {
