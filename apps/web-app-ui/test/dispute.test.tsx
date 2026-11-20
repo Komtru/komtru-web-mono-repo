@@ -284,6 +284,79 @@ describe('the seller’s response (Seller-8)', () => {
     expect(screen.getByRole('button', { name: 'Submit response' }).hasAttribute('disabled')).toBe(true);
     await expectNoAxeViolations(container);
   });
+
+  it('does not offer a replacement: nothing enforces release after one arrives (F-034)', async () => {
+    serve({
+      'GET /trades/:id': workspaceTrade('DISPUTED', 'SELLER'),
+      'GET /disputes/:id': detail({ yourRole: 'SELLER' }),
+    });
+    renderWithApi(api.call, <WithDispute id={TRADE} screen="respond" />);
+    await screen.findByText('What actually happened?');
+    expect(screen.queryByLabelText(/replacement/i)).toBeNull();
+    expect(screen.queryByText(/replacement/i)).toBeNull();
+  });
+
+  it('sends a full refund offer as a full refund to the buyer, with the written account first', async () => {
+    serve({
+      'GET /trades/:id': workspaceTrade('DISPUTED', 'SELLER'),
+      'GET /disputes/:id': detail({ yourRole: 'SELLER' }),
+      'POST /disputes/:id/evidence': {
+        id: id(61),
+        disputeId: CASE,
+        submittedByUserId: SELLER,
+        fileRefId: null,
+        note: 'We shipped the right unit.',
+        submittedAfterDeadline: false,
+        submittedAt: '2026-11-19T10:00:00.000Z',
+      },
+      'POST /disputes/:id/mediation/proposals': {
+        ...decision(),
+        id: id(62),
+        disputeId: CASE,
+        proposedByUserId: SELLER,
+        note: null,
+        status: 'PROPOSED',
+        respondedByUserId: null,
+        respondedAt: null,
+        createdAt: '2026-11-19T10:00:00.000Z',
+      },
+    });
+    renderWithApi(api.call, <WithDispute id={TRADE} screen="respond" />);
+    await screen.findByText('What actually happened?');
+    fireEvent.change(screen.getByLabelText('What actually happened?'), {
+      target: { value: 'We shipped the right unit.' },
+    });
+    fireEvent.click(screen.getByLabelText('Full refund'));
+    fireEvent.click(screen.getByRole('button', { name: 'Submit response' }));
+
+    await waitFor(() => {
+      expect(callsTo(api.call, 'POST', '/disputes/:id/mediation/proposals')).toHaveLength(1);
+    });
+    const sent = callsTo(api.call, 'POST', '/disputes/:id/mediation/proposals')[0] as {
+      body: { outcome: string; amountToBuyerMinor: string; amountToSellerMinor: string };
+    };
+    expect(sent.body.outcome).toBe('REFUND_BUYER_FULL');
+    expect(sent.body.amountToBuyerMinor).toBe('45200000');
+    expect(sent.body.amountToSellerMinor).toBe('0');
+  });
+
+  it('refuses a buyer with the role gate', async () => {
+    serve({ 'GET /trades/:id': workspaceTrade('DISPUTED', 'BUYER') });
+    renderWithApi(api.call, <WithDispute id={TRADE} screen="respond" />);
+    await screen.findByText(/seller's response screen/);
+    expect(screen.queryByText('What actually happened?')).toBeNull();
+  });
+
+  it('refuses once the case is with a reviewer', async () => {
+    serve({
+      'GET /trades/:id': workspaceTrade('DISPUTED', 'SELLER'),
+      'GET /trades/:id/dispute': dispute({ status: 'UNDER_REVIEW' }),
+      'GET /disputes/:id': detail({ yourRole: 'SELLER', status: 'UNDER_REVIEW' }),
+    });
+    renderWithApi(api.call, <WithDispute id={TRADE} screen="respond" />);
+    await screen.findByText(/with a reviewer now/);
+    expect(screen.queryByText('What actually happened?')).toBeNull();
+  });
 });
 
 describe('the evidence comparison (Y1)', () => {

@@ -21,14 +21,13 @@ import { comparisonHref, disputeStatusHref } from './routes';
 
 const TITLE = 'Your Response';
 
-/** The two the reference offers the seller, with the money outcome each really is. */
+/**
+ * What the seller may offer. The reference also lists "Reship the correct color, no extra cost", but that has no
+ * money outcome the platform can enforce: the only fit is RELEASE_SELLER_FULL, which would pay the seller the whole
+ * escrow on the promise of a replacement nothing checks. A replacement is F-034's track (design Q10 records it as an
+ * agreed note beside a money outcome), so it is not offered here.
+ */
 const PROPOSALS = [
-  {
-    id: 'RESHIP',
-    label: 'Send a replacement, no extra cost',
-    outcome: 'RELEASE_SELLER_FULL' as const,
-    note: 'Seller sends a replacement at no extra cost; the payment is released once it arrives.',
-  },
   {
     id: 'REFUND',
     label: 'Full refund',
