@@ -231,6 +231,38 @@ describe('the trade, account and dispute routes over HTTP', () => {
     }
   });
 
+  it('draws the case in mediation and after a decision, for the buyer and for the seller', async () => {
+    const standin = await startStandin({ port: 0, log: () => undefined });
+    try {
+      const cases = [
+        ['buyer', 'dispute-mediation', 'MEDIATION', 'BUYER', 0],
+        ['seller', 'dispute-mediation', 'MEDIATION', 'SELLER', 0],
+        ['buyer', 'dispute-decided', 'DECIDED', 'BUYER', 1],
+        ['seller', 'dispute-decided', 'DECIDED', 'SELLER', 1],
+      ] as const;
+      for (const [persona, scenario, status, role, decisions] of cases) {
+        const auth = await signedIn(standin.apiUrl, persona, scenario);
+        const disputed = tradesFor(persona, scenario).find((trade) => trade.status === 'DISPUTED');
+        expect(disputed?.yourRole).toBe(role);
+        const onTrade = disputeSchema.parse(
+          await (
+            await fetch(`${standin.apiUrl}/trades/${disputed?.id ?? ''}/dispute`, { headers: auth })
+          ).json(),
+        );
+        expect(onTrade.status).toBe(status);
+        const detail = disputeDetailSchema.parse(
+          await (await fetch(`${standin.apiUrl}/disputes/${onTrade.id}`, { headers: auth })).json(),
+        );
+        expect(detail.yourRole).toBe(role);
+        expect(detail.decisions).toHaveLength(decisions);
+      }
+      // The seller sees the disputed trade only in a dispute scenario.
+      expect(tradesFor('seller', 'with-trades').some((trade) => trade.status === 'DISPUTED')).toBe(false);
+    } finally {
+      await standin.close();
+    }
+  });
+
   it('answers no case on a trade without one, and no dispute to a seller who is not a party to it', async () => {
     const standin = await startStandin({ port: 0, log: () => undefined });
     try {

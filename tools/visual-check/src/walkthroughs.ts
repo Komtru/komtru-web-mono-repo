@@ -35,17 +35,80 @@ export const WALKTHROUGHS: Readonly<Record<string, Walkthrough>> = {
     path: `/trade/${TRADE_IDS.buyerDisputed}`,
     content: 'main',
   },
+  // F-032 disputes (T-120, T-196). The reference draws the case at mediation, so the case screens are walked in
+  // the `dispute-mediation` scenario; H1, H2 and AC6 are drawn after a decision, so they take `dispute-decided`.
+  // Customer-7 and CWT-S14 are the report form on a trade with no case yet: the one in inspection.
   'CWT-S15': {
     screen: 'CWT-S15',
     persona: 'buyer',
-    scenario: 'with-trades',
+    scenario: 'dispute-mediation',
     path: `/trade/${TRADE_IDS.buyerDisputed}/dispute/status`,
   },
   Y1: {
     screen: 'Y1',
     persona: 'buyer',
-    scenario: 'with-trades',
+    scenario: 'dispute-mediation',
     path: `/trade/${TRADE_IDS.buyerDisputed}/dispute/evidence`,
+  },
+  'Customer-7': {
+    screen: 'Customer-7',
+    persona: 'buyer',
+    scenario: 'with-trades',
+    path: `/trade/${TRADE_IDS.buyerInspection}/dispute`,
+  },
+  'CWT-S14': {
+    screen: 'CWT-S14',
+    persona: 'buyer',
+    scenario: 'with-trades',
+    path: `/trade/${TRADE_IDS.buyerInspection}/dispute`,
+  },
+  'Customer-8': {
+    screen: 'Customer-8',
+    persona: 'buyer',
+    scenario: 'dispute-mediation',
+    path: `/trade/${TRADE_IDS.buyerDisputed}/dispute`,
+  },
+  'DI-01': {
+    screen: 'DI-01',
+    persona: 'buyer',
+    scenario: 'dispute-mediation',
+    path: `/trade/${TRADE_IDS.buyerDisputed}/issue`,
+  },
+  'Seller-7': {
+    screen: 'Seller-7',
+    persona: 'seller',
+    scenario: 'dispute-mediation',
+    path: `/trade/${TRADE_IDS.buyerDisputed}/dispute`,
+  },
+  'Seller-8': {
+    screen: 'Seller-8',
+    persona: 'seller',
+    scenario: 'dispute-mediation',
+    path: `/trade/${TRADE_IDS.buyerDisputed}/dispute/respond`,
+  },
+  H1: {
+    screen: 'H1',
+    persona: 'buyer',
+    scenario: 'dispute-decided',
+    path: `/trade/${TRADE_IDS.buyerDisputed}/dispute/status`,
+  },
+  H2: {
+    screen: 'H2',
+    persona: 'seller',
+    scenario: 'dispute-decided',
+    path: `/trade/${TRADE_IDS.buyerDisputed}/dispute/status`,
+  },
+  AC6: {
+    screen: 'AC6',
+    persona: 'buyer',
+    scenario: 'dispute-decided',
+    path: `/trade/${TRADE_IDS.buyerDisputed}/appeal`,
+  },
+  'SP-M23': {
+    screen: 'SP-M23',
+    persona: 'buyer',
+    scenario: 'dispute-mediation',
+    path: `/trade/${TRADE_IDS.buyerDisputed}/dispute/withdraw`,
   },
   // The seller's business verification: the application in review, and the one a decision rejected (T-121).
   M2: {
