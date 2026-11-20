@@ -236,6 +236,29 @@ describe('the seller’s notice (Seller-7)', () => {
     renderWithApi(api.call, <SellerNotice id={TRADE} disputeId={CASE} />);
     await screen.findByText(/seller's view of the case/);
   });
+
+  it('sends "Respond with evidence" to the seller’s response screen (Seller-8), not the comparison', async () => {
+    serve({
+      'GET /trades/:id': workspaceTrade('DISPUTED', 'SELLER'),
+      'GET /disputes/:id': detail({ yourRole: 'SELLER' }),
+    });
+    renderWithApi(api.call, <SellerNotice id={TRADE} disputeId={CASE} />);
+    const link = await screen.findByRole('link', { name: 'Respond with evidence' });
+    expect(link.getAttribute('href')).toBe(`/trade/${TRADE}/dispute/respond`);
+  });
+});
+
+describe('the seller’s response (Seller-8)', () => {
+  it('is reachable by its route key and asks the seller what happened', async () => {
+    serve({
+      'GET /trades/:id': workspaceTrade('DISPUTED', 'SELLER'),
+      'GET /disputes/:id': detail({ yourRole: 'SELLER' }),
+    });
+    const { container } = renderWithApi(api.call, <WithDispute id={TRADE} screen="respond" />);
+    await screen.findByText('What actually happened?');
+    expect(screen.getByRole('button', { name: 'Submit response' }).hasAttribute('disabled')).toBe(true);
+    await expectNoAxeViolations(container);
+  });
 });
 
 describe('the evidence comparison (Y1)', () => {

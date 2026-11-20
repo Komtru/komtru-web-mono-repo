@@ -10,7 +10,7 @@ import { ActionStack, Button, ItemCard, SectionLabel } from '@komtru/ui-kit';
 import { Frame, TradeGate } from '../delivery/parts';
 import { naira, partyName } from '../format';
 import { DisputeCountdown, DisputeGate } from './parts';
-import { comparisonHref, tradeHref } from './routes';
+import { respondHref, tradeHref } from './routes';
 import { reasonLabel } from './words';
 
 const TITLE = 'Dispute';
@@ -64,7 +64,7 @@ function Body({
 
       <ActionStack>
         <Button asChild>
-          <a href={comparisonHref(id)}>Respond with evidence</a>
+          <a href={respondHref(id)}>Respond with evidence</a>
         </Button>
         <Button asChild variant="secondary">
           <a href={tradeHref(id)}>Back to the trade</a>
