@@ -20,6 +20,7 @@ import {
   otpPurposeLabel,
 } from '../../identity/index.js';
 import { identitySessionReuseDetectedEvent } from '@komtru/shared-types';
+import { logisticsMemberInvited } from '../../logistics/index.js';
 import { decisionLine, merchantApplicationDecided } from '../../merchant/index.js';
 import { TRADE_NOTIFICATION_PLANS, resolveTradeAudience } from '../../trades/index.js';
 import type { Tx } from '../../../platform/events/publish.js';
@@ -254,6 +255,22 @@ export const BINDINGS: NotificationBinding[] = [
             reason: payload.reason,
             requested: payload.requested,
           }),
+        },
+      },
+    ],
+  }),
+
+  // T-086 (m2 §13.5): the invitee hears they were added, whichever way the membership came about.
+  defineBinding({
+    subscriber: 'notify.on-logistics-member-invited',
+    event: logisticsMemberInvited,
+    templateKey: 'logistics.member.invited',
+    recipients: (payload) => [
+      {
+        userId: payload.userId,
+        variables: {
+          companyName: payload.companyName,
+          roleLabel: payload.role === 'ADMIN' ? 'an admin' : 'an operator',
         },
       },
     ],

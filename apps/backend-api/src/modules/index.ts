@@ -31,6 +31,7 @@ import {
   type AvatarPorts,
 } from './identity/index.js';
 import { ledgerModule } from './ledger/index.js';
+import { acceptOnLogin, activeMembership, hasLogisticsAccess, logisticsModule } from './logistics/index.js';
 import { merchantModule } from './merchant/index.js';
 import { notifyModule } from './notify/index.js';
 import { createSocketModule } from './socket/index.js';
@@ -99,6 +100,10 @@ export const createModules: ModuleBuilder = (deps) => {
   };
   const auth = createIdentityAuth({
     ...deps,
+    // T-086 (m2 §2): a LOGISTICS principal's company, re-resolved every request, and the logistics
+    // sign-in's eligibility and login-is-acceptance. Wired here because logistics imports identity.
+    companyMembership: activeMembership,
+    logisticsAccess: { eligible: hasLogisticsAccess, accept: acceptOnLogin },
     cities: getCitiesByIds,
     avatar: avatarPorts,
     hasActiveTrades,
@@ -128,7 +133,16 @@ export const createModules: ModuleBuilder = (deps) => {
     config: deps.config,
     logger: deps.logger,
     authenticate: (token) =>
-      resolvePrincipal({ db: deps.db, signer: auth.signer, epochs: auth.epochs, logger: deps.logger }, token),
+      resolvePrincipal(
+        {
+          db: deps.db,
+          signer: auth.signer,
+          epochs: auth.epochs,
+          logger: deps.logger,
+          companyMembership: activeMembership,
+        },
+        token,
+      ),
   });
 
   return [
@@ -166,6 +180,9 @@ export const createModules: ModuleBuilder = (deps) => {
     // files (the evidence grants) and cases (where it registers itself as staff work). Before
     // notify, which subscribes to the events it publishes.
     createDisputesModule(),
+    // T-085/T-086: after identity, whose verified contacts and contact events it reads through the
+    // barrel. Before notify, which tells an invitee they were added.
+    logisticsModule,
     // After identity (capability, audit), files (KYC documents), geo, config (categories), ledger (the payout
     // account), trust (the CAC lookup) and cases (the review case), all read through their barrels. Before
     // notify, which subscribes to the decisions it publishes.
