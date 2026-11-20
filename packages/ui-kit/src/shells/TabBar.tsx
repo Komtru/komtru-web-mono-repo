@@ -20,6 +20,15 @@ export interface TabBarProps {
    * content, and its caption sits on the bar's baseline with the tab labels.
    */
   action?: TabBarAction;
+  /**
+   * `sticky` (the default) rides `<MobileShell>`'s flex column: `margin-top:auto` holds it at the
+   * bottom of a short screen. `fixed` pins it to the bottom of the screen itself, which
+   * `<ResponsiveAppShell>` uses (2026-11-20): in a mobile browser with a bottom toolbar (Brave and
+   * Safari on iOS) a `min-h-dvh` page can be taller than what shows, so a sticky bar was drawn above
+   * a strip of empty page and scrolling to it pushed the header off the top. The caller then owns
+   * the bottom clearance of its content.
+   */
+  pinned?: 'sticky' | 'fixed';
   /** Names the landmark. A screen with two navigations needs them told apart. */
   label?: string;
   /**
@@ -36,7 +45,13 @@ export interface TabBarProps {
  * v1's `.scr-tabbar`; T-222 re-based it. `margin-top:auto` is what pins it to the bottom of a
  * short screen, so it only works inside `<MobileShell>`'s flex column.
  */
-export function TabBar({ items, label = 'Sections', action, className }: TabBarProps): React.JSX.Element {
+export function TabBar({
+  items,
+  label = 'Sections',
+  action,
+  pinned = 'sticky',
+  className,
+}: TabBarProps): React.JSX.Element {
   const current = soleCurrent(items, 'TabBar');
   // In the middle: with five tabs, two on its left and three on its right.
   const actionAt = Math.floor(items.length / 2);
@@ -45,7 +60,8 @@ export function TabBar({ items, label = 'Sections', action, className }: TabBarP
     <nav
       aria-label={label}
       className={cx(
-        'sticky bottom-0 z-20 mt-auto grid shrink-0 grow-0 basis-auto grid-flow-col auto-cols-fr gap-[4px]',
+        pinned === 'fixed' ? 'fixed inset-x-0 bottom-0' : 'sticky bottom-0 mt-auto',
+        'z-20 grid shrink-0 grow-0 basis-auto grid-flow-col auto-cols-fr gap-[4px]',
         'pt-[8px] pr-[8px] pb-[calc(8px+env(safe-area-inset-bottom,0px))] pl-[8px]',
         'border-t-[1px] border-t-border-hairline bg-[rgba(255,255,255,.97)]',
         '[box-shadow:0_-6px_18px_rgba(13,20,32,.045)] [backdrop-filter:blur(12px)]',
@@ -116,19 +132,17 @@ export function TabBar({ items, label = 'Sections', action, className }: TabBarP
 }
 
 /**
- * The raised action's column. The column keeps the bar's rhythm (same height, caption on the same
- * line as the tab labels); the 52px circle is lifted so its centre sits on the bar's top edge — half
- * over the content, half in the bar — with a white ring that reads as a notch in the bar's border.
+ * The raised action's column: a bare 52px brand-blue circle with a plus, no caption (owner,
+ * 2026-11-20). The column keeps the bar's rhythm; the circle is lifted so its centre sits on the
+ * bar's top edge — half over the content, half in the bar — with a white ring that reads as a notch
+ * in the bar's border. With no visible text, `aria-label` is the link's name.
  */
 function ActionSlot({ action }: { action: TabBarAction }): React.JSX.Element {
   return (
     <a
       href={action.href}
-      className={cx(
-        'group relative flex min-h-[48px] min-w-0 flex-col items-center justify-end rounded-[12px] pb-[6px] no-underline',
-        'text-[9.5px] font-semibold tracking-[.01em] text-trust-indigo',
-        FOCUS_RING,
-      )}
+      aria-label={action.label}
+      className={cx('group relative flex min-h-[48px] min-w-0 rounded-[12px] no-underline', FOCUS_RING)}
     >
       <span
         aria-hidden
@@ -143,8 +157,6 @@ function ActionSlot({ action }: { action: TabBarAction }): React.JSX.Element {
       >
         <span className="h-[22px] w-[22px] stroke-current">{action.icon}</span>
       </span>
-      {/* The caption is the accessible name, so what a voice-control user reads is what they say. */}
-      <span>{action.label}</span>
     </a>
   );
 }
