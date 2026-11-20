@@ -17,9 +17,14 @@ import { ProblemError } from '@komtru/api-client';
 export const ROLE_LABEL: Record<LogisticsRole, string> = { ADMIN: 'Admin', OPERATOR: 'Operator' };
 
 export const ROLE_OPTIONS = [
-  { value: 'OPERATOR', label: 'Operator — handles pickups and tracking' },
-  { value: 'ADMIN', label: 'Admin — also manages the team' },
+  { value: 'OPERATOR', label: 'Operator' },
+  { value: 'ADMIN', label: 'Admin' },
 ] as const;
+
+export const ROLE_HELP: Record<LogisticsRole, string> = {
+  OPERATOR: 'Handles pickups and tracking numbers',
+  ADMIN: 'Also invites people and changes roles',
+};
 
 export interface Roster {
   /** Signed in at least once: working on the portal. */

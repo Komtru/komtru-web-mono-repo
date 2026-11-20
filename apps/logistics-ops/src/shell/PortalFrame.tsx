@@ -44,6 +44,11 @@ export function PortalFrame({ current, title, description, children }: PortalFra
     }
   }, [park, viewer.me]);
 
+  // The company is named on every screen, so a person who works for two couriers in turn always knows
+  // whose portal this is.
+  const company = viewer.me?.company.name;
+  const heading = company === undefined ? description : [company, description].filter(Boolean).join(' · ');
+
   const nav = SECTIONS.map<NavItem>((section) => ({
     label: section.label,
     href: section.href,
@@ -99,7 +104,7 @@ export function PortalFrame({ current, title, description, children }: PortalFra
       navLabel="Portal"
       navFooter={footer}
       title={title}
-      {...(description === undefined ? {} : { description })}
+      {...(heading === undefined ? {} : { description: heading })}
     >
       {body}
     </ConsoleShell>

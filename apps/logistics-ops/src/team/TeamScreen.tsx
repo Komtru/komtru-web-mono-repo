@@ -16,6 +16,7 @@ import { useId, useState } from 'react';
 import { useTeam, useTeamMutations } from './hooks';
 import {
   ROLE_LABEL,
+  ROLE_HELP,
   ROLE_OPTIONS,
   buildRoster,
   contactFrom,
@@ -169,6 +170,7 @@ function InviteForm({ onNotice }: { onNotice: (notice: Notice | null) => void })
             name="role"
             value={role}
             options={ROLE_OPTIONS}
+            helper={ROLE_HELP[role]}
             onChange={(event) => setRole(event.target.value as LogisticsRole)}
           />
           <div className="sm:col-span-2">

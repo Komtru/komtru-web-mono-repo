@@ -5,7 +5,7 @@ import { TeamScreen } from '../../../src/team/TeamScreen';
 
 export default function TeamPage(): React.JSX.Element {
   return (
-    <PortalFrame current="team" title="Team" description="Who can sign in to the portal for your company">
+    <PortalFrame current="team" title="Team" description="Who can sign in to the portal">
       {({ me, isAdmin }) => <TeamScreen me={me} isAdmin={isAdmin} />}
     </PortalFrame>
   );
