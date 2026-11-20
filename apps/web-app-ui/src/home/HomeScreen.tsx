@@ -81,13 +81,16 @@ export function HomeScreen(): React.JSX.Element {
         {`${String(attentionCount)} need${attentionCount === 1 ? 's' : ''} your attention · ${String(activeCount)} active`}
       </p>
 
-      <nav aria-label="Quick actions" className="mb-[6px] grid grid-cols-3 gap-[8px]">
+      <nav aria-label="Quick actions" className="mb-[6px] grid grid-cols-2 gap-[8px] md:grid-cols-3">
         <Button asChild variant="secondary">
           <a href="/find">Find a Trade</a>
         </Button>
-        <Button asChild variant="secondary">
-          <a href="/trade/new">Start a Trade</a>
-        </Button>
+        {/* Mobile starts a trade from the tab bar's raised action instead (owner ruling 2026-11-20). */}
+        <div className="hidden md:block">
+          <Button asChild variant="secondary">
+            <a href="/trade/new">Start a Trade</a>
+          </Button>
+        </div>
         <Button asChild variant="secondary">
           <a href="/search">Search</a>
         </Button>
@@ -196,9 +199,12 @@ function HomeEmpty(): React.JSX.Element {
         body="Start one, or enter a Trade Code from a seller — every completed Trade adds to your Trust Profile."
       />
       <div className="mt-[16px] flex flex-col gap-[8px]">
-        <Button asChild>
-          <a href="/trade/new">Start a Trade</a>
-        </Button>
+        {/* On mobile the tab bar's raised action is the way to start one. */}
+        <div className="hidden md:block">
+          <Button asChild>
+            <a href="/trade/new">Start a Trade</a>
+          </Button>
+        </div>
         <Button asChild variant="secondary">
           <a href="/find">Enter a Trade Code</a>
         </Button>

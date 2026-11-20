@@ -1,9 +1,25 @@
+import { Fragment } from 'react';
 import { cx } from '../primitives/cx.js';
 import { FOCUS_RING } from '../primitives/focus.js';
 import { type NavItem, soleCurrent } from './NavItem.js';
 
+/** The tab bar's one raised action: a link, drawn as a brand-blue circle in the middle of the bar. */
+export interface TabBarAction {
+  /** The accessible name and the caption under the circle. */
+  label: string;
+  href: string;
+  /** Strokes in `currentColor`, which is white on the circle. */
+  icon: React.ReactNode;
+}
+
 export interface TabBarProps {
   items: readonly NavItem[];
+  /**
+   * A primary action set in the middle of the bar (owner ruling 2026-11-20: Start Trade on mobile).
+   * It is not a destination, so it is never current: the circle floats half above the bar, over the
+   * content, and its caption sits on the bar's baseline with the tab labels.
+   */
+  action?: TabBarAction;
   /** Names the landmark. A screen with two navigations needs them told apart. */
   label?: string;
   /**
@@ -20,8 +36,10 @@ export interface TabBarProps {
  * v1's `.scr-tabbar`; T-222 re-based it. `margin-top:auto` is what pins it to the bottom of a
  * short screen, so it only works inside `<MobileShell>`'s flex column.
  */
-export function TabBar({ items, label = 'Sections', className }: TabBarProps): React.JSX.Element {
+export function TabBar({ items, label = 'Sections', action, className }: TabBarProps): React.JSX.Element {
   const current = soleCurrent(items, 'TabBar');
+  // In the middle: with five tabs, two on its left and three on its right.
+  const actionAt = Math.floor(items.length / 2);
 
   return (
     <nav
@@ -36,6 +54,10 @@ export function TabBar({ items, label = 'Sections', className }: TabBarProps): R
     >
       {items.map((item, index) => {
         const active = index === current;
+        const before =
+          action !== undefined && index === actionAt ? (
+            <ActionSlot key="tabbar-action" action={action} />
+          ) : null;
         const content = (
           <>
             {/* v2 sets `stroke="currentColor"` on each glyph; a caller's icon does not, so the
@@ -58,27 +80,71 @@ export function TabBar({ items, label = 'Sections', className }: TabBarProps): R
           FOCUS_RING,
         );
 
-        return item.href === undefined ? (
-          <button
-            key={item.label}
-            type="button"
-            aria-current={active ? 'page' : undefined}
-            onClick={item.onSelect}
-            className={tabClass}
-          >
-            {content}
-          </button>
+        const tab =
+          item.href === undefined ? (
+            <button
+              key={item.label}
+              type="button"
+              aria-current={active ? 'page' : undefined}
+              onClick={item.onSelect}
+              className={tabClass}
+            >
+              {content}
+            </button>
+          ) : (
+            <a
+              key={item.label}
+              href={item.href}
+              aria-current={active ? 'page' : undefined}
+              className={tabClass}
+            >
+              {content}
+            </a>
+          );
+        return before === null ? (
+          tab
         ) : (
-          <a
-            key={item.label}
-            href={item.href}
-            aria-current={active ? 'page' : undefined}
-            className={tabClass}
-          >
-            {content}
-          </a>
+          <Fragment key={item.label}>
+            {before}
+            {tab}
+          </Fragment>
         );
       })}
+      {action !== undefined && actionAt >= items.length && <ActionSlot action={action} />}
     </nav>
+  );
+}
+
+/**
+ * The raised action's column. The column keeps the bar's rhythm (same height, caption on the same
+ * line as the tab labels); the 52px circle is lifted so its centre sits on the bar's top edge — half
+ * over the content, half in the bar — with a white ring that reads as a notch in the bar's border.
+ */
+function ActionSlot({ action }: { action: TabBarAction }): React.JSX.Element {
+  return (
+    <a
+      href={action.href}
+      className={cx(
+        'group relative flex min-h-[48px] min-w-0 flex-col items-center justify-end rounded-[12px] pb-[6px] no-underline',
+        'text-[9.5px] font-semibold tracking-[.01em] text-trust-indigo',
+        FOCUS_RING,
+      )}
+    >
+      <span
+        aria-hidden
+        data-tabbar-action-circle
+        className={cx(
+          // The bar has 8px of top padding, so -8px puts the circle's centre on the bar's edge.
+          'absolute left-1/2 top-[-8px] flex h-[52px] w-[52px] -translate-x-1/2 -translate-y-1/2 items-center justify-center',
+          'rounded-full border-[4px] border-solid border-pure-white bg-trust-indigo text-pure-white',
+          '[box-shadow:0_6px_16px_rgba(13,20,32,.18)] transition-transform duration-150 ease-[ease]',
+          'group-active:scale-95 motion-reduce:transition-none',
+        )}
+      >
+        <span className="h-[22px] w-[22px] stroke-current">{action.icon}</span>
+      </span>
+      {/* The caption is the accessible name, so what a voice-control user reads is what they say. */}
+      <span>{action.label}</span>
+    </a>
   );
 }

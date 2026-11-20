@@ -20,6 +20,28 @@ describe('TabBar', () => {
     expect(current[0]?.textContent).toBe('Trades');
   });
 
+  // Owner ruling 2026-11-20: mobile's Start Trade, raised out of the middle of the bar.
+  it('sets a raised action in the middle of the bar, never marked current', () => {
+    const tabs = TABS.map((tab) => ({ ...tab, href: `/${tab.label.toLowerCase()}` }));
+    const { container } = render(
+      <TabBar items={tabs} action={{ label: 'Start a trade', href: '/trade/new', icon: ICON }} />,
+    );
+    const links = [...container.querySelectorAll('nav > a')].map((link) => link.textContent);
+    expect(links).toEqual(['Trades', 'Passport', 'Start a trade', 'Alerts', 'Settings']);
+    const action = screen.getByRole('link', { name: 'Start a trade' });
+    expect(action.getAttribute('href')).toBe('/trade/new');
+    expect(action.hasAttribute('aria-current')).toBe(false);
+    // Brand blue, and lifted so its centre sits on the bar's top edge, over the content.
+    const circle = action.querySelector('[data-tabbar-action-circle]');
+    expect(circle?.className).toContain('bg-trust-indigo');
+    expect(circle?.className).toContain('-translate-y-1/2');
+  });
+
+  it('draws no action when none is given', () => {
+    const { container } = render(<TabBar items={TABS} />);
+    expect(container.querySelector('[data-tabbar-action-circle]')).toBeNull();
+  });
+
   it('refuses two current tabs rather than announcing both', () => {
     const two = [
       { label: 'Trades', icon: ICON, current: true },

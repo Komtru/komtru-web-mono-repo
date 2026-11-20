@@ -1,12 +1,17 @@
 import { CollapsibleSideNav } from '../primitives/CollapsibleSideNav.js';
 import { LogoBar } from './LogoBar.js';
 import type { NavItem } from './NavItem.js';
-import { TabBar } from './TabBar.js';
+import { TabBar, type TabBarAction } from './TabBar.js';
 import { TopNav } from './TopNav.js';
 
 export interface ResponsiveAppShellProps {
   /** The bottom tab bar below `md`, and what the rail falls back to. */
   tabs: readonly NavItem[];
+  /**
+   * What the bottom tab bar lists when it is not every tab. The consumer app drops Discover there to
+   * make room for the raised Start Trade action (owner ruling 2026-11-20); the rail keeps it.
+   */
+  barTabs?: readonly NavItem[];
   /**
    * What the sidebar and the top nav list, when that is not the tabs. D9 does this: inside Account
    * the rail is headed "Account" and lists the account's sections instead of the app's tabs.
@@ -21,8 +26,13 @@ export interface ResponsiveAppShellProps {
    * bar; from `md` to `lg` they ride the top nav (TX-02). Rendered in both, hidden at the other width.
    */
   actions?: React.ReactNode;
-  /** The mobile header's tools: the Buy/Sell switch, which mobile has too (owner ruling, T-191). */
+  /** The mobile header's tools, beside the brand. */
   mobileActions?: React.ReactNode;
+  /**
+   * The bottom tab bar's raised action (`TabBar`'s `action`). Mobile only: from `md` up the bar is
+   * gone and the screens keep their own buttons.
+   */
+  mobileAction?: TabBarAction;
   children?: React.ReactNode;
 }
 
@@ -54,11 +64,13 @@ export interface ResponsiveAppShellProps {
  */
 export function ResponsiveAppShell({
   tabs,
+  barTabs,
   rail,
   banner,
   search,
   actions,
   mobileActions,
+  mobileAction,
   children,
 }: ResponsiveAppShellProps): React.JSX.Element {
   const railLabel = rail?.label ?? 'Komtru';
@@ -99,7 +111,12 @@ export function ResponsiveAppShell({
           {banner}
           {children}
         </main>
-        <TabBar items={tabs} label="Sections" className="md:hidden" />
+        <TabBar
+          items={barTabs ?? tabs}
+          label="Sections"
+          className="md:hidden"
+          {...(mobileAction === undefined ? {} : { action: mobileAction })}
+        />
       </div>
     </div>
   );
