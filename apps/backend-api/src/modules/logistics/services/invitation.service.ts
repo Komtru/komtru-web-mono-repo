@@ -104,12 +104,13 @@ export async function materialiseInvitations(
     .select({
       id: logisticsMemberInvitations.id,
       companyId: logisticsMemberInvitations.companyId,
-      companyName: logisticsCompanies.name,
+      // A scalar subquery, not a join: Postgres refuses `FOR UPDATE OF` a schema-qualified name, and
+      // with no join a plain FOR UPDATE locks only the invitation rows.
+      companyName: sql<string>`(select ${logisticsCompanies.name} from ${logisticsCompanies} where ${logisticsCompanies.id} = ${logisticsMemberInvitations.companyId})`,
       role: logisticsMemberInvitations.role,
       invitedByUserId: logisticsMemberInvitations.invitedByUserId,
     })
     .from(logisticsMemberInvitations)
-    .innerJoin(logisticsCompanies, eq(logisticsCompanies.id, logisticsMemberInvitations.companyId))
     .where(
       and(
         eq(logisticsMemberInvitations.destinationHash, destinationHash),
@@ -118,7 +119,7 @@ export async function materialiseInvitations(
         gt(logisticsMemberInvitations.expiresAt, sql`now()`),
       ),
     )
-    .for('update', { of: logisticsMemberInvitations });
+    .for('update');
 
   let materialised = 0;
   for (const invitation of pending) {
