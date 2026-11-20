@@ -18,19 +18,14 @@ describe('the injected font stylesheet', () => {
     for (const family of named) expect(css).toContain(`font-family: '${family}';`);
   });
 
-  it('covers the weights ui-kit loads through next/font', () => {
-    const weights = (family: string) =>
-      FONT_FACES.filter((face) => face.family === family).map((face) => face.weight);
+  it('loads the very files ui-kit hands to next/font, at the same weights', () => {
     const source = readFileSync(new URL('../../../packages/ui-kit/src/fonts.ts', import.meta.url), 'utf8');
-
-    // Discrete weights on both sides, so a variable instance never stands in for a static cut.
-    expect(weights('Space Grotesk')).toEqual(['400', '500', '600', '700']);
-    expect(source).toContain(`weight: ['400', '500', '600', '700']`);
-    expect(weights('IBM Plex Mono')).toEqual(['400', '500', '600']);
-    expect(source).toContain(`weight: ['400', '500', '600']`);
-    // Inter is the one family ui-kit loads without a weight list, so next/font serves the variable
-    // font and so does this.
-    expect(weights('Inter')).toEqual(['100 900']);
+    // Every face here is one `{ path, weight }` entry there, so the two sides cannot drift apart.
+    for (const face of FONT_FACES) {
+      const name = face.file.split('/').at(-1)!;
+      expect(source, face.family).toContain(`path: '../fonts/${name}', weight: '${face.weight}'`);
+    }
+    expect(FONT_FACES.map((face) => face.weight)).toEqual(['400 700', '100 900', '400', '500', '600']);
   });
 
   it('inlines the files so nothing is fetched at screenshot time', () => {

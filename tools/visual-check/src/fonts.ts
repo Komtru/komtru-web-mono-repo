@@ -7,20 +7,16 @@
 //
 // Masking text was rejected: in a design-system build most deviations *are* text. Linking Google
 // Fonts at screenshot time was rejected: a network round-trip makes the diff irreproducible offline
-// and lets the upstream file change without the repository changing. Instead the three families
-// arrive as exact-pinned Fontsource dependencies, `latin` subset, in the same weights ui-kit asks
-// next/font for, and are inlined into *both* pages. Both sides then have all three faces available
-// and only the markup decides which one applies, so a screen that reaches for the wrong family
-// still shows up as a deviation.
+// and lets the upstream file change without the repository changing.
 //
-// What this is not: next/font renders the built app under a generated family name of its own, so
-// these faces do not apply there — the app keeps its own copies. The two sides therefore run
-// independently produced builds of the same three typefaces, Fontsource's and Google Fonts' API
-// output, and a sub-pixel metric skew between two releases is possible. `docs/ui-review/README.md`
-// records that, and the airtight version (ui-kit owning the files both sides load) waits for the
-// first real screen to measure against.
+// Since 2026-11-20 ui-kit owns the files (`packages/ui-kit/fonts`, loaded by `next/font/local`), and
+// this reads the very same ones and inlines them into *both* pages. Both sides then have all three
+// faces available, byte-identical to what the app ships, and only the markup decides which one
+// applies, so a screen that reaches for the wrong family still shows up as a deviation. next/font
+// renders the built app under a generated family name of its own, which is why these are declared
+// again here under the reference's names.
 import { readFileSync } from 'node:fs';
-import { createRequire } from 'node:module';
+import { fileURLToPath } from 'node:url';
 
 interface FontFace {
   family: string;
@@ -30,25 +26,17 @@ interface FontFace {
   weight: string;
 }
 
-const file = createRequire(import.meta.url).resolve;
+/** ui-kit's committed font files: the ones `packages/ui-kit/src/fonts.ts` hands to next/font/local. */
+const file = (name: string): string =>
+  fileURLToPath(new URL(`../../../packages/ui-kit/fonts/${name}`, import.meta.url));
 
-/** Matches `packages/ui-kit/src/fonts.ts`: latin subset, and the weights each loader asks for. */
+/** Matches `packages/ui-kit/src/fonts.ts`: the same files, at the same weights or weight ranges. */
 export const FONT_FACES: readonly FontFace[] = [
-  // Static, not the variable face: ui-kit asks next/font for four discrete Space Grotesk weights,
-  // and a variable instance at 600 is not guaranteed to be the static 600.
-  ...(['400', '500', '600', '700'] as const).map((weight) => ({
-    family: 'Space Grotesk',
-    file: file(`@fontsource/space-grotesk/files/space-grotesk-latin-${weight}-normal.woff2`),
-    weight,
-  })),
-  {
-    family: 'Inter',
-    file: file('@fontsource-variable/inter/files/inter-latin-wght-normal.woff2'),
-    weight: '100 900',
-  },
+  { family: 'Space Grotesk', file: file('space-grotesk-latin-400-700.woff2'), weight: '400 700' },
+  { family: 'Inter', file: file('inter-latin-100-900.woff2'), weight: '100 900' },
   ...(['400', '500', '600'] as const).map((weight) => ({
     family: 'IBM Plex Mono',
-    file: file(`@fontsource/ibm-plex-mono/files/ibm-plex-mono-latin-${weight}-normal.woff2`),
+    file: file(`ibm-plex-mono-latin-${weight}.woff2`),
     weight,
   })),
 ];
