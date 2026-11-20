@@ -8,6 +8,7 @@ import type { Tx } from '../../../platform/events/publish.js';
 import {
   getCurrentStandard,
   getStandardVersion,
+  casualSellLimit,
   snapshotFees,
   tradeCategories,
   tradeStandards,
@@ -17,6 +18,7 @@ import { findServableFile, grantAccess, listGrants, revokeGrant } from '../../fi
 import { userProfiles, users } from '../../identity/index.js';
 import type { CityLookup, InvitationDeps, PartyDeps } from '../../identity/index.js';
 import type { SellerKind, TradeFeeSnapshot } from '../domain/feeSnapshot.js';
+import type { SellLimit } from '../domain/sellLimit.js';
 
 export interface TradeStandard extends StandardView {
   categoryId: string;
@@ -52,6 +54,8 @@ export interface TradeDeps {
   /** Takes the buyer's access back (decline, cancel, expiry). Idempotent; called after the trade commits. */
   revokeProofAccess(fileIds: readonly string[], buyerUserId: string): Promise<void>;
   snapshotFees(itemMinor: Kobo, sellerKind: SellerKind): TradeFeeSnapshot;
+  /** The selling limit for an account without merchant status, from config/fees.yaml (2026-11-20). */
+  sellLimit(): SellLimit;
   /** M7 D4: hours a buyer has to confirm delivery, snapshotted onto the trade. */
   graceHours(): Promise<number>;
   /**
@@ -169,4 +173,4 @@ export const postgresCounterpartyDisplays =
     return out;
   };
 
-export { snapshotFees };
+export { casualSellLimit, snapshotFees };

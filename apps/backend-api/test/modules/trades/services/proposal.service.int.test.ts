@@ -89,6 +89,8 @@ describe.runIf(infraEnabled)('proposal flow (T-061)', () => {
     grantProofAccess: (fileIds, buyer) => Promise.resolve(void granted.push({ fileIds, buyer })),
     revokeProofAccess: (fileIds, buyer) => Promise.resolve(void revoked.push({ fileIds, buyer })),
     snapshotFees,
+    // Out of the way by default: most of this file sells at ₦450,000. The limit has its own tests.
+    sellLimit: () => ({ perTradeMinor: 10n ** 15n, perDayMinor: 10n ** 15n }),
     graceHours: () => Promise.resolve(48),
     displays: () => Promise.resolve(new Map()),
     ...overrides,
@@ -210,24 +212,22 @@ describe.runIf(infraEnabled)('proposal flow (T-061)', () => {
       expect(error.code).toBe('ADDRESS_REQUIRED');
     });
 
-    it('refuses a certified merchant the buyer side, and records it', async () => {
+    it('lets a certified merchant take the buyer side (owner ruling 2026-11-20)', async () => {
       const merchant = await person('merchant');
       await certify(merchant.id);
-      const error = await failure(
-        createProposal(deps(), {
-          userId: merchant.id,
-          role: 'BUYER',
-          categoryCode: 'PHONES',
-          itemAmountMinor: PRICE,
-          itemSpec: SPEC,
-          addressId: await address(merchant.id),
-        }),
-      );
-      expect(error.code).toBe('MERCHANT_CANNOT_BUY');
+      const trade = await createProposal(deps(), {
+        userId: merchant.id,
+        role: 'BUYER',
+        categoryCode: 'PHONES',
+        itemAmountMinor: PRICE,
+        itemSpec: SPEC,
+        addressId: await address(merchant.id),
+      });
+      expect(trade.yourRole).toBe('BUYER');
       const { rows } = await t
         .owner()
         .query(`SELECT 1 FROM platform.outbox WHERE event_type = 'trades.eligibility.blocked'`);
-      expect(rows).toHaveLength(1);
+      expect(rows).toHaveLength(0);
     });
 
     it('previews the sides, the requirements and the buyer total (Z3)', async () => {
@@ -239,7 +239,7 @@ describe.runIf(infraEnabled)('proposal flow (T-061)', () => {
         categoryCode: 'PHONES',
         itemAmountMinor: PRICE,
       });
-      expect(preview.allowedRoles).toEqual(['SELLER']);
+      expect(preview.allowedRoles).toEqual(['BUYER', 'SELLER']);
       expect(preview.standard.proofMedia).toEqual({ minPhotos: 2, requireVideo: false });
       expect(preview.fees).toHaveLength(1);
       expect(preview.fees[0]?.sellerKind).toBe('MERCHANT');
@@ -475,45 +475,6 @@ describe.runIf(infraEnabled)('proposal flow (T-061)', () => {
       expect(revoked.slice(before)).toHaveLength(2);
     });
 
-    it('rejects naming a certified merchant as the buyer, before send', async () => {
-      const seller = await person('seller');
-      const merchant = await person('merchant');
-      await certify(merchant.id);
-      const draft = await sellerDraft(seller);
-      const error = await failure(
-        sendProposal(deps(), {
-          userId: seller.id,
-          tradeId: draft.id,
-          counterparty: { channel: 'USERNAME', value: 'merchant' },
-        }),
-      );
-      expect([error.status, error.code]).toEqual([403, 'MERCHANT_CANNOT_BUY']);
-      expect((await getTrade(deps(), { userId: seller.id, tradeId: draft.id })).status).toBe('DRAFT');
-      expect(await activityTypes(draft.id)).toContain('ELIGIBILITY_BLOCKED');
-    });
-
-    it('checks canBuy again at acceptance', async () => {
-      const seller = await person('seller');
-      const buyer = await person('buyer');
-      const draft = await sellerDraft(seller);
-      await sendProposal(deps(), {
-        userId: seller.id,
-        tradeId: draft.id,
-        counterparty: { channel: 'USERNAME', value: 'buyer' },
-      });
-      await certify(buyer.id);
-      const view = await getTrade(deps(), { userId: buyer.id, tradeId: draft.id });
-      const error = await failure(
-        acceptProposal(deps(), {
-          userId: buyer.id,
-          tradeId: draft.id,
-          termsVersionId: view.terms!.versionId,
-          addressId: await address(buyer.id),
-        }),
-      );
-      expect(error.code).toBe('MERCHANT_CANNOT_BUY');
-    });
-
     it('refuses trading with yourself and hides trades from strangers', async () => {
       const seller = await person('seller');
       const stranger = await person('stranger');
@@ -659,36 +620,6 @@ describe.runIf(infraEnabled)('proposal flow (T-061)', () => {
         }),
       );
       expect([nothing.status, nothing.code]).toEqual([422, 'VALIDATION_FAILED']);
-    });
-
-    it('re-checks canBuy when a buyer counters', async () => {
-      const buyer = await person('buyer');
-      const seller = await person('seller');
-      const draft = await buyerDraft(buyer);
-      await sendProposal(deps(), {
-        userId: buyer.id,
-        tradeId: draft.id,
-        counterparty: { channel: 'USERNAME', value: 'seller' },
-      });
-      const first = await getTrade(deps(), { userId: seller.id, tradeId: draft.id });
-      await counterPropose(deps(), {
-        userId: seller.id,
-        tradeId: draft.id,
-        expectedRevision: first.statusRevision,
-        itemAmountMinor: 50_000_000n,
-        addressId: await address(seller.id),
-      });
-      await certify(buyer.id);
-      const now = await getTrade(deps(), { userId: buyer.id, tradeId: draft.id });
-      const error = await failure(
-        counterPropose(deps(), {
-          userId: buyer.id,
-          tradeId: draft.id,
-          expectedRevision: now.statusRevision,
-          itemAmountMinor: 48_000_000n,
-        }),
-      );
-      expect(error.code).toBe('MERCHANT_CANNOT_BUY');
     });
 
     it('answers a wrong-state accept with 409 INVALID_TRANSITION before any address or proof check', async () => {
@@ -1056,27 +987,6 @@ describe.runIf(infraEnabled)('proposal flow (T-061)', () => {
       expect(await invitationStatuses(draft.id)).toEqual(['CANCELLED']);
     });
 
-    it('re-checks canBuy at claim', async () => {
-      const seller = await person('seller');
-      const draft = await sellerDraft(seller);
-      await sendProposal(deps(), {
-        userId: seller.id,
-        tradeId: draft.id,
-        counterparty: { channel: 'EMAIL', value: 'chidi@example.com' },
-      });
-      const claimer = await person('chidi');
-      await certify(claimer.id);
-      await address(claimer.id);
-      await t
-        .owner()
-        .query(
-          `UPDATE identity.party_invitations SET status = 'CLAIMED', claimed_by_user_id = $1, claimed_at = now()`,
-          [claimer.id],
-        );
-      const error = await failure(claimTradeInvitation(deps(), { userId: claimer.id, tradeId: draft.id }));
-      expect(error.code).toBe('MERCHANT_CANNOT_BUY');
-    });
-
     it('expires an unclaimed invitation, once', async () => {
       const seller = await person('seller');
       const draft = await sellerDraft(seller);
@@ -1095,6 +1005,155 @@ describe.runIf(infraEnabled)('proposal flow (T-061)', () => {
       await expireTradeInvitation(deps(), input);
       await expireTradeInvitation(deps(), input);
       expect((await getTrade(deps(), { userId: seller.id, tradeId: draft.id })).status).toBe('EXPIRED');
+    });
+  });
+
+  // Owner ruling 2026-11-20: an account without merchant status sells at most ₦200,000 a trade and
+  // ₦2,000,000 a Lagos day. Scaled down here (₦200,000 / ₦500,000) so a few trades reach the total.
+  describe('the selling limit', () => {
+    const LIMIT = { perTradeMinor: 20_000_000n, perDayMinor: 50_000_000n };
+    const limited = () => deps({ sellLimit: () => LIMIT });
+
+    const sellerTrade = async (seller: { id: string }, itemAmountMinor: bigint) =>
+      createProposal(limited(), {
+        userId: seller.id,
+        role: 'SELLER',
+        categoryCode: 'PHONES',
+        itemAmountMinor,
+        itemSpec: SPEC,
+        addressId: await address(seller.id),
+        proofFileIds: [upload(seller.id), upload(seller.id)],
+      });
+    const sendTo = (from: { id: string }, tradeId: string, username: string) =>
+      sendProposal(limited(), {
+        userId: from.id,
+        tradeId,
+        counterparty: { channel: 'USERNAME', value: username },
+      });
+
+    it('refuses a seller over the per-trade limit, and allows exactly the limit', async () => {
+      const seller = await person('seller');
+      const over = await failure(sellerTrade(seller, 20_000_001n));
+      expect([over.status, over.code]).toEqual([422, 'SELL_LIMIT_PER_TRADE']);
+      expect(over.detail).toContain('₦200,000');
+      expect((await sellerTrade(seller, 20_000_000n)).status).toBe('DRAFT');
+    });
+
+    it('does not limit a certified merchant, nor anyone buying', async () => {
+      const merchant = await person('merchant');
+      await certify(merchant.id);
+      expect((await sellerTrade(merchant, 45_000_000n)).status).toBe('DRAFT');
+      const buyer = await person('buyer');
+      const bought = await createProposal(limited(), {
+        userId: buyer.id,
+        role: 'BUYER',
+        categoryCode: 'PHONES',
+        itemAmountMinor: 45_000_000n,
+        itemSpec: SPEC,
+        addressId: await address(buyer.id),
+      });
+      expect(bought.status).toBe('DRAFT');
+    });
+
+    it('adds up what was sent today and refuses the trade that would pass the daily total', async () => {
+      const seller = await person('seller');
+      await person('buyer');
+      for (const amount of [20_000_000n, 20_000_000n])
+        await sendTo(seller, (await sellerTrade(seller, amount)).id, 'buyer');
+      // Drafts are not commitments: this one is created, never sent, and does not count.
+      await sellerTrade(seller, 5_000_000n);
+
+      const over = await failure(sellerTrade(seller, 15_000_000n));
+      expect([over.status, over.code]).toEqual([422, 'SELL_LIMIT_DAILY']);
+      expect(over.detail).toContain('₦100,000 left');
+      expect((await sellerTrade(seller, 10_000_000n)).status).toBe('DRAFT');
+
+      const preview = await previewProposal(limited(), {
+        userId: seller.id,
+        role: 'SELLER',
+        categoryCode: 'PHONES',
+      });
+      expect(preview.sellLimit).toEqual({
+        perTradeMinor: '20000000',
+        perDayMinor: '50000000',
+        remainingTodayMinor: '10000000',
+      });
+    });
+
+    it('frees the allowance when a sent trade is cancelled', async () => {
+      const seller = await person('seller');
+      await person('buyer');
+      const first = await sellerTrade(seller, 20_000_000n);
+      await sendTo(seller, first.id, 'buyer');
+      await sendTo(seller, (await sellerTrade(seller, 20_000_000n)).id, 'buyer');
+      expect((await failure(sellerTrade(seller, 15_000_000n))).code).toBe('SELL_LIMIT_DAILY');
+
+      await cancelTrade(limited(), { userId: seller.id, tradeId: first.id });
+      expect((await sellerTrade(seller, 15_000_000n)).status).toBe('DRAFT');
+    });
+
+    it("does not count a buyer's request until the seller accepts it, and checks the limit then", async () => {
+      const seller = await person('seller');
+      const buyer = await person('buyer');
+      await sendTo(seller, (await sellerTrade(seller, 20_000_000n)).id, 'buyer');
+      await sendTo(seller, (await sellerTrade(seller, 20_000_000n)).id, 'buyer');
+
+      const request = await createProposal(limited(), {
+        userId: buyer.id,
+        role: 'BUYER',
+        categoryCode: 'PHONES',
+        itemAmountMinor: 15_000_000n,
+        itemSpec: SPEC,
+        addressId: await address(buyer.id),
+      });
+      await sendTo(buyer, request.id, 'seller');
+      // Unanswered, it uses none of the seller's allowance.
+      const preview = await previewProposal(limited(), {
+        userId: seller.id,
+        role: 'SELLER',
+        categoryCode: 'PHONES',
+      });
+      expect(preview.sellLimit?.remainingTodayMinor).toBe('10000000');
+
+      const view = await getTrade(limited(), { userId: seller.id, tradeId: request.id });
+      const refused = await failure(
+        acceptProposal(limited(), {
+          userId: seller.id,
+          tradeId: request.id,
+          termsVersionId: view.terms!.versionId,
+          addressId: await address(seller.id),
+          proofFileIds: [upload(seller.id), upload(seller.id)],
+        }),
+      );
+      expect(refused.code).toBe('SELL_LIMIT_DAILY');
+      expect((await getTrade(limited(), { userId: seller.id, tradeId: request.id })).status).toBe(
+        'AWAITING_ACCEPTANCE',
+      );
+    });
+
+    it('refuses a seller countering above the per-trade limit', async () => {
+      const seller = await person('seller');
+      const buyer = await person('buyer');
+      const request = await createProposal(limited(), {
+        userId: buyer.id,
+        role: 'BUYER',
+        categoryCode: 'PHONES',
+        itemAmountMinor: 15_000_000n,
+        itemSpec: SPEC,
+        addressId: await address(buyer.id),
+      });
+      await sendTo(buyer, request.id, 'seller');
+      const view = await getTrade(limited(), { userId: seller.id, tradeId: request.id });
+      const refused = await failure(
+        counterPropose(limited(), {
+          userId: seller.id,
+          tradeId: request.id,
+          expectedRevision: view.statusRevision,
+          itemAmountMinor: 25_000_000n,
+          addressId: await address(seller.id),
+        }),
+      );
+      expect(refused.code).toBe('SELL_LIMIT_PER_TRADE');
     });
   });
 });

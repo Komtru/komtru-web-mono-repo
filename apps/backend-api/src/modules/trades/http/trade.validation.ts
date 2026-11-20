@@ -88,4 +88,8 @@ export const tradeViewSchema = z.looseObject({
 
 export const previewResponseSchema = z.looseObject({
   allowedRoles: z.array(roleSchema),
+  /** The caller's selling limit (owner ruling 2026-11-20), in kobo; null for a certified merchant. */
+  sellLimit: z
+    .strictObject({ perTradeMinor: z.string(), perDayMinor: z.string(), remainingTodayMinor: z.string() })
+    .nullable(),
 });

@@ -207,17 +207,20 @@ list a trade.
 - **MVP:** yes
 - **Note:** Done for email, phone and handle. Social sign-in is F-014 and was deliberately left out of T-111.
 
-#### F-012 — App shell, navigation and the Buy/Sell mode switch
+#### F-012 — App shell and navigation
 
 - **Journey:** Arrive & verify
 - **Actor:** buyer, seller
 - **Absorbs:** T-110 (done), T-191 (done), T-222 (done)
 - **Backend scope:** None.
-- **Frontend scope:** App scaffold, the v2 desktop sidebar, tablet top nav, the Buy/Sell mode switch (Y2), the offline screen (OF1) and the v2 mobile TabBar. Built (T-110, T-191, T-222). _2 v2 screens._
+- **Frontend scope:** App scaffold, the v2 desktop sidebar, tablet top nav, the offline screen (OF1) and the v2 mobile TabBar. Built (T-110, T-191, T-222). _2 v2 screens._
 - **Status:** Done
 - **Depends on:** none
 - **MVP:** yes
-- **Note:** The shell every other consumer feature renders inside.
+- **Note:** The shell every other consumer feature renders inside. **Amended 2026-11-20 by the owner:**
+  the Buy/Sell mode switch (Y2) and its Sell-mode tabs (Shop, Orders, Listings) are removed. There are
+  no buyer and seller accounts; anyone buys and sells, and the side is chosen per trade on Start Trade
+  (F-082). Design `docs/superpowers/specs/2026-11-20-one-account-trade-sides-design.md`.
 
 #### F-013 — First-time onboarding walkthrough
 
@@ -581,12 +584,13 @@ list a trade.
 - **Absorbs:** T-056 (todo), T-122 (todo)
 - **Backend scope:** Listings lifecycle, images and stock (T-056).
 - **Frontend scope:** Shop and listings (Seller-1, Seller-4, Seller-5) and Edit Listing & Manage Stock (EL1, EL2). _5 v2 screens._
-- **Status:** Not started
+- **Status:** Withdrawn
 - **Depends on:** F-040
 - **MVP:** no
 - **Note:** **Deferred 2026-11-15 by the owner.** Listings and stock are out of the MVP: a trade is
   proposed party to party and never needs a catalogue. F-017 already proved this when multi-item
-  ordering was split out of it on 2026-11-09.
+  ordering was split out of it on 2026-11-09. **Withdrawn 2026-11-20 by the owner:** there is no
+  storefront. Merchant status lifts the selling limit (F-082); it does not open a shop.
 
 #### F-042 — Shop settings and catalogue import
 
@@ -595,11 +599,12 @@ list a trade.
 - **Absorbs:** T-202 (todo)
 - **Backend scope:** Served by F-040 and F-041.
 - **Frontend scope:** Supporting · Shop settings (SP-M25–SP-M29) and Catalogue import (SP-M34–SP-M36). _8 v2 screens._
-- **Status:** Not started
+- **Status:** Withdrawn
 - **Depends on:** F-041
 - **MVP:** no
 - **Note:** **Deferred 2026-11-15 by the owner**, with F-041. Catalogue import is bulk listing
-  creation, and a shop with no listings is the seller profile F-016 already draws.
+  creation, and a shop with no listings is the seller profile F-016 already draws. **Withdrawn
+  2026-11-20 by the owner**, with F-041.
 
 #### F-043 — Customers, tax documents and badges
 
@@ -611,7 +616,9 @@ list a trade.
 - **Status:** Not started
 - **Depends on:** F-016, F-039, F-041
 - **MVP:** no
-- **Note:** Deferred: storefront polish after the first merchants are live.
+- **Note:** Deferred: storefront polish after the first merchants are live. **2026-11-20:** the
+  storefront is withdrawn (F-041). What survives is tax documents and the merchant badge; Customers
+  goes with the shop. Re-scope before it is picked up.
 
 ### Journey: Account, trust & support
 
@@ -1079,6 +1086,26 @@ list a trade.
 - **Depends on:** F-045
 - **MVP:** yes
 - **Note:** Opened and done 2026-11-18; plan `docs/superpowers/plans/2026-11-18-f-081-verify-contacts.md`. Scope is **add + verify only**, the owner's call: changing an address that is already verified stays impossible, and that is what keeps this off the account-takeover path — `start` only ever writes an unverified row, so no request here can move a contact somebody already proved. No step-up gate, unlike F-045's phone change. Found because an account registered phone-first could never reach `CONTACT_VERIFIED`: the email captured at registration was never challenged, and no route existed to challenge it afterwards, so `POST /trades/:id/send` refused with "Confirm both your email address and your phone number". The whole-branch review on opus reproduced a working exploit against a live database, as F-045's did: `start` replaces the unproven row but `issueOtp` only supersedes challenges with the SAME destination hash, so two starts left the first code live against the second address — spending it verified an address the caller never controlled, locking its real owner out of it permanently through the global verified-unique index. Closed by binding `confirm` to the challenge's destination hash, the guard `mfa.service.ts`, `staff-invitation.service.ts` and `phone-change.service.ts` already carry. The same pass fixed a NULLS FIRST ordering bug that would have stopped `ALREADY_VERIFIED` firing once a channel held two rows, added the missing `OTP_ISSUED`/`OTP_FAILED`/`EMAIL_VERIFIED`/`PHONE_VERIFIED` audit rows, and restored 15 T-039 route tests an earlier commit had overwritten. Deferred: `start` remains an authenticated 5-per-hour "send to any address I name" primitive with no step-up (now audited), and its per-destination budget is shared across OTP purposes, so it can burn a stranger's send budget — both pre-existing properties of `issueOtp`, widened by this route.
+
+#### F-082 — One account: choose your side per trade, and the selling limit
+
+- **Journey:** Sell on Komtru
+- **Actor:** buyer, seller, merchant
+- **Backend scope:** A certified merchant can buy (the sell-only rule is gone). The selling limit for an
+  account without merchant status — ₦200,000 per trade and ₦2,000,000 per Lagos day, set in
+  `config/fees.yaml` under `casual_sell_limit` — enforced wherever the seller commits: creating a trade
+  as seller, sending it, countering and accepting. `POST /trades/preview` reports what is left today.
+- **Frontend scope:** No Buy/Sell switch and no Shop, Orders or Listings tabs. Start Trade asks "Are you
+  buying or selling?" and opens the buyer's or the seller's flow; the seller's flow warns over the limit
+  and points to merchant status. _No new reference screen._
+- **Status:** Built, awaiting staging check
+- **Depends on:** F-012, F-017, F-040
+- **MVP:** yes
+- **Note:** Opened 2026-11-20 by the owner. Design
+  `docs/superpowers/specs/2026-11-20-one-account-trade-sides-design.md`. A trade counts toward the day
+  once the seller has committed to it (accepted, or the seller's own terms are on the table), on the day
+  it was accepted or the seller's terms were put up; cancelled, declined, rejected, expired and
+  cancelled-and-refunded trades do not count.
 
 ## 3. Coverage table
 

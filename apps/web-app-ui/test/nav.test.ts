@@ -4,10 +4,7 @@ import {
   ANONYMOUS_VIEWER,
   BELL_HREF,
   currentTab,
-  landingFor,
-  modeCookie,
-  modeFor,
-  rootDestination,
+  ROOT_DESTINATION,
   searchDestination,
   tabsFor,
   type Viewer,
@@ -17,111 +14,58 @@ const viewer = (overrides: Partial<Viewer> = {}): Viewer => ({ ...ANONYMOUS_VIEW
 
 const labels = (items: readonly { label: string }[]) => items.map((item) => item.label);
 
-describe('the tab bar, the sidebar and the top nav (v2: DX-03, DX-04, TX-02)', () => {
-  it('is five destinations in Buy mode, the same five at every width', () => {
-    expect(labels(tabsFor(viewer(), 'buy'))).toEqual(['Home', 'Trades', 'Messages', 'Discover', 'Account']);
+describe('the tab bar, the sidebar and the top nav (v2: DX-03, TX-02)', () => {
+  it('is five destinations, the same five at every width', () => {
+    expect(labels(tabsFor(viewer()))).toEqual(['Home', 'Trades', 'Messages', 'Discover', 'Account']);
   });
 
-  it('defaults to Buy mode', () => {
-    expect(labels(tabsFor(viewer()))).toEqual(labels(tabsFor(viewer(), 'buy')));
+  // Owner ruling 2026-11-20: one account, one navigation. Buying and selling are sides of a trade.
+  it('is the same for a certified merchant and someone who has sold: there is no Sell mode', () => {
+    const everyone = labels(tabsFor(viewer()));
+    expect(labels(tabsFor(viewer({ certifiedMerchant: true })))).toEqual(everyone);
+    expect(labels(tabsFor(viewer({ hasSold: true })))).toEqual(everyone);
   });
 
-  it('is Shop, Orders, Listings, Messages and Account in Sell mode', () => {
-    expect(labels(tabsFor(viewer(), 'sell'))).toEqual(['Shop', 'Orders', 'Listings', 'Messages', 'Account']);
-  });
-
-  it('keeps five destinations in both modes, and Messages and Account in both', () => {
-    for (const mode of ['buy', 'sell'] as const) {
-      const tabs = tabsFor(viewer(), mode);
-      expect(tabs).toHaveLength(5);
-      expect(tabs.map((tab) => tab.id)).toEqual(expect.arrayContaining(['messages', 'account']));
-    }
+  it('has no Shop, Orders or Listings destination', () => {
+    for (const label of ['Shop', 'Orders', 'Listings'])
+      expect(labels(tabsFor(viewer({ certifiedMerchant: true })))).not.toContain(label);
   });
 
   it('takes Alerts out of the nav: it is the bell in the top bar', () => {
-    for (const mode of ['buy', 'sell'] as const) {
-      expect(labels(tabsFor(viewer(), mode))).not.toContain('Alerts');
-    }
+    expect(labels(tabsFor(viewer()))).not.toContain('Alerts');
     expect(BELL_HREF).toBe('/alerts');
   });
 
   it('points Discover at search, because the browse catalogue is deferred', () => {
-    expect(tabsFor(viewer(), 'buy').find((tab) => tab.id === 'discover')?.href).toBe('/search');
+    expect(tabsFor(viewer()).find((tab) => tab.id === 'discover')?.href).toBe('/search');
   });
 
   it('never draws a role switcher or a seller tab bar as a destination', () => {
-    const text = labels(tabsFor(viewer(), 'buy')).join(' ');
+    const text = labels(tabsFor(viewer())).join(' ');
     expect(text).not.toMatch(/switch|role|buyer|seller/i);
   });
-});
 
-describe('the mode a person is in', () => {
-  it('is what they chose, Buy when they have not chosen', () => {
-    expect(modeFor(viewer(), undefined)).toBe('buy');
-    expect(modeFor(viewer(), 'sell')).toBe('sell');
-    expect(modeFor(viewer(), 'buy')).toBe('buy');
-  });
-
-  it('ignores a value that is not a mode', () => {
-    expect(modeFor(viewer(), 'merchant')).toBe('buy');
-  });
-
-  it('is always Sell for a certified merchant, who cannot buy (design 6.3)', () => {
-    expect(modeFor(viewer({ certifiedMerchant: true }), 'buy')).toBe('sell');
-    expect(modeFor(viewer({ certifiedMerchant: true }), undefined)).toBe('sell');
-  });
-
-  it('gives a certified viewer the Sell tabs and the Sell landing whatever the cookie says', () => {
-    // TODO(T-111): the cookie is a view preference only. Buyer routes must be rejected on the server
-    // when the session says `canActAsBuyer === false`; nothing here enforces that.
-    const certified = viewer({ certifiedMerchant: true });
-    for (const chosen of ['buy', 'sell', 'merchant', undefined]) {
-      const mode = modeFor(certified, chosen);
-      expect(mode).toBe('sell');
-      expect(labels(tabsFor(certified, mode))).toEqual(['Shop', 'Orders', 'Listings', 'Messages', 'Account']);
-      expect(rootDestination(certified, chosen)).toBe('/shop');
-    }
-  });
-
-  it('opens the root at the landing screen of the mode the person is in', () => {
-    expect(rootDestination(viewer(), undefined)).toBe('/home');
-    expect(rootDestination(viewer(), 'buy')).toBe('/home');
-    expect(rootDestination(viewer(), 'sell')).toBe('/shop');
-  });
-
-  it('writes the mode cookie as a Lax preference, Secure everywhere but localhost', () => {
-    expect(modeCookie('sell', true)).toBe('komtru_mode=sell; path=/; max-age=31536000; samesite=lax; secure');
-    expect(modeCookie('buy', false)).toBe('komtru_mode=buy; path=/; max-age=31536000; samesite=lax');
-  });
-
-  it('opens each mode at its own landing screen', () => {
-    expect(landingFor('buy')).toBe('/home');
-    expect(landingFor('sell')).toBe('/shop');
+  it('opens the root at Home for everyone', () => {
+    expect(ROOT_DESTINATION).toBe('/home');
   });
 });
 
 describe('which tab a URL is under', () => {
   it('matches a tab’s own route and everything below it', () => {
-    expect(currentTab('/trades', viewer(), 'buy')).toBe('trades');
-    expect(currentTab('/trades/KMT-88213', viewer(), 'buy')).toBe('trades');
-    expect(currentTab('/account/verification', viewer(), 'buy')).toBe('account');
-    expect(currentTab('/home', viewer(), 'buy')).toBe('home');
+    expect(currentTab('/trades', viewer())).toBe('trades');
+    expect(currentTab('/trades/KMT-88213', viewer())).toBe('trades');
+    expect(currentTab('/account/verification', viewer())).toBe('account');
+    expect(currentTab('/home', viewer())).toBe('home');
   });
 
   it('matches whole segments, so /tradesmanship is under no tab', () => {
-    expect(currentTab('/tradesmanship', viewer(), 'buy')).toBeUndefined();
+    expect(currentTab('/tradesmanship', viewer())).toBeUndefined();
   });
 
   it('is undefined on a screen that belongs to no tab, rather than guessing one', () => {
-    expect(currentTab('/hub/register', viewer(), 'buy')).toBeUndefined();
-    expect(currentTab('/alerts', viewer(), 'buy')).toBeUndefined();
-  });
-
-  it('reads /shop and /orders under Sell mode only', () => {
-    expect(currentTab('/shop/listings', viewer(), 'sell')).toBe('shop');
-    expect(currentTab('/orders', viewer(), 'sell')).toBe('orders');
-    expect(currentTab('/orders', viewer(), 'buy')).toBeUndefined();
-    expect(currentTab('/browse', viewer(), 'sell')).toBeUndefined();
+    expect(currentTab('/hub/register', viewer())).toBeUndefined();
+    expect(currentTab('/alerts', viewer())).toBeUndefined();
+    expect(currentTab('/shop', viewer())).toBeUndefined();
   });
 });
 
@@ -215,8 +159,6 @@ describe('Account', () => {
 
   it('is the only place the Park Agent entry point exists', () => {
     // Not a tab, not a role: design §6.3 puts it in Account and nowhere else.
-    expect(tabsFor(viewer({ parkAgent: 'active' }), 'buy').map((tab) => tab.href)).not.toContain(
-      links.parkUrl,
-    );
+    expect(tabsFor(viewer({ parkAgent: 'active' })).map((tab) => tab.href)).not.toContain(links.parkUrl);
   });
 });

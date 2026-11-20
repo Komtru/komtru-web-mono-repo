@@ -1,6 +1,6 @@
 import type { Metadata } from 'next';
 import { AppShell } from '../../../src/shell/AppShell';
-import { resolveMode, resolveViewer } from '../../../src/shell/viewer';
+import { resolveViewer } from '../../../src/shell/viewer';
 import { SearchTrades } from '../../../src/home/SearchTrades';
 
 export const metadata: Metadata = { title: 'Search' };
@@ -17,10 +17,9 @@ export default async function SearchPage({
   const { q } = await searchParams;
   const initialQuery = typeof q === 'string' ? q : '';
   const viewer = await resolveViewer();
-  const mode = await resolveMode(viewer);
 
   return (
-    <AppShell tab="discover" viewer={viewer} mode={mode}>
+    <AppShell tab="discover" viewer={viewer}>
       <SearchTrades key={initialQuery} initialQuery={initialQuery} />
     </AppShell>
   );

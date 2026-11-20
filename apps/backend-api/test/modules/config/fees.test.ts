@@ -27,7 +27,7 @@ const thrownBy = (source: string): Error => {
 describe('getFeeSchedule', () => {
   it('reads the committed file and exposes it', () => {
     const schedule = getFeeSchedule();
-    expect(schedule.version).toBe('2026-10-05.1');
+    expect(schedule.version).toBe('2026-11-20.1');
     expect(schedule.buyerProtectionFee.rateBps).toBe(150);
     expect(schedule.parkCashHandlingFee).toEqual({ minMinor: 30000n, maxMinor: 50000n });
   });

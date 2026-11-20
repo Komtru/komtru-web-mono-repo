@@ -1,6 +1,6 @@
 import type { Metadata } from 'next';
 import { AppShell } from '../../../src/shell/AppShell';
-import { resolveMode, resolveViewer } from '../../../src/shell/viewer';
+import { resolveViewer } from '../../../src/shell/viewer';
 import { FindTrade } from '../../../src/home/FindTrade';
 
 export const metadata: Metadata = { title: 'Find a Trade' };
@@ -17,10 +17,9 @@ export default async function FindPage({
   const { code } = await searchParams;
   const initialCode = typeof code === 'string' ? code : undefined;
   const viewer = await resolveViewer();
-  const mode = await resolveMode(viewer);
 
   return (
-    <AppShell tab="discover" viewer={viewer} mode={mode}>
+    <AppShell tab="discover" viewer={viewer}>
       <FindTrade key={initialCode ?? ''} {...(initialCode === undefined ? {} : { initialCode })} />
     </AppShell>
   );

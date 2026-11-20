@@ -7,7 +7,7 @@
 #   3. Open a PR. Git history is the audit trail.
 #   4. Deploy. Trades and Park parcels already created keep the fees they were snapshotted under.
 # Full runbook: docs/runbooks/fees.md
-version: 2026-10-05.1
+version: 2026-11-20.1
 currency: NGN
 
 buyer_protection_fee: # paid by the buyer on top of the item price (HTML V1)
@@ -32,3 +32,7 @@ park_cash_handling_fee: # INFORMATIONAL ONLY (C23): shown to buyers, never charg
 
 payout_fee: # charged on each seller withdrawal
   amount_minor: 0
+
+casual_sell_limit: # NOT a fee. Owner ruling 2026-11-20: what an account without merchant status may sell.
+  per_trade_minor: 20000000 # ₦200,000 item value on one trade
+  per_day_minor: 200000000 # ₦2,000,000 agreed across all its selling trades in one Lagos calendar day

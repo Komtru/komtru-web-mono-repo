@@ -134,8 +134,8 @@ export function About(props: {
         />
       )}
       {!props.canBuy && (
-        <WarnBanner title="Merchants sell on Komtru">
-          Your account is a certified merchant account. Merchants sell; they don&apos;t buy.
+        <WarnBanner title="You can't buy on this account right now">
+          This account can&apos;t take the buyer side of a trade at the moment.
         </WarnBanner>
       )}
     </>

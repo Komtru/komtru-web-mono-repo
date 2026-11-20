@@ -41,6 +41,7 @@ import { type Attached, ProofUpload } from '../ProofUpload';
 import { KomtruTerms, Sent } from './BuyerStages';
 import { Agreement, ItemFields, StageHeader } from './parts';
 import { allowedPromises, detectCategory, parkAvailable, parseCharge, sellerSpec } from './request';
+import { MERCHANT_STATUS_HREF, sellLimitWarning } from './sellLimit';
 
 export const SELLER_STAGES = ['About', 'Item & delivery', 'Terms', 'Review'] as const;
 const TITLE = 'Create Trade';
@@ -122,6 +123,7 @@ export function SellerStart({
   };
   const canSell = preview.data === undefined || preview.data.allowedRoles.includes('SELLER');
   const amounts = preview.data?.fees[0]?.snapshot.amounts;
+  const overLimit = sellLimitWarning(preview.data?.sellLimit, kobo);
 
   const check = async (): Promise<LookupResult | undefined> => {
     if (party === undefined) return undefined;
@@ -337,7 +339,7 @@ export function SellerStart({
           )}
           {merchantBuyer && (
             <WarnBanner title="They can't be the buyer">
-              This is a certified merchant. Merchants sell on Komtru; they don&apos;t buy. Name someone else.
+              This account can&apos;t take the buyer side of a trade right now. Name someone else.
             </WarnBanner>
           )}
           {lookedNow?.found === false && lookedNow.canInvite && (
@@ -404,6 +406,14 @@ export function SellerStart({
                 ...standards.data.map((item) => ({ value: item.categoryCode, label: item.categoryName })),
               ]}
             />
+          )}
+          {overLimit !== undefined && (
+            <WarnBanner title={overLimit.title}>
+              {overLimit.body}{' '}
+              <a href={MERCHANT_STATUS_HREF} className="underline">
+                About merchant status
+              </a>
+            </WarnBanner>
           )}
           {!canSell && (
             <WarnBanner title="You can't sell on this account">
@@ -614,7 +624,7 @@ export function SellerStart({
             <Button
               type="button"
               onClick={() => void next()}
-              disabled={busy || (stage === 0 && (merchantBuyer || cannotInvite))}
+              disabled={busy || (stage === 0 && (merchantBuyer || cannotInvite || overLimit !== undefined))}
             >
               {stage === 2 ? 'Review' : 'Continue'}
             </Button>
@@ -634,7 +644,11 @@ export function SellerStart({
           </>
         ) : (
           <>
-            <Button type="button" onClick={() => void submit()} disabled={busy || amounts === undefined}>
+            <Button
+              type="button"
+              onClick={() => void submit()}
+              disabled={busy || amounts === undefined || overLimit !== undefined}
+            >
               {busy ? 'Sending…' : 'Send to buyer'}
             </Button>
             <Button

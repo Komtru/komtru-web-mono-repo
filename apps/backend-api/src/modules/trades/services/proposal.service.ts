@@ -45,6 +45,8 @@ import { tradeEvidenceMedia, tradeProofMedia } from '../infrastructure/postgres/
 import { tradeTermsVersions } from '../infrastructure/postgres/schema/terms.js';
 import { trades } from '../infrastructure/postgres/schema/trades.js';
 import { readTradePrincipal, recordEligibilityBlock } from '../infrastructure/postgres/principals.js';
+import { lockSellerAllowance, sellingTodayMinor } from '../infrastructure/postgres/sellLimit.js';
+import { assertWithinSellLimit, remainingToday, sellLimitFor } from '../domain/sellLimit.js';
 import { withTradeCode } from '../infrastructure/postgres/tradeCodes.js';
 import { applyTransition } from '../infrastructure/postgres/transitions.js';
 import type { TradeDeps, TradeStandard } from './ports.js';
@@ -90,6 +92,31 @@ async function refuseMerchantBuyer(
     return true;
   });
   if (blocked) throw merchantCannotBuyError(input.path);
+}
+
+/**
+ * The selling limit (owner ruling 2026-11-20), checked wherever the seller commits to terms:
+ * creating a trade as seller, sending it, countering, and accepting. Runs inside the caller's
+ * transaction and holds a per-seller lock to its end, so two commitments at once are decided one
+ * after the other. A certified merchant passes without a read.
+ */
+async function assertSellerWithinLimit(
+  deps: Pick<TradeDeps, 'sellLimit'>,
+  tx: Tx,
+  input: { sellerUserId: string; amountMinor: Kobo; tradeId?: string },
+): Promise<void> {
+  const seller = await readTradePrincipal(tx, input.sellerUserId);
+  const limit = sellLimitFor(seller.merchantCapabilityStatus, deps.sellLimit());
+  if (limit === null) return;
+  // The per-trade cap needs no total, so it is answered before taking the lock.
+  assertWithinSellLimit(limit, input.amountMinor, 0n);
+  await lockSellerAllowance(tx, input.sellerUserId);
+  const soldToday = await sellingTodayMinor(tx, {
+    sellerUserId: input.sellerUserId,
+    at: new Date(),
+    ...(input.tradeId ? { excludeTradeId: input.tradeId } : {}),
+  });
+  assertWithinSellLimit(limit, input.amountMinor, soldToday);
 }
 
 const proofRequirement = (standard: TradeStandard): ProofRequirement => standard.proofMedia;
@@ -230,7 +257,11 @@ export interface PreviewInput {
  */
 export async function previewProposal(deps: TradeDeps, input: PreviewInput) {
   const standard = await deps.standards.current(input.categoryCode);
-  const principal = await deps.db.transaction((tx) => readTradePrincipal(tx, input.userId));
+  const { principal, soldToday } = await deps.db.transaction(async (tx) => ({
+    principal: await readTradePrincipal(tx, input.userId),
+    soldToday: await sellingTodayMinor(tx, { sellerUserId: input.userId, at: new Date() }),
+  }));
+  const sellLimit = sellLimitFor(principal.merchantCapabilityStatus, deps.sellLimit());
   const allowedRoles: TradeInitiatorRole[] = canActAsBuyer(principal) ? ['BUYER', 'SELLER'] : ['SELLER'];
   const amount =
     input.itemAmountMinor !== undefined && input.itemAmountMinor > 0n ? input.itemAmountMinor : null;
@@ -238,6 +269,16 @@ export async function previewProposal(deps: TradeDeps, input: PreviewInput) {
     input.role === 'SELLER' ? [sellerKindOf(principal.merchantCapabilityStatus)] : ['CASUAL', 'MERCHANT'];
   return {
     allowedRoles,
+    // What this person may still sell, for the Start Trade warnings; null when they have no limit.
+    sellLimit:
+      sellLimit === null
+        ? null
+        : {
+            // Strings, as every amount in a response is: JSON has no bigint.
+            perTradeMinor: sellLimit.perTradeMinor.toString(),
+            perDayMinor: sellLimit.perDayMinor.toString(),
+            remainingTodayMinor: (remainingToday(sellLimit, soldToday) ?? 0n).toString(),
+          },
     standard: {
       categoryCode: standard.categoryCode,
       versionNumber: standard.versionNumber,
@@ -284,6 +325,11 @@ export async function createProposal(deps: TradeDeps, input: CreateProposalInput
   return deps.db.transaction(async (tx) => {
     // First: see lockUserForTrade. A closing account must not gain a trade behind the closure's back.
     await lockUserForTrade(tx, input.userId);
+    if (input.role === 'SELLER')
+      await assertSellerWithinLimit(deps, tx, {
+        sellerUserId: input.userId,
+        amountMinor: input.itemAmountMinor,
+      });
     const address = await snapshotAddress(deps, tx, input.userId, input.addressId, input.role);
 
     const trade = await withTradeCode(tx, async (tradeCode) => {
@@ -531,6 +577,11 @@ async function sendInTransaction(
     await snapshotAddress(deps, tx, input.userId, own?.source_address_id, trade.initiatorRole);
 
     if (trade.initiatorRole === 'SELLER') {
+      await assertSellerWithinLimit(deps, tx, {
+        sellerUserId: input.userId,
+        amountMinor: terms.itemAmountMinor,
+        tradeId: trade.id,
+      });
       if (input.proofFileIds?.length) await attachProof(deps, tx, trade, input.userId, input.proofFileIds);
       await assertSellerProof(deps, tx, trade.id, standard);
     }
@@ -679,6 +730,13 @@ export async function counterPropose(deps: TradeDeps, input: CounterInput): Prom
         [{ path: 'itemAmountMinor', message: 'Change at least one term' }],
       );
     }
+
+    if (role === 'SELLER')
+      await assertSellerWithinLimit(deps, tx, {
+        sellerUserId: input.userId,
+        amountMinor: amount,
+        tradeId: trade.id,
+      });
 
     const version = await insertNextVersion(tx, current, {
       proposedByUserId: input.userId,
@@ -829,6 +887,12 @@ export async function acceptProposal(deps: TradeDeps, input: AcceptInput): Promi
       });
     }
 
+    if (side === 'SELLER')
+      await assertSellerWithinLimit(deps, tx, {
+        sellerUserId: input.userId,
+        amountMinor: accepted.itemAmountMinor,
+        tradeId: trade.id,
+      });
     if (side === 'SELLER' && input.proofFileIds?.length) {
       await attachProof(deps, tx, trade, input.userId, input.proofFileIds);
     }

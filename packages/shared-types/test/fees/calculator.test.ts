@@ -174,7 +174,7 @@ const AT = new Date('2026-10-05T09:00:00.000Z');
 describe('snapshotFees', () => {
   it('carries the version, the amounts and the terms they came from', () => {
     expect(snapshotFees(5_000_000n, 'CASUAL', committed, AT)).toEqual({
-      version: '2026-10-05.1',
+      version: '2026-11-20.1',
       currency: 'NGN',
       takenAt: '2026-10-05T09:00:00.000Z',
       sellerKind: 'CASUAL',
@@ -248,7 +248,7 @@ describe('snapshotFees', () => {
 describe('snapshotParkCashFee', () => {
   it('snapshots the range as display-only amounts', () => {
     expect(snapshotParkCashFee(committed, AT)).toEqual({
-      version: '2026-10-05.1',
+      version: '2026-11-20.1',
       currency: 'NGN',
       takenAt: '2026-10-05T09:00:00.000Z',
       minMinor: '30000',
@@ -260,7 +260,7 @@ describe('snapshotParkCashFee', () => {
 describe('snapshotPayoutFee (T-073)', () => {
   it('freezes the per-withdrawal fee with the schedule version it came from', () => {
     expect(snapshotPayoutFee(committed, AT)).toEqual({
-      version: '2026-10-05.1',
+      version: '2026-11-20.1',
       currency: 'NGN',
       takenAt: '2026-10-05T09:00:00.000Z',
       amountMinor: 0n,

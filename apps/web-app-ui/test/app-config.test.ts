@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { appSpec } from '../src/app-config';
-import { landingFor } from '../src/shell/nav';
+import { ROOT_DESTINATION } from '../src/shell/nav';
 
 /** `.env.example` is the documented environment; a config that cannot be built from it is wrong. */
 const envExample = (): Record<string, string> => {
@@ -30,8 +30,8 @@ describe('@komtru/web-app-ui app spec', () => {
     });
   });
 
-  it('opens on Buy mode’s landing screen, not the retired Trades-as-home', () => {
-    expect(appSpec.homePath).toBe(landingFor('buy'));
+  it('opens on Home, where the root sends everyone, not the retired Trades-as-home', () => {
+    expect(appSpec.homePath).toBe(ROOT_DESTINATION);
     expect(appSpec.homePath).toBe('/home');
   });
 

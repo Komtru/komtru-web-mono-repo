@@ -6,7 +6,7 @@ import { AccountSections } from '../../../src/shell/AccountSections';
 import { AppShell } from '../../../src/shell/AppShell';
 import { ACCOUNT_ICONS } from '../../../src/shell/icons';
 import { accountItemsFor } from '../../../src/shell/nav';
-import { resolveMode, resolveViewer } from '../../../src/shell/viewer';
+import { resolveViewer } from '../../../src/shell/viewer';
 
 export const metadata: Metadata = { title: 'Account' };
 
@@ -31,7 +31,6 @@ export const dynamic = 'force-dynamic';
  */
 export default async function AccountPage(): Promise<React.JSX.Element> {
   const viewer = await resolveViewer();
-  const mode = await resolveMode(viewer);
   const links = { parkUrl: readParkUrl(webAppEnv()) };
 
   const nav = accountItemsFor(viewer, links).map<NavItem>((item) => ({
@@ -43,13 +42,13 @@ export default async function AccountPage(): Promise<React.JSX.Element> {
   }));
 
   return (
-    <AppShell tab="account" viewer={viewer} mode={mode} nav={{ label: 'Account', items: nav }}>
+    <AppShell tab="account" viewer={viewer} nav={{ label: 'Account', items: nav }}>
       <h1 className="mb-[4px] font-display text-[17px] font-semibold md:text-[15px]">Account</h1>
       <p className="mb-[16px] text-[12px] leading-[1.6] text-slate">
         Your details, what Komtru has verified, and how you get paid.
       </p>
       <div className="max-w-[480px]">
-        <StatusNotice seller={mode === 'sell'} />
+        <StatusNotice seller={viewer.hasSold} />
       </div>
       <AccountSections viewer={viewer} links={links} />
     </AppShell>

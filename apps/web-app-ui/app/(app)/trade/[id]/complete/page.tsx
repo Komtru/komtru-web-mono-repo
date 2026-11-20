@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import { AppShell } from '../../../../../src/shell/AppShell';
-import { resolveMode, resolveViewer } from '../../../../../src/shell/viewer';
+import { resolveViewer } from '../../../../../src/shell/viewer';
 import { CompleteRequest } from '../../../../../src/trade/create/CompleteRequest';
 
 export const metadata: Metadata = { title: 'Complete the Details' };
@@ -20,10 +20,9 @@ export default async function CompleteRequestPage({
   const { id } = await params;
   if (!UUID.test(id)) notFound();
   const viewer = await resolveViewer();
-  const mode = await resolveMode(viewer);
 
   return (
-    <AppShell tab="trades" viewer={viewer} mode={mode}>
+    <AppShell tab="trades" viewer={viewer}>
       <CompleteRequest id={id} />
     </AppShell>
   );

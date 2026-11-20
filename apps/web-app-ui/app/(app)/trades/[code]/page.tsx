@@ -1,6 +1,6 @@
 import type { Metadata } from 'next';
 import { AppShell } from '../../../../src/shell/AppShell';
-import { resolveMode, resolveViewer } from '../../../../src/shell/viewer';
+import { resolveViewer } from '../../../../src/shell/viewer';
 import { TradeByCode } from '../../../../src/trade/TradeByCode';
 
 /** The path segment as typed. A malformed escape is left as it is, and fails as "not a Trade Code". */
@@ -25,10 +25,9 @@ export default async function TradeByCodePage({
 }): Promise<React.JSX.Element> {
   const { code } = await params;
   const viewer = await resolveViewer();
-  const mode = await resolveMode(viewer);
 
   return (
-    <AppShell tab="trades" viewer={viewer} mode={mode}>
+    <AppShell tab="trades" viewer={viewer}>
       <TradeByCode typed={typedCode(code)} />
     </AppShell>
   );

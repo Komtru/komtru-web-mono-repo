@@ -420,7 +420,7 @@ function ShipForm({ trade }: { trade: TradeView }): React.JSX.Element {
             {ship.isPending ? shipLabel : 'Mark as dispatched'}
           </Button>
           <Button asChild variant="secondary">
-            <a href={ORDERS_HREF}>Back to orders</a>
+            <a href={TRADES_HREF}>Back to trades</a>
           </Button>
         </ActionStack>
       </Frame>
@@ -450,7 +450,7 @@ function ShipForm({ trade }: { trade: TradeView }): React.JSX.Element {
   );
 }
 
-const ORDERS_HREF = '/orders';
+const TRADES_HREF = '/trades';
 const DISPATCH_SUBTITLE = 'Payment is protected. Confirm the route and hand the item over.';
 /** The reminders DX-19 draws; the same two as the phone's dispatch step. The platform's gates are the evidence below. */
 const CHECKLIST = ['Package sealed and labelled', 'Waybill or courier receipt ready'] as const;

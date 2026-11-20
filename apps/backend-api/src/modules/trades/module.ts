@@ -50,6 +50,7 @@ import {
   postgresProofFiles,
   postgresRevokeProofAccess,
   postgresStandards,
+  casualSellLimit,
   snapshotFees,
   type TradeDeps,
 } from './services/ports.js';
@@ -111,6 +112,7 @@ export function buildTradeDeps({
     grantProofAccess: postgresGrantProofAccess(db),
     revokeProofAccess: postgresRevokeProofAccess(db),
     snapshotFees,
+    sellLimit: casualSellLimit,
     graceHours: () => accessor.getInteger('trades', 'unconfirmed_delivery_grace_hours'),
     displays: postgresCounterpartyDisplays(avatarUrls ?? (() => Promise.resolve(new Map()))),
   };

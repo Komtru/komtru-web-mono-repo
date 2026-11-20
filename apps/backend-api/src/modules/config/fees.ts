@@ -82,6 +82,12 @@ export const feeScheduleSource = (): string => feesPath;
 export const snapshotParkCashFee = (takenAt?: Date): ParkCashFeeSnapshot =>
   snapshotParkCash(schedule, takenAt);
 
+/**
+ * What an account without merchant status may sell (owner ruling 2026-11-20). Live, not snapshotted:
+ * it gates a new commitment, and a trade already agreed is never re-checked against a changed limit.
+ */
+export const casualSellLimit = (): FeeSchedule['casualSellLimit'] => schedule.casualSellLimit;
+
 /** The live schedule's snapshot, for a trade whose terms are being accepted now. */
 export const snapshotFees = (itemMinor: Kobo, sellerKind: SellerKind, takenAt?: Date): FeeSnapshot =>
   snapshotTradeFees(itemMinor, sellerKind, schedule, takenAt);

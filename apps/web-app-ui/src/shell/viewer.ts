@@ -1,6 +1,6 @@
 import { createSessionSealer, SESSION_COOKIE, SESSION_SECRET_ENV, type SessionSealer } from '@komtru/app-kit';
 import { cookies } from 'next/headers';
-import { ANONYMOUS_VIEWER, MODE_COOKIE, modeFor, type Mode, type Viewer } from './nav';
+import { ANONYMOUS_VIEWER, type Viewer } from './nav';
 import { viewerFromHint } from './viewer-facts';
 
 let sealer: { secret: string; sealer: SessionSealer } | undefined;
@@ -33,12 +33,4 @@ export async function resolveViewer(): Promise<Viewer> {
   } catch {
     return ANONYMOUS_VIEWER;
   }
-}
-
-/**
- * The mode the switch last chose, or the one the viewer is held to: a certified merchant is always in
- * Sell. Reads the request's cookies, so a page that calls it is rendered per request.
- */
-export async function resolveMode(viewer: Viewer): Promise<Mode> {
-  return modeFor(viewer, (await cookies()).get(MODE_COOKIE)?.value);
 }

@@ -31,8 +31,8 @@ describe('Verified merchant (SO5)', () => {
     expect(await screen.findByRole('heading', { name: 'You’re a verified merchant' })).toBeDefined();
     expect(screen.getByText(/Electronics · Verified Merchant/)).toBeDefined();
     expect(screen.getByText(/Trade Standards for this category apply automatically/)).toBeDefined();
-    const action = screen.getByRole('link', { name: 'Go to your shop' });
-    expect(action.getAttribute('href')).toBe('/shop');
+    const action = screen.getByRole('link', { name: 'Start selling' });
+    expect(action.getAttribute('href')).toBe('/trade/new?side=sell');
     await expectNoAxeViolations(container, SHELL_RULES);
   });
 

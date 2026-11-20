@@ -30,7 +30,7 @@ describe('GET /v1/config/fees', () => {
   it('serves the current schedule for display, with money as strings', async () => {
     const response = await request(app).get('/v1/config/fees').expect(200);
     expect(response.body).toEqual({
-      version: '2026-10-05.1',
+      version: '2026-11-20.1',
       currency: 'NGN',
       buyerProtectionFee: { rateBps: 150, minMinor: '0', maxMinor: null, refundableOnFullRefund: true },
       sellerCommission: { rateBps: 0, minMinor: '0', maxMinor: null },

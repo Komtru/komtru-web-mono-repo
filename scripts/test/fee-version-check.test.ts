@@ -16,7 +16,7 @@ describe('findVersionProblems', () => {
   });
 
   it('accepts a value change with a version bump', () => {
-    const head = base.replace('rate_bps: 150', 'rate_bps: 200').replace('2026-10-05.1', '2026-10-05.2');
+    const head = base.replace('rate_bps: 150', 'rate_bps: 200').replace('2026-11-20.1', '2026-11-20.2');
     expect(findVersionProblems(base, head)).toEqual([]);
   });
 
@@ -47,12 +47,12 @@ describe('findVersionProblems', () => {
   });
 
   it('rejects a version that goes backwards', () => {
-    const head = base.replace('rate_bps: 150', 'rate_bps: 200').replace('2026-10-05.1', '2026-10-04.9');
+    const head = base.replace('rate_bps: 150', 'rate_bps: 200').replace('2026-11-20.1', '2026-11-19.9');
     expect(findVersionProblems(base, head)).toEqual([expect.stringContaining('version')]);
   });
 
   it('rejects a version bumped on its own counter but to a lower one', () => {
-    const head = base.replace('2026-10-05.1', '2026-10-05.0');
+    const head = base.replace('2026-11-20.1', '2026-11-20.0');
     expect(findVersionProblems(base, head)).toEqual([expect.stringContaining('version')]);
   });
 

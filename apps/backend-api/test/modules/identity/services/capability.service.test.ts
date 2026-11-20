@@ -18,9 +18,9 @@ const serviceWith = (facts: Partial<BuyerFacts> = {}) => {
 };
 
 describe('capability service: canActAsBuyer(userId)', () => {
-  it('is false while an ACTIVE MERCHANT capability exists', async () => {
+  it('is true for a certified merchant: merchant status only lifts the selling limit (2026-11-20)', async () => {
     const { service, lookup } = serviceWith({ merchantStatus: 'ACTIVE' });
-    await expect(service.canActAsBuyer('user-1')).resolves.toBe(false);
+    await expect(service.canActAsBuyer('user-1')).resolves.toBe(true);
     expect(lookup).toHaveBeenCalledWith('user-1');
   });
 
@@ -38,8 +38,8 @@ describe('capability service: canActAsBuyer(userId)', () => {
     },
   );
 
-  it('offers no bypass: a second argument changes nothing for an ACTIVE merchant', async () => {
-    const { service } = serviceWith({ merchantStatus: 'ACTIVE' });
+  it('offers no bypass: a second argument changes nothing for a suspended account', async () => {
+    const { service } = serviceWith({ userStatus: 'SUSPENDED' });
     // The type has one parameter; call it as an untyped caller (JavaScript, a cast) would.
     // eslint-disable-next-line @typescript-eslint/unbound-method
     const method = service.canActAsBuyer;
@@ -57,7 +57,7 @@ describe('capability service: canActAsBuyer(userId)', () => {
   it('is exported from the identity barrel without shadowing the pure rule', () => {
     expect(identity).toHaveProperty('createCapabilityService');
     expect(identity).toHaveProperty('postgresBuyerFacts');
-    expect(identity.canActAsBuyer('ACTIVE')).toBe(false);
+    expect(identity.canActAsBuyer('ACTIVE')).toBe(true);
     expect(identity.canActAsBuyer.length).toBe(1);
   });
 });

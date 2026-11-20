@@ -32,7 +32,8 @@ describe.runIf(infraEnabled)('readTradePrincipal', () => {
       merchantCapabilityStatus: 'ACTIVE',
       verificationLevel: 'IDENTITY_VERIFIED',
     });
-    expect(canActAsBuyer(principal)).toBe(false);
+    // Owner ruling 2026-11-20: a certified merchant buys like anyone else.
+    expect(canActAsBuyer(principal)).toBe(true);
   });
 
   it('reports no capability for an account that never applied', async () => {
@@ -115,46 +116,7 @@ describe.runIf(infraEnabled)('recordEligibilityBlock', () => {
 describe.runIf(infraEnabled)('blockBuyerOrPass', () => {
   const t = useTestDatabase();
 
-  // The acceptance criterion is "fails with a specific error AND publishes": two separate calls are
-  // two a caller can get half right, so one function does both.
-  it('records and raises in one call, so neither half can be forgotten', async () => {
-    const buyer = await insertUser(t.app());
-    const seller = await insertUser(t.app());
-    const tradeId = await insertTrade(t.app(), { buyer, seller });
-    await insertRow(t.app(), 'identity.user_capabilities', {
-      user_id: buyer,
-      capability: 'MERCHANT',
-      status: 'ACTIVE',
-    });
-
-    try {
-      await t.db().transaction(async (tx) => {
-        const principal = await readTradePrincipal(tx, buyer);
-        await blockBuyerOrPass(tx, principal, 'ACCEPT_AS_BUYER', tradeId);
-      });
-      expect.unreachable('should have blocked');
-    } catch (error) {
-      expect((error as ApiError).code).toBe('MERCHANT_CANNOT_BUY');
-    }
-
-    // The throw unwound the transaction, so nothing was recorded — which is why the service must
-    // record in its own transaction before raising. Here the recorded half is checked by calling it
-    // where the caller would: inside a transaction that commits the evidence.
-    await t.db().transaction(async (tx) => {
-      const principal = await readTradePrincipal(tx, buyer);
-      await recordEligibilityBlock(tx, {
-        tradeId,
-        gate: 'MERCHANT_CANNOT_BUY',
-        path: 'ACCEPT_AS_BUYER',
-        actorId: principal.userId,
-      });
-    });
-    const { rows } = await t
-      .app()
-      .query<{ actor_type: string }>('SELECT actor_type FROM trade.trade_activity');
-    expect(rows).toEqual([{ actor_type: 'BUYER' }]);
-  });
-
+  // Nothing trips the gate since merchants may buy (2026-11-20), so only the pass half is live.
   it('passes an account that may buy, and records nothing', async () => {
     const buyer = await insertUser(t.app());
     const seller = await insertUser(t.app());
@@ -191,7 +153,7 @@ describe.runIf(infraEnabled)('certification mid-trade', () => {
       status: 'ACTIVE',
     });
     const principal = await t.db().transaction((tx) => readTradePrincipal(tx, buyer));
-    expect(canActAsBuyer(principal)).toBe(false);
+    expect(canActAsBuyer(principal)).toBe(true);
 
     const run = (action: 'BEGIN_CUSTODY' | 'DELIVERY_SIGNAL' | 'COMPLETE' | 'SETTLE', to: string) =>
       t.db().transaction((tx) =>

@@ -48,31 +48,6 @@ export const TAB_ICONS: Record<TabId, React.ReactNode> = {
       <path d="M5 20c0-3.5 3-6 7-6s7 2.5 7 6" />
     </svg>
   ),
-  /** S1's `.tab` — the storefront grid. Sell mode's first destination. */
-  shop: (
-    <svg {...TAB}>
-      <rect x="3" y="3" width="8" height="8" rx="1.5" />
-      <rect x="13" y="3" width="8" height="5" rx="1.5" />
-      <rect x="13" y="10" width="8" height="11" rx="1.5" />
-      <rect x="3" y="13" width="8" height="8" rx="1.5" />
-    </svg>
-  ),
-  /** The parcel: an order to pack and send. */
-  orders: (
-    <svg {...TAB} strokeLinejoin="round">
-      <path d="M4 8l8-4 8 4v8l-8 4-8-4V8z" />
-      <path d="M4 8l8 4 8-4M12 12v8" />
-    </svg>
-  ),
-  /** A list of things for sale. */
-  listings: (
-    <svg {...TAB}>
-      <path d="M9 6h11M9 12h11M9 18h11" />
-      <circle cx="4.5" cy="6" r="1" />
-      <circle cx="4.5" cy="12" r="1" />
-      <circle cx="4.5" cy="18" r="1" />
-    </svg>
-  ),
 };
 
 /** The top bar's bell (`.tb-icon`): where Alerts went when it left the nav. */

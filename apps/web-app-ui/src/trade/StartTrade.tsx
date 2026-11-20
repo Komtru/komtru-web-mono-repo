@@ -96,7 +96,7 @@ export function StartTrade({ defaultRole = 'BUYER', counterparty = '' }: StartTr
   const category = standard?.categoryCode ?? '';
   const kobo = parseAmount(amount);
 
-  // The platform says which sides this person may take (a certified merchant sells only) and what the
+  // The platform says which sides this person may take  and what the
   // fees come to. Asked again when the category, side or price changes; stored nowhere.
   const { mutate: runPreview } = preview;
   useEffect(() => {
@@ -357,8 +357,8 @@ export function StartTrade({ defaultRole = 'BUYER', counterparty = '' }: StartTr
         )}
         {merchantBuyer && (
           <WarnBanner title="They can't be the buyer">
-            This is a certified merchant. Merchants sell on Komtru; they don&apos;t buy. Switch to buying, or
-            name someone else.
+            This account can&apos;t take the buyer side of a trade right now. Switch to buying, or name
+            someone else.
           </WarnBanner>
         )}
         {lookedNow?.found === false && lookedNow.canInvite && (

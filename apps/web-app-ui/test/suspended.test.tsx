@@ -87,7 +87,7 @@ describe('Shop suspended (AS2)', () => {
   it('says the shop is paused and what still works, from what the platform says the person can do', async () => {
     answerWith(api.call, { 'GET /me': suspended() });
     const { container } = renderWithApi(api.call, <Suspended seller />);
-    expect(await screen.findByRole('heading', { name: 'Your shop is suspended' })).toBeDefined();
+    expect(await screen.findByRole('heading', { name: 'Your selling is suspended' })).toBeDefined();
     expect(
       screen.getByText(
         'You can still sign in and see your orders and withdraw money already released to your balance.',
@@ -110,8 +110,8 @@ describe('Shop suspended (AS2)', () => {
   it('points an account in good standing back to the shop', async () => {
     answerWith(api.call, { 'GET /me': me() });
     renderWithApi(api.call, <Suspended seller />);
-    expect((await screen.findByRole('link', { name: 'Back to your shop' })).getAttribute('href')).toBe(
-      '/shop',
+    expect((await screen.findByRole('link', { name: 'Back to your trades' })).getAttribute('href')).toBe(
+      '/trades',
     );
   });
 });

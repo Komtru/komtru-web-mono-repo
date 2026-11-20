@@ -5,6 +5,7 @@
 import { createConfigModule } from './module.js';
 
 export {
+  casualSellLimit,
   feeScheduleSource,
   findFeesFile,
   getFeeSchedule,

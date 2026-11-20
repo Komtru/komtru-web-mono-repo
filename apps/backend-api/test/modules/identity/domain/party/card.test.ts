@@ -58,8 +58,8 @@ describe('badgesFor (M1 §8.2)', () => {
 });
 
 describe('partyCard (M1 §8.2)', () => {
-  it('carries canBuy false for a certified merchant and true for everyone else', () => {
-    expect(partyCard(facts({ merchantCapabilityStatus: 'ACTIVE' }), none).canBuy).toBe(false);
+  it('carries canBuy true for everyone, a certified merchant included', () => {
+    expect(partyCard(facts({ merchantCapabilityStatus: 'ACTIVE' }), none).canBuy).toBe(true);
     expect(partyCard(facts({ merchantCapabilityStatus: 'SUSPENDED' }), none).canBuy).toBe(true);
     expect(partyCard(facts({ merchantCapabilityStatus: null }), none).canBuy).toBe(true);
   });

@@ -3,7 +3,7 @@
 import { useMyMerchantApplication, useTradeStandards } from '@komtru/api-client/react';
 import { Button, EmptyState, ScreenColumn, StatusHero } from '@komtru/ui-kit';
 import { LoadProblem, Loading } from '../account/states';
-import { SHOP_HREF, VERIFICATION_HREF, phaseOf } from './rules';
+import { START_SELLING_HREF, VERIFICATION_HREF, phaseOf } from './rules';
 
 /**
  * SO5 (T-121): the approved outcome of merchant verification. Nothing goes live: the account gains merchant status, and
@@ -63,7 +63,7 @@ export function SellLive(): React.JSX.Element {
         you list, and buyers see the badge on your Trust Passport.
       </StatusHero>
       <Button asChild>
-        <a href={SHOP_HREF}>Go to your shop</a>
+        <a href={START_SELLING_HREF}>Start selling</a>
       </Button>
     </ScreenColumn>
   );

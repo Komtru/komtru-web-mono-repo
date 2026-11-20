@@ -197,7 +197,7 @@ describe.runIf(infraEnabled)('party invitations (M1 §8.5)', () => {
       expect((await row(invitationId))?.status).toBe('PENDING');
     });
 
-    it('does not claim a BUYER invitation for a certified merchant (design §6.3)', async () => {
+    it('claims a BUYER invitation for a certified merchant too: merchants buy (2026-11-20)', async () => {
       const inviter = await seedUserRow();
       const buyerInvite = await invite(inviter, { intendedRole: 'BUYER' });
       const sellerInvite = await invite(inviter, { intendedRole: 'SELLER' });
@@ -208,8 +208,8 @@ describe.runIf(infraEnabled)('party invitations (M1 §8.5)', () => {
         [merchant],
       );
 
-      expect(await claim(merchant, 'chidi@example.com')).toBe(1);
-      expect((await row(buyerInvite.invitationId))?.status).toBe('PENDING');
+      expect(await claim(merchant, 'chidi@example.com')).toBe(2);
+      expect((await row(buyerInvite.invitationId))?.status).toBe('CLAIMED');
       expect((await row(sellerInvite.invitationId))?.status).toBe('CLAIMED');
     });
 

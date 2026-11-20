@@ -22,7 +22,7 @@ export function StatusNotice({ seller = false }: { seller?: boolean }): React.JS
 
   return (
     <Banner tone="warning" title={WORDS[status]}>
-      <a href={seller ? '/shop/suspended' : '/account/suspended'} className="underline">
+      <a href={seller ? '/account/suspended/selling' : '/account/suspended'} className="underline">
         See what this means
       </a>
     </Banner>

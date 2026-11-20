@@ -11,11 +11,14 @@
 export type CapabilityStatus = 'PENDING' | 'ACTIVE' | 'SUSPENDED' | 'REVOKED';
 
 /**
- * False only while the account holds an ACTIVE MERCHANT capability.
+ * Always true. Owner ruling 2026-11-20: there are no buyer accounts and seller accounts, only
+ * accounts, and a certified merchant buys like anyone else. Merchant status now only lifts the
+ * selling limit (`trades/domain/sellLimit.ts`). This replaces design §6.3's "sell-only while
+ * ACTIVE" rule.
  *
- * PENDING is not a block: an application under review has not been approved and the applicant is
- * still an ordinary buyer. SUSPENDED and REVOKED restore buying, which design §6.3 states outright —
- * losing certification is not a punishment that also stops you shopping.
+ * The status parameter and the gate plumbing that calls this (`MERCHANT_CANNOT_BUY`, the buyer
+ * paths) are kept so a future per-account buy block has one place to live; today nothing trips it.
+ * An account that may not trade at all is still refused, by the account-status check in
+ * `capability.service.ts`.
  */
-export const canActAsBuyer = (merchantCapabilityStatus: CapabilityStatus | null): boolean =>
-  merchantCapabilityStatus !== 'ACTIVE';
+export const canActAsBuyer = (_merchantCapabilityStatus: CapabilityStatus | null): boolean => true;

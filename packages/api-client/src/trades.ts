@@ -97,6 +97,15 @@ export const proofMediaRuleSchema = z.object({ minPhotos: z.number(), requireVid
 
 export const previewResponseSchema = z.looseObject({
   allowedRoles: z.array(tradeRoleSchema),
+  /**
+   * What the caller may still sell, in kobo (owner ruling 2026-11-20): an account without merchant
+   * status is limited per trade and per Lagos day. `null` is a certified merchant, who has no limit.
+   * Optional so an older backend that does not send it reads as "no limit known".
+   */
+  sellLimit: z
+    .object({ perTradeMinor: z.string(), perDayMinor: z.string(), remainingTodayMinor: z.string() })
+    .nullable()
+    .optional(),
   standard: z.object({
     categoryCode: z.string(),
     versionNumber: z.number(),

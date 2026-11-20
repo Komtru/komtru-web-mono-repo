@@ -36,7 +36,7 @@ describe.runIf(infraEnabled)('capability grant, suspension and revocation (T-055
       ).rows[0]?.n,
     );
 
-  it('activates the capability, creating the row, and takes the buy block with it', async () => {
+  it('activates the capability, creating the row, and leaves buying open (merchants buy too, 2026-11-20)', async () => {
     const { userId } = await seedUser(t.app());
     const { userId: staffId } = await seedUser(t.app());
     const service = createCapabilityService({ facts: postgresBuyerFacts(db()) });
@@ -48,7 +48,7 @@ describe.runIf(infraEnabled)('capability grant, suspension and revocation (T-055
     expect(result).toEqual({ changed: true, from: null });
     expect(await status(userId)).toMatchObject({ status: 'ACTIVE' });
     expect((await status(userId))?.activated_at).not.toBeNull();
-    expect(await service.canActAsBuyer(userId)).toBe(false);
+    expect(await service.canActAsBuyer(userId)).toBe(true);
     expect(await audit('CAPABILITY_ACTIVATED')).toBe(1);
   });
 
