@@ -836,3 +836,23 @@ VALUE` cannot work here at all (drizzle runs every pending migration in one tran
 - Verification on `main` after each merge: packages build, then `turbo run lint typecheck test --force --concurrency=2` **37/37**, and `pnpm format:check` clean. Infra tests were not run (the other session was using the shared Postgres and Redis).
 - Feature costs: not comparable to the manager's 5h/week percentages — a different account and plan. Subagent token spend was roughly 1.7M across three implementers, three reviewers and three fix passes.
 - Next: F-031 (T-198) is the newly Ready MVP feature. F-030's UI (T-119) is still outstanding and was deliberately left to the manager. F-037, F-044 and F-045 remain the Backend-done-UI-outstanding group; F-044 and F-045 still wait on F-046.
+
+## 2026-11-20 16:30 WAT — run summary (interactive, at the owner's request)
+
+- Usage at start: 5h 16%, week 33%. At end: 5h 87%, week 42%. Stopped at the 88% checkpoint; the window resets 19:50 WAT.
+- The scheduled `komtru-build-manager` task is **disabled** (last run 2026-11-13); this run was started by hand.
+- Capacity: 2. F-032 close-out (web-app-ui, no migration) and F-065 (backend logistics + identity, logistics-ops, migration 0057).
+- **F-032 (sonnet):** visual check run on all 12 built screens (5.8–15.1%, mostly the 28px shell offset). Fixed: Seller-8 unreachable (new `/trade/[id]/dispute/respond`), item card titled with the trade code, H1 "awaiting" on a decided case. Review: 2 must-fix (stale ui-review banners/tables), 5 should-fix, all fixed. The money one: Seller-8 and Y1 offered "replacement" as `RELEASE_SELLER_FULL` on an unenforced promise; hidden on both, since replacement is F-034's. Merged `b955d312`, pushed; CI green. Still **not Done**: the withdrawal fix.
+- **Owner answers (2026-11-20):** withdrawal resumes inspection with the time left; a dispute opened from `SHIPPED`/`UNCONFIRMED_DELIVERY` returns the trade to that status; F-032 is Done without the evidence uploader. The withdrawal needs a migration (`trade_action` enum value + re-emitted `trade.is_valid_transition`, and the `state-machine-sql` parity test must read the newest redefinition), so it follows F-065's 0057.
+- **F-065 (opus):** both layers built, 9 commits, on `f-065-logistics-companies`, **unreviewed**. The orchestrator ran the logistics integration tests: 1 failure, `FOR UPDATE OF` a schema-qualified name in `materialiseInvitations`, fixed (`374a7879`), now 50/50. Its eight open questions are in the agent report below and need the owner:
+  - pending invitees with no account get no notification (notify addresses only users);
+  - invitation lifetime 7 days, copied from staff invitations, no sweep;
+  - `LAST_ADMIN` counts only ACTIVE admins;
+  - Park members can use the portal team endpoints on the backend (only the frontend redirects them);
+  - a disabled company's members can still sign in;
+  - inviting someone ACTIVE elsewhere is allowed until they activate;
+  - `DELETE /logistics/invitations/:id` added (not in the spec);
+  - a duplicate pending invitation returns a generic `409 CONFLICT`.
+  - Outstanding regardless: the logistics-ops Vercel project and DNS.
+- Feature costs: F-032 close-out (visual check, review, two fix rounds, merge) and the F-065 build together 5h-cost=71 week-cost=9. F-065 alone was most of it (an opus build of ~500k subagent tokens).
+- Next: review F-065 on opus, fix, merge, then the F-032 withdrawal (opus, migration 0058), which makes F-032 Done.
