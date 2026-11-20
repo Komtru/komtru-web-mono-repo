@@ -132,7 +132,7 @@ export function TabBar({
 }
 
 /**
- * The raised action's column: a bare 52px brand-blue circle with a plus, no caption (owner,
+ * The raised action's column: a bare 64px brand-blue circle with a plus, no caption (owner,
  * 2026-11-20). The column keeps the bar's rhythm; the circle is lifted so its centre sits on the
  * bar's top edge — half over the content, half in the bar — with a white ring that reads as a notch
  * in the bar's border. With no visible text, `aria-label` is the link's name.
@@ -149,13 +149,13 @@ function ActionSlot({ action }: { action: TabBarAction }): React.JSX.Element {
         data-tabbar-action-circle
         className={cx(
           // The bar has 8px of top padding, so -8px puts the circle's centre on the bar's edge.
-          'absolute left-1/2 top-[-8px] flex h-[52px] w-[52px] -translate-x-1/2 -translate-y-1/2 items-center justify-center',
+          'absolute left-1/2 top-[-8px] flex h-[64px] w-[64px] -translate-x-1/2 -translate-y-1/2 items-center justify-center',
           'rounded-full border-[4px] border-solid border-pure-white bg-trust-indigo text-pure-white',
           '[box-shadow:0_6px_16px_rgba(13,20,32,.18)] transition-transform duration-150 ease-[ease]',
           'group-active:scale-95 motion-reduce:transition-none',
         )}
       >
-        <span className="h-[22px] w-[22px] stroke-current">{action.icon}</span>
+        <span className="h-[30px] w-[30px] stroke-current">{action.icon}</span>
       </span>
     </a>
   );

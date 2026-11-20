@@ -166,7 +166,7 @@ describe('AppShell chrome', () => {
     // `.scr-body`'s 16px, with clearance for the fixed tab bar, its raised Start a trade button and
     // the safe area; `.tweb-content`'s 20px, then `.dweb-content`'s 24px.
     expect(main?.className).toContain('p-[16px]');
-    expect(main?.className).toContain('pb-[calc(110px+env(safe-area-inset-bottom,0px))]');
+    expect(main?.className).toContain('pb-[calc(120px+env(safe-area-inset-bottom,0px))]');
     expect(main?.className).toContain('md:p-[20px]');
     expect(main?.className).toContain('lg:p-[24px]');
   });

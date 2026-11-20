@@ -201,6 +201,10 @@ describe('TopNav and ResponsiveAppShell tools', () => {
     );
     const bar = screen.getByRole('navigation', { name: 'Sections' }).className;
     expect(bar).toContain('fixed');
+    // The brand row stays put too, so a pull-to-refresh bounce cannot leave it off the top.
+    expect(container.querySelector('header')?.className).toMatch(
+      /\bsticky\b.*\btop-0\b|\btop-0\b.*\bsticky\b/,
+    );
     expect(bar).toContain('bottom-0');
     expect(container.querySelector('main')?.className).toContain(
       'pb-[calc(90px+env(safe-area-inset-bottom,0px))]',
@@ -214,7 +218,7 @@ describe('TopNav and ResponsiveAppShell tools', () => {
       </ResponsiveAppShell>,
     );
     expect(container.querySelector('main')?.className).toContain(
-      'pb-[calc(110px+env(safe-area-inset-bottom,0px))]',
+      'pb-[calc(120px+env(safe-area-inset-bottom,0px))]',
     );
   });
 
