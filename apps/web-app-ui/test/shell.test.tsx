@@ -91,11 +91,15 @@ describe('AppShell', () => {
   it('raises Start a trade in the middle of the mobile bar, in place of Discover', () => {
     shell();
     const bar = screen.getByRole('navigation', { name: 'Sections' });
-    const names = [...bar.querySelectorAll('a')].map((link) => link.textContent);
+    const names = [...bar.querySelectorAll('a')].map(
+      (link) => link.getAttribute('aria-label') ?? link.textContent,
+    );
     expect(names).toEqual(['Home', 'Trades', 'Start a trade', 'Messages', 'Account']);
     const start = screen.getByRole('link', { name: 'Start a trade' });
     expect(start.getAttribute('href')).toBe('/trade/new');
     expect(start.getAttribute('aria-current')).toBeNull();
+    // Just the plus, no caption (owner, 2026-11-20).
+    expect(start.textContent).toBe('');
     // Only the mobile bar carries it: the tablet and desktop navigations keep their five.
     expect(screen.getAllByRole('link', { name: 'Start a trade' })).toHaveLength(1);
   });
@@ -159,10 +163,10 @@ describe('AppShell chrome', () => {
   it('steps the content padding from mobile through tablet to desktop', () => {
     const { container } = shell();
     const main = container.querySelector('main');
-    // `.scr-body`'s 16px with the tab bar's 90px of clearance, `.tweb-content`'s 20px, then
-    // `.dweb-content`'s 24px.
+    // `.scr-body`'s 16px, with clearance for the fixed tab bar, its raised Start a trade button and
+    // the safe area; `.tweb-content`'s 20px, then `.dweb-content`'s 24px.
     expect(main?.className).toContain('p-[16px]');
-    expect(main?.className).toContain('pb-[90px]');
+    expect(main?.className).toContain('pb-[calc(110px+env(safe-area-inset-bottom,0px))]');
     expect(main?.className).toContain('md:p-[20px]');
     expect(main?.className).toContain('lg:p-[24px]');
   });

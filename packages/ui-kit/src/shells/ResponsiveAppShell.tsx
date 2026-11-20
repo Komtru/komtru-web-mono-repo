@@ -1,4 +1,5 @@
 import { CollapsibleSideNav } from '../primitives/CollapsibleSideNav.js';
+import { cx } from '../primitives/cx.js';
 import { LogoBar } from './LogoBar.js';
 import type { NavItem } from './NavItem.js';
 import { TabBar, type TabBarAction } from './TabBar.js';
@@ -107,7 +108,17 @@ export function ResponsiveAppShell({
         )}
         {/* `.scr-body`'s 16px and its 90px of bottom clearance for the tab bar, stepping to
             `.tweb-content`'s 20px and `.dweb-content`'s 24px where the tab bar is gone. */}
-        <main className="flex-1 p-[16px] pb-[90px] md:p-[20px] lg:p-[24px]">
+        {/* Below `md` the tab bar is fixed to the screen's bottom, so the content clears it itself:
+            the bar's 64px and the safe area, plus the raised action's 34px above the bar when there
+            is one. From `md` up the bar is gone and the padding steps to 20px and 24px. */}
+        <main
+          className={cx(
+            'flex-1 p-[16px] md:p-[20px] lg:p-[24px]',
+            mobileAction === undefined
+              ? 'pb-[calc(90px+env(safe-area-inset-bottom,0px))]'
+              : 'pb-[calc(110px+env(safe-area-inset-bottom,0px))]',
+          )}
+        >
           {banner}
           {children}
         </main>
@@ -115,6 +126,7 @@ export function ResponsiveAppShell({
           items={barTabs ?? tabs}
           label="Sections"
           className="md:hidden"
+          pinned="fixed"
           {...(mobileAction === undefined ? {} : { action: mobileAction })}
         />
       </div>

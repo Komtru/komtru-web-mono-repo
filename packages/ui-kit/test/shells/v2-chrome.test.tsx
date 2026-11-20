@@ -192,6 +192,32 @@ describe('TopNav and ResponsiveAppShell tools', () => {
     }
   });
 
+  // 2026-11-20: a sticky bar sat above a strip of empty page in iOS browsers with a bottom toolbar.
+  it('pins the mobile bar to the screen and clears it, more so with a raised action', () => {
+    const { container, rerender } = render(
+      <ResponsiveAppShell tabs={NAV}>
+        <h1>Page</h1>
+      </ResponsiveAppShell>,
+    );
+    const bar = screen.getByRole('navigation', { name: 'Sections' }).className;
+    expect(bar).toContain('fixed');
+    expect(bar).toContain('bottom-0');
+    expect(container.querySelector('main')?.className).toContain(
+      'pb-[calc(90px+env(safe-area-inset-bottom,0px))]',
+    );
+    rerender(
+      <ResponsiveAppShell
+        tabs={NAV}
+        mobileAction={{ label: 'Start a trade', href: '/trade/new', icon: null }}
+      >
+        <h1>Page</h1>
+      </ResponsiveAppShell>,
+    );
+    expect(container.querySelector('main')?.className).toContain(
+      'pb-[calc(110px+env(safe-area-inset-bottom,0px))]',
+    );
+  });
+
   it('puts the mobile tools in the mobile header only, hidden from md up', () => {
     render(
       <ResponsiveAppShell tabs={NAV} mobileActions={<button type="button">Mode</button>}>

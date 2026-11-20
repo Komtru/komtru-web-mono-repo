@@ -26,7 +26,9 @@ describe('TabBar', () => {
     const { container } = render(
       <TabBar items={tabs} action={{ label: 'Start a trade', href: '/trade/new', icon: ICON }} />,
     );
-    const links = [...container.querySelectorAll('nav > a')].map((link) => link.textContent);
+    const links = [...container.querySelectorAll('nav > a')].map(
+      (link) => link.getAttribute('aria-label') ?? link.textContent,
+    );
     expect(links).toEqual(['Trades', 'Passport', 'Start a trade', 'Alerts', 'Settings']);
     const action = screen.getByRole('link', { name: 'Start a trade' });
     expect(action.getAttribute('href')).toBe('/trade/new');
@@ -35,6 +37,18 @@ describe('TabBar', () => {
     const circle = action.querySelector('[data-tabbar-action-circle]');
     expect(circle?.className).toContain('bg-trust-indigo');
     expect(circle?.className).toContain('-translate-y-1/2');
+    // Just the plus: no caption under it (owner, 2026-11-20).
+    expect(action.textContent).toBe('');
+  });
+
+  it('stays sticky inside MobileShell by default, and pins to the screen when asked', () => {
+    const { container, rerender } = render(<TabBar items={TABS} />);
+    expect(container.querySelector('nav')?.className).toContain('sticky');
+    rerender(<TabBar items={TABS} pinned="fixed" />);
+    const nav = container.querySelector('nav')?.className ?? '';
+    expect(nav).toContain('fixed');
+    expect(nav).toContain('bottom-0');
+    expect(nav).not.toContain('sticky');
   });
 
   it('draws no action when none is given', () => {
