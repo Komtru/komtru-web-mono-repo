@@ -27,3 +27,6 @@ export const appealHref = (id: string): string => `/trade/${id}/appeal`;
 
 /** SP-M23. */
 export const withdrawHref = (id: string): string => `/trade/${id}/dispute/withdraw`;
+
+/** Seller-8: the seller's written response, reached from Seller-7's "Respond with evidence". */
+export const respondHref = (id: string): string => `/trade/${id}/dispute/respond`;

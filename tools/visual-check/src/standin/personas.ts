@@ -23,6 +23,9 @@ export interface Persona {
  *
  * The `application-*` scenarios are the merchant application (F-040) in each state the verification
  * screens draw. They keep the person's trades, and set the application the stand-in answers with.
+ *
+ * `dispute-mediation` and `dispute-decided` (F-032) put the case on the disputed trade in mediation and after a
+ * decision, and give the seller's persona the seller side of that trade. They keep the rest of the person's trades.
  */
 export const SCENARIO_IDS = [
   'with-trades',
@@ -32,6 +35,8 @@ export const SCENARIO_IDS = [
   'application-changes-requested',
   'application-rejected',
   'application-approved',
+  'dispute-mediation',
+  'dispute-decided',
 ] as const;
 export type ScenarioId = (typeof SCENARIO_IDS)[number];
 

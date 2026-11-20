@@ -117,14 +117,16 @@ export function caseSteps(dispute: Dispute, counterpartyName: string): VersionSt
   const state = (statuses: readonly Dispute['status'][]): VersionStep['state'] =>
     past(statuses) ? 'done' : reached(statuses) ? 'active' : 'pending';
 
+  const responseState = state(['MEDIATION']);
   const steps: VersionStep[] = [
     { id: 'filed', title: 'You reported this issue', detail: 'Filed', state: 'done' },
     { id: 'notified', title: `${counterpartyName} was notified`, detail: 'Filed', state: 'done' },
     {
       id: 'response',
-      title: 'Awaiting the other side’s response',
+      // Once the case has moved on, "awaiting" is no longer true: the screen says only that the window is over.
+      title: responseState === 'active' ? 'Awaiting the other side’s response' : 'The response window closed',
       detail: dispute.window.kind === 'MEDIATION' ? pending(dispute) : 'Done',
-      state: state(['MEDIATION']),
+      state: responseState,
     },
   ];
 

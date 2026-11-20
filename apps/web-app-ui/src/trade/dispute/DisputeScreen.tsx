@@ -20,6 +20,7 @@ import { CaseStatus } from './CaseStatus';
 import { EvidenceComparison } from './EvidenceComparison';
 import { IssueReview } from './IssueReview';
 import { ReportIssue } from './ReportIssue';
+import { SellerResponse } from './SellerResponse';
 import { SellerNotice } from './SellerNotice';
 import { Withdraw } from './Withdraw';
 
@@ -81,7 +82,7 @@ export function DisputeScreen({ id }: { id: string }): React.JSX.Element {
  * or a render function into this client module (React cannot serialise a function across that boundary),
  * so the choice is made here, from a string.
  */
-export type CaseScreen = 'issue' | 'status' | 'evidence' | 'withdraw' | 'appeal';
+export type CaseScreen = 'issue' | 'status' | 'evidence' | 'withdraw' | 'appeal' | 'respond';
 
 type CaseScreenProps = { id: string; disputeId?: string };
 
@@ -94,6 +95,7 @@ const CASE_SCREENS: Record<
   evidence: { title: 'Evidence', Screen: EvidenceComparison },
   withdraw: { title: 'Withdraw', Screen: Withdraw },
   appeal: { title: 'File an Appeal', Screen: Appeal },
+  respond: { title: 'Your Response', Screen: SellerResponse },
 };
 
 /**

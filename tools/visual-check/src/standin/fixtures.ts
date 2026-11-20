@@ -5,6 +5,7 @@
 // data behind it did not move.
 import type {
   Dispute,
+  DisputeDecision,
   DisputeDetail,
   DisputeEvidence,
   DisputeTimelineEntry,
@@ -319,11 +320,40 @@ const SELLER_TRADES: TradeListItem[] = [
   },
 ];
 
+/**
+ * The seller's side of the disputed trade (F-032 Seller-7, H2). Only the dispute scenarios carry it: adding it to
+ * the seller's normal list would change every seller screen that counts trades.
+ */
+const SELLER_DISPUTED_TRADE: TradeListItem = {
+  id: TRADE_IDS.buyerDisputed,
+  tradeCode: 'KMT-88244-NG',
+  status: 'DISPUTED',
+  statusRevision: 7,
+  yourRole: 'SELLER',
+  initiatorRole: 'SELLER',
+  awaiting: null,
+  attention: null,
+  counterparty: BUYER_CARD,
+  item: { title: 'JBL Flip 6', categoryCode: 'ELECTRONICS', categoryName: 'Electronics' },
+  currency: 'NGN',
+  itemAmountMinor: '9800000',
+  buyerTotalMinor: '10290000',
+  sentAt: '2026-11-10T10:00:00.000Z',
+  createdAt: '2026-11-10T09:40:00.000Z',
+  updatedAt: '2026-11-17T09:00:00.000Z',
+};
+
+/** The scenarios that draw the disputed trade's case in a state other than evidence collection. */
+const isDisputeScenario = (scenario: ScenarioId): boolean =>
+  scenario === 'dispute-mediation' || scenario === 'dispute-decided';
+
 /** The trade list a persona sees in each scenario. Staff have no consumer trades, so they get none. */
 export function tradesFor(persona: PersonaId, scenario: ScenarioId): TradeListItem[] {
   if (scenario === 'no-trades') return [];
   if (persona === 'buyer') return BUYER_TRADES;
-  if (persona === 'seller' || persona === 'merchant') return SELLER_TRADES;
+  if (persona === 'seller' || persona === 'merchant') {
+    return isDisputeScenario(scenario) ? [...SELLER_TRADES, SELLER_DISPUTED_TRADE] : SELLER_TRADES;
+  }
   return [];
 }
 
@@ -514,6 +544,58 @@ const DISPUTE: Dispute = {
   createdAt: '2026-11-16T10:00:00.000Z',
 };
 
+/**
+ * `dispute-mediation`: the same case on its first day, while the parties still own it (Customer-8, Seller-7,
+ * Seller-8, SP-M23). Opened 1 hour before the pinned clock, so 47 of its 48 mediation hours are left.
+ */
+const DISPUTE_IN_MEDIATION: Dispute = {
+  ...DISPUTE,
+  status: 'MEDIATION',
+  window: {
+    kind: 'MEDIATION',
+    deadlineAt: '2026-11-21T08:00:00.000Z',
+    remaining: { hours: 47, minutes: 0, expired: false },
+  },
+  mediationDeadlineAt: '2026-11-21T08:00:00.000Z',
+  evidenceDeadlineAt: '2026-11-26T08:00:00.000Z',
+  createdAt: '2026-11-19T08:00:00.000Z',
+};
+
+const DECISION_FIXTURE: DisputeDecision = {
+  id: '0190b0a0-0000-7000-8000-000000000641',
+  disputeId: DISPUTE_ID,
+  decisionType: 'ORIGINAL',
+  decidedByUserId: '0190b0a0-0000-7000-8000-000000000104',
+  outcome: 'REFUND_BUYER_FULL',
+  amountToBuyerMinor: '10290000',
+  amountToSellerMinor: '0',
+  appealOutcome: null,
+  rationale:
+    'The photos taken at the hub show a cracked grille and a charger that is not the one listed. The seller’s packing photo does not show either part.',
+  agreedNote: null,
+  decidedAt: '2026-11-19T07:00:00.000Z',
+};
+
+/** `dispute-decided`: the case after TrustOps ruled, inside the appeal window (H1, H2, AC6). */
+const DISPUTE_DECIDED: Dispute = {
+  ...DISPUTE,
+  status: 'DECIDED',
+  window: {
+    kind: 'APPEAL',
+    deadlineAt: '2026-11-26T07:00:00.000Z',
+    remaining: { hours: 166, minutes: 0, expired: false },
+  },
+  decidedAt: '2026-11-19T07:00:00.000Z',
+  appealDeadlineAt: '2026-11-26T07:00:00.000Z',
+};
+
+const disputeIn = (scenario: ScenarioId): Dispute =>
+  scenario === 'dispute-mediation'
+    ? DISPUTE_IN_MEDIATION
+    : scenario === 'dispute-decided'
+      ? DISPUTE_DECIDED
+      : DISPUTE;
+
 const DISPUTE_EVIDENCE_BY_BUYER: DisputeEvidence = {
   id: '0190b0a0-0000-7000-8000-000000000611',
   disputeId: DISPUTE_ID,
@@ -533,6 +615,30 @@ const DISPUTE_EVIDENCE_BY_SELLER: DisputeEvidence = {
   submittedAfterDeadline: false,
   submittedAt: '2026-11-18T14:20:00.000Z',
 };
+
+const DISPUTE_TIMELINE_DECIDED_STEP: DisputeTimelineEntry = {
+  id: 3,
+  occurredAt: '2026-11-19T07:00:00.000Z',
+  fromStatus: 'UNDER_REVIEW',
+  toStatus: 'DECIDED',
+  action: 'DECIDED',
+  actorType: 'REVIEWER',
+  actorId: '0190b0a0-0000-7000-8000-000000000104',
+  reason: 'Refund in full.',
+};
+
+const DISPUTE_TIMELINE_MEDIATION: DisputeTimelineEntry[] = [
+  {
+    id: 1,
+    occurredAt: '2026-11-19T08:00:00.000Z',
+    fromStatus: null,
+    toStatus: 'MEDIATION',
+    action: 'DISPUTE_OPENED',
+    actorType: 'BUYER',
+    actorId: BUYER_USER_ID,
+    reason: 'The speaker arrived with a cracked grille and the charger is not the one listed.',
+  },
+];
 
 const DISPUTE_TIMELINE: DisputeTimelineEntry[] = [
   {
@@ -619,23 +725,27 @@ function disputeVisible(persona: PersonaId, scenario: ScenarioId, dispute: Dispu
   return tradesFor(persona, scenario).some((item) => item.id === dispute.tradeId);
 }
 
-function disputeDetailOf(persona: PersonaId): DisputeDetail {
+function disputeDetailOf(persona: PersonaId, scenario: ScenarioId): DisputeDetail {
+  const dispute = disputeIn(scenario);
   return {
-    ...DISPUTE,
-    yourRole: PERSONAS[persona].userId === DISPUTE.buyerUserId ? 'BUYER' : 'SELLER',
-    decisions: [],
+    ...dispute,
+    yourRole: PERSONAS[persona].userId === dispute.buyerUserId ? 'BUYER' : 'SELLER',
+    decisions: scenario === 'dispute-decided' ? [DECISION_FIXTURE] : [],
     proposals: [],
   };
 }
 
 /** `GET /disputes` for this persona: the cases on their trades. One page holds them all. */
 export function disputesFor(persona: PersonaId, scenario: ScenarioId): Dispute[] {
-  return disputeVisible(persona, scenario, DISPUTE) ? [DISPUTE] : [];
+  const dispute = disputeIn(scenario);
+  return disputeVisible(persona, scenario, dispute) ? [dispute] : [];
 }
 
 /** `GET /disputes/:id`, or `null` when the case is not theirs. */
 export function disputeDetailFor(persona: PersonaId, scenario: ScenarioId, id: string): DisputeDetail | null {
-  return id === DISPUTE_ID && disputeVisible(persona, scenario, DISPUTE) ? disputeDetailOf(persona) : null;
+  return id === DISPUTE_ID && disputeVisible(persona, scenario, disputeIn(scenario))
+    ? disputeDetailOf(persona, scenario)
+    : null;
 }
 
 /** `GET /trades/:id/dispute`: the case on this trade, or `null` when the trade has none. */
@@ -649,7 +759,10 @@ export function disputeTimelineFor(
   scenario: ScenarioId,
   id: string,
 ): DisputeTimelineEntry[] | null {
-  return id === DISPUTE_ID && disputeVisible(persona, scenario, DISPUTE) ? DISPUTE_TIMELINE : null;
+  if (id !== DISPUTE_ID || !disputeVisible(persona, scenario, disputeIn(scenario))) return null;
+  if (scenario === 'dispute-mediation') return DISPUTE_TIMELINE_MEDIATION;
+  if (scenario === 'dispute-decided') return [DISPUTE_TIMELINE_DECIDED_STEP, ...DISPUTE_TIMELINE];
+  return DISPUTE_TIMELINE;
 }
 
 /** `GET /disputes/:id/evidence`: what both parties submitted. */
@@ -658,9 +771,11 @@ export function disputeEvidenceFor(
   scenario: ScenarioId,
   id: string,
 ): DisputeEvidence[] | null {
-  return id === DISPUTE_ID && disputeVisible(persona, scenario, DISPUTE)
-    ? [DISPUTE_EVIDENCE_BY_SELLER, DISPUTE_EVIDENCE_BY_BUYER]
-    : null;
+  if (id !== DISPUTE_ID || !disputeVisible(persona, scenario, disputeIn(scenario))) return null;
+  // In mediation the seller has not answered yet.
+  return scenario === 'dispute-mediation'
+    ? [DISPUTE_EVIDENCE_BY_BUYER]
+    : [DISPUTE_EVIDENCE_BY_SELLER, DISPUTE_EVIDENCE_BY_BUYER];
 }
 
 /** `GET /disputes/:id/evidence-comparison` (Y1). */
@@ -669,7 +784,17 @@ export function evidenceComparisonFor(
   scenario: ScenarioId,
   id: string,
 ): EvidenceComparison | null {
-  return id === DISPUTE_ID && disputeVisible(persona, scenario, DISPUTE) ? EVIDENCE_COMPARISON : null;
+  if (id !== DISPUTE_ID || !disputeVisible(persona, scenario, disputeIn(scenario))) return null;
+  if (scenario !== 'dispute-mediation') return EVIDENCE_COMPARISON;
+  // The reference draws the comparison with mediation open: the clock is running and the seller has not answered.
+  return {
+    ...EVIDENCE_COMPARISON,
+    seller: { ...EVIDENCE_COMPARISON.seller, fromDispute: [] },
+    mediation: {
+      deadlineAt: '2026-11-21T08:00:00.000Z',
+      remaining: { hours: 47, minutes: 0, expired: false },
+    },
+  };
 }
 
 // --- me -------------------------------------------------------------------------------------------

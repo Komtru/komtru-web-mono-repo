@@ -8,9 +8,9 @@
 import type { DisputeDetail, TradeView } from '@komtru/api-client';
 import { ActionStack, Button, ItemCard, SectionLabel } from '@komtru/ui-kit';
 import { Frame, TradeGate } from '../delivery/parts';
-import { naira, partyName } from '../format';
+import { itemTitle, naira, partyName } from '../format';
 import { DisputeCountdown, DisputeGate } from './parts';
-import { comparisonHref, tradeHref } from './routes';
+import { respondHref, tradeHref } from './routes';
 import { reasonLabel } from './words';
 
 const TITLE = 'Dispute';
@@ -47,8 +47,8 @@ function Body({
       <DisputeCountdown dispute={dispute} />
 
       <ItemCard
-        title={trade.tradeCode}
-        sub={`${naira(dispute.totalEscrowMinor)} · ${buyer}`}
+        title={itemTitle(trade.terms?.itemSpec)}
+        sub={`${trade.tradeCode} · ${buyer}`}
         price={naira(dispute.totalEscrowMinor)}
       />
 
@@ -64,7 +64,7 @@ function Body({
 
       <ActionStack>
         <Button asChild>
-          <a href={comparisonHref(id)}>Respond with evidence</a>
+          <a href={respondHref(id)}>Respond with evidence</a>
         </Button>
         <Button asChild variant="secondary">
           <a href={tradeHref(id)}>Back to the trade</a>

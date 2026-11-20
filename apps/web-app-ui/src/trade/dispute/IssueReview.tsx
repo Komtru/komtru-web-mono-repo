@@ -11,7 +11,7 @@
 import type { DisputeDetail, TradeView } from '@komtru/api-client';
 import { ActionStack, Button, ItemCard, NoteBanner, SectionLabel, TermList, TermRow } from '@komtru/ui-kit';
 import { Frame, TradeGate } from '../delivery/parts';
-import { naira } from '../format';
+import { itemTitle, naira } from '../format';
 import { DisputeGate } from './parts';
 import { comparisonHref, disputeStatusHref } from './routes';
 import { INTAKE_NOTE, reasonLabel } from './words';
@@ -47,8 +47,8 @@ function Body({
 
       <SectionLabel>Affected item</SectionLabel>
       <ItemCard
-        title={trade.tradeCode}
-        sub={dispute.orderId === null ? 'Entire order' : 'One item of this order'}
+        title={itemTitle(trade.terms?.itemSpec)}
+        sub={`${trade.tradeCode} · ${dispute.orderId === null ? 'Entire order' : 'One item of this order'}`}
         price={naira(dispute.totalEscrowMinor)}
       />
 
