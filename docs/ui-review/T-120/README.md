@@ -23,21 +23,6 @@ in the reference and its line boxes no longer overlap the reference's; that alon
 number. The scenarios `dispute-mediation` and `dispute-decided` (and the seller's side of the disputed trade) are
 new in the stand-in this run; see `docs/runbooks/visual-check.md`.
 
-## Deviations`
-
-> heading without disturbing what is there.
-
-| Screen     | Route                          | Case state                          | Shot |
-| ---------- | ------------------------------ | ----------------------------------- | ---- |
-| Customer-7 | `/trade/[id]/dispute`          | `INSPECTION`, buyer, no case yet    | owed |
-| Customer-8 | `/trade/[id]/dispute/status`   | `MEDIATION`, buyer                  | owed |
-| H1         | `/trade/[id]/dispute/status`   | `DECIDED`, buyer, refund in full    | owed |
-| H2         | `/trade/[id]/dispute/status`   | `DECIDED`, seller, same case        | owed |
-| Y1         | `/trade/[id]/dispute/evidence` | `MEDIATION`, either side            | owed |
-| AC6        | `/trade/[id]/appeal`           | `DECIDED`, inside the appeal window | owed |
-| Seller-7   | `/trade/[id]/dispute`          | `MEDIATION`, seller                 | owed |
-| Seller-8   | `/trade/[id]/dispute`          | `MEDIATION`, seller, responding     | owed |
-
 ## Deviations
 
 <!-- One line per deviation: what differs, where, and whether it is intended.
@@ -130,8 +115,8 @@ differs is documented line by line in each record, and falls into three groups:
    supporting evidence") and AC6 ("Add new evidence") draw one in the reference and ship without. The file path exists
    (`uploadFile`, `FileDropzone`, `fileRefId` on `POST /disputes/:id/evidence`), but the open-dispute and appeal
    endpoints accept no files, so photos on those two would need either a contract change or a second step. Seller-8's
-   "Add photos and compare" and Y1 are the way to add evidence today. This is the owner's call: ship F-032 Done with
-   the uploader as a follow-up, or hold it for the uploader.
+   "Add photos and compare" and Y1 are the way to add evidence today. **Owner's decision (2026-11-20): F-032 counts
+   as Done without the uploader.** The uploader on these three screens is a follow-up.
 
 Not touched: the dispute-withdrawal behaviour that leaves the trade in `DISPUTED` (a money question, in
 `docs/manager/RUN_LOG.md`).

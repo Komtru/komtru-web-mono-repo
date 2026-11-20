@@ -19,18 +19,6 @@ CWT-S16, CWT-S17 and CWT-S18 are the honest placeholders described below. They a
 draw them from, and scoring a placeholder against a reference it deliberately does not imitate would only produce a
 number that means nothing. They remain the open part of F-032 (15 screens, 12 built).
 
-## Deviations` heading without disturbing what is there.
-
-| Screen  | Route                          | Case state                         | Shot |
-| ------- | ------------------------------ | ---------------------------------- | ---- |
-| DI-01   | `/trade/[id]/issue`            | case just opened, buyer            | owed |
-| CWT-S14 | `/trade/[id]/dispute`          | `INSPECTION`, buyer, no case yet   | owed |
-| CWT-S15 | `/trade/[id]/dispute/status`   | `MEDIATION`, either side           | owed |
-| CWT-S16 | `/trade/[id]/dispute`          | multi-item order (not in platform) | owed |
-| CWT-S17 | `/trade/[id]/dispute/item`     | multi-item order (not in platform) | owed |
-| CWT-S18 | `/trade/[id]/dispute/status`   | mixed order (not in platform)      | owed |
-| SP-M23  | `/trade/[id]/dispute/withdraw` | `MEDIATION`, opener                | owed |
-
 ## Deviations
 
 <!-- One line per deviation: what differs, where, and whether it is intended.
