@@ -387,6 +387,14 @@ describe('the evidence comparison (Y1)', () => {
     expect(screen.getByText(/isn’t in the app yet/)).toBeTruthy();
   });
 
+  it('does not offer a replacement: nothing enforces release after one arrives (F-034)', async () => {
+    serve();
+    renderWithApi(api.call, <EvidenceComparison id={TRADE} disputeId={CASE} />);
+    await screen.findByText('Seller’s pre-shipment proof');
+    expect(screen.queryByLabelText(/replacement/i)).toBeNull();
+    expect(screen.getByLabelText('Full refund with return')).toBeTruthy();
+  });
+
   it('sends a full refund with return as the money outcome plus the agreed words', async () => {
     serve({
       'POST /disputes/:id/mediation/proposals': {

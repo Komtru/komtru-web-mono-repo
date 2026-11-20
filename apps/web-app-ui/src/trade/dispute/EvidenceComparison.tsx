@@ -10,7 +10,8 @@
 //
 // The desired-outcome picker is the mediation offer. The reference lists "Full refund with
 // return", "Partial settlement" and "Replacement item"; only one of those is a money outcome the
-// platform has. Return and replacement ride as the agreed note on the money outcome they imply
+// platform has. Return rides as the agreed note on the money outcome it implies, and "Replacement item" is not
+// offered at all: its only fit, RELEASE_SELLER_FULL, would pay the seller on a promise nothing enforces (F-034)
 // (Q10: return shipping is self-arranged), which is exactly what the platform stores.
 import { useState } from 'react';
 import type { ComparisonPanel, DisputeDetail, EvidenceComparison as Comparison } from '@komtru/api-client';
@@ -47,12 +48,6 @@ const DESIRED = [
     label: 'Partial settlement',
     outcome: 'REFUND_BUYER_PARTIAL' as const,
     note: null,
-  },
-  {
-    id: 'REPLACEMENT',
-    label: 'Replacement item',
-    outcome: 'RELEASE_SELLER_FULL' as const,
-    note: 'Seller sends a replacement; the payment is released once it arrives.',
   },
 ];
 

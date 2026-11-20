@@ -74,9 +74,10 @@ many items are on the record. Rendering the media needs signed per-file URLs for
 outcomes the platform has; a partial needs an amount, and splitting the escrow is F-034's mutual-settlement track.
 Choosing it disables the button and says why, rather than sending an offer the screen cannot price.
 
-**Y1 — "Full refund with return" and "Replacement item" are notes, not outcomes.** Q10's default: both are
-recorded as the agreed note beside the money outcome they really are, with return shipping self-arranged. The
-platform stores no return-logistics state and the screen claims none.
+**Y1 — "Full refund with return" is a note, "Replacement item" is not offered.** Return is recorded as the agreed
+note beside the money outcome it really is (Q10: return shipping is self-arranged); the platform stores no
+return-logistics state and the screen claims none. Replacement is hidden, here and on Seller-8: its only fitting
+outcome, `RELEASE_SELLER_FULL`, would release the whole escrow on a promise nothing enforces. It is F-034's track.
 
 **Seller-7 — the quote is attributed and unedited.** The buyer's words are shown as written, with the reason
 label beside them, and the screen takes no position on them.
