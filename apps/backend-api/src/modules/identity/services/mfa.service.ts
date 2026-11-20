@@ -18,6 +18,7 @@ import { and, desc, eq, isNull, sql } from 'drizzle-orm';
 import type { Db } from '../../../db/index.js';
 import { isUniqueViolation } from '../../../db/errors.js';
 import type { Encryption } from '../../../platform/crypto/encryption.js';
+import type { CompanyMembership } from '../../../platform/http/principal.js';
 import { maskPhone } from '../../../platform/identifiers.js';
 import { publish, type Tx } from '../../../platform/events/publish.js';
 import {
@@ -67,6 +68,22 @@ export interface MfaDeps extends AccountDeps {
   webauthnChallenges: WebauthnChallengeStore;
   /** `IDENTITY_STAFF_REQUIRE_MFA` (D2 C4, §S13). */
   staffRequireMfa: boolean;
+  /**
+   * T-086. The logistics module's answer to "may this account open a LOGISTICS session", wired by the
+   * registry (identity cannot import logistics: logistics imports identity). Absent means nobody may.
+   */
+  logisticsAccess?: LogisticsAccessPort;
+}
+
+/** What identity asks the logistics module at a LOGISTICS sign-in (m2 §2). */
+export interface LogisticsAccessPort {
+  /** An INVITED or ACTIVE membership anywhere. Read-only: asked before a challenge is issued. */
+  eligible: (tx: Tx, userId: string) => Promise<boolean>;
+  /**
+   * Login is acceptance: in the session's own transaction, returns the membership the session will
+   * act under, flipping an INVITED one to ACTIVE. Null when there is none any more.
+   */
+  accept: (tx: Tx, userId: string) => Promise<CompanyMembership | null>;
 }
 
 export interface FactorRow {

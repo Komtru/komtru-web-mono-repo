@@ -30,6 +30,7 @@ import {
   MFA_TOKEN_TTL_SECONDS,
   factorAmr,
   mfaSubjectHash,
+  type MfaScope,
   type MfaFactorType,
 } from '../domain/mfa/policy.js';
 import { hashCode, matchesCode, splitProofToken } from '../domain/otp/challenge.js';
@@ -112,7 +113,7 @@ const challengeViews = async (tx: Tx, factors: FactorRow[]): Promise<MfaChalleng
 export async function issueMfaToken(
   tx: Tx,
   deps: MfaDeps,
-  input: { userId: string; factors: FactorRow[]; ip?: string | null; scope?: 'CONSUMER' | 'STAFF' },
+  input: { userId: string; factors: FactorRow[]; ip?: string | null; scope?: MfaScope },
 ): Promise<IssuedMfaToken> {
   const secret = randomToken(MFA_TOKEN_BYTES);
   const challengeId = uuidv7();
@@ -175,7 +176,7 @@ export interface CompleteMfaLoginInput {
   ip: string | null;
   userAgent: string | null;
   /** The scope the token was issued for, and the one the session opens with. CONSUMER by default. */
-  scope?: 'CONSUMER' | 'STAFF';
+  scope?: MfaScope;
 }
 
 /**
@@ -272,6 +273,12 @@ export async function completeMfaLogin(
     // A staff session needs a role that is live NOW: it may have been revoked or have expired
     // between the password step and this one, and the session must not outlive the grant it rests on.
     if (scope === 'STAFF' && !(await holdsLiveAdminRole(tx, userId))) return { outcome: 'REJECTED' };
+    // T-086, the same rule for a LOGISTICS session: the membership must be live NOW, and accepting it
+    // here is login-is-acceptance (m2 §2) — in the session's own transaction, so a refused activation
+    // opens nothing.
+    if (scope === 'LOGISTICS' && !(await deps.logisticsAccess?.accept(tx, userId))) {
+      return { outcome: 'REJECTED' };
+    }
 
     await tx
       .update(otpChallenges)
@@ -377,7 +384,7 @@ export async function resolveMfaToken(
   if (challenge.attempts >= challenge.maxAttempts) return null;
 
   // Either scope may ask for its factor's code to be sent; only the verify routes are scope-bound.
-  const scope = (['CONSUMER', 'STAFF'] as const).find((candidate) =>
+  const scope = (['CONSUMER', 'STAFF', 'LOGISTICS'] as const).find((candidate) =>
     Buffer.from(challenge.destinationHash).equals(
       mfaSubjectHash(deps.otpHasher, challenge.userId!, candidate),
     ),
