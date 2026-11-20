@@ -1,9 +1,25 @@
 # F-032 — Trade workspace resolution and issue reporting (T-196)
 
-> **The pixel comparison has not been run**, for the reason given in `docs/ui-review/T-120/README.md`: the
-> canned platform stand-in these shots need is built per ticket and was not built in this run. The deviation
-> record below is written; the generated stub is owed, and `visualCheck` will write it above each
-> `## Deviations` heading without disturbing what is there.
+> **The pixel comparison has been run** (2026-11-20) with `pnpm visual-check --walk <screen>` against the platform
+> stand-in, for the four built screens below. The earlier 12.49% (and the 9.80% re-measure) for CWT-S15 are void, as
+> explained in `docs/ui-review/T-120/README.md`. Per-screen records are beside this file; the PNGs and heat maps are
+> generated and not committed.
+
+| Screen  | Route                          | Scenario (persona)                      | Differing pixels | Record       |
+| ------- | ------------------------------ | --------------------------------------- | ---------------- | ------------ |
+| DI-01   | `/trade/[id]/issue`            | `dispute-mediation` (buyer)             | 9.57%            | `DI-01.md`   |
+| CWT-S14 | `/trade/[id]/dispute`          | `with-trades` (buyer, in inspection)    | 10.07%           | `CWT-S14.md` |
+| CWT-S15 | `/trade/[id]/dispute/status`   | `dispute-mediation` (buyer)             | 10.50%           | `CWT-S15.md` |
+| SP-M23  | `/trade/[id]/dispute/withdraw` | `dispute-mediation` (buyer, the opener) | 11.41%           | `SP-M23.md`  |
+| CWT-S16 | `/trade/[id]/dispute`          | multi-item order (not in platform)      | not applicable   | placeholder  |
+| CWT-S17 | `/trade/[id]/dispute/item`     | multi-item order (not in platform)      | not applicable   | placeholder  |
+| CWT-S18 | `/trade/[id]/dispute/status`   | mixed order (not in platform)           | not applicable   | placeholder  |
+
+CWT-S16, CWT-S17 and CWT-S18 are the honest placeholders described below. They are not scored: there is no order to
+draw them from, and scoring a placeholder against a reference it deliberately does not imitate would only produce a
+number that means nothing. They remain the open part of F-032 (15 screens, 12 built).
+
+## Deviations` heading without disturbing what is there.
 
 | Screen  | Route                          | Case state                         | Shot |
 | ------- | ------------------------------ | ---------------------------------- | ---- |
@@ -71,6 +87,7 @@ tests with axe cover these screens in `apps/web-app-ui/test/dispute.test.tsx`.
 
 ## Judgement
 
-**Not yet assessed.** The pixel pass is owed. The three multi-item screens are the ones to look at hardest: they
-are honest placeholders rather than built screens, and whether that is acceptable for the ticket is the owner's
-call, not this run's.
+The four built screens render and read the right data in the states the reference draws; see `docs/ui-review/T-120/README.md`
+for how to read the scores. Two defects were found and fixed by running them (DI-01 named the trade code as the item;
+a decided case's rail said it was still awaiting a response). Open: the three multi-item screens, which are the owner's
+call and unchanged, and CWT-S15's "Settle directly with the seller", which waits for F-034.

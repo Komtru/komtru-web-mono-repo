@@ -1,10 +1,30 @@
 # F-032 — Disputes, buyer and seller (T-120)
 
-> **The pixel comparison has not been run.** `pnpm visual-check` needs the production build behind a canned
-> stand-in for the platform (trade ids mapped to states, a proxy adding the sealed session cookie), the way
-> T-119's shots were taken. That stand-in is built per ticket and was not built in this run. Everything below
-> is the deviation record, written from the reference and the built screens side by side; the generated stub
-> with the differing-pixel counts is still owed, and `visualCheck` will write it above each `## Deviations`
+> **The pixel comparison has been run** (2026-11-20) with `pnpm visual-check --walk <screen>` against the platform
+> stand-in, for all eight screens below. The two scores recorded earlier (12.27% and 12.49%) were measured against
+> the error card and are void; so are the 10.11% and 9.80% re-measures, which were taken with the case in evidence
+> collection while the reference is drawn at mediation. Per-screen records, with the scenario each was shot in, are
+> beside this file (`<screen>.md`); the PNGs and heat maps are generated beside them and not committed.
+
+| Screen     | Route                          | Scenario (persona)                            | Differing pixels | Record          |
+| ---------- | ------------------------------ | --------------------------------------------- | ---------------- | --------------- |
+| Customer-7 | `/trade/[id]/dispute`          | `with-trades` (buyer, in inspection, no case) | 9.98%            | `Customer-7.md` |
+| Customer-8 | `/trade/[id]/dispute`          | `dispute-mediation` (buyer)                   | 5.80%            | `Customer-8.md` |
+| H1         | `/trade/[id]/dispute/status`   | `dispute-decided` (buyer)                     | 11.58%           | `H1.md`         |
+| H2         | `/trade/[id]/dispute/status`   | `dispute-decided` (seller)                    | 7.37%            | `H2.md`         |
+| Y1         | `/trade/[id]/dispute/evidence` | `dispute-mediation` (buyer)                   | 10.48%           | `Y1.md`         |
+| AC6        | `/trade/[id]/appeal`           | `dispute-decided` (buyer)                     | 14.68%           | `AC6.md`        |
+| Seller-7   | `/trade/[id]/dispute`          | `dispute-mediation` (seller)                  | 15.11%           | `Seller-7.md`   |
+| Seller-8   | `/trade/[id]/dispute/respond`  | `dispute-mediation` (seller)                  | 11.18%           | `Seller-8.md`   |
+
+**Reading the scores.** Every screen sits under the app shell's header bar, so all content is about 28px lower than
+in the reference and its line boxes no longer overlap the reference's; that alone flags most text. Scores of 6% to
+15% are therefore the same band as T-113's proven AC1, and what separates the screens is the written list, not the
+number. The scenarios `dispute-mediation` and `dispute-decided` (and the seller's side of the disputed trade) are
+new in the stand-in this run; see `docs/runbooks/visual-check.md`.
+
+## Deviations`
+
 > heading without disturbing what is there.
 
 | Screen     | Route                          | Case state                          | Shot |
@@ -88,7 +108,30 @@ case that has not been decided, or one already appealed, the screen says which a
 **No Playwright e2e.** The repo has no app e2e harness; T-111 and T-192 both recorded the same and waived it.
 Component tests with axe cover every screen (`apps/web-app-ui/test/dispute.test.tsx`).
 
+## Found and fixed by running it
+
+- **Seller-8 was unreachable.** `SellerResponse` was built and exported and nothing routed to it; Seller-7's "Respond
+  with evidence" went to the comparison (Y1) instead. Neither the 22 component tests nor the axe pass drew it, which is
+  why nobody noticed. It now has `/trade/<id>/dispute/respond`, Seller-7's button goes there, and two tests cover it.
+- **Seller-7 and DI-01 named the trade code as the item.** The item card's title was "KMT-88244-NG" with the escrow
+  printed twice. It now names the item.
+- **H1's timeline said a decided case was "awaiting the other side's response".** It now says the response window
+  closed.
+
 ## Judgement
 
-**Not yet assessed.** The deviations above are deliberate and each is argued. The pixel pass is still owed, and
-the ticket should not be called done until it has run.
+The eight screens render against the stand-in in the states the reference draws, with the data they should read. What
+differs is documented line by line in each record, and falls into three groups:
+
+1. **Intended and argued above** (reason vocabulary, nothing pre-selected, the step rail from the real status, the
+   platform's own clocks, no invented figures, counts for thumbnails).
+2. **Shell and data** (the header offset, fixture codes and amounts, the page being longer than the 660px frame).
+3. **A real gap: three screens have no evidence uploader.** Customer-7 ("Add evidence photos"), Seller-8 ("Add
+   supporting evidence") and AC6 ("Add new evidence") draw one in the reference and ship without. The file path exists
+   (`uploadFile`, `FileDropzone`, `fileRefId` on `POST /disputes/:id/evidence`), but the open-dispute and appeal
+   endpoints accept no files, so photos on those two would need either a contract change or a second step. Seller-8's
+   "Add photos and compare" and Y1 are the way to add evidence today. This is the owner's call: ship F-032 Done with
+   the uploader as a follow-up, or hold it for the uploader.
+
+Not touched: the dispute-withdrawal behaviour that leaves the trade in `DISPUTED` (a money question, in
+`docs/manager/RUN_LOG.md`).

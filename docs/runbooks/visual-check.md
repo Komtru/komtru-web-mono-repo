@@ -130,6 +130,10 @@ funding, a funded trade, a trade in inspection and a disputed trade; for the sel
 awaiting an answer. `no-trades` is the same person before a first trade, which is the state the empty-state screens
 are drawn in. Default: `with-trades`.
 
+The `dispute-mediation` and `dispute-decided` scenarios put the case on the disputed trade in mediation and after a
+decision (a refund in full, inside the appeal window), and give the `seller` and `merchant` personas the seller side of
+that trade, which their normal list does not carry. Default (`with-trades`) is the case in evidence collection.
+
 The `application-*` scenarios set the merchant application (F-040) the verification screens draw: `application-draft`,
 `application-in-review`, `application-changes-requested`, `application-rejected` and `application-approved`. They keep
 the person's trades. With no application scenario, a certified merchant is approved and everyone else has not started
@@ -162,8 +166,9 @@ with its step number and the selector, so a screen reached by a different path t
 walk may set `content` (the shell-cropping selector, as `--content`).
 
 Registered today: `AC1` (My Trades, empty), `CWT-01` and `CWT-S03` (a trade awaiting funding, and its funding step),
-`CWT-05` and `CWT-S15` (a disputed trade's workspace and case status), `Y1` (the evidence comparison), and `M2` and
-`BVR1` (the seller's business verification, in review and rejected). Add a row when a ticket needs a state the URL
+`CWT-05` (a disputed trade's workspace), the F-032 dispute screens (`Customer-7`, `Customer-8`, `Seller-7`, `Seller-8`,
+`H1`, `H2`, `AC6`, `Y1`, `DI-01`, `CWT-S14`, `CWT-S15`, `SP-M23`), and `M2` and `BVR1` (the seller's business
+verification, in review and rejected). Add a row when a ticket needs a state the URL
 does not reach. `tools/visual-check/test/walkthroughs.test.ts` checks every entry names a row of the v2 screen index.
 
 A walk for a trade names a fixture trade by its id. The ids are constants in `fixtures.ts` (`TRADE_IDS`), so a
@@ -227,12 +232,12 @@ Be specific before you claim a screen. These were checked by loading the app aga
   evidence, apply for verification) can be drawn, but a submit answers 404 and the screen shows its failure.
 - **Trade states and dispute states not fixtured.** The fixtures cover the proposal awaiting an answer, the trade
   awaiting funding, funded and shipped, in inspection, and disputed in evidence collection. A cancelled, expired,
-  delivered-and-released, settled or refunded trade has no fixture, and neither has a decided, mediated or appealed
-  dispute. A trade the persona cannot see answers 404, as the backend does.
+  delivered-and-released, settled or refunded trade has no fixture, and neither has an appealed or withdrawn dispute. A trade the persona cannot see answers 404, as the backend does.
 - **Dispute routes.** The case routes (`/trade/<id>/dispute/status`, `/dispute/evidence`, `/issue`, `/dispute/withdraw`,
   `/appeal`) render in a production build since the F-032 wiring fix: each route names its screen by key rather than
-  passing a function. Their ui-review records (CWT-S15, Y1) carry the real comparisons. The fixtures cover the live
-  case in evidence collection; a decided or past-mediation case shows the screen's own gate, not the full screen.
+  passing a function. Their ui-review records (CWT-S15, Y1) carry the real comparisons. The fixtures cover the case in
+  evidence collection, in mediation and decided (see _Personas and scenarios_); an appealed or withdrawn case has no
+  fixture.
 - **Trade creation and the trade-by-code page.** `POST /trades/preview` and `POST /trades` are writes, so the create
   flow (`/trade/new`) cannot be driven past its first screen. `GET /trades/by-code/:code` is not served.
 - **Account security, payouts, two-factor and privacy.** `/me/factors`, `/me/devices`, `/me/sessions`, the payout
