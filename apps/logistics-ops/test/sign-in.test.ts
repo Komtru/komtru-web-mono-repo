@@ -38,6 +38,14 @@ describe('submitPassword', () => {
     expect(wrong).toEqual({ kind: 'error', message: messageFor(401, 'INVALID_CREDENTIALS') });
   });
 
+  it('turns 409 MULTIPLE_LOGISTICS_INVITATIONS into its own state', async () => {
+    const result = await submitPassword(
+      credentials,
+      fetchReturning(json({ status: 409, code: 'MULTIPLE_LOGISTICS_INVITATIONS', title: 'x' }, 409)),
+    );
+    expect(result).toEqual({ kind: 'several-invitations' });
+  });
+
   it('moves to a second factor when the account has one', async () => {
     const result = await submitPassword(
       credentials,

@@ -72,8 +72,9 @@ export function inviteNotice(result: LogisticsInviteOutcome): Notice {
   if (result.outcome === 'LINKED') {
     return {
       tone: 'success',
-      title: `Added — ${displayName(result.member)} can log in now`,
-      body: 'They already have a Komtru account. We have let them know; their first sign-in here accepts the invitation.',
+      // No name: the platform does not reveal whose account an address belongs to until they sign in.
+      title: 'Added — they can log in now',
+      body: `${result.member.contactMasked ?? 'This person'} already has a Komtru account. We have let them know; their first sign-in here accepts the invitation.`,
     };
   }
   return {

@@ -10,6 +10,8 @@ import { destinationFor, parkUrl } from '../auth/park';
 import {
   NO_ACCESS_BODY,
   NO_ACCESS_TITLE,
+  SEVERAL_BODY,
+  SEVERAL_TITLE,
   UNAVAILABLE,
   defaultFactor,
   needsSend,
@@ -56,6 +58,7 @@ export function SignInForm({ next, wrongScope = false }: SignInFormProps): React
   const [sentTo, setSentTo] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [noAccess, setNoAccess] = useState(false);
+  const [several, setSeveral] = useState(false);
   const [busy, setBusy] = useState(false);
 
   /** Signed in: find out whose portal this is, and send a Park Agent to the Park app. */
@@ -91,6 +94,7 @@ export function SignInForm({ next, wrongScope = false }: SignInFormProps): React
     setBusy(true);
     setMessage(null);
     setNoAccess(false);
+    setSeveral(false);
     const result = await submitPassword({ identifier: identifier.trim(), password });
     switch (result.kind) {
       case 'session':
@@ -99,6 +103,9 @@ export function SignInForm({ next, wrongScope = false }: SignInFormProps): React
         return;
       case 'no-access':
         setNoAccess(true);
+        break;
+      case 'several-invitations':
+        setSeveral(true);
         break;
       case 'error':
         setMessage(result.message);
@@ -126,6 +133,7 @@ export function SignInForm({ next, wrongScope = false }: SignInFormProps): React
       return;
     }
     if (result.kind === 'no-access') setNoAccess(true);
+    else if (result.kind === 'several-invitations') setSeveral(true);
     else setMessage(result.message);
     setCode('');
     setBusy(false);
@@ -137,6 +145,7 @@ export function SignInForm({ next, wrongScope = false }: SignInFormProps): React
     setCode('');
     setMessage(null);
     setNoAccess(false);
+    setSeveral(false);
   };
 
   const others =
@@ -158,12 +167,17 @@ export function SignInForm({ next, wrongScope = false }: SignInFormProps): React
             : stepPrompt(factor, sentTo)}
       </p>
 
-      {wrongScope && challenge === null && !noAccess && (
+      {wrongScope && challenge === null && !noAccess && !several && (
         <Banner tone="warning">That session was for another Komtru app. Sign in again here.</Banner>
       )}
       {noAccess && (
         <Banner tone="warning" title={NO_ACCESS_TITLE}>
           {NO_ACCESS_BODY}
+        </Banner>
+      )}
+      {several && (
+        <Banner tone="warning" title={SEVERAL_TITLE}>
+          {SEVERAL_BODY}
         </Banner>
       )}
       {message !== null && <Banner tone="risk">{message}</Banner>}

@@ -30,12 +30,15 @@ export type PasswordResult =
   | { kind: 'challenge'; challenge: Challenge }
   /** The password was right and the account belongs to no logistics company (403 NO_LOGISTICS_ACCESS). */
   | { kind: 'no-access' }
+  /** Invitations from more than one company: none is accepted until support settles it (409). */
+  | { kind: 'several-invitations' }
   | { kind: 'error'; message: string };
 
 export type SendResult = { kind: 'sent'; destination: string | null } | { kind: 'error'; message: string };
 export type CodeResult =
   | { kind: 'ok' }
   | { kind: 'no-access' }
+  | { kind: 'several-invitations' }
   /** The code was wrong and another try is allowed. */
   | { kind: 'wrong'; message: string }
   | { kind: 'error'; message: string };
@@ -86,6 +89,13 @@ const post = (path: string, body: unknown, fetchImpl: typeof fetch): Promise<Res
     body: JSON.stringify(body),
   });
 
+export const SEVERAL_TITLE = 'Invitations from more than one company';
+export const SEVERAL_BODY =
+  'This account has been invited by more than one logistics company, so we have not added you to any of them yet. Contact Komtru support and we will sort it out.';
+
+const isSeveral = (status: number, code: unknown): boolean =>
+  status === 409 && code === 'MULTIPLE_LOGISTICS_INVITATIONS';
+
 export const isNoAccess = (status: number, code: unknown): boolean =>
   status === 403 && code === 'NO_LOGISTICS_ACCESS';
 
@@ -114,6 +124,7 @@ export async function submitPassword(
     const body = await readBody(response);
     if (!response.ok) {
       if (isNoAccess(response.status, body.code)) return { kind: 'no-access' };
+      if (isSeveral(response.status, body.code)) return { kind: 'several-invitations' };
       return { kind: 'error', message: messageFor(response.status, body.code) };
     }
     if (isChallenge(body)) {
@@ -157,6 +168,7 @@ export async function submitCode(
     const body = await readBody(response);
     if (response.ok) return { kind: 'ok' };
     if (isNoAccess(response.status, body.code)) return { kind: 'no-access' };
+    if (isSeveral(response.status, body.code)) return { kind: 'several-invitations' };
     if (response.status === 401) {
       const left = body.attemptsRemaining;
       const tail =

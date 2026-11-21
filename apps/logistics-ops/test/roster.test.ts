@@ -59,9 +59,9 @@ describe('buildRoster', () => {
 
 describe('inviteNotice', () => {
   it('says LINKED people can log in now', () => {
-    expect(inviteNotice({ outcome: 'LINKED', member: member({ status: 'INVITED' }) }).title).toBe(
-      'Added — Ada Obi can log in now',
-    );
+    const notice = inviteNotice({ outcome: 'LINKED', member: member({ status: 'INVITED', name: null }) });
+    expect(notice.title).toBe('Added — they can log in now');
+    expect(notice.body).toContain('a•••@swift.ng');
   });
 
   it('says PENDING people get access once they sign up, and that the admin must tell them', () => {

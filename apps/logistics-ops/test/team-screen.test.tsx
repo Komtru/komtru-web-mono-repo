@@ -42,7 +42,7 @@ const member = (n: number, over: Record<string, unknown> = {}) => ({
 const MEMBERS = [
   member(10, { name: 'Ada Admin', role: 'ADMIN' }),
   member(11, { name: 'Obi Operator' }),
-  member(12, { name: 'Ngozi Newcomer', status: 'INVITED' }),
+  member(12, { name: null, contactMasked: 'n•••@gmail.com', status: 'INVITED' }),
 ];
 const INVITATIONS = [
   {
@@ -106,6 +106,8 @@ describe('TeamScreen', () => {
     expect(screen.getByText('Not signed in yet')).toBeDefined();
     expect(screen.getByText('Not signed up yet')).toBeDefined();
     expect(screen.getByText('+23480•••4567')).toBeDefined();
+    // A member who has not signed in is shown by masked contact, never by name.
+    expect(screen.getByText('n•••@gmail.com')).toBeDefined();
     await expectNoAxeViolations(container);
   });
 
@@ -120,7 +122,7 @@ describe('TeamScreen', () => {
     await screen.findByText('Obi Operator');
     fireEvent.change(screen.getByLabelText('Email or phone'), { target: { value: 'tunde@swift.ng' } });
     fireEvent.click(screen.getByRole('button', { name: 'Send invite' }));
-    expect(await screen.findByText('Added — Tunde can log in now')).toBeDefined();
+    expect(await screen.findByText('Added — they can log in now')).toBeDefined();
     const [, input] = api.call.mock.calls.find(([endpoint]) => endpoint.method === 'post')!;
     expect(input).toEqual({ body: { email: 'tunde@swift.ng', role: 'OPERATOR' } });
   });
