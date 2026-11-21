@@ -51,7 +51,14 @@ import {
   verificationStatusFor,
   viewerFactsFor,
 } from './fixtures.ts';
-import { PERSONA_IDS, SCENARIO_IDS, type PersonaId, type ScenarioId } from './personas.ts';
+import { checkLogisticsFixtures } from './logistics.ts';
+import {
+  PERSONA_IDS,
+  SCENARIO_IDS,
+  isConsumerPersona,
+  type ConsumerPersonaId,
+  type ScenarioId,
+} from './personas.ts';
 
 /** The part of a zod schema this check reads: whether it parsed, and why not. */
 interface Checkable {
@@ -77,11 +84,12 @@ export function checkFixtures(): void {
       tradesFor(persona, scenario).forEach((trade, index) => {
         check(failures, `trade ${index} for ${where}`, tradeListItemSchema, trade);
       });
-      // Staff have no consumer account, so no consumer read exists for them to check.
-      if (persona === 'staff') continue;
+      // Staff and couriers have no consumer account, so no consumer read exists for them to check.
+      if (!isConsumerPersona(persona)) continue;
       checkConsumerReads(failures, persona, scenario, where);
     }
   }
+  checkLogisticsFixtures(failures, check);
   if (failures.length > 0) {
     throw new Error(
       `Stand-in fixtures no longer match @komtru/shared-types or @komtru/api-client:\n${failures.join('\n')}`,
@@ -91,7 +99,7 @@ export function checkFixtures(): void {
 
 function checkConsumerReads(
   failures: string[],
-  persona: Exclude<PersonaId, 'staff'>,
+  persona: ConsumerPersonaId,
   scenario: ScenarioId,
   where: string,
 ): void {

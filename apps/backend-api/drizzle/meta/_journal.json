@@ -400,6 +400,13 @@
       "when": 1795104763797,
       "tag": "0056_trust_provider_webhooks",
       "breakpoints": true
+    },
+    {
+      "idx": 57,
+      "version": "7",
+      "when": 1795186279893,
+      "tag": "0057_logistics_companies",
+      "breakpoints": true
     }
   ]
 }

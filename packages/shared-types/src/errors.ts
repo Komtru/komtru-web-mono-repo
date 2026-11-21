@@ -36,6 +36,10 @@ export const PROBLEM_CODES = [
   'LAST_ADMIN',
   'ALREADY_HAS_ACTIVE_COMPANY',
   'ALREADY_A_MEMBER',
+  // F-065. An account with no ACTIVE logistics membership and invitations from more than one company:
+  // its first sign-in cannot tell which company it is accepting, so it accepts none until support
+  // settles it (the owner has not ruled which should win).
+  'MULTIPLE_LOGISTICS_INVITATIONS',
   'MERCHANT_CANNOT_BUY',
   // The selling limit for an account without merchant status (owner ruling 2026-11-20).
   'SELL_LIMIT_PER_TRADE',

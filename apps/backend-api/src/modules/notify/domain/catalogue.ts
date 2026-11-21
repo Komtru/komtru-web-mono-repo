@@ -224,6 +224,41 @@ const MERCHANT_MAPPINGS: unknown[] = [
 ];
 
 /**
+ * T-086 (closes m2 §13.5): a person was added to a logistics company's team. One template for both
+ * ways it happens — their address already belonged to a verified account, or they just verified it
+ * after being invited — because in both they now hold an INVITED membership and their first sign-in
+ * to the portal is what accepts it. Sent to the invitee's own account, so never to an unproven address.
+ */
+const LOGISTICS_TEMPLATES: unknown[] = [
+  {
+    templateKey: 'logistics.member.invited',
+    channel: 'IN_APP',
+    category: 'ACCOUNT',
+    body: 'You were added to {{companyName}} as {{roleLabel}}. Sign in to the Komtru logistics portal to start.',
+    variables: ['companyName', 'roleLabel'],
+  },
+  {
+    templateKey: 'logistics.member.invited',
+    channel: 'EMAIL',
+    category: 'ACCOUNT',
+    subject: 'You were added to {{companyName}} on Komtru',
+    body: '{{companyName}} added you to its team on Komtru as {{roleLabel}}.\n\nSign in to the Komtru logistics portal with your usual Komtru email or phone and password. Your first sign-in accepts the invitation.\n\nIf you were not expecting this, you can ignore it: nothing changes until you sign in.',
+    variables: ['companyName', 'roleLabel'],
+  },
+  {
+    templateKey: 'logistics.member.invited',
+    channel: 'SMS',
+    category: 'ACCOUNT',
+    body: 'Komtru: {{companyName}} added you to its team as {{roleLabel}}. Sign in to the Komtru logistics portal with your Komtru account to accept.',
+    variables: ['companyName', 'roleLabel'],
+  },
+];
+
+const LOGISTICS_MAPPINGS: unknown[] = [
+  { eventName: 'logistics.member.invited', templateKey: 'logistics.member.invited' },
+];
+
+/**
  * T-068: every trade notification. The copy is in `tradeCatalogue.ts`; the mappings come from the
  * trades module's plans, which are what say which event sends which key.
  */
@@ -233,12 +268,20 @@ const TRADE_MAPPINGS: unknown[] = TRADE_NOTIFICATION_PLANS.map((plan) => ({
 }));
 
 export const CATALOGUE: NotificationCatalogue = {
-  templates: [...IDENTITY_TEMPLATES, ...GEO_TEMPLATES, ...MERCHANT_TEMPLATES, ...tradeTemplates()].map((t) =>
-    templateSchema.parse(t),
-  ),
-  mappings: [...IDENTITY_MAPPINGS, ...GEO_MAPPINGS, ...MERCHANT_MAPPINGS, ...TRADE_MAPPINGS].map((m) =>
-    mappingSchema.parse(m),
-  ),
+  templates: [
+    ...IDENTITY_TEMPLATES,
+    ...GEO_TEMPLATES,
+    ...MERCHANT_TEMPLATES,
+    ...LOGISTICS_TEMPLATES,
+    ...tradeTemplates(),
+  ].map((t) => templateSchema.parse(t)),
+  mappings: [
+    ...IDENTITY_MAPPINGS,
+    ...GEO_MAPPINGS,
+    ...MERCHANT_MAPPINGS,
+    ...LOGISTICS_MAPPINGS,
+    ...TRADE_MAPPINGS,
+  ].map((m) => mappingSchema.parse(m)),
 };
 
 const sameSet = (a: string[], b: string[]): boolean =>

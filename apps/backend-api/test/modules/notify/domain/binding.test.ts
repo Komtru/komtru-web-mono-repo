@@ -109,6 +109,14 @@ describe("notify's identity bindings", () => {
         ip: null,
         revokedSessions: 3,
       },
+      'logistics.member.invited': {
+        memberId: randomUUID(),
+        companyId: randomUUID(),
+        companyName: 'Swift Couriers',
+        userId: randomUUID(),
+        role: 'OPERATOR',
+        via: 'INVITATION',
+      },
     };
 
     // Trade bindings resolve their audience from the database; their variables are checked against the

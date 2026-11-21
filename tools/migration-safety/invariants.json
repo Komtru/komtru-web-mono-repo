@@ -142,6 +142,31 @@
       "definition": "CREATE UNIQUE INDEX refunds_provider_refund ON ledger.refunds USING btree (provider, provider_refund_id) WHERE (provider_refund_id IS NOT NULL)"
     },
     {
+      "table": "logistics.logistics_companies",
+      "name": "logistics_companies_one_default_uidx",
+      "definition": "CREATE UNIQUE INDEX logistics_companies_one_default_uidx ON logistics.logistics_companies USING btree (is_default) WHERE is_default"
+    },
+    {
+      "table": "logistics.logistics_company_members",
+      "name": "logistics_company_members_active_user_uidx",
+      "definition": "CREATE UNIQUE INDEX logistics_company_members_active_user_uidx ON logistics.logistics_company_members USING btree (user_id) WHERE (status = 'ACTIVE'::logistics.member_status)"
+    },
+    {
+      "table": "logistics.logistics_company_members",
+      "name": "logistics_company_members_company_user_live_uidx",
+      "definition": "CREATE UNIQUE INDEX logistics_company_members_company_user_live_uidx ON logistics.logistics_company_members USING btree (company_id, user_id) WHERE (status = ANY (ARRAY['INVITED'::logistics.member_status, 'ACTIVE'::logistics.member_status]))"
+    },
+    {
+      "table": "logistics.logistics_member_invitations",
+      "name": "logistics_member_invitations_pending_uidx",
+      "definition": "CREATE UNIQUE INDEX logistics_member_invitations_pending_uidx ON logistics.logistics_member_invitations USING btree (company_id, destination_hash) WHERE (status = 'PENDING'::logistics.invitation_status)"
+    },
+    {
+      "table": "logistics.logistics_packages",
+      "name": "logistics_packages_trade_live_uidx",
+      "definition": "CREATE UNIQUE INDEX logistics_packages_trade_live_uidx ON logistics.logistics_packages USING btree (trade_id) WHERE (status <> 'REJECTED'::logistics.package_status)"
+    },
+    {
       "table": "merchant.merchant_applications",
       "name": "merchant_applications_case_unique",
       "definition": "CREATE UNIQUE INDEX merchant_applications_case_unique ON merchant.merchant_applications USING btree (case_id) WHERE (case_id IS NOT NULL)"
@@ -1009,6 +1034,11 @@
       "table": "ledger.refunds",
       "name": "komtru_refund_total",
       "definition": "[O] CREATE TRIGGER komtru_refund_total BEFORE INSERT OR UPDATE OF amount_minor, status, payment_attempt_id ON ledger.refunds FOR EACH ROW EXECUTE FUNCTION ledger.guard_refund_total()"
+    },
+    {
+      "table": "logistics.logistics_package_status_events",
+      "name": "komtru_append_only",
+      "definition": "[O] CREATE TRIGGER komtru_append_only BEFORE DELETE OR UPDATE ON logistics.logistics_package_status_events FOR EACH ROW EXECUTE FUNCTION platform.reject_mutation()"
     },
     {
       "table": "merchant.merchant_application_events",

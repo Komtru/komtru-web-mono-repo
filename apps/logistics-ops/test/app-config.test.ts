@@ -28,7 +28,9 @@ describe('@komtru/logistics-ops app spec', () => {
     });
   });
 
-  it('declares the session secret the middleware needs', () => {
-    expect(Object.keys(envExample())).toContain(SESSION_SECRET_ENV);
+  it('declares the session secret and the Park app URL', () => {
+    expect(Object.keys(envExample())).toEqual(
+      expect.arrayContaining([SESSION_SECRET_ENV, 'NEXT_PUBLIC_KOMTRU_PARK_URL']),
+    );
   });
 });

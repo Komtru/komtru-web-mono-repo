@@ -23,6 +23,7 @@ import { sessionUsableUnder } from '../domain/session/status.js';
 import { userEmails, userPhones } from '../infrastructure/postgres/schema/contacts.js';
 import { users } from '../infrastructure/postgres/schema/users.js';
 import { AUDIT_ACTIONS, writeAudit } from './audit.service.js';
+import { recordLogisticsRefusal } from './logistics-refusal.service.js';
 import { onboarding, type PublicUser } from './auth.service.js';
 import { mfaRequirement } from '../domain/mfa/policy.js';
 import { issueMfaToken, type MfaChallengeView } from './mfa-login.service.js';
@@ -55,6 +56,12 @@ export type LoginResult =
    * Consumer sign-in only: the staff path never takes it.
    */
   | { outcome: 'ACCOUNT_NOTICE'; notice: AccountNotice }
+  /**
+   * T-086 (m2 §2): the password was PROVED, and the account holds no logistics membership. Like
+   * `ACCOUNT_NOTICE`, reached only by someone who already holds the credentials, so it tells a stranger
+   * nothing about which identifiers exist. LOGISTICS sign-in only.
+   */
+  | { outcome: 'NO_LOGISTICS_ACCESS' }
   /** Still the only failure. §S3: one status, one body, one cost, whatever actually went wrong. */
   | { outcome: 'REJECTED' };
 
@@ -141,8 +148,10 @@ export interface LoginOptions {
   /**
    * CONSUMER by default. STAFF is `POST /auth/staff/login` (T-037): password and a second factor
    * only, never a session from the password alone, and only for an account holding a live role.
+   * LOGISTICS is `POST /auth/logistics/login` (T-086): the consumer credential flow, for an account
+   * with a logistics membership, and the session's opening is the invitation's acceptance.
    */
-  scope?: 'CONSUMER' | 'STAFF';
+  scope?: 'CONSUMER' | 'STAFF' | 'LOGISTICS';
 }
 
 export async function login(
@@ -239,9 +248,16 @@ export async function login(
       };
     }
 
+    // The logistics gate (m2 §2). Below the line, for the staff gate's reason, and before any challenge
+    // is issued: an account with no membership gets no mfa token to spend on a session it cannot have.
+    if (scope === 'LOGISTICS' && !(await deps.logisticsAccess?.eligible(tx, candidate.userId))) {
+      await recordLogisticsRefusal(tx, input, candidate.userId, 'password');
+      return { outcome: 'NO_LOGISTICS_ACCESS' };
+    }
+
     const factors = await activeFactors(tx, candidate.userId);
     const requirement = mfaRequirement({
-      scope: 'CONSUMER',
+      scope,
       activeFactorTypes: factors.map((factor) => factor.factorType),
       // Not a lookup, deliberately. `mfaRequirement` makes this inert for CONSUMER (D2 C4's forced
       // setup is about STAFF sessions, §S13), so querying the role grants here would be a round
@@ -256,6 +272,7 @@ export async function login(
         userId: candidate.userId,
         factors,
         ip: input.ip,
+        scope,
       });
 
       // No device row and no session: both belong in the transaction that COMPLETES the login
@@ -285,6 +302,14 @@ export async function login(
       };
     }
 
+    // Login is acceptance (m2 §2): an INVITED membership becomes ACTIVE here, in the transaction that
+    // opens the session, so a refused activation opens nothing.
+    if (scope === 'LOGISTICS' && !(await deps.logisticsAccess?.accept(tx, candidate.userId))) {
+      // The membership went between the eligibility check and here (a removal in between).
+      await recordLogisticsRefusal(tx, input, candidate.userId, 'accept');
+      return { outcome: 'NO_LOGISTICS_ACCESS' };
+    }
+
     const device = await upsertDevice(tx, {
       userId: candidate.userId,
       fingerprint: input.deviceFingerprint ?? null,
@@ -293,10 +318,10 @@ export async function login(
 
     const session = await createSession(tx, deps, {
       userId: candidate.userId,
-      // CONSUMER and only CONSUMER. Staff and logistics sign in through their own routes (T-037,
-      // T-086); T-031's rule is that the scope is chosen where the session is created and can never
-      // be changed by a refresh.
-      scope: 'CONSUMER',
+      // CONSUMER here, or LOGISTICS from `/auth/logistics/login` (T-086). Staff never reach this line:
+      // their branch above returns a challenge. T-031's rule is that the scope is chosen where the
+      // session is created and can never be changed by a refresh.
+      scope,
       amr: ['pwd'],
       deviceId: device.deviceId,
       ip: input.ip,
@@ -316,7 +341,7 @@ export async function login(
         },
         aggregateType: 'identity.user',
         aggregateId: candidate.userId,
-        actor: { type: 'CONSUMER', id: candidate.userId },
+        actor: { type: scope, id: candidate.userId },
       });
     }
 
@@ -335,7 +360,12 @@ export async function login(
       userAgent: input.userAgent,
       sessionId: session.sessionId,
       deviceId: device.deviceId,
-      metadata: { amr: ['pwd'], rehashed: verdict.rehashed, isNewDevice: device.isNewDevice },
+      metadata: {
+        ...(scope === 'LOGISTICS' ? { scope } : {}),
+        amr: ['pwd'],
+        rehashed: verdict.rehashed,
+        isNewDevice: device.isNewDevice,
+      },
     });
 
     const { user, state } = await onboarding(tx, deps, candidate.userId);

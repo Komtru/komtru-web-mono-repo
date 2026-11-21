@@ -8,7 +8,7 @@ frontends.
 | `web-app-ui`     | consumer app — buy, sell, Park hub applications | yes, staging.komtru.com                |
 | `operations-app` | TrustOps console                                | yes                                    |
 | `web-site`       | public marketing site, komtru.com               | yes                                    |
-| `logistics-ops`  | courier company portal                          | placeholder package, no dev server yet |
+| `logistics-ops`  | courier company portal                          | built (F-065), no host yet             |
 | `park-agent-app` | Park Agent custody app                          | placeholder package, no dev server yet |
 
 ## Shared conventions

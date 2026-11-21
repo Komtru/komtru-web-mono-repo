@@ -21,12 +21,13 @@ import { deviceRoutes } from './http/routes/device.routes.js';
 import { mfaRoutes } from './http/routes/mfa.routes.js';
 import { passwordRoutes } from './http/routes/password.routes.js';
 import { staffAuthRoutes } from './http/routes/staff-auth.routes.js';
+import { logisticsAuthRoutes } from './http/routes/logistics-auth.routes.js';
 import { adminRoutes } from './http/routes/admin.routes.js';
 import { callerAgent, callerIp } from './http/controllers/request.js';
 import { recordRouteDenial } from './services/rbac.service.js';
 import { routeLabel } from '../../platform/http/route.js';
 import { registrationRoutes } from './http/routes/registration.routes.js';
-import type { MfaDeps } from './services/mfa.service.js';
+import type { LogisticsAccessPort, MfaDeps } from './services/mfa.service.js';
 import { createRelyingParty } from './infrastructure/webauthn/relying-party.js';
 import { createWebauthnChallengeStore } from './infrastructure/redis/webauthn-challenge.js';
 import { usernameRoutes } from './http/username.controller.js';
@@ -110,6 +111,7 @@ export {
   verifyFactor,
   type FactorRow,
   type FactorView,
+  type LogisticsAccessPort,
   type MfaDeps,
 } from './services/mfa.service.js';
 export { issueStepUpToken, consumeStepUpToken, requireStepUp } from './services/step-up.service.js';
@@ -273,6 +275,8 @@ export interface IdentityAuthOptions {
   logger: Logger;
   /** T-086's `logistics_company_members` lookup. Absent means nobody has a membership yet. */
   companyMembership?: (db: Db, userId: string) => Promise<CompanyMembership | null>;
+  /** T-086: eligibility and login-is-acceptance for `/auth/logistics/*`. Absent means nobody may. */
+  logisticsAccess?: LogisticsAccessPort;
   /**
    * The geo catalog's `getCitiesByIds`, wired by the registry (identity cannot import geo: geo imports
    * identity). Absent means address writes fail loudly rather than skip the city check.
@@ -378,6 +382,7 @@ export function createIdentityAuth(options: IdentityAuthOptions): IdentityAuth {
     webauthn: createRelyingParty(config, logger),
     webauthnChallenges: createWebauthnChallengeStore(redis, logger),
     staffRequireMfa: config.identity.staffRequireMfa,
+    ...(options.logisticsAccess ? { logisticsAccess: options.logisticsAccess } : {}),
   };
 
   // T-035 / T-041. `enrich` supplies the avatar only: M7's completed-trade count (T-061) and M5's
@@ -451,6 +456,7 @@ export function createIdentityAuth(options: IdentityAuthOptions): IdentityAuth {
       ...registrationRoutes(account),
       ...passwordRoutes(account),
       ...staffAuthRoutes(account),
+      ...logisticsAuthRoutes(account),
       ...adminRoutes({ db, epochs, ports }),
       ...staffInvitationRoutes({ db, hasher: account.otpHasher, encryption, logger }),
       ...usernameRoutes({ db }),
@@ -522,3 +528,7 @@ export const identityModule = (auth: IdentityAuth): KomtruModule =>
 // holder approves through /admin/approvals, and trust spends the approval with `consumeApproval`.
 export { consumeApproval, requestApproval, type RequestApprovalInput } from './services/approval.service.js';
 export type { StaffActor } from './services/rbac.service.js';
+
+// T-086. Logistics invites a POC by address: an address a verified account already holds links that
+// account straight away (m2 §2). VERIFIED only, for `findUserByVerifiedEmail`'s reason.
+export { findUserByVerifiedEmail } from './services/contact.service.js';

@@ -284,6 +284,11 @@
       "tag": "0056_trust_provider_webhooks",
       "when": 1795104763797,
       "sha256": "a4126cfd1febe0f8b7d1684bf57b3831735b252c3dedbd0bc57c149d01f9099b"
+    },
+    {
+      "tag": "0057_logistics_companies",
+      "when": 1795186279893,
+      "sha256": "011012fb4c89924a1acd53402f52cdd90a8a9e22db469f5564ee80d9408ccdf7"
     }
   ]
 }

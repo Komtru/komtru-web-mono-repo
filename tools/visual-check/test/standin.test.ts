@@ -118,6 +118,44 @@ describe('the stand-in over HTTP', () => {
   });
 });
 
+describe('the logistics portal (F-065)', () => {
+  const tokenFor = async (apiUrl: string, persona: string): Promise<string> => {
+    const refresh = await fetch(`${apiUrl}/auth/refresh`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ refreshToken: `vc.${persona}.with-trades` }),
+    });
+    return ((await refresh.json()) as { accessToken: string }).accessToken;
+  };
+
+  it('answers a courier on the portal routes and refuses them every consumer route', async () => {
+    const standin = await startStandin({ port: 0, log: () => undefined });
+    try {
+      const auth = { authorization: `Bearer ${await tokenFor(standin.apiUrl, 'courier-operator')}` };
+      const me = await fetch(`${standin.apiUrl}/logistics/me`, { headers: auth });
+      expect(me.status).toBe(200);
+      expect(await me.json()).toMatchObject({
+        company: { name: 'Swift Couriers' },
+        member: { role: 'OPERATOR' },
+      });
+      expect((await fetch(`${standin.apiUrl}/logistics/members`, { headers: auth })).status).toBe(200);
+      expect((await fetch(`${standin.apiUrl}/me/viewer`, { headers: auth })).status).toBe(403);
+    } finally {
+      await standin.close();
+    }
+  });
+
+  it('refuses a consumer session on the portal routes', async () => {
+    const standin = await startStandin({ port: 0, log: () => undefined });
+    try {
+      const auth = { authorization: `Bearer ${await tokenFor(standin.apiUrl, 'buyer')}` };
+      expect((await fetch(`${standin.apiUrl}/logistics/me`, { headers: auth })).status).toBe(403);
+    } finally {
+      await standin.close();
+    }
+  });
+});
+
 describe('the session seeder', () => {
   it('seals a session the app sealer opens, with the persona facts and the access token digest', async () => {
     const cookies = await sessionCookiesFor('merchant', 'with-trades', 'localhost');

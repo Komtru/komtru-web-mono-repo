@@ -47,6 +47,21 @@ export const MFA_SUBJECT_DOMAIN = 'identity.mfa.subject';
 export const MFA_STAFF_SUBJECT_DOMAIN = 'identity.mfa.subject.staff';
 
 /**
+ * T-086: the same separation for `/auth/logistics/mfa/verify`. A consumer or staff `mfaToken` cannot
+ * open a LOGISTICS session, and a logistics one cannot open either of theirs.
+ */
+export const MFA_LOGISTICS_SUBJECT_DOMAIN = 'identity.mfa.subject.logistics';
+
+/** The scopes a sign-in challenge is issued under: every session scope. */
+export type MfaScope = 'CONSUMER' | 'STAFF' | 'LOGISTICS';
+
+const MFA_SUBJECT_DOMAINS: Record<MfaScope, string> = {
+  CONSUMER: MFA_SUBJECT_DOMAIN,
+  STAFF: MFA_STAFF_SUBJECT_DOMAIN,
+  LOGISTICS: MFA_LOGISTICS_SUBJECT_DOMAIN,
+};
+
+/**
  * The same shape for an ENROLMENT ceremony, under a domain of its own.
  *
  * From review, and it is not decoration. Both families are `otp_challenges` rows of purpose
@@ -59,11 +74,8 @@ export const MFA_STAFF_SUBJECT_DOMAIN = 'identity.mfa.subject.staff';
 export const MFA_ENROLMENT_DOMAIN = 'identity.mfa.enrolment';
 
 /** `otp_challenges.destination_hash` for a challenge bound to an account rather than an address. */
-export const mfaSubjectHash = (
-  hasher: HmacHasher,
-  userId: string,
-  scope: 'CONSUMER' | 'STAFF' = 'CONSUMER',
-): Buffer => hasher.hmac(scope === 'STAFF' ? MFA_STAFF_SUBJECT_DOMAIN : MFA_SUBJECT_DOMAIN, userId);
+export const mfaSubjectHash = (hasher: HmacHasher, userId: string, scope: MfaScope = 'CONSUMER'): Buffer =>
+  hasher.hmac(MFA_SUBJECT_DOMAINS[scope], userId);
 
 export const mfaEnrolmentHash = (hasher: HmacHasher, userId: string): Buffer =>
   hasher.hmac(MFA_ENROLMENT_DOMAIN, userId);

@@ -120,4 +120,13 @@ describe('the two subject hashes', () => {
     expect(mfaSubjectHash(hasher, userId)).not.toEqual(mfaSubjectHash(hasher, other));
     expect(mfaEnrolmentHash(hasher, userId)).not.toEqual(mfaEnrolmentHash(hasher, other));
   });
+
+  // T-086: a token issued under one scope's sign-in cannot be spent on another scope's verify route.
+  it('gives each sign-in scope its own family, LOGISTICS included', () => {
+    const consumer = mfaSubjectHash(hasher, userId, 'CONSUMER');
+    const staff = mfaSubjectHash(hasher, userId, 'STAFF');
+    const logistics = mfaSubjectHash(hasher, userId, 'LOGISTICS');
+    expect(new Set([consumer, staff, logistics].map((hash) => hash.toString('hex'))).size).toBe(3);
+    expect(mfaSubjectHash(hasher, userId)).toEqual(consumer);
+  });
 });

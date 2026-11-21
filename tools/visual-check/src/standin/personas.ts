@@ -3,8 +3,21 @@
 // none of them carries a credential: the stand-in answers for them, and nothing else does.
 import type { SessionScope, ViewerFacts } from '@komtru/shared-types';
 
-export const PERSONA_IDS = ['buyer', 'seller', 'merchant', 'staff'] as const;
+export const PERSONA_IDS = [
+  'buyer',
+  'seller',
+  'merchant',
+  'staff',
+  'courier-admin',
+  'courier-operator',
+] as const;
 export type PersonaId = (typeof PERSONA_IDS)[number];
+
+/** The people who sign in to a consumer app. Staff and couriers hold another scope and no consumer account. */
+export type ConsumerPersonaId = Exclude<PersonaId, 'staff' | 'courier-admin' | 'courier-operator'>;
+
+/** F-065: the logistics portal's people, members of the fixture courier company. */
+export type CourierPersonaId = 'courier-admin' | 'courier-operator';
 
 export interface Persona {
   id: PersonaId;
@@ -70,7 +83,26 @@ export const PERSONAS: Readonly<Record<PersonaId, Persona>> = {
     // Staff have no consumer viewer. The facts are here so the type is whole; no consumer route reads them.
     facts: { hasSold: false, certifiedMerchant: false },
   },
+  // F-065: a courier company's admin and operator, signed in to logistics-ops. No consumer route reads
+  // their facts either.
+  'courier-admin': {
+    id: 'courier-admin',
+    userId: '0190b0a0-0000-7000-8000-000000000105',
+    scope: 'LOGISTICS',
+    displayName: 'Chidi Nwosu',
+    facts: { hasSold: false, certifiedMerchant: false },
+  },
+  'courier-operator': {
+    id: 'courier-operator',
+    userId: '0190b0a0-0000-7000-8000-000000000106',
+    scope: 'LOGISTICS',
+    displayName: 'Bisi Ade',
+    facts: { hasSold: false, certifiedMerchant: false },
+  },
 };
+
+export const isConsumerPersona = (persona: PersonaId): persona is ConsumerPersonaId =>
+  PERSONAS[persona].scope === 'CONSUMER';
 
 export const isPersonaId = (value: string): value is PersonaId =>
   (PERSONA_IDS as readonly string[]).includes(value);
