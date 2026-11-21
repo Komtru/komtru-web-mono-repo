@@ -531,4 +531,4 @@ export type { StaffActor } from './services/rbac.service.js';
 
 // T-086. Logistics invites a POC by address: an address a verified account already holds links that
 // account straight away (m2 §2). VERIFIED only, for `findUserByVerifiedEmail`'s reason.
-export { findUserByVerifiedEmail, findUserByVerifiedPhone } from './services/contact.service.js';
+export { findUserByVerifiedEmail } from './services/contact.service.js';

@@ -44,6 +44,12 @@ export const AUDIT_ACTIONS = {
   OTP_FAILED: 'OTP_FAILED',
   LOGIN: 'LOGIN',
   LOGIN_FAILED: 'LOGIN_FAILED',
+  /**
+   * T-086: the password (and any factor) was right, and the sign-in was refused for what the account
+   * may do — no logistics membership. Not a LOGIN_FAILED, and no `identity.login.failed` event: it is
+   * not a guess at a credential, so nothing that counts failures should count it.
+   */
+  LOGIN_REFUSED: 'LOGIN_REFUSED',
   PASSWORD_SET: 'PASSWORD_SET',
   PASSWORD_CHANGED: 'PASSWORD_CHANGED',
   PASSWORD_RESET: 'PASSWORD_RESET',

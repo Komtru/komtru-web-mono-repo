@@ -9,7 +9,6 @@ import { isUniqueViolation } from '../../../db/errors.js';
 import type { Db } from '../../../db/index.js';
 import type { HmacHasher } from '../../../platform/crypto/hmac.js';
 import { publish, type Tx } from '../../../platform/events/publish.js';
-import type { EventActor } from '@komtru/shared-types';
 import { invitationDestinationHash, type InvitationChannel } from '../domain/contact.js';
 import { logisticsInvitationCancelled, logisticsMemberInvited } from '../domain/events.js';
 import {
@@ -18,7 +17,8 @@ import {
   logisticsMemberInvitations,
   type InvitationStatus,
 } from '../infrastructure/postgres/schema/index.js';
-import { notFound } from './member.service.js';
+import { LOGISTICS_AUDIT, eventActorFor, writeLogisticsAudit, type LogisticsActor } from './audit.js';
+import { lockCompany, notFound, requireActingAdmin } from './member.service.js';
 import { invitationColumns, toInvitationView, type InvitationView } from './views.js';
 
 export async function listInvitations(
@@ -63,12 +63,14 @@ export async function listInvitations(
 
 export async function cancelInvitation(
   tx: Tx,
-  input: { companyId: string; invitationId: string; actorUserId: string; actor: EventActor },
+  input: { companyId: string; invitationId: string; actor: LogisticsActor },
 ): Promise<InvitationView> {
+  await lockCompany(tx, input.companyId);
+  await requireActingAdmin(tx, input.companyId, input.actor);
   const row = (
     await tx
       .update(logisticsMemberInvitations)
-      .set({ status: 'CANCELLED', cancelledAt: sql`now()`, cancelledByUserId: input.actorUserId })
+      .set({ status: 'CANCELLED', cancelledAt: sql`now()`, cancelledByUserId: input.actor.userId })
       .where(
         and(
           eq(logisticsMemberInvitations.id, input.invitationId),
@@ -84,7 +86,11 @@ export async function cancelInvitation(
     payload: { invitationId: row.id, companyId: input.companyId },
     aggregateType: 'logistics.company',
     aggregateId: input.companyId,
-    actor: input.actor,
+    actor: eventActorFor(input.actor),
+  });
+  await writeLogisticsAudit(tx, input.actor, LOGISTICS_AUDIT.INVITATION_WITHDRAWN, {
+    companyId: input.companyId,
+    metadata: { invitationId: row.id, role: row.role, channel: row.channel, contact: row.destinationMasked },
   });
   return toInvitationView(row);
 }

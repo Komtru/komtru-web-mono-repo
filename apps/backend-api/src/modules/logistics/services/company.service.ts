@@ -3,13 +3,19 @@
 import { and, asc, count, desc, eq, sql } from 'drizzle-orm';
 import type { Db } from '../../../db/index.js';
 import { publish } from '../../../platform/events/publish.js';
-import type { EventActor } from '@komtru/shared-types';
 import { normaliseCompanyName, type CompanyStatus } from '../domain/company.js';
 import type { InviteContact } from '../domain/contact.js';
 import { logisticsCompanyCreated, logisticsCompanyUpdated } from '../domain/events.js';
 import type { MemberStatus } from '../domain/membership.js';
 import { logisticsCompanies } from '../infrastructure/postgres/schema/index.js';
-import { inviteToCompany, notFound, type InviteOutcome, type LogisticsCrypto } from './member.service.js';
+import { LOGISTICS_AUDIT, eventActorFor, writeLogisticsAudit, type LogisticsActor } from './audit.js';
+import {
+  inviteToCompany,
+  lockCompany,
+  notFound,
+  type InviteOutcome,
+  type LogisticsCrypto,
+} from './member.service.js';
 import {
   companyColumns,
   findCompany,
@@ -37,23 +43,31 @@ export type OnboardResult = InviteOutcome & { company: CompanyView };
 export async function onboardCompany(
   db: Db,
   crypto: LogisticsCrypto,
-  input: { name: string; initialPoc: InviteContact; actorUserId: string },
+  input: { name: string; initialPoc: InviteContact; actor: LogisticsActor },
 ): Promise<OnboardResult> {
   return db.transaction(async (tx) => {
-    const actor: EventActor = { type: 'STAFF', id: input.actorUserId };
+    const { actor } = input;
     const row = (
       await tx
         .insert(logisticsCompanies)
-        .values({ name: normaliseCompanyName(input.name), createdByUserId: input.actorUserId })
+        .values({ name: normaliseCompanyName(input.name), createdByUserId: actor.userId })
         .returning(companyColumns)
     )[0];
     if (!row) throw new Error('logistics: a company insert returned no row');
 
     await publish(tx, logisticsCompanyCreated, {
-      payload: { companyId: row.id, name: row.name, createdByUserId: input.actorUserId },
+      payload: { companyId: row.id, name: row.name, createdByUserId: actor.userId },
       aggregateType: 'logistics.company',
       aggregateId: row.id,
-      actor,
+      actor: eventActorFor(actor),
+    });
+    await writeLogisticsAudit(tx, actor, LOGISTICS_AUDIT.COMPANY_ONBOARDED, {
+      companyId: row.id,
+      metadata: {
+        name: row.name,
+        initialPocChannel: input.initialPoc.channel,
+        initialPoc: input.initialPoc.masked,
+      },
     });
 
     const outcome = await inviteToCompany(tx, crypto, {
@@ -86,9 +100,16 @@ export async function listCompanies(
 
 export async function updateCompany(
   db: Db,
-  input: { companyId: string; name?: string; status?: CompanyStatus; actorUserId: string },
+  input: { companyId: string; name?: string; status?: CompanyStatus; actor: LogisticsActor },
 ): Promise<CompanyView> {
   return db.transaction(async (tx) => {
+    const before = await lockCompany(tx, input.companyId);
+    const previousStatus = (
+      await tx
+        .select({ status: logisticsCompanies.status })
+        .from(logisticsCompanies)
+        .where(eq(logisticsCompanies.id, input.companyId))
+    )[0]?.status;
     const row = (
       await tx
         .update(logisticsCompanies)
@@ -105,8 +126,22 @@ export async function updateCompany(
       payload: { companyId: row.id, name: row.name, status: row.status },
       aggregateType: 'logistics.company',
       aggregateId: row.id,
-      actor: { type: 'STAFF', id: input.actorUserId },
+      actor: eventActorFor(input.actor),
     });
+    if (row.name !== before.name) {
+      await writeLogisticsAudit(tx, input.actor, LOGISTICS_AUDIT.COMPANY_RENAMED, {
+        companyId: row.id,
+        metadata: { from: before.name, to: row.name },
+      });
+    }
+    if (row.status !== previousStatus) {
+      await writeLogisticsAudit(
+        tx,
+        input.actor,
+        row.status === 'ENABLED' ? LOGISTICS_AUDIT.COMPANY_ENABLED : LOGISTICS_AUDIT.COMPANY_DISABLED,
+        { companyId: row.id, metadata: { from: previousStatus, to: row.status } },
+      );
+    }
     return toCompanyView(row);
   });
 }

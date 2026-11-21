@@ -2,6 +2,7 @@
 // a handler could reach for one. The scope of every route is the platform's to enforce (mount.ts); the
 // company and the ADMIN-vs-OPERATOR rule are this module's, in its controllers.
 import { randomUUID } from 'node:crypto';
+import type { Request } from 'express';
 import { describe, expect, it } from 'vitest';
 import type { Db } from '../../../src/db/index.js';
 import * as http from '../../../src/modules/logistics/http/controllers.js';
@@ -28,6 +29,7 @@ const untouchable = new Proxy(
 ) as Db;
 const deps: http.LogisticsHttpDeps = { db: () => untouchable, crypto: () => ({}) as LogisticsCrypto };
 const routes = logisticsRoutes(deps);
+const req = { ip: '127.0.0.1', get: () => undefined } as unknown as Request;
 const route = (label: string) => routes.find((candidate) => routeLabel(candidate) === label);
 
 const ADMIN_ROUTES = [
@@ -124,17 +126,20 @@ describe('the portal derives the company from the principal (m2 §5b)', () => {
     const operator = logisticsActor('OPERATOR');
     const refused: unknown = expect.objectContaining({ status: 403, code: 'FORBIDDEN' });
     expect(() =>
-      http.portalInviteHandler(deps, operator, { email: 'a@example.com', role: 'OPERATOR' }),
+      http.portalInviteHandler(deps, operator, req, { email: 'a@example.com', role: 'OPERATOR' }),
     ).toThrow(refused);
-    expect(() => http.portalUpdateMemberHandler(deps, operator, randomUUID(), { status: 'REMOVED' })).toThrow(
-      refused,
-    );
-    expect(() => http.portalCancelInvitationHandler(deps, operator, randomUUID())).toThrow(refused);
+    expect(() =>
+      http.portalUpdateMemberHandler(deps, operator, req, randomUUID(), { status: 'REMOVED' }),
+    ).toThrow(refused);
+    expect(() => http.portalCancelInvitationHandler(deps, operator, req, randomUUID())).toThrow(refused);
   });
 
   it('refuses an invalid contact as a 422 before touching the database', () => {
     expect(() =>
-      http.portalInviteHandler(deps, logisticsActor('ADMIN'), { email: 'not-an-email', role: 'OPERATOR' }),
+      http.portalInviteHandler(deps, logisticsActor('ADMIN'), req, {
+        email: 'not-an-email',
+        role: 'OPERATOR',
+      }),
     ).toThrow(expect.objectContaining({ status: 422, code: 'VALIDATION_FAILED' }));
   });
 });

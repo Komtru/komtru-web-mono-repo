@@ -110,18 +110,20 @@ describe.runIf(infraEnabled)('logistics portal (T-086)', () => {
       const person = await seedMember(t, app);
       const a = await insertCompany(t, 'Courier A');
       const b = await insertCompany(t, 'Courier B');
-      const rowA = await insertMember(t, { companyId: a, userId: person.userId });
       await insertMember(t, { companyId: b, userId: person.userId });
 
-      // Another sign-in is mid-way through activating A and has not committed.
+      // Another transaction is making this person ACTIVE at A and has not committed yet.
       const rival = await t.owner().connect();
       try {
         await rival.query('BEGIN');
-        await rival.query(`UPDATE logistics.logistics_company_members SET status = 'ACTIVE' WHERE id = $1`, [
-          rowA,
-        ]);
+        await rival.query(
+          `INSERT INTO logistics.logistics_company_members (company_id, user_id, role, status)
+             VALUES ($1, $2, 'OPERATOR', 'ACTIVE')`,
+          [a, person.userId],
+        );
 
-        // This one sees no ACTIVE row yet, picks B, and waits on the unique index behind the rival.
+        // This sign-in sees no ACTIVE row yet, takes its one invitation (B), and waits on the unique
+        // index behind the rival.
         const loser = t.db().transaction((tx) => acceptOnLogin(tx, person.userId));
         await new Promise((resolve) => setTimeout(resolve, 200));
         await rival.query('COMMIT');
@@ -142,6 +144,27 @@ describe.runIf(infraEnabled)('logistics portal (T-086)', () => {
       const token = await logisticsSession(app, person.email);
       const me = await request(app).get('/v1/logistics/me').set(bearer(token));
       expect(me.body).toMatchObject({ company: { id: a } });
+    }, 20_000);
+
+    it('accepts none of several invitations and answers 409 MULTIPLE_LOGISTICS_INVITATIONS', async () => {
+      const person = await seedMember(t, app);
+      const a = await insertMember(t, {
+        companyId: await insertCompany(t, 'Courier A'),
+        userId: person.userId,
+      });
+      const b = await insertMember(t, {
+        companyId: await insertCompany(t, 'Courier B'),
+        userId: person.userId,
+      });
+      const response = await logisticsLogin(app, person.email);
+      expect(response.status).toBe(409);
+      expect(bodyOf<Problem>(response).code).toBe('MULTIPLE_LOGISTICS_INVITATIONS');
+      expect(await memberStatus(t, a)).toBe('INVITED');
+      expect(await memberStatus(t, b)).toBe('INVITED');
+      const { rows } = await t
+        .app()
+        .query(`SELECT 1 FROM identity.sessions WHERE user_id = $1 AND scope = 'LOGISTICS'`, [person.userId]);
+      expect(rows).toHaveLength(0);
     });
 
     it('lets the same person sign in twice at once on one invitation: both succeed, one ACTIVE row', async () => {

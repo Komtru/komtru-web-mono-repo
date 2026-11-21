@@ -35,6 +35,7 @@ import {
 } from '../domain/mfa/policy.js';
 import { hashCode, matchesCode, splitProofToken } from '../domain/otp/challenge.js';
 import { identityDeviceSignedInEvent } from '../domain/events.js';
+import { recordLogisticsRefusal } from './logistics-refusal.service.js';
 import { nextStep, type NextStep } from '../domain/registration.js';
 import { sessionUsableUnder } from '../domain/session/status.js';
 import { otpChallenges } from '../infrastructure/postgres/schema/sessions.js';
@@ -277,6 +278,7 @@ export async function completeMfaLogin(
     // here is login-is-acceptance (m2 §2) — in the session's own transaction, so a refused activation
     // opens nothing.
     if (scope === 'LOGISTICS' && !(await deps.logisticsAccess?.accept(tx, userId))) {
+      await recordLogisticsRefusal(tx, input, userId, 'mfa');
       return { outcome: 'REJECTED' };
     }
 

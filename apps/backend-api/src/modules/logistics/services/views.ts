@@ -120,7 +120,10 @@ export async function readMembers(
       const named = [row.firstName, row.lastName].filter(Boolean).join(' ');
       return {
         id: row.id,
-        name: row.displayName ?? (named.length > 0 ? named : null),
+        // No name until they have signed in and accepted. A LINKED invite resolves an address to an
+        // account, and returning that account's name would make the invite form a lookup tool for
+        // every partner admin; the masked contact is all the inviter typed in the first place.
+        name: row.status === 'INVITED' ? null : (row.displayName ?? (named.length > 0 ? named : null)),
         contactMasked: row.email ? maskEmail(row.email) : row.phone ? maskPhone(row.phone) : null,
         role: row.role,
         status: row.status,

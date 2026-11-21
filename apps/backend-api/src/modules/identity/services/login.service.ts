@@ -23,6 +23,7 @@ import { sessionUsableUnder } from '../domain/session/status.js';
 import { userEmails, userPhones } from '../infrastructure/postgres/schema/contacts.js';
 import { users } from '../infrastructure/postgres/schema/users.js';
 import { AUDIT_ACTIONS, writeAudit } from './audit.service.js';
+import { recordLogisticsRefusal } from './logistics-refusal.service.js';
 import { onboarding, type PublicUser } from './auth.service.js';
 import { mfaRequirement } from '../domain/mfa/policy.js';
 import { issueMfaToken, type MfaChallengeView } from './mfa-login.service.js';
@@ -250,7 +251,7 @@ export async function login(
     // The logistics gate (m2 §2). Below the line, for the staff gate's reason, and before any challenge
     // is issued: an account with no membership gets no mfa token to spend on a session it cannot have.
     if (scope === 'LOGISTICS' && !(await deps.logisticsAccess?.eligible(tx, candidate.userId))) {
-      await recordFailure(tx, input, candidate, 'no_logistics_access', true);
+      await recordLogisticsRefusal(tx, input, candidate.userId, 'password');
       return { outcome: 'NO_LOGISTICS_ACCESS' };
     }
 
@@ -304,6 +305,8 @@ export async function login(
     // Login is acceptance (m2 §2): an INVITED membership becomes ACTIVE here, in the transaction that
     // opens the session, so a refused activation opens nothing.
     if (scope === 'LOGISTICS' && !(await deps.logisticsAccess?.accept(tx, candidate.userId))) {
+      // The membership went between the eligibility check and here (a removal in between).
+      await recordLogisticsRefusal(tx, input, candidate.userId, 'accept');
       return { outcome: 'NO_LOGISTICS_ACCESS' };
     }
 

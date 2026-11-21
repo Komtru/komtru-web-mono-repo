@@ -10,16 +10,19 @@
 //   2. EVERY ROSTER CHANGE LOCKS THE COMPANY ROW FIRST. `409 LAST_ADMIN` is a service-level guard
 //      (m2 §3), and two admins demoting each other at the same instant would both pass it without a
 //      lock. The lock serialises the roster, so the second one reads the first one's result.
-//   3. THE COMPANY IS ALWAYS THE CALLER'S. Every function takes `companyId` from its caller, and the
+//   3. A PORTAL ADMIN IS RE-CHECKED UNDER THAT LOCK. The principal's role was read when the request
+//      arrived; an admin removed a moment ago must not finish a change they started. So every
+//      mutation re-reads the caller's own row after the lock (`requireActingAdmin`).
+//   4. THE COMPANY IS ALWAYS THE CALLER'S. Every function takes `companyId` from its caller, and the
 //      portal controllers take it from the principal's re-resolved membership, never the request.
-import { and, eq, inArray, lte, sql } from 'drizzle-orm';
+import { and, eq, gt, inArray, isNotNull, isNull, lte, or, sql } from 'drizzle-orm';
 import { isUniqueViolation } from '../../../db/errors.js';
 import type { Encryption } from '../../../platform/crypto/encryption.js';
 import type { HmacHasher } from '../../../platform/crypto/hmac.js';
 import { ApiError } from '../../../platform/errors.js';
 import { publish, type Tx } from '../../../platform/events/publish.js';
-import type { EventActor } from '@komtru/shared-types';
-import { findUserByVerifiedEmail, findUserByVerifiedPhone } from '../../identity/index.js';
+import { findUserByVerifiedEmail, userPhones } from '../../identity/index.js';
+import { LOGISTICS_AUDIT, eventActorFor, writeLogisticsAudit, type LogisticsActor } from './audit.js';
 import { invitationDestinationHash, invitationExpiry, type InviteContact } from '../domain/contact.js';
 import {
   logisticsInvitationCreated,
@@ -90,13 +93,58 @@ export async function lockCompany(tx: Tx, companyId: string): Promise<{ id: stri
   return row;
 }
 
+/**
+ * A portal caller must still be an ACTIVE ADMIN of this company, read under the company lock the
+ * caller already holds. Staff (behind `logistics.manage`) pass through.
+ */
+export async function requireActingAdmin(tx: Tx, companyId: string, actor: LogisticsActor): Promise<void> {
+  if (actor.kind === 'STAFF') return;
+  const row = (
+    await tx
+      .select({ role: logisticsCompanyMembers.role })
+      .from(logisticsCompanyMembers)
+      .where(
+        and(
+          eq(logisticsCompanyMembers.companyId, companyId),
+          eq(logisticsCompanyMembers.userId, actor.userId),
+          eq(logisticsCompanyMembers.status, 'ACTIVE'),
+        ),
+      )
+  )[0];
+  if (row?.role !== 'ADMIN') {
+    throw new ApiError(403, 'FORBIDDEN', 'Admins only', 'Only a company admin can change the team');
+  }
+}
+
+/**
+ * The account that provably holds this number NOW. Logistics-only on purpose: a number past its
+ * `reverify_after` may have been recycled to someone else (M1 D4), and linking it would hand the
+ * previous owner a company membership. Identity's shared lookup keeps its own rule.
+ */
+export async function findUserByCurrentPhone(tx: Tx, phoneE164: string): Promise<{ userId: string } | null> {
+  const row = (
+    await tx
+      .select({ userId: userPhones.userId })
+      .from(userPhones)
+      .where(
+        and(
+          eq(userPhones.phoneE164, phoneE164),
+          isNotNull(userPhones.verifiedAt),
+          or(isNull(userPhones.reverifyAfter), gt(userPhones.reverifyAfter, sql`now()`)),
+        ),
+      )
+      .limit(1)
+  )[0];
+  return row ?? null;
+}
+
 export interface InviteInput {
   companyId: string;
   role: MemberRole;
   contact: InviteContact;
   /** Null when staff onboard a company: the first POC has no inviter, the company row has a creator. */
   invitedByUserId: string | null;
-  actor: EventActor;
+  actor: LogisticsActor;
 }
 
 /** The one invite path, shared by staff onboarding (m2 §5a) and the portal (m2 §5b). */
@@ -106,12 +154,13 @@ export async function inviteToCompany(
   input: InviteInput,
 ): Promise<InviteOutcome> {
   const company = await lockCompany(tx, input.companyId);
+  await requireActingAdmin(tx, company.id, input.actor);
   const { contact } = input;
 
   const existing =
     contact.channel === 'EMAIL'
       ? await findUserByVerifiedEmail(tx, contact.canonical)
-      : await findUserByVerifiedPhone(tx, contact.canonical);
+      : await findUserByCurrentPhone(tx, contact.canonical);
 
   if (existing) {
     let memberId: string;
@@ -150,7 +199,12 @@ export async function inviteToCompany(
       },
       aggregateType: 'logistics.company',
       aggregateId: company.id,
-      actor: input.actor,
+      actor: eventActorFor(input.actor),
+    });
+    await writeLogisticsAudit(tx, input.actor, LOGISTICS_AUDIT.MEMBER_INVITED, {
+      companyId: company.id,
+      subjectUserId: existing.userId,
+      metadata: { memberId, role: input.role, channel: contact.channel },
     });
 
     const member = await readMember(tx, company.id, memberId);
@@ -209,7 +263,17 @@ export async function inviteToCompany(
     },
     aggregateType: 'logistics.company',
     aggregateId: company.id,
-    actor: input.actor,
+    actor: eventActorFor(input.actor),
+  });
+  await writeLogisticsAudit(tx, input.actor, LOGISTICS_AUDIT.INVITATION_CREATED, {
+    companyId: company.id,
+    // The masked address only: an audit row is kept, and §S12 keeps clear contacts out of what we keep.
+    metadata: {
+      invitationId: invitation.id,
+      role: input.role,
+      channel: contact.channel,
+      contact: contact.masked,
+    },
   });
 
   return { outcome: 'PENDING', invitation: toInvitationView(invitation) };
@@ -219,7 +283,7 @@ export interface UpdateMemberInput {
   companyId: string;
   memberId: string;
   change: MemberChange;
-  actor: EventActor;
+  actor: LogisticsActor;
 }
 
 /**
@@ -228,6 +292,7 @@ export interface UpdateMemberInput {
  */
 export async function updateMember(tx: Tx, input: UpdateMemberInput): Promise<MemberView> {
   await lockCompany(tx, input.companyId);
+  await requireActingAdmin(tx, input.companyId, input.actor);
 
   const roster = await tx
     .select({
@@ -284,7 +349,12 @@ export async function updateMember(tx: Tx, input: UpdateMemberInput): Promise<Me
       payload: { memberId: target.id, companyId: input.companyId, userId: target.userId },
       aggregateType: 'logistics.company',
       aggregateId: input.companyId,
-      actor: input.actor,
+      actor: eventActorFor(input.actor),
+    });
+    await writeLogisticsAudit(tx, input.actor, LOGISTICS_AUDIT.MEMBER_REMOVED, {
+      companyId: input.companyId,
+      subjectUserId: target.userId,
+      metadata: { memberId: target.id, role: target.role, fromStatus: target.status },
     });
   } else if (input.change.role !== target.role) {
     await tx
@@ -301,7 +371,12 @@ export async function updateMember(tx: Tx, input: UpdateMemberInput): Promise<Me
       },
       aggregateType: 'logistics.company',
       aggregateId: input.companyId,
-      actor: input.actor,
+      actor: eventActorFor(input.actor),
+    });
+    await writeLogisticsAudit(tx, input.actor, LOGISTICS_AUDIT.MEMBER_ROLE_CHANGED, {
+      companyId: input.companyId,
+      subjectUserId: target.userId,
+      metadata: { memberId: target.id, from: target.role, to: input.change.role },
     });
   }
 

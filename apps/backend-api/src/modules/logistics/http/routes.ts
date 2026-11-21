@@ -45,7 +45,7 @@ export function logisticsRoutes(deps: http.LogisticsHttpDeps): RouteDefinition[]
       status: 201,
       rateLimit: WRITE_BUDGET,
       schema: { body: onboardBody, response: onboardResponse },
-      handler: (ctx) => http.onboardHandler(deps, ctx.actor, ctx.body),
+      handler: (ctx) => http.onboardHandler(deps, ctx.actor, ctx.req, ctx.body),
     }),
 
     defineRoute({
@@ -70,7 +70,7 @@ export function logisticsRoutes(deps: http.LogisticsHttpDeps): RouteDefinition[]
       retryable: false,
       rateLimit: WRITE_BUDGET,
       schema: { params: idParams, body: updateCompanyBody, response: companySchema },
-      handler: (ctx) => http.updateCompanyHandler(deps, ctx.actor, ctx.params.id, ctx.body),
+      handler: (ctx) => http.updateCompanyHandler(deps, ctx.actor, ctx.req, ctx.params.id, ctx.body),
     }),
 
     defineRoute({
@@ -105,7 +105,7 @@ export function logisticsRoutes(deps: http.LogisticsHttpDeps): RouteDefinition[]
       status: 201,
       rateLimit: WRITE_BUDGET,
       schema: { body: inviteBody, response: inviteOutcomeSchema },
-      handler: (ctx) => http.portalInviteHandler(deps, ctx.actor, ctx.body),
+      handler: (ctx) => http.portalInviteHandler(deps, ctx.actor, ctx.req, ctx.body),
     }),
 
     defineRoute({
@@ -128,7 +128,7 @@ export function logisticsRoutes(deps: http.LogisticsHttpDeps): RouteDefinition[]
       retryable: false,
       rateLimit: WRITE_BUDGET,
       schema: { params: idParams, body: updateMemberBody, response: memberSchema },
-      handler: (ctx) => http.portalUpdateMemberHandler(deps, ctx.actor, ctx.params.id, ctx.body),
+      handler: (ctx) => http.portalUpdateMemberHandler(deps, ctx.actor, ctx.req, ctx.params.id, ctx.body),
     }),
 
     defineRoute({
@@ -151,7 +151,7 @@ export function logisticsRoutes(deps: http.LogisticsHttpDeps): RouteDefinition[]
       retryable: false,
       rateLimit: WRITE_BUDGET,
       schema: { params: idParams, response: invitationSchema },
-      handler: (ctx) => http.portalCancelInvitationHandler(deps, ctx.actor, ctx.params.id),
+      handler: (ctx) => http.portalCancelInvitationHandler(deps, ctx.actor, ctx.req, ctx.params.id),
     }),
   ];
 }

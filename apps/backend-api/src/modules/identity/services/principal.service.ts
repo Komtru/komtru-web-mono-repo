@@ -129,6 +129,9 @@ export async function resolvePrincipal(deps: PrincipalDeps, token: string): Prom
     amr: row.amr ?? [],
     roles: row.roles ?? [],
     permissions: new Set(row.permissions ?? []),
-    companyMembership: (await deps.companyMembership?.(deps.db, row.user_id)) ?? null,
+    // Only a LOGISTICS session acts for a company: a consumer or staff session of the same person is
+    // not a company member, and asking for its membership would be a query per request for nothing.
+    companyMembership:
+      claims.scp === 'LOGISTICS' ? ((await deps.companyMembership?.(deps.db, row.user_id)) ?? null) : null,
   });
 }

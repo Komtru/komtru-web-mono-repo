@@ -56,6 +56,14 @@ export async function hasLogisticsAccess(tx: Pick<Tx, 'select'>, userId: string)
   return row !== undefined;
 }
 
+export const multipleInvitations = (): ApiError =>
+  new ApiError(
+    409,
+    'MULTIPLE_LOGISTICS_INVITATIONS',
+    'Invitations from more than one company',
+    'This account has invitations from more than one logistics company. Contact Komtru support and we will sort it out.',
+  );
+
 export const alreadyHasActiveCompany = (): ApiError =>
   new ApiError(
     409,
@@ -65,8 +73,8 @@ export const alreadyHasActiveCompany = (): ApiError =>
   );
 
 /**
- * Login is acceptance (m2 §2). An ACTIVE membership is kept as it is; otherwise the newest INVITED one
- * becomes ACTIVE. Null when the account has neither, which the caller answers `403 NO_LOGISTICS_ACCESS`.
+ * Login is acceptance (m2 §2). An ACTIVE membership is kept as it is; otherwise the one INVITED row
+ * becomes ACTIVE, and two or more are refused with `409 MULTIPLE_LOGISTICS_INVITATIONS`. Null when the account has neither, which the caller answers `403 NO_LOGISTICS_ACCESS`.
  *
  * Runs in the session's transaction, so a refused activation opens no session. Two first sign-ins
  * racing on two different invitations are settled by `active_user_uidx`, in Postgres: exactly one
@@ -86,15 +94,18 @@ export async function acceptOnLogin(tx: Tx, userId: string): Promise<AcceptedMem
   const active = await readActive();
   if (active) return active;
 
-  const invited = (
-    await tx
-      .select(membershipColumns)
-      .from(logisticsCompanyMembers)
-      .where(and(eq(logisticsCompanyMembers.userId, userId), eq(logisticsCompanyMembers.status, 'INVITED')))
-      .orderBy(desc(logisticsCompanyMembers.invitedAt))
-      .limit(1)
-      .for('update')
-  )[0];
+  const invitations = await tx
+    .select(membershipColumns)
+    .from(logisticsCompanyMembers)
+    .where(and(eq(logisticsCompanyMembers.userId, userId), eq(logisticsCompanyMembers.status, 'INVITED')))
+    .orderBy(desc(logisticsCompanyMembers.invitedAt))
+    .limit(2)
+    .for('update');
+  // Conservative until the owner rules: with invitations from two companies, the newest is not
+  // necessarily the one the person means to join, and the first sign-in would bind them to it. So
+  // none is accepted, and support settles it.
+  if (invitations.length > 1) throw multipleInvitations();
+  const invited = invitations[0];
   // Nothing INVITED may mean a concurrent sign-in of the same person accepted it while this one waited
   // on the row lock: their row is ACTIVE now, and this sign-in uses it.
   if (!invited) return readActive();
