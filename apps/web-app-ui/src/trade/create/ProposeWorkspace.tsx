@@ -81,7 +81,10 @@ export function ProposeWorkspace({
           'grid gap-[16px]',
           preview === undefined
             ? 'lg:grid-cols-[200px_minmax(0,1fr)]'
-            : 'md:grid-cols-[minmax(0,1fr)_minmax(0,260px)] lg:grid-cols-[200px_minmax(0,1.5fr)_minmax(0,1fr)]',
+            : rail === undefined
+              ? // The checkout (DX-15, TX-10): no rail, so the stage and the summary share the width.
+                'md:grid-cols-[minmax(0,1fr)_minmax(0,260px)] lg:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)]'
+              : 'md:grid-cols-[minmax(0,1fr)_minmax(0,260px)] lg:grid-cols-[200px_minmax(0,1.5fr)_minmax(0,1fr)]',
         ].join(' ')}
       >
         {rail !== undefined && (
@@ -94,6 +97,11 @@ export function ProposeWorkspace({
         )}
         <div data-propose-work className={preview === undefined ? 'min-w-0 lg:col-span-1' : 'min-w-0'}>
           {children}
+          {decision !== undefined && (
+            <section aria-label={decisionLabel} className="mt-[16px] min-w-0">
+              {decision}
+            </section>
+          )}
         </div>
         {preview !== undefined && (
           <aside

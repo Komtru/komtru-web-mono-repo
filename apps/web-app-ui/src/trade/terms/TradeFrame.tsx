@@ -37,9 +37,18 @@ export function TradeFrame({
   const body = (
     <>
       <ScreenHeader title={title} backHref={back} backLabel={backLabel} />
-      <Content trade={trade} loading={loading}>
-        {children}
-      </Content>
+      {trade.data === undefined ? (
+        // Loading and failure read as a column, not a bar across a desktop window.
+        <div className="mx-auto md:max-w-[560px]">
+          <Content trade={trade} loading={loading}>
+            {children}
+          </Content>
+        </div>
+      ) : (
+        <Content trade={trade} loading={loading}>
+          {children}
+        </Content>
+      )}
     </>
   );
   return wide ? (
