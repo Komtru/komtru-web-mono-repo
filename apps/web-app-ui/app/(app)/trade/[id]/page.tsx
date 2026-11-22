@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import { AppShell } from '../../../../src/shell/AppShell';
-import { resolveViewer } from '../../../../src/shell/viewer';
+import { resolveMode, resolveViewer } from '../../../../src/shell/viewer';
 import { TradeScreen } from '../../../../src/trade/TradeScreen';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -21,9 +21,10 @@ export default async function TradePage({
   const { id } = await params;
   if (!UUID.test(id)) notFound();
   const viewer = await resolveViewer();
+  const mode = await resolveMode(viewer);
 
   return (
-    <AppShell tab="trades" viewer={viewer}>
+    <AppShell mode={mode} tab="trades" viewer={viewer}>
       <TradeScreen id={id} />
     </AppShell>
   );

@@ -10,10 +10,15 @@ import {
   callsTo,
   counterparty,
   id,
-  listItem,
+  listItem as anyListItem,
   renderWithApi,
   type CallFn,
 } from './support/trade';
+
+// F-083: Buy's lists show only the trades the person is buying, so these rows are the buyer's unless a test says
+// otherwise.
+const listItem = (...[n, overrides]: Parameters<typeof anyListItem>): ReturnType<typeof anyListItem> =>
+  anyListItem(n, { yourRole: 'BUYER', ...overrides });
 
 const api = vi.hoisted(() => ({ call: vi.fn<CallFn>() }));
 
@@ -154,5 +159,25 @@ describe('Your Trades (Q1)', () => {
     await waitFor(() => {
       expect(screen.getByText('—')).toBeTruthy();
     });
+  });
+});
+
+// F-083: Buy's Trades lists the trades the person is buying; their sales are in Sell's Orders.
+describe('Trades by side', () => {
+  it('leaves out the trades the person is selling, and keeps reading past a page that has none of its own', async () => {
+    const sold = listItem(50, {
+      yourRole: 'SELLER',
+      item: { title: 'Sold phone', categoryCode: 'electronics', categoryName: 'Electronics' },
+    });
+    const bought = listItem(51, {
+      item: { title: 'Bought shoes', categoryCode: 'fashion', categoryName: 'Fashion' },
+    });
+    api.call.mockImplementation((endpoint, input) => {
+      const cursor = input?.query?.cursor;
+      return Promise.resolve(cursor === undefined ? list([sold], 'next') : list([bought]));
+    });
+    renderWithApi(api.call, <MyTrades />);
+    expect(await screen.findByText(/Bought shoes/)).toBeTruthy();
+    expect(screen.queryByText(/Sold phone/)).toBeNull();
   });
 });

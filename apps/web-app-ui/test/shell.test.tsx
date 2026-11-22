@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { AccountSections } from '../src/shell/AccountSections';
 import { AppShell } from '../src/shell/AppShell';
@@ -120,11 +120,41 @@ describe('AppShell', () => {
 });
 
 describe('the top bar tools (v2: DX-03, TX-02)', () => {
-  it('has no Buy/Sell switch anywhere: the side is chosen per trade, on Start Trade', () => {
+  // F-083: the switch is back, for everyone, merchants included, and never locked.
+  it('draws the Buy/Sell switch for everyone, unlocked, with the current mode pressed', () => {
     shell({ certifiedMerchant: true });
-    expect(screen.queryByRole('group', { name: 'Buy or sell mode' })).toBeNull();
-    expect(screen.queryByRole('button', { name: 'Sell' })).toBeNull();
-    expect(screen.queryByRole('button', { name: 'Buy' })).toBeNull();
+    const switches = screen.getAllByRole('group', { name: 'Buy or sell mode' });
+    expect(switches.length).toBeGreaterThan(0);
+    for (const group of switches) {
+      const buy = within(group).getByRole('button', { name: 'Buy' });
+      expect(buy.getAttribute('aria-pressed')).toBe('true');
+      expect(buy.getAttribute('aria-disabled')).not.toBe('true');
+    }
+  });
+
+  it('draws Sell’s destinations in Sell, and marks a trade screen under Orders there', () => {
+    render(
+      <AppShell tab="trades" mode="sell" viewer={viewer()}>
+        <h1>A trade</h1>
+      </AppShell>,
+    );
+    const sidebar = screen.getByRole('navigation', { name: 'Sections sidebar' });
+    expect(within(sidebar).getByRole('link', { name: 'Shop' }).getAttribute('href')).toBe('/shop');
+    expect(within(sidebar).getByRole('link', { name: 'Payouts' }).getAttribute('href')).toBe(
+      '/account/payouts',
+    );
+    expect(within(sidebar).queryByRole('link', { name: 'Home' })).toBeNull();
+    expect(within(sidebar).getByRole('link', { name: 'Orders' }).getAttribute('aria-current')).toBe('page');
+  });
+
+  it('remembers a switch to Sell in the mode cookie and opens Shop', () => {
+    shell();
+    const group = screen.getAllByRole('group', { name: 'Buy or sell mode' })[0];
+    if (group === undefined) throw new Error('no switch');
+    fireEvent.click(within(group).getByRole('button', { name: 'Sell' }));
+    expect(document.cookie).toContain('komtru_mode=sell');
+    expect(router.push).toHaveBeenCalledWith('/shop');
+    expect(router.refresh).toHaveBeenCalled();
   });
 
   it('draws each duplicated copy of the tools inside an ancestor that hides it at the other widths', () => {

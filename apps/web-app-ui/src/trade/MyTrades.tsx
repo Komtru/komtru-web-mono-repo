@@ -2,10 +2,11 @@
 
 import { useTradeList, useTradeLive } from '@komtru/api-client/react';
 import { Button, EmptyState, LoadFailed, ScreenColumn, Skeleton, TradeRow } from '@komtru/ui-kit';
+import { useEffect } from 'react';
 import { describeTrade, initialsOf, nairaShort, partyName } from './format';
 
 /**
- * Q1 and the buyer's trades tab: every trade the person is a party to, with what to do next on each.
+ * Q1 and Buy's Trades tab (F-083): the trades the person is buying, with what to do next on each.
  *
  * Rows come from `GET /trades`, newest-relevant first, a page at a time. Whether a trade needs the
  * person is the server's `attention`, never worked out here: a row cannot see a pending extension
@@ -13,8 +14,19 @@ import { describeTrade, initialsOf, nairaShort, partyName } from './format';
  * kept current by the trades' rooms (a push, or a reconnect, reads it again) and, while no socket is
  * delivering, by the timer in `useTradeLive`. Window focus is not a fallback: the app turns that refetch off.
  */
-export function MyTrades(): React.JSX.Element {
+export function MyTrades({ side = 'BUYER' }: { side?: 'BUYER' | 'SELLER' } = {}): React.JSX.Element {
   const list = useTradeList('ALL');
+  // F-083: Buy's Trades lists the trades the person is buying (Sell's Orders has the rest). The list endpoint has
+  // no side filter, so a page can hold none of this side's trades: keep reading until one does or the list ends,
+  // rather than saying "no trades" over trades not yet read.
+  const mineSoFar = (list.data?.pages ?? [])
+    .flatMap((page) => page.items)
+    .filter((trade) => trade.yourRole === side);
+  const { hasNextPage, isFetchingNextPage, isFetchNextPageError, fetchNextPage } = list;
+  useEffect(() => {
+    if (mineSoFar.length === 0 && hasNextPage && !isFetchingNextPage && !isFetchNextPageError)
+      void fetchNextPage();
+  }, [mineSoFar.length, hasNextPage, isFetchingNextPage, isFetchNextPageError, fetchNextPage]);
   // A trade list gets a push only for rooms it has joined, so it joins the trades it shows and reads the list
   // again when any of them moves, and again on every reconnect. With no live connection it reads on a timer.
   const shown = (list.data?.pages ?? []).flatMap((page) => page.items);
@@ -39,13 +51,22 @@ export function MyTrades(): React.JSX.Element {
     );
   }
 
-  const trades = list.data.pages.flatMap((page) => page.items);
+  const trades = list.data.pages.flatMap((page) => page.items).filter((trade) => trade.yourRole === side);
+  if (trades.length === 0 && hasNextPage && !isFetchNextPageError) {
+    return (
+      <ScreenColumn>
+        <div role="status" aria-label="Loading your trades" aria-busy="true">
+          <Skeleton width="full" lines={3} />
+        </div>
+      </ScreenColumn>
+    );
+  }
   if (trades.length === 0) {
     return (
       <ScreenColumn>
         <EmptyState
           title="No protected trades yet"
-          body="Start one with a seller or a buyer. Every completed trade adds to your Trust Profile."
+          body="Start one with a seller. Every completed trade adds to your Trust Profile. What you sell is in Orders, on the Sell side."
           action={
             <Button asChild>
               <a href="/trade/new">Start a trade</a>

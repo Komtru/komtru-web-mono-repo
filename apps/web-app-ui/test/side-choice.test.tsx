@@ -6,7 +6,8 @@ import { expectNoAxeViolations } from './axe';
 
 afterEach(cleanup);
 
-// Owner ruling 2026-11-20: no Buy/Sell mode. The person creating a trade says which side they are on.
+// Owner rulings 2026-11-20 and 2026-11-22: the person creating a trade always says which side they are on,
+// with the side of the Buy/Sell mode they are in already picked.
 describe('Start Trade: buying or selling', () => {
   it('asks the question and links each answer to its flow', () => {
     render(<SideChoice />);
@@ -31,6 +32,20 @@ describe('Start Trade: buying or selling', () => {
     expect(sideOf('merchant')).toBeUndefined();
     expect(sideOf(['buy', 'sell'])).toBeUndefined();
     expect(sideOf(undefined)).toBeUndefined();
+  });
+
+  it('picks the side of the mode the person is in, and Continue opens it', () => {
+    render(<SideChoice picked="sell" counterparty="@amaka" />);
+    expect(screen.getByRole('link', { name: /I’m selling/ }).getAttribute('aria-current')).toBe('true');
+    expect(screen.getByRole('link', { name: /I’m buying/ }).getAttribute('aria-current')).toBeNull();
+    expect(screen.getByRole('link', { name: 'Continue' }).getAttribute('href')).toBe(
+      '/trade/new?side=sell&with=%40amaka',
+    );
+  });
+
+  it('offers no Continue when nothing is picked', () => {
+    render(<SideChoice />);
+    expect(screen.queryByRole('link', { name: 'Continue' })).toBeNull();
   });
 
   it('has no accessibility violations', async () => {

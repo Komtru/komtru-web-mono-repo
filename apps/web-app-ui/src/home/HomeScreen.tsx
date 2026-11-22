@@ -10,6 +10,7 @@ import {
   Skeleton,
 } from '@komtru/ui-kit';
 import type { TradeListItem } from '@komtru/shared-types';
+import { useMemo } from 'react';
 import { splitTrades } from './classify';
 import { TradeLine } from './TradeLine';
 import { useAllTrades } from './useAllTrades';
@@ -17,20 +18,66 @@ import { useAllTrades } from './useAllTrades';
 /** How many closed trades home shows before pointing at the full list. */
 const PAST_SHOWN = 5;
 
+/** Which side's dashboard this is (F-083): Buy's Home or Sell's Shop. */
+export type DashboardSide = 'BUYER' | 'SELLER';
+
+const COPY: Record<
+  DashboardSide,
+  {
+    title: string;
+    loading: string;
+    active: string;
+    past: string;
+    all: string;
+    seeAll: string;
+    allHref: string;
+  }
+> = {
+  BUYER: {
+    title: 'Your trades, at a glance',
+    loading: 'Loading your trades',
+    active: 'Active trades',
+    past: 'Past trades',
+    all: 'View all trades',
+    seeAll: 'See all trades',
+    allHref: '/trades',
+  },
+  SELLER: {
+    title: 'Your selling activity',
+    loading: 'Loading your sales',
+    active: 'Active orders',
+    past: 'Past sales',
+    all: 'View all orders',
+    seeAll: 'See all orders',
+    allHref: '/orders',
+  },
+};
+
 /**
- * The Home tab (Z1 and H-01 with trades; AC1 and H-03 without any).
+ * A mode's dashboard (F-083). Buy's Home (Z1, H-01, DX-03; AC1 and H-03 without any trades) lists the trades the
+ * person is buying; Sell's Shop (Seller-1, H-02, DX-04) lists the ones they are selling, under `header`, the shop's
+ * KPI strip. Each is in three groups: what needs them first, what is still moving, and what is finished.
  *
- * Home lists the person's own trades only, in three groups: what needs them first, what is still moving, and what
- * is finished. There is no discovery feed and no catalogue here, by design. The totals a v2 hero draws (protected
- * balance, all-time trade) are not on the platform yet, so they are not drawn.
+ * There is no discovery feed and no catalogue here, by design. The totals a v2 hero draws (protected balance,
+ * all-time trade, in escrow) are not on the platform yet, so they are not drawn: a money figure the backend does
+ * not report is never summed here.
  */
-export function HomeScreen(): React.JSX.Element {
-  const all = useAllTrades();
+export function HomeScreen({
+  side = 'BUYER',
+  header,
+}: {
+  side?: DashboardSide;
+  header?: React.ReactNode;
+} = {}): React.JSX.Element {
+  const loaded = useAllTrades();
+  const copy = COPY[side];
+  const mine = useMemo(() => loaded.trades.filter((trade) => trade.yourRole === side), [loaded.trades, side]);
+  const all = { ...loaded, trades: mine };
 
   if (all.isPending) {
     return (
       <ScreenColumn>
-        <div role="status" aria-label="Loading your trades" aria-busy="true">
+        <div role="status" aria-label={copy.loading} aria-busy="true">
           <Skeleton width="full" lines={3} />
         </div>
       </ScreenColumn>
@@ -60,13 +107,13 @@ export function HomeScreen(): React.JSX.Element {
     }
     return (
       <ScreenColumn>
-        <div role="status" aria-label="Loading your trades" aria-busy="true">
+        <div role="status" aria-label={copy.loading} aria-busy="true">
           <Skeleton width="full" lines={3} />
         </div>
       </ScreenColumn>
     );
   }
-  if (all.trades.length === 0) return <HomeEmpty />;
+  if (all.trades.length === 0) return side === 'SELLER' ? <ShopEmpty header={header} /> : <HomeEmpty />;
 
   const groups = splitTrades(all.trades);
   const past = groups.past.slice(0, PAST_SHOWN);
@@ -76,10 +123,12 @@ export function HomeScreen(): React.JSX.Element {
   // Tablet and desktop read the groups as two panels side by side (TX-02); a phone keeps one column.
   return (
     <div className="mx-auto w-full max-w-[480px] md:max-w-[760px] lg:max-w-none">
-      <h1 className="text-[19px] font-semibold">Your trades, at a glance</h1>
+      <h1 className="text-[19px] font-semibold">{copy.title}</h1>
       <p className="mb-[14px] mt-[3px] text-[11.5px] text-slate">
         {`${String(attentionCount)} need${attentionCount === 1 ? 's' : ''} your attention · ${String(activeCount)} active`}
       </p>
+
+      {header}
 
       <nav aria-label="Quick actions" className="mb-[6px] grid grid-cols-2 gap-[8px] md:grid-cols-3">
         <Button asChild variant="secondary">
@@ -100,16 +149,16 @@ export function HomeScreen(): React.JSX.Element {
         {attentionCount > 0 && (
           <Group title="Needs your attention" count={attentionCount} trades={groups.attention} />
         )}
-        {activeCount > 0 && <Group title="Active trades" count={activeCount} trades={groups.active} />}
+        {activeCount > 0 && <Group title={copy.active} count={activeCount} trades={groups.active} />}
         {past.length > 0 && (
           <Group
-            title="Past trades"
+            title={copy.past}
             count={groups.past.length}
             trades={past}
             footer={
               groups.past.length > PAST_SHOWN ? (
-                <a className="text-[12px] font-semibold text-trust-indigo" href="/trades">
-                  See all trades
+                <a className="text-[12px] font-semibold text-trust-indigo" href={copy.allHref}>
+                  {copy.seeAll}
                 </a>
               ) : undefined
             }
@@ -132,8 +181,8 @@ export function HomeScreen(): React.JSX.Element {
           </div>
         )}
       </div>
-      <a className="mt-[4px] block text-[12px] font-semibold text-trust-indigo" href="/trades">
-        View all trades
+      <a className="mt-[4px] block text-[12px] font-semibold text-trust-indigo" href={copy.allHref}>
+        {copy.all}
       </a>
     </div>
   );
@@ -214,6 +263,26 @@ function HomeEmpty(): React.JSX.Element {
           Agree on the details. Follow the payment and delivery status. Confirm the outcome when your
           obligations are met.
         </NoteBanner>
+      </div>
+    </ScreenColumn>
+  );
+}
+
+/** Sell's Shop with nothing sold yet: the KPI strip still shows, then a way to start selling. */
+function ShopEmpty({ header }: { header?: React.ReactNode }): React.JSX.Element {
+  return (
+    <ScreenColumn>
+      <h1 className="mb-[14px] text-[19px] font-semibold">Your selling activity</h1>
+      {header}
+      <EmptyState
+        icon={EMPTY_ICON}
+        title="No sales yet"
+        body="Start a trade as the seller and share its Trade Code with your buyer. Their money is held before you ship."
+      />
+      <div className="mt-[16px] hidden md:block">
+        <Button asChild>
+          <a href="/trade/new">Start a Trade</a>
+        </Button>
       </div>
     </ScreenColumn>
   );

@@ -3,7 +3,7 @@ import { readParkUrl, webAppEnv } from '../app-config';
 import { AppShell } from './AppShell';
 import { ACCOUNT_ICONS } from './icons';
 import { accountItemsFor, type AccountItemId } from './nav';
-import { resolveViewer } from './viewer';
+import { resolveMode, resolveViewer } from './viewer';
 
 /**
  * Account's own frame (D9): the shell with the rail headed "Account" listing the account's sections, under the
@@ -18,6 +18,7 @@ export async function AccountScreen({
   children: React.ReactNode;
 }): Promise<React.JSX.Element> {
   const viewer = await resolveViewer();
+  const mode = await resolveMode(viewer);
   const links = { parkUrl: readParkUrl(webAppEnv()) };
 
   const nav = accountItemsFor(viewer, links).map<NavItem>((item) => ({
@@ -30,7 +31,12 @@ export async function AccountScreen({
   }));
 
   return (
-    <AppShell tab="account" viewer={viewer} nav={{ label: 'Account', items: nav }}>
+    <AppShell
+      mode={mode}
+      tab={section === 'payouts' ? 'payouts' : 'account'}
+      viewer={viewer}
+      nav={{ label: 'Account', items: nav }}
+    >
       {children}
     </AppShell>
   );

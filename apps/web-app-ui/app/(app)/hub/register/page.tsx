@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import { AppShell } from '../../../../src/shell/AppShell';
 import { Placeholder } from '../../../../src/shell/Placeholder';
-import { resolveViewer } from '../../../../src/shell/viewer';
+import { resolveMode, resolveViewer } from '../../../../src/shell/viewer';
 
 export const metadata: Metadata = { title: 'Register a Park Hub' };
 
@@ -14,9 +14,10 @@ export const metadata: Metadata = { title: 'Register a Park Hub' };
  */
 export default async function HubRegisterPage(): Promise<React.JSX.Element> {
   const viewer = await resolveViewer();
+  const mode = await resolveMode(viewer);
 
   return (
-    <AppShell viewer={viewer}>
+    <AppShell mode={mode} viewer={viewer}>
       <Placeholder
         title="Register a Park Hub"
         body="Turn a motor park terminal into a Komtru custody point: every parcel logged, inspected, and released only against a matching PIN."
