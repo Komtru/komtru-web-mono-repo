@@ -13,13 +13,15 @@ import type { TradeListItem } from '@komtru/shared-types';
 import { useMemo } from 'react';
 import { splitTrades } from './classify';
 import { TradeLine } from './TradeLine';
+import { VerificationChecklist } from './VerificationChecklist';
+import type { DashboardSide } from './verificationSteps';
 import { useAllTrades } from './useAllTrades';
 
 /** How many closed trades home shows before pointing at the full list. */
 const PAST_SHOWN = 5;
 
 /** Which side's dashboard this is (F-083): Buy's Home or Sell's Shop. */
-export type DashboardSide = 'BUYER' | 'SELLER';
+export type { DashboardSide };
 
 const COPY: Record<
   DashboardSide,
@@ -129,6 +131,8 @@ export function HomeScreen({
         {`${String(attentionCount)} need${attentionCount === 1 ? 's' : ''} your attention · ${String(activeCount)} active`}
       </p>
 
+      {/* F-084: what verification is still owed comes before everything else on the dashboard. */}
+      <VerificationChecklist side={side} />
       {header}
 
       <nav aria-label="Quick actions" className="mb-[6px] grid grid-cols-2 gap-[8px] md:grid-cols-3">
@@ -243,6 +247,7 @@ function HomeEmpty(): React.JSX.Element {
     <ScreenColumn>
       {/* The reference draws no heading over this panel; the page still needs its one `h1`, so it is read, not seen. */}
       <h1 className="sr-only">Your trades, at a glance</h1>
+      <VerificationChecklist side="BUYER" />
       <EmptyState
         icon={EMPTY_ICON}
         title="No protected Trades yet"
@@ -274,6 +279,7 @@ function ShopEmpty({ header }: { header?: React.ReactNode }): React.JSX.Element 
   return (
     <ScreenColumn>
       <h1 className="mb-[14px] text-[19px] font-semibold">Your selling activity</h1>
+      <VerificationChecklist side="SELLER" />
       {header}
       <EmptyState
         icon={EMPTY_ICON}

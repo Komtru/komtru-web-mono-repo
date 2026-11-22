@@ -63,7 +63,7 @@ function confirmProblem(error: unknown, channelWord: string): string {
 
 export function ContactChecks({ contacts }: { contacts: Contacts }): React.JSX.Element {
   return (
-    <section aria-label="Your contact details" className="mb-[14px]">
+    <section id="contact" aria-label="Your contact details" className="mb-[14px] scroll-mt-[72px]">
       <SectionLabel>Your contact details</SectionLabel>
       <ContactRow channel="EMAIL" state={contacts.email} />
       <ContactRow channel="PHONE" state={contacts.phone} />
