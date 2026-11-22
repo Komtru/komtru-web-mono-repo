@@ -87,12 +87,13 @@ export function LoginForm({
     // What the fields hold, read from the form itself rather than only from state. A browser that
     // autofills saved details can fill the inputs before React hydrates, or without an input event, so
     // the boxes show the values while state is still empty (owner report 2026-11-22: "invalid input" on
-    // a filled form). The DOM is what the person sees, so it is what gets sent.
-    const form = new FormData(event.currentTarget);
-    const filledIdentifier = form.get('identifier');
-    const filledPassword = form.get('password');
-    const typedIdentifier = typeof filledIdentifier === 'string' ? filledIdentifier : identifier;
-    const typedPassword = typeof filledPassword === 'string' ? filledPassword : password;
+    // a filled form). The DOM is what the person sees, so it is what gets sent. The inputs are found by
+    // their `autocomplete`, not by a `name`: a named password field would ride along in the URL of the
+    // native GET a submit before hydration falls back to.
+    const fieldValue = (token: string): string | undefined =>
+      event.currentTarget.querySelector<HTMLInputElement>(`input[autocomplete="${token}"]`)?.value;
+    const typedIdentifier = fieldValue('username') ?? identifier;
+    const typedPassword = fieldValue('current-password') ?? password;
     if (typedIdentifier !== identifier) setIdentifier(typedIdentifier);
     if (typedPassword !== password) setPassword(typedPassword);
     if (typedIdentifier.trim() === '' || typedPassword === '') {
@@ -199,7 +200,6 @@ export function LoginForm({
         <TextField
           label={wide ? 'Phone number or email' : 'Phone number'}
           type="text"
-          name="identifier"
           // Text, not tel: the field takes an email or a username too, and a phone keypad has no @.
           inputMode="text"
           autoComplete="username"
@@ -217,7 +217,6 @@ export function LoginForm({
         <TextField
           label="Password"
           type="password"
-          name="password"
           autoComplete="current-password"
           value={password}
           onChange={(event) => {

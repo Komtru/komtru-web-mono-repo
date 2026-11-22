@@ -136,7 +136,7 @@ export async function createSession(
       epc: user.sessionsEpoch,
     }),
     refreshToken: token,
-    expiresIn: deps.signer.ttlSeconds,
+    expiresIn: deps.signer.ttlFor(input.scope),
     idleExpiresAt,
     absoluteExpiresAt,
   };
@@ -255,7 +255,7 @@ export async function refreshSession(
           epc: user.sessionsEpoch,
         }),
         refreshToken: token,
-        expiresIn: deps.signer.ttlSeconds,
+        expiresIn: deps.signer.ttlFor(child.scope),
         idleExpiresAt: child.idleExpiresAt,
         absoluteExpiresAt: child.absoluteExpiresAt,
       },
