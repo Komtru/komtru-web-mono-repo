@@ -177,3 +177,50 @@ describe('Search while the list cannot be read', () => {
     expect(await screen.findByRole('button', { name: 'Try again' })).toBeTruthy();
   });
 });
+
+// DX-06 and TX-05: filters over the person's own trades, a column on desktop and chips below it.
+describe('Search filters', () => {
+  const sold = listItem(3, {
+    tradeCode: 'KMT-9030000-NG',
+    yourRole: 'SELLER',
+    attention: null,
+    status: 'CANCELLED',
+    awaiting: null,
+    item: { title: 'iPhone 12', categoryCode: 'electronics', categoryName: 'Electronics' },
+  });
+  const bought = listItem(4, {
+    tradeCode: 'KMT-9040000-NG',
+    yourRole: 'BUYER',
+    item: { title: 'iPhone 11', categoryCode: 'electronics', categoryName: 'Electronics' },
+  });
+
+  beforeEach(() => {
+    answerWith(api.call, { 'GET /trades': page([sold, bought]) });
+  });
+
+  it('narrows the results to one side', async () => {
+    search('iphone');
+    expect(await screen.findByText(/iPhone 12/)).toBeTruthy();
+    const side = screen.getByRole('group', { name: 'Side' });
+    fireEvent.click(within(side).getByRole('button', { name: 'Buying' }));
+    expect(within(side).getByRole('button', { name: 'Buying' }).getAttribute('aria-pressed')).toBe('true');
+    expect(screen.getByText(/iPhone 11/)).toBeTruthy();
+    expect(screen.queryByText(/iPhone 12/)).toBeNull();
+  });
+
+  it('narrows the results to past trades, and says so when nothing is left', async () => {
+    search('iphone');
+    await screen.findByText(/iPhone 12/);
+    fireEvent.click(
+      within(screen.getByRole('group', { name: 'State' })).getByRole('button', { name: 'Past' }),
+    );
+    expect(screen.getByText(/iPhone 12/)).toBeTruthy();
+    expect(screen.queryByText(/iPhone 11/)).toBeNull();
+    fireEvent.click(
+      within(screen.getByRole('group', { name: 'Side' })).getByRole('button', { name: 'Buying' }),
+    );
+    expect(
+      await screen.findByText('None of your trades match with these filters. Try All and Any state.'),
+    ).toBeTruthy();
+  });
+});

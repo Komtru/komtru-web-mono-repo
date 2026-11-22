@@ -243,41 +243,85 @@ const EMPTY_ICON = (
  * it, so they are siblings here.
  */
 function HomeEmpty(): React.JSX.Element {
+  // DX-05 and TX-04: on a desktop window the empty state and the ways in sit side by side, rather than one
+  // phone-width column in the middle of the page. A phone keeps the single column.
   return (
-    <ScreenColumn>
+    <div className="mx-auto w-full max-w-[480px] md:max-w-[760px] lg:max-w-none">
       {/* The reference draws no heading over this panel; the page still needs its one `h1`, so it is read, not seen. */}
       <h1 className="sr-only">Your trades, at a glance</h1>
+      <p className="mb-[2px] hidden text-[11.5px] font-semibold uppercase tracking-[.04em] text-slate md:block">
+        Start with a trade
+      </p>
+      <p aria-hidden className="mb-[16px] hidden text-[22px] font-semibold md:block">
+        Welcome to Komtru
+      </p>
       <VerificationChecklist side="BUYER" />
-      <EmptyState
-        icon={EMPTY_ICON}
-        title="No protected Trades yet"
-        body="Start one, or enter a Trade Code from a seller — every completed Trade adds to your Trust Profile."
-      />
-      <div className="mt-[16px] flex flex-col gap-[8px]">
-        {/* On mobile the tab bar's raised action is the way to start one. */}
-        <div className="hidden md:block">
-          <Button asChild>
-            <a href="/trade/new">Start a Trade</a>
-          </Button>
-        </div>
-        <Button asChild variant="secondary">
-          <a href="/find">Enter a Trade Code</a>
-        </Button>
+      <div className="md:grid md:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)] md:items-start md:gap-[16px]">
+        <section aria-label="Start your first trade">
+          <EmptyState
+            icon={EMPTY_ICON}
+            title="No protected Trades yet"
+            body="Start one, or enter a Trade Code from a seller — every completed Trade adds to your Trust Profile."
+          />
+          <div className="mt-[16px] flex flex-col gap-[8px] md:flex-row">
+            {/* On mobile the tab bar's raised action is the way to start one. */}
+            <div className="hidden md:block md:flex-1">
+              <Button asChild>
+                <a href="/trade/new">Start a Trade</a>
+              </Button>
+            </div>
+            <div className="md:flex-1">
+              <Button asChild variant="secondary">
+                <a href="/find">Enter a Trade Code</a>
+              </Button>
+            </div>
+          </div>
+        </section>
+        <section aria-label="What would you like to do?" className="mt-[16px] md:mt-0">
+          <h2 className="mb-[10px] hidden font-display text-[15px] font-semibold md:block">
+            What would you like to do?
+          </h2>
+          <ul className="m-0 mb-[12px] hidden list-none flex-col gap-[8px] p-0 md:flex">
+            <WayIn
+              href="/trade/new"
+              title="Propose a trade"
+              body="Write the agreement with a buyer or a seller before any money moves."
+            />
+            <WayIn
+              href="/find"
+              title="Check a Trade Code"
+              body="See exactly what you are being asked to agree to, without trusting a link."
+            />
+          </ul>
+          <NoteBanner>
+            Agree on the details. Follow the payment and delivery status. Confirm the outcome when your
+            obligations are met.
+          </NoteBanner>
+        </section>
       </div>
-      <div className="mt-[16px]">
-        <NoteBanner>
-          Agree on the details. Follow the payment and delivery status. Confirm the outcome when your
-          obligations are met.
-        </NoteBanner>
-      </div>
-    </ScreenColumn>
+    </div>
+  );
+}
+
+/** One of DX-05's ways in: a card that is a link. */
+function WayIn({ href, title, body }: { href: string; title: string; body: string }): React.JSX.Element {
+  return (
+    <li>
+      <a
+        href={href}
+        className="block rounded-md border border-solid border-border-hairline bg-surface-primary p-[14px] hover:border-trust-indigo focus-visible:outline-[2.5px] focus-visible:outline-offset-[2px] focus-visible:outline-trust-indigo"
+      >
+        <span className="block text-[13.5px] font-semibold text-midnight-text">{title}</span>
+        <span className="mt-[4px] block text-[12px] leading-[1.5] text-slate">{body}</span>
+      </a>
+    </li>
   );
 }
 
 /** Sell's Shop with nothing sold yet: the KPI strip still shows, then a way to start selling. */
 function ShopEmpty({ header }: { header?: React.ReactNode }): React.JSX.Element {
   return (
-    <ScreenColumn>
+    <div className="mx-auto w-full max-w-[480px] md:max-w-[760px] lg:max-w-none">
       <h1 className="mb-[14px] text-[19px] font-semibold">Your selling activity</h1>
       <VerificationChecklist side="SELLER" />
       {header}
@@ -291,6 +335,6 @@ function ShopEmpty({ header }: { header?: React.ReactNode }): React.JSX.Element 
           <a href="/trade/new">Start a Trade</a>
         </Button>
       </div>
-    </ScreenColumn>
+    </div>
   );
 }

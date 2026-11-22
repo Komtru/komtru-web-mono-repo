@@ -920,6 +920,13 @@ list a trade.
 - **Depends on:** F-015, F-016
 - **MVP:** yes
 - **Progress note (2026-11-19), entry screens:** DX-01 Welcome — Log in is built and merged to `staging` (6.2% of pixels differ through the stand-in). By the owner's direction, every other entry screen (welcome, sign up, verify, terms, terms updated, reset and set password, session expired, service notice, update required, too many attempts) uses DX-01's two-column frame on desktop, and the onboarding walkthrough OB1–OB5 a centred card; none of those is drawn wide, so they are read by eye (`docs/ui-review/entry-wide.md`, `docs/ui-review/onboarding-wide.md`). Phone is pixel-identical to staging on all 24 captures. The Trade Code box needs a session (`/find` and `GET /trades/by-code` are authenticated), so a logged-out visitor goes through log in, or sign up, and lands on the trade. "Keep me signed in" is not built: the platform has no session-length option. **Not started:** DX-02 (identity verification, being rebuilt in the F-045 YouVerify work), DX-03–DX-09.
+- **Progress note (2026-11-22), desktop batch 1:** On the owner's direction (desktop and tablet first), DX-05
+  and TX-04 (new user: the empty state and the ways in side by side), DX-06 and TX-05 (search with side and
+  state filters, a column on desktop and chips below it, results two to a row from tablet up) and DX-09
+  (find a trade: the code on the left, the result on the right) are built and merged to `staging`. DX-06
+  searches the person's own trades, not listings, which are withdrawn. DX-03, DX-04, TX-02 and TX-03 came
+  with F-083. **Not built:** DX-07 browse categories (needs listings, F-041, withdrawn), DX-02 (waits on the
+  YouVerify rebuild), DX-08 and TX-06 (F-016). **Not Done:** the scored visual check has not run (captures only).
 
 #### F-068 — Desktop: propose, agree and fund
 
@@ -981,6 +988,13 @@ list a trade.
 - **Progress note (2026-11-19), entry screens:** TX-01 Log in is built and merged to `staging` (3.4% of pixels differ at 820px; the harness's own 560px tablet frame measures the phone layout). Every other entry screen and the onboarding walkthrough use TX-01's centred card on tablet; see F-067's entry note. TX-02–TX-06 not started.
 - **Depends on:** F-015, F-018, F-019, F-023, F-024
 - **MVP:** yes
+- **Progress note (2026-11-22), desktop batch 1:** On the owner's direction (desktop and tablet first), DX-05
+  and TX-04 (new user: the empty state and the ways in side by side), DX-06 and TX-05 (search with side and
+  state filters, a column on desktop and chips below it, results two to a row from tablet up) and DX-09
+  (find a trade: the code on the left, the result on the right) are built and merged to `staging`. DX-06
+  searches the person's own trades, not listings, which are withdrawn. DX-03, DX-04, TX-02 and TX-03 came
+  with F-083. **Not built:** DX-07 browse categories (needs listings, F-041, withdrawn), DX-02 (waits on the
+  YouVerify rebuild), DX-08 and TX-06 (F-016). **Not Done:** the scored visual check has not run (captures only).
 
 #### F-073 — Tablet: fulfil, deliver, inspect and payouts
 
