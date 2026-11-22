@@ -24,10 +24,11 @@ import {
   TermRow,
   TextField,
 } from '@komtru/ui-kit';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { isProductionHost } from '../hosts';
 import { VERIFICATION_HREF } from '../sell/rules';
 import { ContactSupport } from './ContactSupport';
+import { activeRejections } from './rejections';
 import { ContactChecks } from './VerifyContact';
 import { Loading, LoadProblem } from './states';
 import { accountProblem } from './words';
@@ -63,20 +64,7 @@ const OUTCOME: Record<
   UNDER_REVIEW: { line: 'A person is looking at it', chip: 'In review', tone: 'verifying' },
 };
 
-/**
- * A rejection is the platform's latest word on a check only until a newer attempt of the same kind is on its way; after a
- * resubmission the old failure stops being the answer, and showing it above "we're checking" would say two things.
- */
-export function activeRejections(status: VerificationStatus): VerificationRejection[] {
-  return status.rejections.filter(
-    (rejection) =>
-      !status.inFlight.some(
-        (request) =>
-          request.type === rejection.type &&
-          (rejection.decidedAt === null || request.submittedAt > rejection.decidedAt),
-      ),
-  );
-}
+export { activeRejections };
 
 /**
  * VF1 (and the verification list it lives in). What failed and why come from the platform, copy included, so a screen
@@ -87,6 +75,15 @@ export function activeRejections(status: VerificationStatus): VerificationReject
 export function Verification(): React.JSX.Element {
   const status = useVerificationStatus();
   const me = useMe();
+  const ready = me.data !== undefined && status.data !== undefined;
+
+  // F-084 links here at a section (`#contact`, `#identity`). Both sections render only once their data is read, so
+  // the browser's own jump on load finds nothing: jump once they exist.
+  useEffect(() => {
+    if (!ready) return;
+    const target = window.location.hash.slice(1);
+    if (target === 'contact' || target === 'identity') document.getElementById(target)?.scrollIntoView();
+  }, [ready]);
 
   return (
     /*

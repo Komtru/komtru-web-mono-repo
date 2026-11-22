@@ -3,23 +3,26 @@
 import { useMe, useVerificationStatus } from '@komtru/api-client/react';
 import { Chip, NoteBanner, SettingsGroup, type ChipTone } from '@komtru/ui-kit';
 import { useState } from 'react';
-import { activeRejections } from '../account/Verification';
+import { activeRejections } from '../account/rejections';
 import { stepsOwed, type DashboardSide, type VerificationStep } from './verificationSteps';
 
-/** "Not now" on the optional ID step, remembered on this device only. Not a credential. */
-const NOT_NOW_KEY = 'komtru.verify.identity.not-now';
+/**
+ * "Not now" on the optional ID step, remembered on this device for this account only, so a shared browser does not
+ * hide it from the next person. Not a credential.
+ */
+export const notNowKey = (accountId: string): string => `komtru.verify.identity.not-now:${accountId}`;
 
-function readNotNow(): boolean {
+function readNotNow(accountId: string): boolean {
   try {
-    return typeof window !== 'undefined' && window.localStorage.getItem(NOT_NOW_KEY) === '1';
+    return typeof window !== 'undefined' && window.localStorage.getItem(notNowKey(accountId)) === '1';
   } catch {
     return false;
   }
 }
 
-function writeNotNow(): void {
+function writeNotNow(accountId: string): void {
   try {
-    window.localStorage.setItem(NOT_NOW_KEY, '1');
+    window.localStorage.setItem(notNowKey(accountId), '1');
   } catch {
     // Blocked site data: it stays hidden for this page only, which is still what the person asked for.
   }
@@ -39,20 +42,27 @@ function badge(step: VerificationStep): { tone: ChipTone; label: string } {
  * person still owes and opens VF1 at it: email or phone, whichever they did not sign up with, and their ID (required
  * on Sell, recommended on Buy).
  *
- * It is information, never a gate: the server decides every refusal. So it draws nothing while either read is in
- * flight or has failed, rather than guess. A required step can't be put away; the optional ID step on Buy has
+ * It is information, never a gate: the server decides every refusal. So it draws nothing until `/me` is read, and
+ * leaves the ID step out while the verification status is unread or unreadable, rather than guess. A required step can't be put away; the optional ID step on Buy has
  * "Not now", which hides it on this device.
  */
 export function VerificationChecklist({ side }: { side: DashboardSide }): React.JSX.Element | null {
   const me = useMe();
   const status = useVerificationStatus();
-  const [notNow, setNotNow] = useState(readNotNow);
+  // The account whose "Not now" this page has seen pressed. Read from storage while it is not this one.
+  const [hiddenFor, setHiddenFor] = useState<string | undefined>(undefined);
 
-  if (me.data === undefined || status.data === undefined) return null;
+  // Contacts need only `/me`; the ID step joins once the status is read, and is left out if it can't be.
+  if (me.data === undefined) return null;
+  const accountId = me.data.id;
+  const notNow = hiddenFor === accountId || readNotNow(accountId);
 
-  const steps = stepsOwed(me.data, status.data, activeRejections(status.data), side).filter(
-    (step) => step.required || !notNow,
-  );
+  const steps = stepsOwed(
+    me.data,
+    status.data,
+    status.data === undefined ? [] : activeRejections(status.data),
+    side,
+  ).filter((step) => step.required || !notNow);
   if (steps.length === 0) return null;
 
   const required = steps.filter((step) => step.required).length;
@@ -90,8 +100,8 @@ export function VerificationChecklist({ side }: { side: DashboardSide }): React.
                       type="button"
                       className="text-[11.5px] font-semibold text-trust-indigo"
                       onClick={() => {
-                        writeNotNow();
-                        setNotNow(true);
+                        writeNotNow(accountId);
+                        setHiddenFor(accountId);
                       }}
                     >
                       Not now

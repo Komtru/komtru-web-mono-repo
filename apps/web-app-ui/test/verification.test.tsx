@@ -230,3 +230,25 @@ describe('Verification failed (VF1)', () => {
     online.mockRestore();
   });
 });
+
+// F-084: Home and Shop link to a section of VF1. Both sections render only once their data is read, so the screen
+// jumps to the one named in the link itself.
+describe('VF1 opened at a section', () => {
+  afterEach(() => {
+    window.history.replaceState(null, '', '/');
+    // jsdom has no scrollIntoView of its own; the test's stub goes away with it.
+    Reflect.deleteProperty(Element.prototype, 'scrollIntoView');
+  });
+
+  it('scrolls to #identity once the checks have loaded', async () => {
+    window.history.replaceState(null, '', '/account/verification#identity');
+    const scrolled = vi.fn();
+    Element.prototype.scrollIntoView = scrolled;
+    answerWith(api.call, { 'GET /me': me(), 'GET /verification/status': status() });
+    renderWithApi(api.call, <Verification />);
+    await waitFor(() => {
+      expect(scrolled).toHaveBeenCalled();
+    });
+    expect((scrolled.mock.contexts[0] as Element).id).toBe('identity');
+  });
+});

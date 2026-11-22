@@ -89,12 +89,14 @@ function identityState(status: VerificationStatus, rejections: VerificationStatu
  */
 export function stepsOwed(
   facts: Facts,
-  status: VerificationStatus,
+  status: VerificationStatus | undefined,
   rejections: VerificationStatus['rejections'],
   side: DashboardSide,
 ): VerificationStep[] {
   const steps = contactSteps(facts.contacts);
-  if (!ID_DONE.has(facts.verificationLevel)) {
+  // Without the status (still loading, or unreadable) the ID step is left out rather than guessed at: the contact
+  // steps, which gate sending and paying, need only `/me`.
+  if (status !== undefined && !ID_DONE.has(facts.verificationLevel)) {
     steps.push({
       id: 'identity',
       title: 'Verify your ID',

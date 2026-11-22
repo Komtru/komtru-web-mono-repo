@@ -1,9 +1,9 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, screen, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { VerificationChecklist } from '../src/home/VerificationChecklist';
+import { VerificationChecklist, notNowKey } from '../src/home/VerificationChecklist';
 import { expectNoAxeViolations } from './axe';
-import { me } from './support/account';
+import { ME_ID, me } from './support/account';
 import { answerWith, renderWithApi, type CallFn } from './support/trade';
 
 const api = vi.hoisted(() => ({ call: vi.fn<CallFn>() }));
@@ -62,11 +62,11 @@ describe('Finish verifying', () => {
     expect(within(card).getByText('Recommended')).toBeTruthy();
     fireEvent.click(within(card).getByRole('button', { name: 'Not now' }));
     expect(screen.queryByRole('region', { name: 'Finish verifying' })).toBeNull();
-    expect(window.localStorage.getItem('komtru.verify.identity.not-now')).toBe('1');
+    expect(window.localStorage.getItem(notNowKey(ME_ID))).toBe('1');
   });
 
   it('keeps a required step after Not now was used on Buy', async () => {
-    window.localStorage.setItem('komtru.verify.identity.not-now', '1');
+    window.localStorage.setItem(notNowKey(ME_ID), '1');
     answerWith(api.call, { 'GET /me': phoneFirst, 'GET /verification/status': status() });
     renderWithApi(api.call, <VerificationChecklist side="BUYER" />);
     const card = await screen.findByRole('region', { name: 'Finish verifying' });
@@ -107,14 +107,26 @@ describe('Finish verifying', () => {
     expect(container.querySelector('section')).toBeNull();
   });
 
-  it('draws nothing when the status cannot be read', async () => {
+  it('still names the contact steps when the status cannot be read, and leaves ID out', async () => {
     api.call.mockImplementation((endpoint) =>
       (endpoint as { path: string }).path === '/me'
         ? Promise.resolve(phoneFirst)
         : Promise.reject(new Error('offline')),
     );
-    const { container } = renderWithApi(api.call, <VerificationChecklist side="SELLER" />);
-    await new Promise((resolve) => setTimeout(resolve, 50));
-    expect(container.querySelector('section')).toBeNull();
+    renderWithApi(api.call, <VerificationChecklist side="SELLER" />);
+    const card = await screen.findByRole('region', { name: 'Finish verifying' });
+    expect(within(card).getByRole('link', { name: /Confirm your email/ })).toBeTruthy();
+    expect(within(card).queryByRole('link', { name: /Verify your ID/ })).toBeNull();
+  });
+
+  it('keeps Not now to the account that pressed it', async () => {
+    window.localStorage.setItem(notNowKey('someone-else'), '1');
+    answerWith(api.call, {
+      'GET /me': me({}, { verificationLevel: 'CONTACT_VERIFIED' }),
+      'GET /verification/status': status(),
+    });
+    renderWithApi(api.call, <VerificationChecklist side="BUYER" />);
+    const card = await screen.findByRole('region', { name: 'Finish verifying' });
+    expect(within(card).getByRole('link', { name: /Verify your ID/ })).toBeTruthy();
   });
 });

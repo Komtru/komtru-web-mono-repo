@@ -119,4 +119,8 @@ describe('the verification steps still owed', () => {
   it('ignores checks that are not about the ID', () => {
     expect(stepsOwed(facts(), status(), [rejection('CAC')], 'SELLER')[0]?.state).toBe('todo');
   });
+
+  it('leaves ID out, and keeps the contacts, when the status is not read', () => {
+    expect(ids(stepsOwed(facts({ email: false }), undefined, [], 'SELLER'))).toEqual(['email']);
+  });
 });
