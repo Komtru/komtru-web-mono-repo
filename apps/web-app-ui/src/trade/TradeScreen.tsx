@@ -193,8 +193,67 @@ function AnswerProposal({ trade }: { trade: TradeView }): React.JSX.Element {
   };
 
   return (
+    // DX-12 and TX-08: the offer and who it is from on the left, the response beside it; a phone stacks them.
     <ProposeWorkspace
       header={<ScreenHeader title={selling ? 'New Request' : 'Review terms'} backHref="/trades" />}
+      decision={
+        <>
+          <div className="mt-[16px] md:mt-0">
+            <AddressPicker
+              label={selling ? 'Ships from' : 'Delivery address'}
+              value={addressId}
+              onChange={setAddressId}
+            />
+          </div>
+          {selling && (
+            <>
+              <SectionLabel>Proof of the item</SectionLabel>
+              {standard.isError && (
+                <RiskBanner title="Couldn't load what proof this trade needs">
+                  <button type="button" className="underline" onClick={() => void standard.refetch()}>
+                    Try again
+                  </button>
+                </RiskBanner>
+              )}
+              {standard.isPending && trade.standardVersionId !== null && (
+                <p role="status" className="mb-[12px] text-[12px] text-slate">
+                  Loading what proof this trade needs…
+                </p>
+              )}
+              {standardReady && (
+                <ProofUpload
+                  required={needs.photos}
+                  requireVideo={needs.video}
+                  onChange={(ids, summary) => {
+                    setProof(ids);
+                    setCounts(summary);
+                  }}
+                  step="accept"
+                />
+              )}
+            </>
+          )}
+          {problem !== undefined && <RiskBanner>{problem}</RiskBanner>}
+          <ActionStack>
+            <Button type="button" onClick={onAccept} disabled={!ready || accept.isPending}>
+              {accept.isPending ? 'Accepting…' : selling ? 'Accept trade request' : 'Accept terms'}
+            </Button>
+            <Button asChild variant="secondary">
+              <a href={`/trade/${trade.id}/counter`}>Propose a change</a>
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              className="self-center"
+              onClick={() => {
+                setDeclining(true);
+              }}
+            >
+              Decline
+            </Button>
+          </ActionStack>
+        </>
+      }
     >
       <NoteBanner>
         {selling
@@ -205,60 +264,6 @@ function AnswerProposal({ trade }: { trade: TradeView }): React.JSX.Element {
       <PartyHeader trade={trade} />
       <SectionLabel>{selling ? "Buyer's proposed terms" : 'Terms of this trade'}</SectionLabel>
       <TermsRows trade={trade} />
-      <div className="mt-[16px]">
-        <AddressPicker
-          label={selling ? 'Ships from' : 'Delivery address'}
-          value={addressId}
-          onChange={setAddressId}
-        />
-      </div>
-      {selling && (
-        <>
-          <SectionLabel>Proof of the item</SectionLabel>
-          {standard.isError && (
-            <RiskBanner title="Couldn't load what proof this trade needs">
-              <button type="button" className="underline" onClick={() => void standard.refetch()}>
-                Try again
-              </button>
-            </RiskBanner>
-          )}
-          {standard.isPending && trade.standardVersionId !== null && (
-            <p role="status" className="mb-[12px] text-[12px] text-slate">
-              Loading what proof this trade needs…
-            </p>
-          )}
-          {standardReady && (
-            <ProofUpload
-              required={needs.photos}
-              requireVideo={needs.video}
-              onChange={(ids, summary) => {
-                setProof(ids);
-                setCounts(summary);
-              }}
-              step="accept"
-            />
-          )}
-        </>
-      )}
-      {problem !== undefined && <RiskBanner>{problem}</RiskBanner>}
-      <ActionStack>
-        <Button type="button" onClick={onAccept} disabled={!ready || accept.isPending}>
-          {accept.isPending ? 'Accepting…' : selling ? 'Accept trade request' : 'Accept terms'}
-        </Button>
-        <Button asChild variant="secondary">
-          <a href={`/trade/${trade.id}/counter`}>Propose a change</a>
-        </Button>
-        <Button
-          type="button"
-          variant="ghost"
-          className="self-center"
-          onClick={() => {
-            setDeclining(true);
-          }}
-        >
-          Decline
-        </Button>
-      </ActionStack>
       <ConfirmSheet
         open={declining}
         title="Decline this request"

@@ -41,6 +41,8 @@ import { type Attached, ProofUpload } from '../ProofUpload';
 import { KomtruTerms, Sent } from './BuyerStages';
 import { Agreement, ItemFields, StageHeader } from './parts';
 import { allowedPromises, detectCategory, parkAvailable, parseCharge, sellerSpec } from './request';
+import { ContractPreview } from './ContractPreview';
+import { ProposeWorkspace } from './ProposeWorkspace';
 import { MERCHANT_STATUS_HREF, sellLimitWarning } from './sellLimit';
 
 export const SELLER_STAGES = ['About', 'Item & delivery', 'Terms', 'Review'] as const;
@@ -293,11 +295,27 @@ export function SellerStart({
       ? undefined
       : sellerSpec(standard, title, fields, { partner, chargeMinor: chargeMinor.toString(), promise });
 
+  // The same frame as the buyer's request (F-068, F-072): on a desktop window the stage rail runs down the
+  // left and the contract so far sits on the right of the stage; a phone keeps the single column.
   return (
-    <ScreenColumn>
-      <ScreenHeader title={heading} {...(stage === 0 ? { backHref: '/trades' } : { onBack: back })} />
-      <StageHeader stages={SELLER_STAGES} current={stage} heading={heading} />
-
+    <ProposeWorkspace
+      header={
+        <ScreenHeader title={heading} {...(stage === 0 ? { backHref: '/trades' } : { onBack: back })} />
+      }
+      rail={<StageHeader stages={SELLER_STAGES} current={stage} heading={heading} />}
+      preview={
+        stage === 0 || stage === 3 ? undefined : (
+          <ContractPreview
+            partyLabel="Buyer"
+            sellerName={buyerName === '' ? undefined : buyerName}
+            itemTitle={title.trim() === '' ? undefined : title.trim()}
+            itemMinor={kobo?.toString()}
+            protectionFeeMinor={amounts?.buyerProtectionFeeMinor}
+            inspectionHours={standard?.inspectionWindowHours}
+          />
+        )
+      }
+    >
       {stage === 0 && (
         <>
           <h2 className="m-0 text-[18px] font-semibold">Who are you trading with?</h2>
@@ -663,6 +681,6 @@ export function SellerStart({
           </>
         )}
       </ActionStack>
-    </ScreenColumn>
+    </ProposeWorkspace>
   );
 }

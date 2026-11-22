@@ -20,6 +20,7 @@ import {
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { AddressPicker } from './AddressPicker';
+import { ProposeWorkspace } from './create/ProposeWorkspace';
 import { addressLine, isProblem, naira, problemMessage } from './format';
 
 const asNairaText = (minor: string): string => {
@@ -129,9 +130,71 @@ export function ProposeChange({ id }: { id: string }): React.JSX.Element {
     );
   };
 
+  // DX-13 at width: the terms you are changing on the left, what changes and the send beside them; a phone stacks
+  // them in the same order.
   return (
-    <ScreenColumn>
-      <ScreenHeader title="Propose a Change" backHref={`/trade/${id}`} />
+    <ProposeWorkspace
+      header={<ScreenHeader title="Propose a Change" backHref={`/trade/${id}`} />}
+      decisionLabel="Your counter-proposal"
+      decision={
+        <>
+          <SectionLabel>What&apos;s changing</SectionLabel>
+          {!priceChanged && !addressChanged && (
+            <p className="text-[12.5px] text-slate">
+              Nothing yet. Change the price or the address to send a counter-proposal.
+            </p>
+          )}
+          {priceChanged && (
+            <CounterDiffRow
+              label="Item price"
+              before={naira(terms.itemAmountMinor)}
+              after={naira(kobo.toString())}
+              beforeCaption={`${proposer} proposed`}
+              afterCaption="your counter"
+            />
+          )}
+          {chosenAddress !== undefined && (
+            <CounterDiffRow
+              label={view.yourRole === 'BUYER' ? 'Delivery to' : 'Ships from'}
+              before={ownSide === null ? 'No address yet' : addressLine(ownSide)}
+              after={addressLine({
+                street: chosenAddress.streetLine,
+                landmark: chosenAddress.landmark ?? '',
+              })}
+              afterCaption="your counter"
+            />
+          )}
+          <SectionLabel>Revised terms summary</SectionLabel>
+          <TermList aria-label="Revised terms summary">
+            <TermRow label="Item price">{kobo === undefined ? '—' : naira(kobo.toString())}</TermRow>
+            <TermRow label={view.yourRole === 'BUYER' ? 'Delivery to' : 'Ships from'}>
+              {chosenAddress === undefined
+                ? ownSide === null
+                  ? 'Not set yet'
+                  : addressLine(ownSide)
+                : addressLine({ street: chosenAddress.streetLine, landmark: chosenAddress.landmark ?? '' })}
+            </TermRow>
+            <TermRow label="Other terms">Unchanged</TermRow>
+          </TermList>
+          <p className="mt-[12px] text-[11px] leading-[1.5] text-trust-gray">
+            The previous proposal is not the accepted agreement.
+          </p>
+          {problem !== undefined && <RiskBanner>{problem}</RiskBanner>}
+          <ActionStack>
+            <Button
+              type="button"
+              onClick={send}
+              disabled={counter.isPending || (!priceChanged && !addressChanged)}
+            >
+              {counter.isPending ? 'Sending…' : 'Send counter-proposal'}
+            </Button>
+            <Button asChild variant="secondary">
+              <a href={`/trade/${id}`}>Discard changes</a>
+            </Button>
+          </ActionStack>
+        </>
+      }
+    >
       <NoteBanner>
         Only the terms you change are different. The {proposer} must review the revised agreement.
       </NoteBanner>
@@ -163,57 +226,6 @@ export function ProposeChange({ id }: { id: string }): React.JSX.Element {
           onChange={setAddressId}
         />
       )}
-      <SectionLabel>What&apos;s changing</SectionLabel>
-      {!priceChanged && !addressChanged && (
-        <p className="text-[12.5px] text-slate">
-          Nothing yet. Change the price or the address to send a counter-proposal.
-        </p>
-      )}
-      {priceChanged && (
-        <CounterDiffRow
-          label="Item price"
-          before={naira(terms.itemAmountMinor)}
-          after={naira(kobo.toString())}
-          beforeCaption={`${proposer} proposed`}
-          afterCaption="your counter"
-        />
-      )}
-      {chosenAddress !== undefined && (
-        <CounterDiffRow
-          label={view.yourRole === 'BUYER' ? 'Delivery to' : 'Ships from'}
-          before={ownSide === null ? 'No address yet' : addressLine(ownSide)}
-          after={addressLine({ street: chosenAddress.streetLine, landmark: chosenAddress.landmark ?? '' })}
-          afterCaption="your counter"
-        />
-      )}
-      <SectionLabel>Revised terms summary</SectionLabel>
-      <TermList aria-label="Revised terms summary">
-        <TermRow label="Item price">{kobo === undefined ? '—' : naira(kobo.toString())}</TermRow>
-        <TermRow label={view.yourRole === 'BUYER' ? 'Delivery to' : 'Ships from'}>
-          {chosenAddress === undefined
-            ? ownSide === null
-              ? 'Not set yet'
-              : addressLine(ownSide)
-            : addressLine({ street: chosenAddress.streetLine, landmark: chosenAddress.landmark ?? '' })}
-        </TermRow>
-        <TermRow label="Other terms">Unchanged</TermRow>
-      </TermList>
-      <p className="mt-[12px] text-[11px] leading-[1.5] text-trust-gray">
-        The previous proposal is not the accepted agreement.
-      </p>
-      {problem !== undefined && <RiskBanner>{problem}</RiskBanner>}
-      <ActionStack>
-        <Button
-          type="button"
-          onClick={send}
-          disabled={counter.isPending || (!priceChanged && !addressChanged)}
-        >
-          {counter.isPending ? 'Sending…' : 'Send counter-proposal'}
-        </Button>
-        <Button asChild variant="secondary">
-          <a href={`/trade/${id}`}>Discard changes</a>
-        </Button>
-      </ActionStack>
-    </ScreenColumn>
+    </ProposeWorkspace>
   );
 }

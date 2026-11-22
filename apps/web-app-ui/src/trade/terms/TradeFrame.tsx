@@ -18,6 +18,7 @@ export function TradeFrame({
   loading,
   back,
   backLabel = 'Back to the trade',
+  wide = false,
   children,
 }: {
   id: string;
@@ -28,16 +29,23 @@ export function TradeFrame({
   /** Where the header's back arrow goes. */
   back: string;
   backLabel?: string;
+  /** Lets the screen use a tablet or desktop window's width (DX-14) instead of a phone-width column. */
+  wide?: boolean;
   children: (trade: TradeView) => React.ReactNode;
 }): React.JSX.Element {
   const trade = useTrade(id);
-  return (
-    <ScreenColumn>
+  const body = (
+    <>
       <ScreenHeader title={title} backHref={back} backLabel={backLabel} />
       <Content trade={trade} loading={loading}>
         {children}
       </Content>
-    </ScreenColumn>
+    </>
+  );
+  return wide ? (
+    <div className="mx-auto w-full max-w-[480px] md:max-w-[760px] lg:max-w-none">{body}</div>
+  ) : (
+    <ScreenColumn>{body}</ScreenColumn>
   );
 }
 
