@@ -1,6 +1,6 @@
 import { notFound } from 'next/navigation';
 import { AppShell } from '../../shell/AppShell';
-import { resolveViewer } from '../../shell/viewer';
+import { resolveMode, resolveViewer } from '../../shell/viewer';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -18,8 +18,9 @@ export async function DeliveryPage({
   const { id } = await params;
   if (!UUID.test(id)) notFound();
   const viewer = await resolveViewer();
+  const mode = await resolveMode(viewer);
   return (
-    <AppShell tab="trades" viewer={viewer}>
+    <AppShell mode={mode} tab="trades" viewer={viewer}>
       {render(id)}
     </AppShell>
   );

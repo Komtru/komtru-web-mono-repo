@@ -4,7 +4,12 @@ import {
   ANONYMOUS_VIEWER,
   BELL_HREF,
   currentTab,
+  landingFor,
+  MODE_COOKIE,
+  modeCookie,
+  modeFor,
   ROOT_DESTINATION,
+  rootDestination,
   searchDestination,
   tabsFor,
   type Viewer,
@@ -19,16 +24,23 @@ describe('the tab bar, the sidebar and the top nav (v2: DX-03, TX-02)', () => {
     expect(labels(tabsFor(viewer()))).toEqual(['Home', 'Trades', 'Messages', 'Discover', 'Account']);
   });
 
-  // Owner ruling 2026-11-20: one account, one navigation. Buying and selling are sides of a trade.
-  it('is the same for a certified merchant and someone who has sold: there is no Sell mode', () => {
-    const everyone = labels(tabsFor(viewer()));
-    expect(labels(tabsFor(viewer({ certifiedMerchant: true })))).toEqual(everyone);
-    expect(labels(tabsFor(viewer({ hasSold: true })))).toEqual(everyone);
+  // F-083 (owner ruling 2026-11-22): one account, two views of it behind the Buy/Sell switch.
+  it('draws Sell as Shop, Orders, Payouts, Messages and Account', () => {
+    expect(labels(tabsFor(viewer(), 'sell'))).toEqual(['Shop', 'Orders', 'Payouts', 'Messages', 'Account']);
   });
 
-  it('has no Shop, Orders or Listings destination', () => {
-    for (const label of ['Shop', 'Orders', 'Listings'])
-      expect(labels(tabsFor(viewer({ certifiedMerchant: true })))).not.toContain(label);
+  it('is the same for a certified merchant and someone who has sold, in either mode', () => {
+    for (const mode of ['buy', 'sell'] as const) {
+      const everyone = labels(tabsFor(viewer(), mode));
+      expect(labels(tabsFor(viewer({ certifiedMerchant: true }), mode))).toEqual(everyone);
+      expect(labels(tabsFor(viewer({ hasSold: true }), mode))).toEqual(everyone);
+    }
+  });
+
+  it('has no Listings in either mode: they are withdrawn', () => {
+    for (const mode of ['buy', 'sell'] as const)
+      expect(labels(tabsFor(viewer(), mode))).not.toContain('Listings');
+    expect(labels(tabsFor(viewer(), 'buy'))).not.toContain('Shop');
   });
 
   it('takes Alerts out of the nav: it is the bell in the top bar', () => {
@@ -45,8 +57,39 @@ describe('the tab bar, the sidebar and the top nav (v2: DX-03, TX-02)', () => {
     expect(text).not.toMatch(/switch|role|buyer|seller/i);
   });
 
-  it('opens the root at Home for everyone', () => {
-    expect(ROOT_DESTINATION).toBe('/home');
+  it('opens the root at the dashboard of the mode the person is in', () => {
+    expect(ROOT_DESTINATION).toBe('/');
+    expect(rootDestination(viewer(), undefined)).toBe('/home');
+    expect(rootDestination(viewer(), 'sell')).toBe('/shop');
+    expect(rootDestination(viewer({ certifiedMerchant: true }), undefined)).toBe('/shop');
+    expect(landingFor('buy')).toBe('/home');
+    expect(landingFor('sell')).toBe('/shop');
+  });
+});
+
+describe('the Buy/Sell mode (F-083)', () => {
+  it('is what the switch last chose, for anyone, merchants included', () => {
+    expect(modeFor(viewer(), 'sell')).toBe('sell');
+    expect(modeFor(viewer({ certifiedMerchant: true }), 'buy')).toBe('buy');
+  });
+
+  it('starts a merchant on Sell and everyone else on Buy, and ignores a value that is not a mode', () => {
+    expect(modeFor(viewer(), undefined)).toBe('buy');
+    expect(modeFor(viewer(), 'merchant')).toBe('buy');
+    expect(modeFor(viewer({ certifiedMerchant: true }), undefined)).toBe('sell');
+  });
+
+  it('is remembered in a lax cookie for a year, secure off localhost', () => {
+    expect(modeCookie('sell', true)).toBe(
+      `${MODE_COOKIE}=sell; path=/; max-age=31536000; samesite=lax; secure`,
+    );
+    expect(modeCookie('buy', false)).not.toContain('secure');
+  });
+
+  it('marks Payouts, not Account, for a payout screen in Sell', () => {
+    expect(currentTab('/account/payouts', viewer(), 'sell')).toBe('payouts');
+    expect(currentTab('/account/payouts', viewer(), 'buy')).toBe('account');
+    expect(currentTab('/orders', viewer(), 'buy')).toBeUndefined();
   });
 });
 

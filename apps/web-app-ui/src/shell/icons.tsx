@@ -48,6 +48,29 @@ export const TAB_ICONS: Record<TabId, React.ReactNode> = {
       <path d="M5 20c0-3.5 3-6 7-6s7 2.5 7 6" />
     </svg>
   ),
+  /** S1's `.tab` — the storefront grid. Sell mode's first destination, the seller's dashboard. */
+  shop: (
+    <svg {...TAB}>
+      <rect x="3" y="3" width="8" height="8" rx="1.5" />
+      <rect x="13" y="3" width="8" height="5" rx="1.5" />
+      <rect x="13" y="10" width="8" height="11" rx="1.5" />
+      <rect x="3" y="13" width="8" height="8" rx="1.5" />
+    </svg>
+  ),
+  /** The parcel: an order to pack and send. */
+  orders: (
+    <svg {...TAB} strokeLinejoin="round">
+      <path d="M4 8l8-4 8 4v8l-8 4-8-4V8z" />
+      <path d="M4 8l8 4 8-4M12 12v8" />
+    </svg>
+  ),
+  /** S6's card, at the tab bar's weight: Sell mode's Payouts. */
+  payouts: (
+    <svg {...TAB}>
+      <path d="M4 8a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z" />
+      <path d="M4 10h16" />
+    </svg>
+  ),
 };
 
 /** The mobile tab bar's raised Start Trade action: a plus, drawn heavier so it holds on the blue. */

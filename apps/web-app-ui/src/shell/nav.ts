@@ -2,9 +2,10 @@ import { tradeCodeSchema } from '@komtru/shared-types';
 
 // The app's navigation, as data.
 //
-// One account, one navigation (owner ruling 2026-11-20). There are no buyer accounts and seller
-// accounts: anyone buys and sells, and which side they are on is chosen per trade, on Start Trade.
-// v2's Buy/Sell switch and its Sell-mode destinations (Shop, Orders, Listings) are gone.
+// One account, two views of it (F-083, owner ruling 2026-11-22). Anyone buys and sells, and the side
+// of each trade is still chosen on Start Trade. The Buy/Sell switch picks which dashboard and which
+// five destinations the person sees: Buy for what they are buying, Sell for what they are selling.
+// It is a view preference held in a cookie, never a permission. Listings stay withdrawn (F-041).
 // Account carries **Payouts** once someone has sold, and a **Park Agent** item whose destination is
 // the hub application, the application's status, or `park.komtru.com`.
 //
@@ -29,7 +30,12 @@ export interface Viewer {
  */
 export const ANONYMOUS_VIEWER: Viewer = { certifiedMerchant: false, hasSold: false, parkAgent: 'none' };
 
-export type TabId = 'home' | 'trades' | 'messages' | 'discover' | 'account';
+/** v2's Buy/Sell switch (Y2, DX-03, DX-04). Two views of one account, not two accounts. */
+export type Mode = 'buy' | 'sell';
+
+export const MODE_COOKIE = 'komtru_mode';
+
+export type TabId = 'home' | 'trades' | 'messages' | 'discover' | 'account' | 'shop' | 'orders' | 'payouts';
 
 export interface Tab {
   id: TabId;
@@ -45,21 +51,52 @@ const TAB: Record<TabId, Tab> = {
   // catalogue is deferred with the listings, so the tab goes to search instead.
   discover: { id: 'discover', label: 'Discover', href: '/search' },
   account: { id: 'account', label: 'Account', href: '/account' },
+  shop: { id: 'shop', label: 'Shop', href: '/shop' },
+  orders: { id: 'orders', label: 'Orders', href: '/orders' },
+  payouts: { id: 'payouts', label: 'Payouts', href: '/account/payouts' },
 };
 
 /** Alerts left the nav in v2: it is the bell in the top bar. */
 export const BELL_HREF = '/alerts';
 
 /**
- * The five destinations, in the order v2 draws them (DX-03's sidebar). The same for everyone: the
- * viewer stays in the signature for the variations Account already has.
+ * The five destinations of a mode. Buy is DX-03's sidebar. Sell is DX-04's with Listings left out
+ * (withdrawn) and Payouts brought up from Account (owner ruling 2026-11-22). Payouts sits before
+ * Account so `/account/payouts` marks Payouts, not Account, in Sell.
  */
-export function tabsFor(_viewer: Viewer): readonly Tab[] {
-  return [TAB.home, TAB.trades, TAB.messages, TAB.discover, TAB.account];
+export function tabsFor(_viewer: Viewer, mode: Mode = 'buy'): readonly Tab[] {
+  return mode === 'sell'
+    ? [TAB.shop, TAB.orders, TAB.payouts, TAB.messages, TAB.account]
+    : [TAB.home, TAB.trades, TAB.messages, TAB.discover, TAB.account];
 }
 
-/** Where `/` sends someone who is signed in. */
-export const ROOT_DESTINATION = '/home';
+/**
+ * The mode someone is in: the one they last chose with the switch. Without a choice, a certified
+ * merchant starts on Sell and everyone else on Buy. Anyone can switch either way: merchants buy too.
+ */
+export function modeFor(viewer: Viewer, chosen: string | undefined): Mode {
+  if (chosen === 'buy' || chosen === 'sell') return chosen;
+  return viewer.certifiedMerchant ? 'sell' : 'buy';
+}
+
+/** Where switching into a mode lands: the first item of its nav, the mode's dashboard. */
+export const landingFor = (mode: Mode): string => (mode === 'sell' ? '/shop' : '/home');
+
+/**
+ * Where sign-in sends someone: the root, which reads their mode and opens that mode's dashboard
+ * (`rootDestination`), so a merchant signing in lands on Shop and everyone else on Home.
+ */
+export const ROOT_DESTINATION = '/';
+
+/** Where `/` sends someone who is signed in: the dashboard of the mode they are in. */
+export const rootDestination = (viewer: Viewer, chosen: string | undefined): string =>
+  landingFor(modeFor(viewer, chosen));
+
+const YEAR_SECONDS = 60 * 60 * 24 * 365;
+
+/** The `document.cookie` string for a chosen mode: Lax, and Secure anywhere but plain-http localhost. */
+export const modeCookie = (mode: Mode, secure: boolean): string =>
+  `${MODE_COOKIE}=${mode}; path=/; max-age=${YEAR_SECONDS}; samesite=lax${secure ? '; secure' : ''}`;
 
 /**
  * Where the global search and Trade Code bar sends a query: a Trade Code goes to that code's own page,
@@ -81,11 +118,11 @@ const isSegmentPrefix = (pathname: string, prefix: string): boolean =>
 
 /**
  * Which tab a path sits under, or `undefined` when it sits under none — a Park Hub application, the
- * alerts feed. Whole segments only: `/tradesmanship` is not the
+ * alerts feed, or a destination of the other mode. Whole segments only: `/tradesmanship` is not the
  * Trades tab, and `aria-current="page"` on the wrong tab is worse than on none.
  */
-export function currentTab(pathname: string, viewer: Viewer): TabId | undefined {
-  return tabsFor(viewer).find((tab) => isSegmentPrefix(pathname, tab.href))?.id;
+export function currentTab(pathname: string, viewer: Viewer, mode: Mode = 'buy'): TabId | undefined {
+  return tabsFor(viewer, mode).find((tab) => isSegmentPrefix(pathname, tab.href))?.id;
 }
 
 export type AccountItemId =

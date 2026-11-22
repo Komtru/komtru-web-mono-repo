@@ -40,7 +40,10 @@ export function useAllTrades(): {
   useTradeLive(live);
 
   useEffect(() => {
-    if (hasNextPage && !isFetchingNextPage && !isFetchNextPageError) void fetchNextPage();
+    // `cancelRefetch: false`: Shop reads this list twice (its groups and its KPI strip), and both effects fire in
+    // the same commit. Without it the second call would cancel and resend the first one's page.
+    if (hasNextPage && !isFetchingNextPage && !isFetchNextPageError)
+      void fetchNextPage({ cancelRefetch: false });
   }, [hasNextPage, isFetchingNextPage, isFetchNextPageError, fetchNextPage]);
 
   return {
@@ -53,7 +56,7 @@ export function useAllTrades(): {
     nextPageFailed: isFetchNextPageError,
     retry: () => {
       if (list.data === undefined) void list.refetch();
-      else void fetchNextPage();
+      else void fetchNextPage({ cancelRefetch: false });
     },
   };
 }

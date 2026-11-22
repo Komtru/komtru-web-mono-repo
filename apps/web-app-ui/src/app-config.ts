@@ -2,7 +2,7 @@
 // a property of the product, not of the environment.
 //
 // Everyone who buys or sells is a CONSUMER session (design C22, §7.3). There is no buyer or seller
-// scope, and no role switcher.
+// scope. The Buy/Sell switch (F-083) is a view preference, not a scope.
 import { publicEnv, readAppConfig, type AppConfig, type AppEnv, type AppSpec } from '@komtru/app-kit';
 import type { HostRules } from './hosts';
 
@@ -11,8 +11,8 @@ export const appSpec = {
   scope: 'CONSUMER',
   // The reference's own URL for screen E4 (`app.komtru.com/login`).
   signInPath: '/login',
-  // Where `/` sends someone signed in (`ROOT_DESTINATION`).
-  homePath: '/home',
+  // Where sign-in sends someone (`ROOT_DESTINATION`): the root, which opens their mode's dashboard (F-083).
+  homePath: '/',
 } as const satisfies AppSpec;
 
 /** Where the public Trust Passport pages are served. Its own host in production (design C12). */

@@ -9,10 +9,15 @@ import {
   callsTo,
   counterparty,
   id,
-  listItem,
+  listItem as anyListItem,
   renderWithApi,
   type CallFn,
 } from './support/trade';
+
+// F-083: Buy's lists show only the trades the person is buying, so these rows are the buyer's unless a test says
+// otherwise.
+const listItem = (...[n, overrides]: Parameters<typeof anyListItem>): ReturnType<typeof anyListItem> =>
+  anyListItem(n, { yourRole: 'BUYER', ...overrides });
 
 const api = vi.hoisted(() => ({ call: vi.fn<CallFn>() }));
 
@@ -217,5 +222,43 @@ describe('Home while it loads and when it cannot', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
     expect(await screen.findByRole('region', { name: 'Active trades' })).toBeTruthy();
     expect(screen.queryByRole('alert')).toBeNull();
+  });
+});
+
+// F-083: Buy's Home and Sell's Shop are two dashboards over one list, split by the side the person is on.
+describe('the Buy and Sell dashboards', () => {
+  const sale = listItem(40, {
+    yourRole: 'SELLER',
+    status: 'FUNDED',
+    attention: 'SHIP',
+    awaiting: null,
+    item: { title: 'MacBook Air', categoryCode: 'electronics', categoryName: 'Electronics' },
+  });
+  const purchase = listItem(41, {
+    item: { title: 'Ankara fabric', categoryCode: 'fashion', categoryName: 'Fashion' },
+  });
+
+  it('lists only what the person is buying on Home', async () => {
+    answerWith(api.call, { 'GET /trades': page([sale, purchase]) });
+    renderWithApi(api.call, <HomeScreen />);
+    expect(await screen.findByText(/Ankara fabric/)).toBeTruthy();
+    expect(screen.queryByText(/MacBook Air/)).toBeNull();
+  });
+
+  it('lists only what the person is selling on Shop, under the header it is given', async () => {
+    answerWith(api.call, { 'GET /trades': page([sale, purchase]) });
+    renderWithApi(api.call, <HomeScreen side="SELLER" header={<p>Shop strip</p>} />);
+    expect(await screen.findByRole('heading', { name: 'Your selling activity' })).toBeTruthy();
+    expect(screen.getByText('Shop strip')).toBeTruthy();
+    expect(screen.getByText(/MacBook Air/)).toBeTruthy();
+    expect(screen.queryByText(/Ankara fabric/)).toBeNull();
+    expect(screen.getByRole('link', { name: 'View all sales' }).getAttribute('href')).toBe('/trades');
+  });
+
+  it('says there are no sales yet on Shop when the person has only bought', async () => {
+    answerWith(api.call, { 'GET /trades': page([purchase]) });
+    renderWithApi(api.call, <HomeScreen side="SELLER" header={<p>Shop strip</p>} />);
+    expect(await screen.findByText('No sales yet')).toBeTruthy();
+    expect(screen.getByText('Shop strip')).toBeTruthy();
   });
 });

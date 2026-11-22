@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import { AppShell } from '../../../../../src/shell/AppShell';
-import { resolveViewer } from '../../../../../src/shell/viewer';
+import { resolveMode, resolveViewer } from '../../../../../src/shell/viewer';
 import { TradeScreen } from '../../../../../src/trade/TradeScreen';
 import { isWorkspaceTab, tabTitle } from '../../../../../src/trade/workspace-state';
 
@@ -24,9 +24,10 @@ export default async function TradeTabPage({ params }: { params: Params }): Prom
   const { id, tab } = await params;
   if (!UUID.test(id) || !isWorkspaceTab(tab) || tab === 'overview') notFound();
   const viewer = await resolveViewer();
+  const mode = await resolveMode(viewer);
 
   return (
-    <AppShell tab="trades" viewer={viewer}>
+    <AppShell mode={mode} tab="trades" viewer={viewer}>
       <TradeScreen id={id} tab={tab} />
     </AppShell>
   );
