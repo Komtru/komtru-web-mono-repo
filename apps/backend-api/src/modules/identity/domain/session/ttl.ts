@@ -21,7 +21,7 @@ const DAY = 24 * HOUR;
 /**
  * Staff is M1 C3 exactly: 30-minute idle, 8-hour absolute. Consumer keeps the 30-day sliding idle
  * window, but its absolute deadline is no longer a fixed length: it is the next Lagos midnight
- * (`untilLagosMidnight`), which always comes first. `absoluteSeconds` stays as the ceiling that rule
+ * (`nextLagosMidnight`), which always comes first. `absoluteSeconds` stays as the ceiling that rule
  * can never exceed. LOGISTICS deliberately shares the consumer numbers (ticket T-031).
  */
 export const SESSION_TTLS: Record<SessionScope, SessionTtl> = {
