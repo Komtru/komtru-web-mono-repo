@@ -7,11 +7,11 @@ behind it is [`BUILD_PLAN.md`](BUILD_PLAN.md). The unit of work is the feature, 
 thing in an app.
 
 ```
-MVP   █████████████████·················  32/64   (50%)
-Total █████████████·····················  32/82   (39%)
+MVP   █████████████████·················  32/65   (49%)
+Total █████████████·····················  32/83   (39%)
 ```
 
-32 MVP features left, 18 deferred past it.
+33 MVP features left, 18 deferred past it.
 
 ## Backend done, UI outstanding
 
@@ -41,7 +41,7 @@ The engine exists and only the UI is missing, so these are the highest-value wor
 | Park network                            | 0    | 5     | 0        | 5         |
 | Logistics partner                       | 0    | 2     | 0        | 2         |
 | Desktop & tablet journeys               | 0    | 8     | 0        | 6         |
-| Launch & assurance (not a user journey) | 2    | 8     | 2        | 6         |
+| Launch & assurance (not a user journey) | 2    | 9     | 2        | 7         |
 
 ## Ready features (every dependency done), MVP first
 
@@ -100,6 +100,7 @@ The engine exists and only the UI is missing, so these are the highest-value wor
 | F-077   | Security review                                                 | Launch & assurance (not a user journey) | yes |
 | F-078   | Definition-of-done audit and first push                         | Launch & assurance (not a user journey) | yes |
 | F-082   | One account: choose your side per trade, and the selling limit  | Launch & assurance (not a user journey) | yes |
+| F-083   | Buy and Sell dashboards behind a switch                         | Launch & assurance (not a user journey) | yes |
 
 ## Ticket layer (detail view)
 

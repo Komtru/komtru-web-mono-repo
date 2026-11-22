@@ -221,6 +221,8 @@ list a trade.
   the Buy/Sell mode switch (Y2) and its Sell-mode tabs (Shop, Orders, Listings) are removed. There are
   no buyer and seller accounts; anyone buys and sells, and the side is chosen per trade on Start Trade
   (F-082). Design `docs/superpowers/specs/2026-11-20-one-account-trade-sides-design.md`.
+  **Reversed in part 2026-11-22 by the owner:** the Buy/Sell switch comes back, with a separate Buy and
+  Sell dashboard and nav (F-083). It is still one account. Design `docs/superpowers/specs/2026-11-22-buy-sell-dashboards-design.md`.
 
 #### F-013 — First-time onboarding walkthrough
 
@@ -913,7 +915,7 @@ list a trade.
 - **Actor:** buyer, seller
 - **Absorbs:** T-207 (todo)
 - **Backend scope:** Served by F-011, F-015, F-016 and F-045.
-- **Frontend scope:** Desktop · 01 · Arrive & verify (DX-01, DX-02), · 02 · Home (DX-03–DX-05) and · 03 · Discover (DX-06–DX-09). _9 v2 screens._
+- **Frontend scope:** Desktop · 01 · Arrive & verify (DX-01, DX-02), · 02 · Home (DX-03–DX-05) and · 03 · Discover (DX-06–DX-09). _9 v2 screens._ DX-03 and DX-04, the Buy and Sell dashboards, moved to F-083 on 2026-11-22.
 - **Status:** Not started
 - **Depends on:** F-015, F-016
 - **MVP:** yes
@@ -1099,7 +1101,8 @@ list a trade.
   as seller, sending it, countering and accepting. `POST /trades/preview` reports what is left today.
 - **Frontend scope:** No Buy/Sell switch and no Shop, Orders or Listings tabs. Start Trade asks "Are you
   buying or selling?" and opens the buyer's or the seller's flow; the seller's flow warns over the limit
-  and points to merchant status. _No new reference screen._
+  and points to merchant status. _No new reference screen._ **Amended 2026-11-22:** the switch and the
+  Sell tabs come back under F-083. The side step and the limit stay.
 - **Status:** Built, awaiting staging check
 - **Depends on:** F-012, F-017, F-040
 - **MVP:** yes
@@ -1108,6 +1111,25 @@ list a trade.
   once the seller has committed to it (accepted, or the seller's own terms are on the table), on the day
   it was accepted or the seller's terms were put up; cancelled, declined, rejected, expired and
   cancelled-and-refunded trades do not count.
+
+#### F-083 — Buy and Sell dashboards behind a switch
+
+- **Journey:** Account, trust & support
+- **Actor:** buyer, seller, merchant
+- **Backend scope:** One account, unchanged from F-082. A summary read for each dashboard if the trade list
+  cannot supply it (money figures come from the backend, never computed in the browser).
+- **Frontend scope:** The Buy/Sell switch (Y2) returns for every account, as a view preference, free to
+  flip. Buy: Home, Trades, Messages, Discover, Account, with Trades listing only the trades where the
+  person is the buyer. Sell: Shop, Orders, Payouts, Messages, Account, with Orders listing only the trades
+  where they are the seller. Buy · Home is the buyer's dashboard (Z1, H-01, DX-03, TX-02). Sell · Shop is
+  the seller's dashboard (Seller-1, H-02, DX-04, TX-03), with the KPI strip and, without merchant status,
+  what is left of today's selling limit. Orders brings back AC8 and DX-18 from before F-082. Create a trade
+  keeps "Are you buying or selling?" and preselects the side the person is in. No Listings.
+- **Status:** Not started
+- **Depends on:** F-082
+- **MVP:** yes
+- **Note:** Opened 2026-11-22 by the owner. Design `docs/superpowers/specs/2026-11-22-buy-sell-dashboards-design.md`. Someone who has not chosen lands on Buy. A
+  certified merchant lands on Sell and can switch to Buy.
 
 ## 3. Coverage table
 
