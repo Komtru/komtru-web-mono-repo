@@ -60,6 +60,22 @@ specification; a feature reaches them through its `Absorbs:` line.
    `pnpm progress --list` shows the same from the terminal.
 2. Priority order:
    1. in-flight work;
+      1a. **Owner direction 2026-11-22: desktop and tablet layouts first.** The owner does not want phone
+      screens stretched across a desktop window. Until they are done, pick the desktop and tablet
+      features ahead of everything below, in this order. They are UI over screens that already
+      work on a phone, so build each screen whose phone version exists even when the feature's
+      `Depends on` is not Done, and leave the rest named in the progress note:
+      1. F-067 / F-072 arrive, home and discover: DX-05 and TX-04 (new user), DX-06 and TX-05
+         (search), DX-07 (browse), DX-09 (find by code). DX-03, DX-04, TX-02 and TX-03 came with F-083;
+         DX-02 waits on the YouVerify rebuild and DX-08 and TX-06 on F-016;
+      2. F-068 / F-072 propose, agree and fund: the 12 screens not yet built (DX-13 still waits on the
+         superseded-terms route, O2);
+      3. F-071 / F-074 account, trust and help: DX-35, DX-37, SP-D01 to SP-D06, TX-21 and SP-T01 to
+         SP-T03 (messages, DX-34 and TX-20, wait on F-047; the Trust Passport, DX-36, on F-016);
+      4. F-070 issues and resolution: DX-24, DX-25 and TX-15 over F-032's screens now, the rest
+         once F-033 and F-034 exist;
+      5. the tablet width in the visual-check harness (F-073 is blocked on it), then the visual check
+         for every screen built under 1a.
    2. a **Backend done, UI outstanding** MVP feature. Prefer these over starting a new
       backend-only feature: the engine exists and only the UI is missing, so they are the
       cheapest route to working product;
