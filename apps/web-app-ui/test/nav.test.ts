@@ -58,7 +58,7 @@ describe('the tab bar, the sidebar and the top nav (v2: DX-03, TX-02)', () => {
   });
 
   it('opens the root at the dashboard of the mode the person is in', () => {
-    expect(ROOT_DESTINATION).toBe('/home');
+    expect(ROOT_DESTINATION).toBe('/');
     expect(rootDestination(viewer(), undefined)).toBe('/home');
     expect(rootDestination(viewer(), 'sell')).toBe('/shop');
     expect(rootDestination(viewer({ certifiedMerchant: true }), undefined)).toBe('/shop');

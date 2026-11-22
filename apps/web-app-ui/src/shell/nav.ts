@@ -82,8 +82,11 @@ export function modeFor(viewer: Viewer, chosen: string | undefined): Mode {
 /** Where switching into a mode lands: the first item of its nav, the mode's dashboard. */
 export const landingFor = (mode: Mode): string => (mode === 'sell' ? '/shop' : '/home');
 
-/** The default landing, Buy's Home: where sign-in sends someone before their mode is read. */
-export const ROOT_DESTINATION = '/home';
+/**
+ * Where sign-in sends someone: the root, which reads their mode and opens that mode's dashboard
+ * (`rootDestination`), so a merchant signing in lands on Shop and everyone else on Home.
+ */
+export const ROOT_DESTINATION = '/';
 
 /** Where `/` sends someone who is signed in: the dashboard of the mode they are in. */
 export const rootDestination = (viewer: Viewer, chosen: string | undefined): string =>

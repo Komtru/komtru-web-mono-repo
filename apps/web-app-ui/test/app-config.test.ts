@@ -32,7 +32,7 @@ describe('@komtru/web-app-ui app spec', () => {
 
   it('opens on Home, where the root sends everyone, not the retired Trades-as-home', () => {
     expect(appSpec.homePath).toBe(ROOT_DESTINATION);
-    expect(appSpec.homePath).toBe('/home');
+    expect(appSpec.homePath).toBe('/');
   });
 
   it('declares the session secret the middleware needs', () => {
