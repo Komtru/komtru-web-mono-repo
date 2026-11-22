@@ -252,6 +252,7 @@ describe('the Buy and Sell dashboards', () => {
     expect(screen.getByText('Shop strip')).toBeTruthy();
     expect(screen.getByText(/MacBook Air/)).toBeTruthy();
     expect(screen.queryByText(/Ankara fabric/)).toBeNull();
+    expect(screen.getByRole('link', { name: 'View all sales' }).getAttribute('href')).toBe('/trades');
   });
 
   it('says there are no sales yet on Shop when the person has only bought', async () => {

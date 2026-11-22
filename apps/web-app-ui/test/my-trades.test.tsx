@@ -181,3 +181,33 @@ describe('Trades by side', () => {
     expect(screen.queryByText(/Sold phone/)).toBeNull();
   });
 });
+
+describe('Show more by side', () => {
+  it('keeps reading past a page of the other side’s trades when Show more is pressed', async () => {
+    const first = listItem(60, {
+      item: { title: 'First buy', categoryCode: 'fashion', categoryName: 'Fashion' },
+    });
+    const sold = listItem(61, { yourRole: 'SELLER' });
+    const second = listItem(62, {
+      item: { title: 'Second buy', categoryCode: 'fashion', categoryName: 'Fashion' },
+    });
+    answerWith(api.call, {
+      'GET /trades': ({ query }: { query?: Record<string, unknown> }) =>
+        query?.cursor === undefined
+          ? list([first], 'a')
+          : query.cursor === 'a'
+            ? list([sold], 'b')
+            : list([second]),
+    });
+    renderWithApi(api.call, <MyTrades />);
+    expect(await screen.findByText(/First buy/)).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Show more' }));
+    expect(await screen.findByText(/Second buy/)).toBeTruthy();
+  });
+
+  it('says no sales yet on the seller’s side', async () => {
+    answerWith(api.call, { 'GET /trades': list([listItem(63)]) });
+    renderWithApi(api.call, <MyTrades side="SELLER" />);
+    expect(await screen.findByText('No sales yet')).toBeTruthy();
+  });
+});

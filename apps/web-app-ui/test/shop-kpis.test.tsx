@@ -46,4 +46,15 @@ describe('the shop KPI strip', () => {
     );
     await expectNoAxeViolations(container);
   });
+
+  it('shows a dash, not a spinner, when the balance cannot be read', async () => {
+    api.call.mockImplementation((endpoint) =>
+      (endpoint as { path: string }).path === '/me/payouts/summary'
+        ? Promise.reject(new Error('offline'))
+        : Promise.resolve(page([])),
+    );
+    renderWithApi(api.call, <ShopKpis certifiedMerchant />);
+    const available = screen.getByRole('link', { name: /Available/ });
+    expect(await within(available).findByText('—', {}, { timeout: 4000 })).toBeTruthy();
+  });
 });

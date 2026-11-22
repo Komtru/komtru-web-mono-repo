@@ -21,7 +21,11 @@ export function ShopKpis({ certifiedMerchant }: { certifiedMerchant: boolean }):
   const all = useAllTrades();
   const sales = all.trades.filter((trade) => trade.yourRole === 'SELLER');
   const count = (statuses: readonly string[]): string =>
-    all.complete ? String(sales.filter((trade) => statuses.includes(trade.status)).length) : '…';
+    all.complete
+      ? String(sales.filter((trade) => statuses.includes(trade.status)).length)
+      : all.nextPageFailed || all.isError
+        ? '—'
+        : '…';
 
   return (
     <div className="mb-[12px]">
@@ -32,7 +36,9 @@ export function ShopKpis({ certifiedMerchant }: { certifiedMerchant: boolean }):
         <Kpi
           wide
           label="Available"
-          value={summary.data === undefined ? '…' : nairaShort(summary.data.availableMinor)}
+          value={
+            summary.data !== undefined ? nairaShort(summary.data.availableMinor) : summary.isError ? '—' : '…'
+          }
           note="Ready to withdraw"
           href="/account/payouts"
         />

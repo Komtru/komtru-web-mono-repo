@@ -47,9 +47,10 @@ const COPY: Record<
     loading: 'Loading your sales',
     active: 'Active orders',
     past: 'Past sales',
-    all: 'View all orders',
-    seeAll: 'See all orders',
-    allHref: '/orders',
+    // Sell's /trades: every sale, past and pending, which Orders (open custody stages only) is not.
+    all: 'View all sales',
+    seeAll: 'See all sales',
+    allHref: '/trades',
   },
 };
 
