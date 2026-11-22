@@ -62,6 +62,22 @@ describe('Home with no trades yet (AC1, H-03)', () => {
     await expectNoAxeViolations(container, SHELL_RULES);
   });
 
+  it('offers DX-05’s ways in beside the panel: propose a trade, or check a code', async () => {
+    answerWith(api.call, { 'GET /trades': page([]) });
+    renderWithApi(api.call, <HomeScreen />);
+    const ways = await screen.findByRole('region', { name: 'What would you like to do?' });
+    expect(
+      within(ways)
+        .getByRole('link', { name: /Propose a trade/ })
+        .getAttribute('href'),
+    ).toBe('/trade/new');
+    expect(
+      within(ways)
+        .getByRole('link', { name: /Check a Trade Code/ })
+        .getAttribute('href'),
+    ).toBe('/find');
+  });
+
   it('asks for every trade, not only the first page, before it decides there are none', async () => {
     answerWith(api.call, {
       'GET /trades': ({ query }: { query?: Record<string, unknown> }) =>

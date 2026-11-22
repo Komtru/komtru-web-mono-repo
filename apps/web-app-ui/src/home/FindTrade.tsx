@@ -11,7 +11,6 @@ import {
   LoadFailed,
   NoteBanner,
   PartyStrip,
-  ScreenColumn,
   ScreenHeader,
   TextField,
 } from '@komtru/ui-kit';
@@ -48,52 +47,66 @@ export function FindTrade({ initialCode }: { initialCode?: string }): React.JSX.
     staleTime: 60_000,
   });
 
+  // DX-09: on a desktop window the code goes in on the left and what it finds shows on the right, so the
+  // person reads the trade beside the code they typed. A phone and a tablet keep the single column.
   return (
-    <ScreenColumn>
+    <div className="mx-auto w-full max-w-[480px] md:max-w-[640px] lg:max-w-none">
       <ScreenHeader title="Find a Trade" backHref="/home" />
-      <NoteBanner>
-        If a seller sent you a link instead of a code, be careful. Always verify a Trade by searching its code
-        here, not by tapping an unfamiliar link.
-      </NoteBanner>
+      <div className="lg:grid lg:grid-cols-[minmax(0,1fr)_minmax(0,1.15fr)] lg:items-start lg:gap-[24px]">
+        <div>
+          <NoteBanner>
+            If a seller sent you a link instead of a code, be careful. Always verify a Trade by searching its
+            code here, not by tapping an unfamiliar link.
+          </NoteBanner>
 
-      <form
-        className="mt-[16px]"
-        onSubmit={(event) => {
-          event.preventDefault();
-          const code = tradeCodeOf(typed);
-          setInvalid(code === undefined);
-          // The same code again is the same query key, which React Query will not refetch on its own after a
-          // failure (a 429 never clears). Pressing Find asks the platform again.
-          if (code !== undefined && code === submitted) void lookup.refetch();
-          else setSubmitted(code);
-        }}
-        noValidate
-      >
-        <TextField
-          mono
-          label="Enter the seller's Trade Code"
-          name="code"
-          placeholder="KMT-XXXXXXX"
-          autoComplete="off"
-          autoCapitalize="characters"
-          spellCheck={false}
-          value={typed}
-          onChange={(event) => {
-            setTyped(event.target.value);
-            setInvalid(false);
-          }}
-          invalid={invalid}
-          helper={invalid ? INVALID : "Ask the seller for this. It's shown on every Trade they create."}
-        />
-        <div className="mt-[12px]">
-          <Button type="submit">Find Trade</Button>
+          <form
+            className="mt-[16px]"
+            onSubmit={(event) => {
+              event.preventDefault();
+              const code = tradeCodeOf(typed);
+              setInvalid(code === undefined);
+              // The same code again is the same query key, which React Query will not refetch on its own after a
+              // failure (a 429 never clears). Pressing Find asks the platform again.
+              if (code !== undefined && code === submitted) void lookup.refetch();
+              else setSubmitted(code);
+            }}
+            noValidate
+          >
+            <TextField
+              mono
+              label="Enter the seller's Trade Code"
+              name="code"
+              placeholder="KMT-XXXXXXX"
+              autoComplete="off"
+              autoCapitalize="characters"
+              spellCheck={false}
+              value={typed}
+              onChange={(event) => {
+                setTyped(event.target.value);
+                setInvalid(false);
+              }}
+              invalid={invalid}
+              helper={invalid ? INVALID : "Ask the seller for this. It's shown on every Trade they create."}
+            />
+            <div className="mt-[12px]">
+              <Button type="submit">Find Trade</Button>
+            </div>
+          </form>
         </div>
-      </form>
-
-      <div className="mt-[16px]">
-        {submitted !== undefined && <Result code={submitted} lookup={lookup} />}
+        <div className="mt-[16px] lg:mt-0">
+          {submitted !== undefined ? (
+            <Result code={submitted} lookup={lookup} />
+          ) : (
+            <div className="hidden lg:block">
+              <EmptyState
+                title="The trade shows here"
+                body="Enter a Trade Code to see exactly what you are being asked to agree to. Komtru never asks you to pay from a link."
+              />
+            </div>
+          )}
+        </div>
       </div>
-    </ScreenColumn>
+    </div>
   );
 }
 

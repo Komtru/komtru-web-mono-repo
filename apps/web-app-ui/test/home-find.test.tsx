@@ -232,3 +232,12 @@ describe('the answer decides the view, not the trade status', () => {
     expect(screen.queryByRole('region', { name: 'Trade invitation' })).toBeNull();
   });
 });
+
+// DX-09: on a desktop window the result has its own column, which says what will appear there before a search.
+describe('Find a Trade at desktop width', () => {
+  it('says where the trade will show before any code is looked up, and asks the platform nothing', () => {
+    renderWithApi(api.call, <FindTrade />);
+    expect(screen.getByRole('heading', { name: 'The trade shows here' })).toBeTruthy();
+    expect(api.call).not.toHaveBeenCalled();
+  });
+});
