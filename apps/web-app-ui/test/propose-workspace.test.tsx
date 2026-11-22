@@ -49,3 +49,29 @@ describe('ProposeWorkspace', () => {
     await expectNoAxeViolations(container);
   });
 });
+
+// DX-12, TX-08 and DX-13: a screen that answers a proposal has no rail, and its response is its own region.
+describe('ProposeWorkspace with a decision', () => {
+  it('names the response as a region after the content, so a phone reads the offer first', () => {
+    const { container } = render(
+      <ProposeWorkspace decision={<button type="button">Accept</button>}>
+        <p>The offer</p>
+      </ProposeWorkspace>,
+    );
+    const response = screen.getByRole('region', { name: 'Your response' });
+    expect(within(response).getByRole('button', { name: 'Accept' })).toBeTruthy();
+    const offer = screen.getByText('The offer');
+    expect(offer.compareDocumentPosition(response) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(container.innerHTML).not.toContain('200px');
+  });
+
+  it('reserves no rail column for a screen with neither a rail nor a preview', () => {
+    const { container } = render(
+      <ProposeWorkspace>
+        <p>Plain stage</p>
+      </ProposeWorkspace>,
+    );
+    expect(container.innerHTML).not.toContain('200px');
+    expect(screen.queryByRole('navigation', { name: 'Trade assembly' })).toBeNull();
+  });
+});

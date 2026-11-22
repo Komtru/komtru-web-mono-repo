@@ -25,6 +25,7 @@ import {
   tradeDisputeFor,
   tradeEvidenceFor,
   tradeFor,
+  STANDARD_VERSION_IDS_LIST,
   tradeStandardFor,
   tradesFor,
   verificationStatusFor,
@@ -218,6 +219,16 @@ const ROUTES: readonly Route[] = [
     path: '/me/addresses',
     kind: 'consumer',
     handle: ({ persona }) => page(addressesFor(persona.id)),
+  },
+  {
+    // Start a Trade's category list (CT-B1, CT-S1). Page-paged, unlike the cursor lists above.
+    method: 'GET',
+    path: '/config/trade-standards',
+    kind: 'anonymous',
+    handle: () => {
+      const items = STANDARD_VERSION_IDS_LIST.map(tradeStandardFor).filter((standard) => standard !== null);
+      return { status: 200, body: { items, page: 1, limit: 100, total: items.length } };
+    },
   },
   {
     method: 'GET',

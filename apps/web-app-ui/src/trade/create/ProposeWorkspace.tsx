@@ -16,6 +16,14 @@ export interface ProposeWorkspaceProps {
    * is hidden below `md` unless a screen's own mobile design is the summary (the payment screens' "What you pay").
    */
   previewOnMobile?: boolean;
+  /**
+   * A screen that answers a proposal rather than building one (DX-12, TX-08): the response to it (the address, the
+   * proof, accept, change or decline). Beside the content from tablet up, sticky; under it on a phone. Only used
+   * where there is no rail.
+   */
+  decision?: ReactNode;
+  /** What the decision column is called for assistive technology. */
+  decisionLabel?: string;
   /** The stage itself. */
   children: ReactNode;
 }
@@ -37,8 +45,34 @@ export function ProposeWorkspace({
   preview,
   previewLabel = 'Contract so far',
   previewOnMobile = false,
+  decision,
+  decisionLabel = 'Your response',
   children,
 }: ProposeWorkspaceProps): React.JSX.Element {
+  // No rail: the screen is not staged, so there is no 200px rail column to reserve. With a decision it is the
+  // content beside the response; without one, a single readable column.
+  if (rail === undefined && preview === undefined) {
+    return (
+      <div className="mx-auto w-full max-w-[480px] md:max-w-[760px] lg:max-w-none">
+        {header}
+        {decision === undefined ? (
+          <div data-propose-work className="mx-auto min-w-0 md:max-w-[640px]">
+            {children}
+          </div>
+        ) : (
+          <div className="grid gap-[16px] md:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)] md:gap-[20px] lg:gap-[24px]">
+            <div data-propose-work className="min-w-0">
+              {children}
+            </div>
+            <section aria-label={decisionLabel} className="min-w-0 md:sticky md:top-[16px] md:self-start">
+              {decision}
+            </section>
+          </div>
+        )}
+      </div>
+    );
+  }
+
   return (
     <div className="mx-auto w-full max-w-[480px] md:max-w-[760px] lg:max-w-none">
       {header}
@@ -47,7 +81,10 @@ export function ProposeWorkspace({
           'grid gap-[16px]',
           preview === undefined
             ? 'lg:grid-cols-[200px_minmax(0,1fr)]'
-            : 'md:grid-cols-[minmax(0,1fr)_minmax(0,260px)] lg:grid-cols-[200px_minmax(0,1.5fr)_minmax(0,1fr)]',
+            : rail === undefined
+              ? // The checkout (DX-15, TX-10): no rail, so the stage and the summary share the width.
+                'md:grid-cols-[minmax(0,1fr)_minmax(0,260px)] lg:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)]'
+              : 'md:grid-cols-[minmax(0,1fr)_minmax(0,260px)] lg:grid-cols-[200px_minmax(0,1.5fr)_minmax(0,1fr)]',
         ].join(' ')}
       >
         {rail !== undefined && (
@@ -60,6 +97,11 @@ export function ProposeWorkspace({
         )}
         <div data-propose-work className={preview === undefined ? 'min-w-0 lg:col-span-1' : 'min-w-0'}>
           {children}
+          {decision !== undefined && (
+            <section aria-label={decisionLabel} className="mt-[16px] min-w-0">
+              {decision}
+            </section>
+          )}
         </div>
         {preview !== undefined && (
           <aside

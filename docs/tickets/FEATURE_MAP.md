@@ -939,6 +939,13 @@ list a trade.
 - **Progress note (2026-11-19):** Merged to `staging`. Built together with F-072 as one responsive pass, because `SCREEN_INDEX.md` pairs DX-10/TX-07, DX-10B/TX-07B and DX-15/TX-10 as the same screen at two widths. 8 of the pair's 20 screens built. **Not Done:** no visual check; DX-13 is blocked on the missing superseded-terms-versions route (logged as O2, now hit by two features); DX-14/TX-09 was left to F-032, which owned the workspace.
 - **Depends on:** F-018, F-019, F-023, F-024
 - **MVP:** yes
+- **Progress note (2026-11-22), desktop batch 2:** The seller's start (CT-S1 to CT-S4) now uses the buyer's
+  frame (stage rail, stage, contract so far). The request review (DX-12, TX-08) shows the offer beside the
+  response, propose a change (DX-13 at width, not the reference's three-version comparison, which still needs the
+  superseded-terms route, O2) shows the terms beside what changes, and agreed terms (DX-14) shows the agreement
+  beside the next steps. The checkout (DX-15) had its payment methods squeezed into a 200px column on desktop;
+  fixed. Merged to `staging`. **Not Done:** the scored visual check has not run (captures only); DX-16 and DX-17
+  were not reworked.
 
 #### F-069 — Desktop: fulfil, deliver, inspect and complete
 
@@ -995,6 +1002,13 @@ list a trade.
   searches the person's own trades, not listings, which are withdrawn. DX-03, DX-04, TX-02 and TX-03 came
   with F-083. **Not built:** DX-07 browse categories (needs listings, F-041, withdrawn), DX-02 (waits on the
   YouVerify rebuild), DX-08 and TX-06 (F-016). **Not Done:** the scored visual check has not run (captures only).
+- **Progress note (2026-11-22), desktop batch 2:** The seller's start (CT-S1 to CT-S4) now uses the buyer's
+  frame (stage rail, stage, contract so far). The request review (DX-12, TX-08) shows the offer beside the
+  response, propose a change (DX-13 at width, not the reference's three-version comparison, which still needs the
+  superseded-terms route, O2) shows the terms beside what changes, and agreed terms (DX-14) shows the agreement
+  beside the next steps. The checkout (DX-15) had its payment methods squeezed into a 200px column on desktop;
+  fixed. Merged to `staging`. **Not Done:** the scored visual check has not run (captures only); DX-16 and DX-17
+  were not reworked.
 
 #### F-073 — Tablet: fulfil, deliver, inspect and payouts
 
