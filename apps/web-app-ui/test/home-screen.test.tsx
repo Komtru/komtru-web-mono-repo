@@ -3,6 +3,7 @@ import { cleanup, fireEvent, screen, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { HomeScreen } from '../src/home/HomeScreen';
 import { expectNoAxeViolations } from './axe';
+import { me } from './support/account';
 import {
   SHELL_RULES,
   answerWith,
@@ -260,5 +261,36 @@ describe('the Buy and Sell dashboards', () => {
     renderWithApi(api.call, <HomeScreen side="SELLER" header={<p>Shop strip</p>} />);
     expect(await screen.findByText('No sales yet')).toBeTruthy();
     expect(screen.getByText('Shop strip')).toBeTruthy();
+  });
+});
+
+// F-084: the "Finish verifying" card sits at the top of the dashboard, empty state included.
+describe('Home with verification still owed', () => {
+  it('shows what is owed above an empty Home', async () => {
+    answerWith(api.call, {
+      'GET /trades': page([]),
+      'GET /me': me(
+        {},
+        {
+          verificationLevel: 'UNVERIFIED',
+          contacts: {
+            email: { present: true, masked: 'a•••@example.test', verified: false },
+            phone: { present: true, masked: '+23480•••4471', verified: true },
+          },
+        },
+      ),
+      'GET /verification/status': {
+        level: 'UNVERIFIED',
+        levelNumber: 0,
+        levelAttainedAt: null,
+        requirements: { identifier: false, liveness: false, business: false, businessBankAccount: false },
+        inFlight: [],
+        rejections: [],
+      },
+    });
+    renderWithApi(api.call, <HomeScreen />);
+    const card = await screen.findByRole('region', { name: 'Finish verifying' });
+    expect(within(card).getByRole('link', { name: /Confirm your email/ })).toBeTruthy();
+    expect(screen.getByText('No protected Trades yet')).toBeTruthy();
   });
 });

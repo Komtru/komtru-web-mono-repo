@@ -137,7 +137,11 @@ function Loaded({
     beside it — and it removes three copies of the same line.
   */
   return (
-    <div className="gap-[16px] lg:grid lg:grid-cols-[minmax(0,1fr)_minmax(0,320px)] lg:items-start">
+    // `#identity`: where F-084's "Verify your ID" step on Home and Shop lands.
+    <div
+      id="identity"
+      className="scroll-mt-[72px] gap-[16px] lg:grid lg:grid-cols-[minmax(0,1fr)_minmax(0,320px)] lg:items-start"
+    >
       <div className="min-w-0">
         <LoadedMain status={status} reference={reference} />
       </div>
