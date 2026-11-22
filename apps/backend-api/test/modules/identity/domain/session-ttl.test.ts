@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  nextLagosMidnight,
   SESSION_TTLS,
   sessionExpiry,
   slidingIdleExpiry,
@@ -32,5 +33,39 @@ describe('session TTLs', () => {
     for (const ttl of Object.values(SESSION_TTLS)) {
       expect(ttl.idleSeconds).toBeLessThanOrEqual(ttl.absoluteSeconds);
     }
+  });
+
+  // Owner ruling 2026-11-22: a consumer or logistics sign-in ends at midnight in Lagos (UTC+1, no DST).
+  describe('the consumer sign-in ends at Lagos midnight', () => {
+    it('finds the end of the Lagos day, which is 23:00 UTC', () => {
+      expect(nextLagosMidnight(new Date('2026-11-22T09:15:00.000Z'))).toEqual(
+        new Date('2026-11-22T23:00:00.000Z'),
+      );
+    });
+
+    it('counts 23:30 UTC as the next Lagos day already', () => {
+      expect(nextLagosMidnight(new Date('2026-11-22T23:30:00.000Z'))).toEqual(
+        new Date('2026-11-23T23:00:00.000Z'),
+      );
+    });
+
+    it('gives a sign-in at exactly Lagos midnight the whole of the new day', () => {
+      expect(nextLagosMidnight(new Date('2026-11-22T23:00:00.000Z'))).toEqual(
+        new Date('2026-11-23T23:00:00.000Z'),
+      );
+    });
+
+    it('crosses a month and a year end', () => {
+      expect(nextLagosMidnight(new Date('2026-12-31T20:00:00.000Z'))).toEqual(
+        new Date('2026-12-31T23:00:00.000Z'),
+      );
+    });
+
+    it('sets the consumer and logistics absolute deadline to that midnight, and leaves staff at 8 hours', () => {
+      const now = new Date('2026-11-22T09:15:00.000Z');
+      expect(sessionExpiry('CONSUMER', now).absoluteExpiresAt).toEqual(new Date('2026-11-22T23:00:00.000Z'));
+      expect(sessionExpiry('LOGISTICS', now).absoluteExpiresAt).toEqual(new Date('2026-11-22T23:00:00.000Z'));
+      expect(sessionExpiry('STAFF', now).absoluteExpiresAt).toEqual(new Date('2026-11-22T17:15:00.000Z'));
+    });
   });
 });

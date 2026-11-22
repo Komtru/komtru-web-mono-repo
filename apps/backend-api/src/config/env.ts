@@ -536,7 +536,8 @@ export function loadConfig(env: NodeJS.ProcessEnv): AppConfig {
     identity: {
       ...(v.IDENTITY_SIGNING_KEY ? { signingKey: v.IDENTITY_SIGNING_KEY } : {}),
       ...(v.IDENTITY_SIGNING_KEY_ID ? { signingKeyId: v.IDENTITY_SIGNING_KEY_ID } : {}),
-      accessTokenTtlSeconds: v.IDENTITY_ACCESS_TOKEN_TTL_SECONDS ?? 600,
+      // An hour (owner ruling 2026-11-22), refreshed until the sign-in ends at Lagos midnight.
+      accessTokenTtlSeconds: v.IDENTITY_ACCESS_TOKEN_TTL_SECONDS ?? 3600,
       tokenIssuer: v.IDENTITY_TOKEN_ISSUER ?? 'https://api.komtru.com',
       tokenAudience: v.IDENTITY_TOKEN_AUDIENCE ?? 'komtru',
       epochCacheTtlSeconds: v.IDENTITY_EPOCH_CACHE_TTL_SECONDS ?? 10,

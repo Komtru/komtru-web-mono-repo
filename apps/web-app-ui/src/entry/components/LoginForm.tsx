@@ -81,16 +81,27 @@ export function LoginForm({
   // SP-M17: the platform has paused sign-in (a 429), here or at the second step. `wait` is its `Retry-After`, if it sent one.
   const [paused, setPaused] = useState<{ wait: number | undefined } | null>(null);
 
-  const submit = async (event: React.FormEvent) => {
+  const submit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (busy) return;
-    if (identifier.trim() === '' || password === '') {
+    // What the fields hold, read from the form itself rather than only from state. A browser that
+    // autofills saved details can fill the inputs before React hydrates, or without an input event, so
+    // the boxes show the values while state is still empty (owner report 2026-11-22: "invalid input" on
+    // a filled form). The DOM is what the person sees, so it is what gets sent.
+    const form = new FormData(event.currentTarget);
+    const filledIdentifier = form.get('identifier');
+    const filledPassword = form.get('password');
+    const typedIdentifier = typeof filledIdentifier === 'string' ? filledIdentifier : identifier;
+    const typedPassword = typeof filledPassword === 'string' ? filledPassword : password;
+    if (typedIdentifier !== identifier) setIdentifier(typedIdentifier);
+    if (typedPassword !== password) setPassword(typedPassword);
+    if (typedIdentifier.trim() === '' || typedPassword === '') {
       setProblem('Enter your phone number and password.');
       return;
     }
     setBusy(true);
     setProblem(null);
-    const outcome = await signIn(identifier, password);
+    const outcome = await signIn(typedIdentifier, typedPassword);
     if (outcome.kind === 'session') {
       await openSession(outcome);
       return;
@@ -188,6 +199,7 @@ export function LoginForm({
         <TextField
           label={wide ? 'Phone number or email' : 'Phone number'}
           type="text"
+          name="identifier"
           // Text, not tel: the field takes an email or a username too, and a phone keypad has no @.
           inputMode="text"
           autoComplete="username"
@@ -205,6 +217,7 @@ export function LoginForm({
         <TextField
           label="Password"
           type="password"
+          name="password"
           autoComplete="current-password"
           value={password}
           onChange={(event) => {

@@ -43,9 +43,9 @@ describe('access tokens', () => {
     expect(header(await signer.sign(claims))).toMatchObject({ alg: 'EdDSA', kid: 'k1', typ: 'JWT' });
   });
 
-  it('expires in the configured ten minutes', async () => {
+  it('expires in the configured hour', async () => {
     const signer = createTokenSigner(configWith());
-    expect(signer.ttlSeconds).toBe(600);
+    expect(signer.ttlSeconds).toBe(3600);
     const token = await signer.sign(claims);
     const payload = JSON.parse(Buffer.from(token.split('.')[1] ?? '', 'base64url').toString('utf8')) as {
       iat: number;
@@ -53,7 +53,7 @@ describe('access tokens', () => {
       iss: string;
       aud: string;
     };
-    expect(payload.exp - payload.iat).toBe(600);
+    expect(payload.exp - payload.iat).toBe(3600);
     expect(payload).toMatchObject({ iss: 'https://api.komtru.com', aud: 'komtru' });
   });
 

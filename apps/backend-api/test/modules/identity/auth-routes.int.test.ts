@@ -12,6 +12,7 @@ import { createIdentityAuth, type IdentityAuth } from '../../../src/modules/iden
 import {
   applyKillSwitch,
   createSession,
+  REUSE_GRACE_SECONDS,
   type IssuedSession,
 } from '../../../src/modules/identity/services/session.service.js';
 import { createIdempotencyGate } from '../../../src/platform/http/idempotency.js';
@@ -112,7 +113,7 @@ describe.runIf(infraEnabled)('the session routes', () => {
         scope: string;
         expiresIn: number;
       };
-      expect(body).toMatchObject({ scope: 'CONSUMER', expiresIn: 600 });
+      expect(body).toMatchObject({ scope: 'CONSUMER', expiresIn: 3600 });
       expect(body.refreshToken).not.toBe(issued.refreshToken);
 
       const probed = await request(app)
@@ -125,11 +126,27 @@ describe.runIf(infraEnabled)('the session routes', () => {
     it('answers 401 SESSION_REVOKED to a replay, which is what signs the client out', async () => {
       const issued = await login();
       await request(app).post('/v1/auth/refresh').send({ refreshToken: issued.refreshToken }).expect(200);
+      // Past the grace window: inside it, the same token again is the client's own retry (see the next test).
+      await t.app().query(
+        `UPDATE identity.sessions SET consumed_at = consumed_at - make_interval(secs => $2)
+          WHERE family_id = $1 AND consumed_at IS NOT NULL`,
+        [issued.familyId, REUSE_GRACE_SECONDS + 1],
+      );
       const replay = await request(app)
         .post('/v1/auth/refresh')
         .send({ refreshToken: issued.refreshToken })
         .expect(401);
       expect(replay.body).toMatchObject({ code: 'SESSION_REVOKED' });
+    });
+
+    it('answers 200 with a fresh pair to a retry inside the grace window', async () => {
+      const issued = await login();
+      await request(app).post('/v1/auth/refresh').send({ refreshToken: issued.refreshToken }).expect(200);
+      const retry = await request(app)
+        .post('/v1/auth/refresh')
+        .send({ refreshToken: issued.refreshToken })
+        .expect(200);
+      expect(retry.body).toMatchObject({ scope: 'CONSUMER', expiresIn: 3600 });
     });
 
     it('answers 401 UNAUTHENTICATED to a token nobody minted', async () => {
