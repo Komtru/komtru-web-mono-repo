@@ -982,6 +982,12 @@ list a trade.
 - **Depends on:** F-016, F-044, F-046, F-047, F-048
 - **MVP:** no
 - **Note:** Deferred: messaging and help are deferred.
+- **Progress note (2026-11-22), desktop batch 3:** The account home (DX-37) and the privacy, display, security
+  and statements sections flow their groups into two balanced columns from tablet up (`AccountPage`); saved
+  addresses (SP-D03) run two to a row; screens not built yet are a centred card. Merged to `staging`. **Not
+  built:** help (SP-D01, F-048), trade history and documents (SP-D04), shop settings and team (SP-D05, SP-D06),
+  notifications (DX-35, the feed is F-046's), messages (DX-34, F-047) and the Trust Passport (DX-36, F-016).
+  **Not Done:** the scored visual check has not run (captures only).
 
 #### F-072 — Tablet: arrive, home, discover, propose and fund
 
@@ -1035,6 +1041,13 @@ list a trade.
 - **Note:** Deferred.
 
 ### Journey: Launch & assurance (not a user journey)
+
+- **Progress note (2026-11-22), desktop batch 3:** The account home (DX-37) and the privacy, display, security
+  and statements sections flow their groups into two balanced columns from tablet up (`AccountPage`); saved
+  addresses (SP-D03) run two to a row; screens not built yet are a centred card. Merged to `staging`. **Not
+  built:** help (SP-D01, F-048), trade history and documents (SP-D04), shop settings and team (SP-D05, SP-D06),
+  notifications (DX-35, the feed is F-046's), messages (DX-34, F-047) and the Trust Passport (DX-36, F-016).
+  **Not Done:** the scored visual check has not run (captures only).
 
 #### F-075 — Hosting and real deploy jobs
 

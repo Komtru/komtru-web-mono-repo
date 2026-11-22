@@ -1,18 +1,11 @@
 'use client';
 
 import { useRequestDataExport } from '@komtru/api-client/react';
-import {
-  Button,
-  ReadyBanner,
-  RiskBanner,
-  ScreenColumn,
-  ScreenHeader,
-  SettingsGroup,
-  SettingsRow,
-} from '@komtru/ui-kit';
+import { Button, ReadyBanner, RiskBanner, ScreenHeader, SettingsGroup, SettingsRow } from '@komtru/ui-kit';
 import { PERMISSION_WORDS, usePermission } from './permissions';
 import { accountProblem } from './words';
 import { whenLabel } from '../trade/format';
+import { AccountPage } from './AccountPage';
 
 export const PRIVACY_HREF = '/account/privacy';
 export const CLOSE_HREF = '/account/close';
@@ -32,8 +25,9 @@ export function PrivacyScreen(): React.JSX.Element {
   const exportData = useRequestDataExport();
 
   return (
-    <ScreenColumn>
-      <ScreenHeader title="Privacy & Data" backHref="/account" backLabel="Back to your account" />
+    <AccountPage
+      header={<ScreenHeader title="Privacy & Data" backHref="/account" backLabel="Back to your account" />}
+    >
       <SettingsGroup label="What Komtru can use">
         <SettingsRow
           label="Camera"
@@ -90,7 +84,7 @@ export function PrivacyScreen(): React.JSX.Element {
       <p className="mt-[6px] text-[11.5px] leading-[1.6] text-trust-gray">
         Komtru never sells your data. Your Trust Passport shows only what you choose to share.
       </p>
-    </ScreenColumn>
+    </AccountPage>
   );
 }
 

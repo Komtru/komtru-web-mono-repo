@@ -14,7 +14,6 @@ import {
   Button,
   EmptyState,
   RiskBanner,
-  ScreenColumn,
   ScreenHeader,
   SettingsGroup,
   SettingsRow,
@@ -26,6 +25,7 @@ import { BackupCodes } from './BackupCodes';
 import { Loading, LoadProblem } from './states';
 import { StepUpSheet } from './StepUpSheet';
 import { accountProblem, ago } from './words';
+import { AccountPage } from './AccountPage';
 
 export const SECURITY_HREF = '/account/security';
 export const TWO_FACTOR_HREF = '/account/security/two-factor';
@@ -56,8 +56,9 @@ export function SecurityScreen(): React.JSX.Element {
     (sessions.data === undefined && sessions.isError);
 
   return (
-    <ScreenColumn>
-      <ScreenHeader title="Security" backHref="/account" backLabel="Back to your account" />
+    <AccountPage
+      header={<ScreenHeader title="Security" backHref="/account" backLabel="Back to your account" />}
+    >
       {pending ? (
         <Loading label="Loading your security settings" />
       ) : failed ||
@@ -75,7 +76,7 @@ export function SecurityScreen(): React.JSX.Element {
       ) : (
         <Loaded factors={factors.data} devices={devices.data} sessions={sessions.data} />
       )}
-    </ScreenColumn>
+    </AccountPage>
   );
 }
 

@@ -8,5 +8,10 @@ import { EmptyState } from '@komtru/ui-kit';
  * never stop. Each of these is deleted by the ticket that owns the screen.
  */
 export function Placeholder({ title, body }: { title: string; body: string }): React.JSX.Element {
-  return <EmptyState title={title} body={body} />;
+  // A screen not built yet reads as a centred card, not one stretched or pinned to a corner of a desktop window.
+  return (
+    <div className="mx-auto w-full max-w-[560px]">
+      <EmptyState title={title} body={body} />
+    </div>
+  );
 }

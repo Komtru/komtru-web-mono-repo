@@ -27,7 +27,9 @@ export function AccountSections({
   const earned = items.filter((item) => item.id === 'payouts' || item.id === 'park-agent');
 
   return (
-    <div className="max-w-[480px]">
+    // From tablet up the groups flow into two balanced columns (DX-37), each kept whole, instead of a phone-width
+    // list beside the Account rail.
+    <div className="mx-auto w-full max-w-[480px] md:max-w-[760px] md:columns-2 md:gap-x-[20px] lg:max-w-[920px] [&>*]:break-inside-avoid">
       <SettingsGroup label="Your account">
         {own.map((item) => (
           <SettingsRow key={item.id} label={item.label} href={item.href} />
