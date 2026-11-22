@@ -1149,12 +1149,19 @@ list a trade.
   up with an email), and verify your ID (required on Sell, where it lets buyers pay into your trades;
   recommended on Buy). An ID check in review says so. The card can't be dismissed while a required step is open,
   and the optional one has "Not now". _No new reference screen._
-- **Status:** Not started
+- **Status:** Built, awaiting staging check
 - **Depends on:** F-081, F-083
 - **MVP:** yes
 - **Note:** Opened 2026-11-22 by the owner. Design `docs/superpowers/specs/2026-11-22-verification-checklist-design.md`.
   Information only: every refusal stays the server's. Offered and not chosen: a status on the Account →
   Verification row, a prompt at the blocked action, and an onboarding step after sign-up.
+- **Progress note (2026-11-22):** Merged to `staging`. The card is `src/home/VerificationChecklist.tsx` over the
+  pure rules in `src/home/verificationSteps.ts`, at the top of Home and Shop, empty states included. Contact
+  steps need only `/me` and show even when the verification status can't be read; the ID step joins once it is
+  read (In review, Try again, Required on Sell, Recommended with Not now on Buy, remembered per account on the
+  device). VF1 gained `#contact` and `#identity` and scrolls to them once they render. Reviewed and fixed. No
+  reference frame exists for the card, so it was checked by eye through the stand-in
+  (`docs/ui-review/F-084/README.md`). **Not Done:** not yet seen on staging.
 
 ## 3. Coverage table
 
