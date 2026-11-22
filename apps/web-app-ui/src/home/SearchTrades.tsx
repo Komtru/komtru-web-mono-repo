@@ -64,18 +64,19 @@ export function SearchTrades({ initialQuery }: { initialQuery: string }): React.
     [all.trades, query, text, side, state],
   );
   const filtered = side !== 'all' || state !== 'all';
+  // Whether the query matches any trade before the filters: a code the person is party to but has filtered out
+  // is theirs, so it is not offered to Find a Trade as if it were someone else's.
+  const anyMatch = text !== '' && all.trades.some((trade) => matchesTradeQuery(trade, query));
 
   // DX-06: the filters stay open in a column on the left of a desktop window and the results run two to a row;
   // TX-05 and a phone put the filters in a row of chips above the results.
   return (
     <div className="mx-auto w-full max-w-[480px] md:max-w-[760px] lg:max-w-none">
       <ScreenHeader title="Search" backHref="/home" />
-      <div className="lg:grid lg:grid-cols-[200px_minmax(0,1fr)] lg:items-start lg:gap-[24px]">
-        <aside aria-label="Filters" className="mb-[12px] lg:mb-0">
-          <FilterGroup label="Side" options={SIDES} value={side} onChange={setSide} />
-          <FilterGroup label="State" options={STATES} value={state} onChange={setState} />
-        </aside>
-        <div>
+      {/* Reading order is the search box, then the filters, then the results, at every width. On a desktop
+          window grid placement moves the filters into the left column without changing that order. */}
+      <div className="lg:grid lg:grid-cols-[200px_minmax(0,1fr)] lg:items-start lg:gap-x-[24px]">
+        <div className="lg:col-start-2 lg:row-start-1">
           <TextField
             type="search"
             label="Search your trades"
@@ -86,7 +87,12 @@ export function SearchTrades({ initialQuery }: { initialQuery: string }): React.
               setQuery(event.target.value);
             }}
           />
-
+        </div>
+        <aside aria-label="Filters" className="mt-[10px] lg:col-start-1 lg:row-span-2 lg:row-start-1 lg:mt-0">
+          <FilterGroup label="Side" options={SIDES} value={side} onChange={setSide} />
+          <FilterGroup label="State" options={STATES} value={state} onChange={setState} />
+        </aside>
+        <div className="lg:col-start-2 lg:row-start-2">
           {all.isError ? (
             <div className="mt-[16px]">
               <LoadFailed
@@ -116,7 +122,7 @@ export function SearchTrades({ initialQuery }: { initialQuery: string }): React.
                 </section>
               )}
 
-              {results.length === 0 && code !== undefined && (
+              {!anyMatch && code !== undefined && (
                 <div className="mb-[12px]">
                   <Button asChild variant="secondary">
                     <a href={`/find?code=${encodeURIComponent(code)}`}>{`Find trade ${code}`}</a>
