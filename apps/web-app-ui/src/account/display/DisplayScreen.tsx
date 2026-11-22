@@ -1,16 +1,9 @@
 'use client';
 
-import {
-  NoteBanner,
-  OptionCard,
-  ScreenColumn,
-  ScreenHeader,
-  SettingsGroup,
-  SettingsRow,
-  Toggle,
-} from '@komtru/ui-kit';
+import { NoteBanner, OptionCard, ScreenHeader, SettingsGroup, SettingsRow, Toggle } from '@komtru/ui-kit';
 import { TEXT_SIZES, type TextSize } from './prefs';
 import { useDisplayPrefs } from './useDisplayPrefs';
+import { AccountPage } from '../AccountPage';
 
 const SIZE_WORDS: Record<TextSize, { label: string; detail: string }> = {
   small: { label: 'Small', detail: 'Fits more on the screen' },
@@ -27,8 +20,9 @@ export function DisplayScreen(): React.JSX.Element {
   const [prefs, update] = useDisplayPrefs();
 
   return (
-    <ScreenColumn>
-      <ScreenHeader title="Display" backHref="/account" backLabel="Back to your account" />
+    <AccountPage
+      header={<ScreenHeader title="Display" backHref="/account" backLabel="Back to your account" />}
+    >
       <SettingsGroup label="Text">
         <fieldset className="m-0 border-0 p-[14px]">
           <legend className="sr-only">Text size</legend>
@@ -113,6 +107,6 @@ export function DisplayScreen(): React.JSX.Element {
       <p className="mt-[6px] text-[11.5px] leading-[1.6] text-trust-gray">
         Status is always shown with words as well as colour.
       </p>
-    </ScreenColumn>
+    </AccountPage>
   );
 }

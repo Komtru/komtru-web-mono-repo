@@ -67,8 +67,9 @@ export function AddressList(): React.JSX.Element {
   const list = addresses.data;
   const full = list.length >= MAX_ADDRESSES_PER_USER;
 
+  // SP-D03 at width: the addresses two to a row from tablet up, rather than a phone column.
   return (
-    <ScreenColumn>
+    <div className="mx-auto w-full max-w-[480px] md:max-w-[760px] lg:max-w-[920px]">
       <Header />
       {list.length === 0 ? (
         <EmptyState
@@ -82,7 +83,10 @@ export function AddressList(): React.JSX.Element {
         />
       ) : (
         <>
-          <ul aria-label="Your addresses" className="m-0 mb-[14px] list-none p-0">
+          <ul
+            aria-label="Your addresses"
+            className="m-0 mb-[14px] list-none p-0 md:grid md:grid-cols-2 md:gap-x-[16px]"
+          >
             {list.map((address) => (
               <li key={address.id} className="mb-[12px]">
                 <InfoCard>
@@ -158,6 +162,6 @@ export function AddressList(): React.JSX.Element {
         </p>
         {archive.isError && <RiskBanner>{addressProblem(archive.error, 'remove')}</RiskBanner>}
       </ConfirmSheet>
-    </ScreenColumn>
+    </div>
   );
 }

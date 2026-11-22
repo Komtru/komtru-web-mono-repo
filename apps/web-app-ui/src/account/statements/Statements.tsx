@@ -9,7 +9,6 @@ import {
   OptionCard,
   ReadyBanner,
   RiskBanner,
-  ScreenColumn,
   ScreenHeader,
   SectionLabel,
   SettingsGroup,
@@ -20,6 +19,7 @@ import { useState } from 'react';
 import { useOnline } from '../../shell/OfflineStatus';
 import { Loading } from '../states';
 import { buildStatement, lagosDate, periodRange, toCsv, type PeriodChoice } from './statement';
+import { AccountPage } from '../AccountPage';
 
 const PAGE = 50;
 
@@ -105,8 +105,9 @@ export function Statements(): React.JSX.Element {
   };
 
   return (
-    <ScreenColumn>
-      <ScreenHeader title="Statements" backHref="/account" backLabel="Back to your account" />
+    <AccountPage
+      header={<ScreenHeader title="Statements" backHref="/account" backLabel="Back to your account" />}
+    >
       <fieldset className="mb-[14px] min-w-0 border-0 p-0">
         <legend className="mb-[6px] p-0">
           <SectionLabel as="h2">Period</SectionLabel>
@@ -196,7 +197,7 @@ export function Statements(): React.JSX.Element {
           {busy ? 'Preparing…' : 'Export statement'}
         </Button>
       </ActionStack>
-    </ScreenColumn>
+    </AccountPage>
   );
 }
 
