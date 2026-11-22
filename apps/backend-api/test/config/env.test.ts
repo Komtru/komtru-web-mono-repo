@@ -111,7 +111,7 @@ describe('loadConfig', () => {
 
   it('defaults the identity token settings and names an invalid signing key', () => {
     expect(loadConfig(minimal).identity).toEqual({
-      accessTokenTtlSeconds: 600,
+      accessTokenTtlSeconds: 3600,
       tokenIssuer: 'https://api.komtru.com',
       tokenAudience: 'komtru',
       epochCacheTtlSeconds: 10,

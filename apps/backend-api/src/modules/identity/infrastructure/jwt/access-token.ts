@@ -1,4 +1,4 @@
-// The stateless half of M1 D5: a 10-minute EdDSA (Ed25519) JWT carrying `sub`, `sid`, `scp` and
+// The stateless half of M1 D5: a short-lived (an hour; ten minutes for staff) EdDSA (Ed25519) JWT carrying `sub`, `sid`, `scp` and
 // `epc`, verifiable by anything holding the JWKS.
 //
 // The claims are the *minimum* needed to find the session again, never a cache of what the caller
@@ -43,8 +43,21 @@ export interface TokenSigner {
   verify: (token: string) => Promise<VerifyResult>;
   /** RFC 7517 key set for `GET /.well-known/jwks.json`; public material only. */
   jwks: () => { keys: Record<string, unknown>[] };
+  /** The configured lifetime (`IDENTITY_ACCESS_TOKEN_TTL_SECONDS`), which consumer and logistics tokens get. */
   ttlSeconds: number;
+  /** The lifetime a token of this scope is minted with: `ttlSeconds`, capped for staff. */
+  ttlFor: (scope: SessionScope) => number;
 }
+
+/**
+ * Staff tokens stay at ten minutes whatever the configured lifetime. A staff session's idle window is
+ * 30 minutes and only slides when the client refreshes, which it does when its token expires; a token
+ * that outlived the idle window would sign an active staff member out every half hour (M1 C3).
+ */
+export const STAFF_ACCESS_TOKEN_TTL_SECONDS = 600;
+
+const lifetimeFor = (configured: number, scope: SessionScope): number =>
+  scope === 'STAFF' ? Math.min(configured, STAFF_ACCESS_TOKEN_TTL_SECONDS) : configured;
 
 const isExpiry = (error: unknown): boolean =>
   typeof error === 'object' && error !== null && 'code' in error && error.code === 'ERR_JWT_EXPIRED';
@@ -68,6 +81,7 @@ export function createTokenSigner(config: AppConfig): TokenSigner {
 
   return {
     ttlSeconds: accessTokenTtlSeconds,
+    ttlFor: (scope) => lifetimeFor(accessTokenTtlSeconds, scope),
 
     sign: (claims, { now = new Date() } = {}) =>
       new SignJWT({ ...claims })
@@ -75,7 +89,7 @@ export function createTokenSigner(config: AppConfig): TokenSigner {
         .setIssuedAt(now)
         .setIssuer(tokenIssuer)
         .setAudience(tokenAudience)
-        .setExpirationTime(new Date(now.getTime() + accessTokenTtlSeconds * 1000))
+        .setExpirationTime(new Date(now.getTime() + lifetimeFor(accessTokenTtlSeconds, claims.scp) * 1000))
         .sign(privateKey),
 
     verify: async (token) => {

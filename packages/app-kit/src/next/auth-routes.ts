@@ -250,8 +250,8 @@ const readCookie = (request: Request, name: string): string | undefined => {
  * notice a 401 at the same moment send the same token twice; the backend treats the second as a
  * replay and revokes the whole family (M1 D5), which signs the user out of a session that was never
  * compromised. Sharing one rotation makes the common case — one browser, one server instance —
- * safe. It is not a complete fix: two app instances behind a load balancer still race, because this
- * map is per process. The complete fix is a grace window on the backend's reuse detection.
+ * safe. It cannot cover two app instances behind a load balancer, because this map is per process;
+ * the backend's reuse detection has a grace window for that (`REUSE_GRACE_SECONDS`, 2026-11-22).
  */
 const rotations = new Map<string, Promise<Response>>();
 

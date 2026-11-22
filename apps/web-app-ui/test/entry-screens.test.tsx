@@ -433,6 +433,24 @@ describe('E4 Log in', () => {
     });
   });
 
+  // Owner report 2026-11-22: saved details autofilled by the browser showed in the boxes, but Log in said
+  // to enter them, because autofill can fill the inputs before React hydrates or without an input event.
+  it('signs in with details the browser autofilled without telling React', async () => {
+    network.on('POST /api/auth/login', 200, { ...session, nextStep: 'DONE' });
+    show(<LoginForm next="/trades" notice={undefined} />);
+    screen.getByLabelText<HTMLInputElement>('Phone number').value = '0802 341 5567';
+    screen.getByLabelText<HTMLInputElement>('Password').value = 'a long passphrase';
+    fireEvent.click(screen.getByRole('button', { name: 'Log in' }));
+    await waitFor(() => {
+      expect(network.to('/api/auth/login')).toHaveLength(1);
+    });
+    expect(network.to('/api/auth/login')[0]?.body).toMatchObject({
+      identifier: '0802 341 5567',
+      password: 'a long passphrase',
+    });
+    expect(screen.queryByText('Enter your phone number and password.')).toBeNull();
+  });
+
   it('says the same thing for a wrong password and no such account', async () => {
     network.on('POST /api/auth/login', 401, problem(401, 'INVALID_CREDENTIALS', 'Sign in failed'));
     show(<LoginForm next={undefined} notice={undefined} />);

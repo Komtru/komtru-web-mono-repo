@@ -136,7 +136,7 @@ export async function createSession(
       epc: user.sessionsEpoch,
     }),
     refreshToken: token,
-    expiresIn: deps.signer.ttlSeconds,
+    expiresIn: deps.signer.ttlFor(input.scope),
     idleExpiresAt,
     absoluteExpiresAt,
   };
@@ -186,12 +186,19 @@ export async function refreshSession(
 
     // Deleted between the two reads; nothing left to rotate.
     if (!session) return { outcome: 'UNKNOWN' };
-    if (session.consumedAt !== null) return detectReuse(tx, deps, session, input);
+    const now = Date.now();
+    if (session.consumedAt !== null) {
+      // Ended on purpose since (a logout, a suspension, a family kill): the holder is out of date.
+      if (session.revokedAt !== null && withinReuseGrace(session.consumedAt, now))
+        return { outcome: 'REVOKED' };
+      if (!withinReuseGrace(session.consumedAt, now)) return detectReuse(tx, deps, session, input);
+      // A second presentation moments after the first: the browser's own retry, not a thief. See
+      // REUSE_GRACE_SECONDS. It rotates again from the same parent, below, and the first child stays good.
+    }
     // Revoked but never consumed: the session was ended deliberately (logout, suspension, a family
     // kill). The holder is out of date, not replaying, and saying otherwise would drown the signal.
     if (session.revokedAt !== null) return { outcome: 'REVOKED' };
 
-    const now = Date.now();
     if (session.idleExpiresAt.getTime() <= now || session.absoluteExpiresAt.getTime() <= now) {
       return { outcome: 'EXPIRED' };
     }
@@ -203,9 +210,15 @@ export async function refreshSession(
     if (!user) throw new Error(`refreshSession: no user ${session.userId}`);
     if (!sessionUsableUnder(user.status)) return { outcome: 'USER_INACTIVE' };
 
+    // A grace-window retry keeps the first `consumed_at`: the window runs from the first rotation, so
+    // retrying cannot keep a spent token alive.
     await tx
       .update(sessions)
-      .set({ consumedAt: sql`now()`, lastUsedAt: sql`now()` })
+      .set(
+        session.consumedAt === null
+          ? { consumedAt: sql`now()`, lastUsedAt: sql`now()` }
+          : { lastUsedAt: sql`now()` },
+      )
       .where(eq(sessions.id, session.id));
 
     const { token, hash: nextHash } = issueRefreshToken();
@@ -242,7 +255,7 @@ export async function refreshSession(
           epc: user.sessionsEpoch,
         }),
         refreshToken: token,
-        expiresIn: deps.signer.ttlSeconds,
+        expiresIn: deps.signer.ttlFor(child.scope),
         idleExpiresAt: child.idleExpiresAt,
         absoluteExpiresAt: child.absoluteExpiresAt,
       },
@@ -251,9 +264,24 @@ export async function refreshSession(
 }
 
 /**
- * A token whose row is already consumed was presented again. There is no way to tell the client's
- * own double-submit from a thief's replay, and M1 D5 answers both the same way: the entire rotation
- * family dies and Risk hears about it.
+ * How long after its first rotation a refresh token may be presented again without counting as a
+ * replay (owner report 2026-11-22: people were being signed out and told their token "may have been
+ * stolen" when it had not been).
+ *
+ * A browser presents the same token twice for ordinary reasons: two tabs, or two app instances behind
+ * the load balancer, refreshing at once (`app-kit`'s single flight is per process), or a rotation whose
+ * response was lost on a flaky mobile connection so the client retries with the token it still holds.
+ * Without a window every one of those killed the whole family. Two minutes covers a retry; a thief who
+ * replays a token later than that still trips reuse detection exactly as before.
+ */
+export const REUSE_GRACE_SECONDS = 120;
+
+const withinReuseGrace = (consumedAt: Date, now: number): boolean =>
+  now - consumedAt.getTime() < REUSE_GRACE_SECONDS * 1000;
+
+/**
+ * A token whose row was consumed more than `REUSE_GRACE_SECONDS` ago was presented again. That is not
+ * the client's own retry, and M1 D5's answer stands: the entire rotation family dies and Risk hears about it.
  */
 async function detectReuse(
   tx: Tx,

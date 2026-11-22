@@ -7,6 +7,7 @@ import {
   applyKillSwitch,
   createSession,
   refreshSession,
+  REUSE_GRACE_SECONDS,
   revokeAllSessions,
   revokeSessionFamily,
   type IssuedSession,
@@ -91,7 +92,7 @@ describe.runIf(infraEnabled)('sessions', () => {
       const issued = await login();
       const actor = await resolvePrincipal(principalDeps, issued.accessToken);
       expect(actor.principal).toMatchObject({ sessionId: issued.sessionId, scope: 'CONSUMER' });
-      expect(issued.expiresIn).toBe(600);
+      expect(issued.expiresIn).toBe(3600);
     });
 
     it("publishes identity.session.created inside the caller's transaction", async () => {
@@ -225,10 +226,20 @@ describe.runIf(infraEnabled)('sessions', () => {
     );
   });
 
+  /** Moves every rotation in a family back past the grace window, so a replay is read as a replay. */
+  const pastGrace = async (familyId: string): Promise<void> => {
+    await t.app().query(
+      `UPDATE identity.sessions SET consumed_at = consumed_at - make_interval(secs => $2)
+        WHERE family_id = $1 AND consumed_at IS NOT NULL`,
+      [familyId, REUSE_GRACE_SECONDS + 1],
+    );
+  };
+
   describe('reuse detection', () => {
     it('kills the family and publishes the risk event when a consumed token is replayed', async () => {
       const first = await login();
       await refreshSession(t.db(), deps, { refreshToken: first.refreshToken });
+      await pastGrace(first.familyId);
       const replay = await refreshSession(t.db(), deps, { refreshToken: first.refreshToken });
       expect(replay).toMatchObject({ outcome: 'REUSED', familyId: first.familyId });
 
@@ -244,29 +255,69 @@ describe.runIf(infraEnabled)('sessions', () => {
       if (rotated.outcome !== 'ROTATED') throw new Error('expected a rotation');
       expect((await resolvePrincipal(principalDeps, rotated.session.accessToken)).principal).not.toBeNull();
 
+      await pastGrace(first.familyId);
       await refreshSession(t.db(), deps, { refreshToken: first.refreshToken });
       expect(await resolvePrincipal(principalDeps, rotated.session.accessToken)).toMatchObject({
         failure: 'SESSION_REVOKED',
       });
     });
 
-    it('lets exactly one of two simultaneous refreshes of the same token win', async () => {
+    // Owner report 2026-11-22: two tabs, two app instances, or a lost response on a flaky connection
+    // present one token twice within moments. That is the client's own retry, not a theft.
+    it('rotates both of two simultaneous refreshes of the same token, and raises no alarm', async () => {
       const first = await login();
       const results = await Promise.all([
         refreshSession(t.db(), deps, { refreshToken: first.refreshToken }),
         refreshSession(t.db(), deps, { refreshToken: first.refreshToken }),
       ]);
-      expect(results.filter((r) => r.outcome === 'ROTATED')).toHaveLength(1);
-      expect(results.filter((r) => r.outcome === 'REUSED')).toHaveLength(1);
-      // The replay killed the family the winner had just extended: nothing is left alive.
+      expect(results.map((r) => r.outcome)).toEqual(['ROTATED', 'ROTATED']);
       const rows = await rowsOfFamily(first.familyId);
-      expect(rows.filter((row) => row.revoked_at === null)).toHaveLength(0);
+      expect(rows.filter((row) => row.revoked_at === null)).toHaveLength(3);
+      expect(await outboxEventTypes(t.app())).not.toContain('identity.session.reuse_detected');
+    });
+
+    it('keeps the first child working when a retry inside the window rotates again', async () => {
+      const first = await login();
+      const rotated = await refreshSession(t.db(), deps, { refreshToken: first.refreshToken });
+      const retried = await refreshSession(t.db(), deps, { refreshToken: first.refreshToken });
+      if (rotated.outcome !== 'ROTATED' || retried.outcome !== 'ROTATED')
+        throw new Error('expected rotations');
+      expect(retried.session.refreshToken).not.toBe(rotated.session.refreshToken);
+      expect(retried.session.absoluteExpiresAt).toEqual(rotated.session.absoluteExpiresAt);
+      expect((await resolvePrincipal(principalDeps, rotated.session.accessToken)).principal).not.toBeNull();
+      expect(
+        await refreshSession(t.db(), deps, { refreshToken: rotated.session.refreshToken }),
+      ).toMatchObject({
+        outcome: 'ROTATED',
+      });
+    });
+
+    it('does not let a retry keep a spent token alive: the window runs from the first rotation', async () => {
+      const first = await login();
+      await refreshSession(t.db(), deps, { refreshToken: first.refreshToken });
+      const [before] = await rowsOfFamily(first.familyId);
+      await refreshSession(t.db(), deps, { refreshToken: first.refreshToken });
+      const [after] = await rowsOfFamily(first.familyId);
+      expect(after!.consumed_at).toEqual(before!.consumed_at);
+    });
+
+    it('says a logged-out session is revoked, not stolen, when its token is retried inside the window', async () => {
+      const first = await login();
+      await refreshSession(t.db(), deps, { refreshToken: first.refreshToken });
+      await t
+        .app()
+        .query(`UPDATE identity.sessions SET revoked_at = now() WHERE family_id = $1`, [first.familyId]);
+      expect(await refreshSession(t.db(), deps, { refreshToken: first.refreshToken })).toEqual({
+        outcome: 'REVOKED',
+      });
+      expect(await outboxEventTypes(t.app())).not.toContain('identity.session.reuse_detected');
     });
 
     it('does not touch another family', async () => {
       const mine = await login();
       const theirs = await login();
       await refreshSession(t.db(), deps, { refreshToken: mine.refreshToken });
+      await pastGrace(mine.familyId);
       await refreshSession(t.db(), deps, { refreshToken: mine.refreshToken });
       expect((await rowsOfFamily(theirs.familyId))[0]!.revoked_at).toBeNull();
     });
@@ -446,6 +497,11 @@ describe.runIf(infraEnabled)('a revoke racing a rotation', () => {
       .transaction((tx) => createSession(tx, deps, { userId, scope: 'CONSUMER', amr: ['pwd'] }));
     const second = await refreshSession(t.db(), deps, { refreshToken: first.refreshToken });
     if (second.outcome !== 'ROTATED') throw new Error('expected a rotation');
+    await t.app().query(
+      `UPDATE identity.sessions SET consumed_at = consumed_at - make_interval(secs => $2)
+        WHERE family_id = $1 AND consumed_at IS NOT NULL`,
+      [first.familyId, REUSE_GRACE_SECONDS + 1],
+    );
 
     // T1: rotate the newest token, and park it with its child row inserted but uncommitted.
     const paused = pausingDeps();

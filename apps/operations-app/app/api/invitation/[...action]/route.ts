@@ -13,8 +13,8 @@ import { createInvitationRoute } from '../../../../src/auth/invitation-route';
 type Route = ReturnType<typeof createInvitationRoute>;
 
 /**
- * Fifteen minutes: longer than the 10 minutes the platform's access token lives
- * (`IDENTITY_ACCESS_TOKEN_TTL_SECONDS`, default 600) so a slow invitee is still revoked by `release`,
+ * Fifteen minutes: longer than the 10 minutes a staff access token lives
+ * (`STAFF_ACCESS_TOKEN_TTL_SECONDS`, 600) so a slow invitee is still revoked by `release`,
  * short enough that an abandoned page does not leave a 30-day refresh token waiting.
  *
  * In process memory, like the limiter: **move both to Redis before running more than one
