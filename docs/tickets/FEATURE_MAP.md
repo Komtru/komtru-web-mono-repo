@@ -1125,11 +1125,18 @@ list a trade.
   the seller's dashboard (Seller-1, H-02, DX-04, TX-03), with the KPI strip and, without merchant status,
   what is left of today's selling limit. Orders brings back AC8 and DX-18 from before F-082. Create a trade
   keeps "Are you buying or selling?" and preselects the side the person is in. No Listings.
-- **Status:** Not started
+- **Status:** Built, awaiting staging check
 - **Depends on:** F-082
 - **MVP:** yes
 - **Note:** Opened 2026-11-22 by the owner. Design `docs/superpowers/specs/2026-11-22-buy-sell-dashboards-design.md`. Someone who has not chosen lands on Buy. A
   certified merchant lands on Sell and can switch to Buy.
+- **Progress note (2026-11-22):** Merged to `staging`. Built in one pass: the switch for everyone (merchants start
+  on Sell), the Sell nav, Shop with the KPI strip (the payout balance, to ship, with the buyer) and the
+  merchant-status pointer, Orders (AC8, DX-18) back from git, Trades and Home split by side, and Start Trade
+  preselecting the mode's side with a Continue. Reviewed; the fixes are in (Shop's see-all opens every sale,
+  side-filtered paging keeps reading). The reference's In escrow and Returns inbound tiles are left out: the
+  platform reports neither. **Not Done:** `pnpm visual-check` has not been run on Shop and Home (captures only),
+  and the switch has not been tried on staging.
 
 ## 3. Coverage table
 
